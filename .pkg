@@ -1,0 +1,48 @@
+[osmium]
+  url=git@github.com:motis-project/libosmium.git
+  branch=master
+  commit=6e6d6b3081cc8bdf25dda89730e25c36eb995516
+[geo]
+  url=git@github.com:motis-project/geo.git
+  branch=master
+  commit=73e4f6fb9b80b178413cf7d9006501e231d41885
+[cista]
+  url=git@github.com:felixguendling/cista.git
+  branch=master
+  commit=e5a58c750d5432cc4ea2855bbfc42bcea591d0f7
+[googletest]
+  url=git@github.com:motis-project/googletest.git
+  branch=master
+  commit=34a46558609e05865c197f0260ab36daa7cbbb6e
+[utl]
+  url=git@github.com:motis-project/utl.git
+  branch=master
+  commit=98387d1bc2e3c57ab1c5bc6a8e1642931472886b
+[protozero]
+  url=git@github.com:motis-project/protozero.git
+  branch=master
+  commit=8c9f3fa97c2cfdceef86d0b61818ae98e9328f29
+[zlib]
+  url=git@github.com:motis-project/zlib.git
+  branch=master
+  commit=8e7c86d3a0e49101b9a67d74c4a07345dcb0e485
+[tiles]
+  url=git@github.com:motis-project/tiles.git
+  branch=master
+  commit=8b1d2aedd7b1a5fcee248af16738df605bd86451
+[mimalloc]
+  url=git@github.com:motis-project/mimalloc.git
+  branch=master
+  commit=0087f000848de31b0090cb6f282348bd2fd3a9b8
+[rapidjson]
+  url=git@github.com:motis-project/rapidjson.git
+  branch=master
+  commit=e7a1ac95c7840c6f4351abead02b1f7a02874197
+[tg]
+  url=git@github.com:triptix-tech/tg.git
+  branch=main
+  commit=9d3db9c9ccbde60449e25338550b14865ea1b98e
+[rtree.c]
+  url=git@github.com:triptix-tech/rtree.c.git
+  branch=master
+  commit=498f993c38e80f21d55ab72f14675b72fca991cc
