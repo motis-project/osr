@@ -56,6 +56,8 @@ target_link_libraries(osr
         tiles-import-library
         rtree
         tg
+        lmdb
+        unordered_dense
 )
 
 add_executable(osr-extract exe/extract.cc)

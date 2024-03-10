@@ -17,7 +17,7 @@
 [utl]
   url=git@github.com:motis-project/utl.git
   branch=master
-  commit=98387d1bc2e3c57ab1c5bc6a8e1642931472886b
+  commit=84347b2ef7105ec3106f5ff2a6aeca4c98eea5e2
 [protozero]
   url=git@github.com:motis-project/protozero.git
   branch=master
@@ -29,7 +29,7 @@
 [tiles]
   url=git@github.com:motis-project/tiles.git
   branch=master
-  commit=8b1d2aedd7b1a5fcee248af16738df605bd86451
+  commit=abbf28537c2ac0271dc8e4e29ed47b0359265723
 [mimalloc]
   url=git@github.com:motis-project/mimalloc.git
   branch=master
@@ -46,3 +46,15 @@
   url=git@github.com:triptix-tech/rtree.c.git
   branch=master
   commit=498f993c38e80f21d55ab72f14675b72fca991cc
+[lmdb]
+  url=git@github.com:motis-project/lmdb.git
+  branch=master
+  commit=9bd01f14f549d8202413c4cd5f49b066b0a22b66
+[fmt]
+  url=git@github.com:motis-project/fmt.git
+  branch=master
+  commit=edb385ac526c24bc917ec4a41bb0edb28f0ca59e
+[unordered_dense]
+  url=git@github.com:motis-project/unordered_dense.git
+  branch=main
+  commit=77e91016354e6d8cba24a86c5abb807de2534c02t
