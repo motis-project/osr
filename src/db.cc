@@ -15,14 +15,14 @@
 /**
  * Binary layout:
  * - point [4 bytes lat, 4 bytes lng]
- * - [8 bytes relation index, ...]
+ * - [8 bytes relation index, ...]   <-- invariant: sorted, unique
  */
 constexpr auto const kNodeDb = "NODE_DB";
 
 /**
  * Binary layout
  * - 8 byte edge flags
- * - [8 bytes osm node index, ...]
+ * - [8 bytes osm node index, ...]   <-- exact order
  */
 constexpr auto const kRelDb = "REL_NODES_DB";
 
@@ -143,6 +143,9 @@ struct db::impl {
           auto const middle = osm_rels_buf.insert(
               end(osm_rels_buf), begin(osm_rels), end(osm_rels));
           std::inplace_merge(begin(osm_rels_buf), middle, end(osm_rels_buf));
+          osm_rels_buf.erase(
+              std::unique(begin(osm_rels_buf), end(osm_rels_buf)),
+              end(osm_rels_buf));
           write_buf(buf, osm_rels_buf, pos_buf);
         } else {
           write_buf(buf, osm_rels, pos);
