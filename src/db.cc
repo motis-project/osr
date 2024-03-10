@@ -2,24 +2,31 @@
 
 #include <span>
 
+#include "osmium/osm/way.hpp"
+
 #include "lmdb/lmdb.hpp"
 
-#include "utl/byte_literals.h"
+#include "utl/get_or_create.h"
+#include "utl/helpers/algorithm.h"
+
+#include "osr/point.h"
+#include "utl/to_vec.h"
 
 /**
  * Binary layout:
- * - 8 bytes latitude
- * - 8 bytes longitude
- * - [... 8 bytes relation index]
+ * - point [4 bytes lat, 4 bytes lng]
+ * - [8 bytes relation index, ...]
  */
 constexpr auto const kNodeDb = "NODE_DB";
 
 /**
  * Binary layout
  * - 8 byte edge flags
- * - [... 8 bytes osm node index]
+ * - [8 bytes osm node index, ...]
  */
 constexpr auto const kRelDb = "REL_NODES_DB";
+
+constexpr auto const kFlushSize = 100'000;
 
 namespace osr {
 
@@ -35,8 +42,9 @@ void write_buf(std::vector<std::uint8_t>& buf, Vec&& data, T&&... t) {
 
   auto offset = std::size_t{0U};
   auto const write = [&](auto&& x) {
-    std::memcpy(&buf[offset], &x, sizeof(std::decay_t<decltype(x)>));
-    offset += sizeof(x);
+    constexpr auto const size = sizeof(std::decay_t<decltype(x)>);
+    std::memcpy(&buf[offset], &x, size);
+    offset += size;
   };
 
   for (auto const& x : data) {
@@ -45,21 +53,22 @@ void write_buf(std::vector<std::uint8_t>& buf, Vec&& data, T&&... t) {
 }
 
 template <typename... T, typename Vec>
-void read_buf(std::span<std::uint8_t const>& buf, Vec& data, T&... t) {
+void read_buf(std::span<std::uint8_t const> buf, Vec& data, T&... t) {
   static_assert((std::is_trivially_copyable_v<T> && ...));
   static_assert(
       std::is_trivially_copyable_v<typename std::decay_t<Vec>::value_type>);
 
-  data.resize((buf.size() - (sizeof(std::decay_t<T>) + ...)) /
-              sizeof(typename Vec::value_type));
-
   auto offset = std::size_t{0U};
   auto const read = [&](auto& x) {
-    std::memcpy(&x, &buf[offset], sizeof(x));
-    offset += sizeof(x);
+    constexpr auto const size = sizeof(std::decay_t<decltype(x)>);
+    std::memcpy(&x, &buf[offset], size);
+    offset += size;
   };
 
   (read(t), ...);
+
+  data.resize((buf.size() - (sizeof(std::decay_t<T>) + ...)) /
+              sizeof(typename Vec::value_type));
   for (auto& x : data) {
     read(x);
   }
@@ -86,11 +95,27 @@ struct db::impl {
     t.commit();
   }
 
-  void add_node(osm_node_idx_t, geo::latlng) {}
+  ~impl() { flush(); }
 
-  void add_relation(osm_rel_idx_t) {}
+  void add_node(osm_node_idx_t const i, point const p) {
+    node_cache_[i].first = p;
+    if (rel_cache_.size() >= kFlushSize) {
+      flush();
+    }
+  }
 
-  void write_cache() {
+  void add_relation(osm_rel_idx_t const i, osmium::WayNodeList const& l) {
+    rel_cache_[i].second = utl::to_vec(
+        l, [](osmium::NodeRef const& x) { return osm_node_idx_t{x.ref()}; });
+    for (auto const& x : l) {
+      node_cache_[osm_node_idx_t{x.ref()}].second.emplace_back(i);
+    }
+    if (rel_cache_.size() >= kFlushSize) {
+      flush();
+    }
+  }
+
+  void flush() {
     auto buf = std::vector<std::uint8_t>{};
     auto t = lmdb::txn{env_};
 
@@ -106,19 +131,34 @@ struct db::impl {
 
     {
       auto db = t.dbi_open(kNodeDb);
+      auto osm_rels_buf = std::vector<osm_rel_idx_t>{};
+      auto pos_buf = point{};
+      for (auto& [n, node] : node_cache_) {
+        auto& [pos, osm_rels] = node;
+        utl::sort(osm_rels);
 
-      for (auto const& [n, node] : rel_cache_) {
-        auto const& [pos, osm_rels] = node;
         auto const existing = t.get(db, to_idx(n));
         if (existing.has_value()) {
+          read_buf(span(*existing), osm_rels_buf, pos_buf);
+          auto const middle = osm_rels_buf.insert(
+              end(osm_rels_buf), begin(osm_rels), end(osm_rels));
+          std::inplace_merge(begin(osm_rels_buf), middle, end(osm_rels_buf));
+          write_buf(buf, osm_rels_buf, pos_buf);
+        } else {
+          write_buf(buf, osm_rels, pos);
         }
+
+        t.put(db, to_idx(n), view(buf));
       }
     }
 
     t.commit();
+
+    node_cache_.clear();
+    rel_cache_.clear();
   }
 
-  hash_map<osm_node_idx_t, std::pair<geo::latlng, std::vector<osm_rel_idx_t>>>
+  hash_map<osm_node_idx_t, std::pair<point, std::vector<osm_rel_idx_t>>>
       node_cache_;
   hash_map<osm_rel_idx_t, std::pair<edge_flags_t, std::vector<osm_node_idx_t>>>
       rel_cache_;
@@ -128,10 +168,14 @@ struct db::impl {
 db::db(std::filesystem::path const& path, std::uint64_t const max_size)
     : impl_(std::make_unique<impl>(path, max_size)) {}
 
-void db::add_node(osm_node_idx_t const i, geo::latlng const& pos) {
+db::~db() = default;
+
+void db::add_node(osm_node_idx_t const i, point const pos) {
   impl_->add_node(i, pos);
 }
 
-void db::add_relation(osm_rel_idx_t const i) { impl_->add_relation(i); }
+void db::add_relation(osm_rel_idx_t const i, osmium::WayNodeList const& l) {
+  impl_->add_relation(i, l);
+}
 
 }  // namespace osr

@@ -28,16 +28,24 @@ namespace fs = std::filesystem;
 namespace osr {
 
 struct feature_handler : public osmium::handler::Handler {
-  feature_handler() {}
-  void way(osmium::Way const& w) { CISTA_UNUSED_PARAM(w); }
-  void node(osmium::Node const& n) { CISTA_UNUSED_PARAM(n); }
+  feature_handler(db& db) : db_{db} {}
+
+  void way(osmium::Way const& w) { w.nodes(); }
+
+  void node(osmium::Node const& n) {
+    db_.add_node(osm_node_idx_t{n.id()}, point::from_location(n.location()));
+  }
+
   void area(osmium::Area const& a) { CISTA_UNUSED_PARAM(a); }
+
+  db& db_;
 };
 
 void extract(fs::path const& in,
              fs::path const& graph_out,
              fs::path const& db_out,
-             fs::path const& tmp) {
+             fs::path const& tmp,
+             std::size_t const db_max_size) {
   CISTA_UNUSED_PARAM(graph_out);
   CISTA_UNUSED_PARAM(db_out);
 
@@ -80,6 +88,7 @@ void extract(fs::path const& in,
   }
 
   auto mp_queue = tiles::in_order_queue<osm_mem::Buffer>{};
+  auto db = osr::db{db_out, db_max_size};
   {  // Extract streets, places, and areas.
     pt->status("Load OSM / Pass 2");
     auto const thread_count =
@@ -97,7 +106,7 @@ void extract(fs::path const& in,
 
     std::atomic_bool has_exception{false};
     std::vector<std::future<void>> workers;
-    auto handler = feature_handler{};
+    auto handler = feature_handler{db};
     workers.reserve(thread_count / 2);
     for (auto i = 0; i < thread_count / 2; ++i) {
       workers.emplace_back(pool.submit([&] {
