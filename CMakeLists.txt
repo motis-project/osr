@@ -1,7 +1,23 @@
 cmake_minimum_required(VERSION 3.10)
 project(osr)
 
+if (NOT DEFINED CMAKE_MSVC_RUNTIME_LIBRARY)
+    if (OSR_MIMALLOC)
+        set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>DLL")
+    else ()
+        set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
+    endif ()
+endif ()
+
+include(cmake/buildcache.cmake)
 include(cmake/pkg.cmake)
+
+# --- LINT ---
+option(OSR_LINT "Run clang-tidy with the compiler." OFF)
+if (OSR_LINT)
+    # clang-tidy will be run on all targets defined hereafter
+    include(cmake/clang-tidy.cmake)
+endif ()
 
 if ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "Clang")
     set(osr-compile-options
@@ -42,6 +58,7 @@ else ()
     endif ()
 endif ()
 
+# --- LIB ---
 file(GLOB_RECURSE osr-src src/*.cc)
 add_library(osr ${osr-src})
 target_include_directories(osr PUBLIC include)
@@ -58,7 +75,21 @@ target_link_libraries(osr
         tg
         lmdb
         unordered_dense
+        boost-thread
+        expat
+        rapidjson
 )
 
+# --- MAIN ---
 add_executable(osr-extract exe/extract.cc)
 target_link_libraries(osr-extract osr)
+
+# --- TEST ---
+configure_file(
+        ${CMAKE_CURRENT_SOURCE_DIR}/test/test_dir.h.in
+        ${CMAKE_CURRENT_BINARY_DIR}/generated/test_dir.h
+)
+file(GLOB_RECURSE osr-test-files test/*cc)
+add_executable(osr-test ${osr-test-files})
+target_include_directories(osr-test PRIVATE ${CMAKE_CURRENT_BINARY_DIR}/generated)
+target_link_libraries(osr-test gtest osr)

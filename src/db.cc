@@ -8,86 +8,37 @@
 
 #include "utl/get_or_create.h"
 #include "utl/helpers/algorithm.h"
-
-#include "osr/point.h"
+#include "utl/pairwise.h"
 #include "utl/to_vec.h"
+#include "utl/verify.h"
 
-/**
- * Binary layout:
- * - point [4 bytes lat, 4 bytes lng]
- * - [8 bytes relation index, ...]   <-- invariant: sorted, unique
- */
+#include "osr/buf_io.h"
+#include "osr/graph.h"
+#include "osr/mmap_vec.h"
+#include "osr/node_info.h"
+#include "osr/point.h"
+#include "osr/way_info.h"
+
+namespace fs = std::filesystem;
+
+// Binary layout:
+// - point [4 bytes lat, 4 bytes lng]
+// - [8 bytes relation index, ...]   <-- invariant: sorted, unique
 constexpr auto const kNodeDb = "NODE_DB";
 
-/**
- * Binary layout
- * - 8 byte edge flags
- * - [8 bytes osm node index, ...]   <-- exact order
- */
+// Binary layout
+// - 8 byte edge flags
+// - [8 bytes osm node index, ...]   <-- exact order
 constexpr auto const kRelDb = "REL_NODES_DB";
-
-constexpr auto const kFlushSize = 100'000;
 
 namespace osr {
 
-template <typename... T, typename Vec>
-void write_buf(std::vector<std::uint8_t>& buf, Vec&& data, T&&... t) {
-  static_assert((std::is_trivially_copyable_v<std::decay_t<T>> && ...));
-  static_assert(std::is_trivially_copyable_v<
-                std::decay_t<typename std::decay_t<Vec>::value_type>>);
-
-  buf.resize((sizeof(t) + ...) +
-             data.size() *
-                 sizeof(std::decay_t<typename std::decay_t<Vec>::value_type>));
-
-  auto offset = std::size_t{0U};
-  auto const write = [&](auto&& x) {
-    constexpr auto const size = sizeof(std::decay_t<decltype(x)>);
-    std::memcpy(&buf[offset], &x, size);
-    offset += size;
-  };
-
-  for (auto const& x : data) {
-    write(x);
-  }
-}
-
-template <typename... T, typename Vec>
-void read_buf(std::span<std::uint8_t const> buf, Vec& data, T&... t) {
-  static_assert((std::is_trivially_copyable_v<T> && ...));
-  static_assert(
-      std::is_trivially_copyable_v<typename std::decay_t<Vec>::value_type>);
-
-  auto offset = std::size_t{0U};
-  auto const read = [&](auto& x) {
-    constexpr auto const size = sizeof(std::decay_t<decltype(x)>);
-    std::memcpy(&x, &buf[offset], size);
-    offset += size;
-  };
-
-  (read(t), ...);
-
-  data.resize((buf.size() - (sizeof(std::decay_t<T>) + ...)) /
-              sizeof(typename Vec::value_type));
-  for (auto& x : data) {
-    read(x);
-  }
-}
-
-std::string_view view(std::vector<std::uint8_t> const& v) {
-  return {reinterpret_cast<char const*>(v.data()), v.size()};
-}
-
-std::span<std::uint8_t const> span(std::string_view s) {
-  return {reinterpret_cast<std::uint8_t const*>(s.data()), s.size()};
-}
-
 struct db::impl {
-  impl(std::filesystem::path const& path, std::uint64_t const max_size) {
+  impl(fs::path const& path, std::uint64_t const max_size) {
     env_.set_maxdbs(2);
     env_.set_mapsize(max_size);
     env_.open(path.c_str(),
-              lmdb::env_open_flags::NOSUBDIR | lmdb::env_open_flags::NOTLS);
+              lmdb::env_open_flags::NOSUBDIR | lmdb::env_open_flags::NOSYNC);
 
     auto t = lmdb::txn{env_};
     t.dbi_open(kNodeDb, lmdb::dbi_flags::CREATE | lmdb::dbi_flags::INTEGERKEY);
@@ -95,90 +46,176 @@ struct db::impl {
     t.commit();
   }
 
-  ~impl() { flush(); }
-
-  void add_node(osm_node_idx_t const i, point const p) {
-    node_cache_[i].first = p;
-    if (rel_cache_.size() >= kFlushSize) {
-      flush();
-    }
-  }
-
-  void add_relation(osm_rel_idx_t const i, osmium::WayNodeList const& l) {
-    rel_cache_[i].second = utl::to_vec(
-        l, [](osmium::NodeRef const& x) { return osm_node_idx_t{x.ref()}; });
-    for (auto const& x : l) {
-      node_cache_[osm_node_idx_t{x.ref()}].second.emplace_back(i);
-    }
-    if (rel_cache_.size() >= kFlushSize) {
-      flush();
-    }
-  }
-
-  void flush() {
-    auto buf = std::vector<std::uint8_t>{};
+  void write_graph(fs::path const& graph_path,
+                   fs::path const& node_map_path,
+                   fs::path const& edge_map_path) {
     auto t = lmdb::txn{env_};
+    auto nodes_db = t.dbi_open(kNodeDb);
 
-    {
-      auto db = t.dbi_open(kRelDb);
+    {  // Assign graph node ids to every node with >1 relation.
+      auto node_map = node_map_t{cista::mmap{node_map_path.c_str()}};
 
-      for (auto const& [r, rel] : rel_cache_) {
-        auto const& [edge_flags, osm_nodes] = rel;
-        write_buf(buf, osm_nodes, edge_flags);
-        t.put(db, to_idx(r), view(buf));
-      }
-    }
-
-    {
-      auto db = t.dbi_open(kNodeDb);
-      auto osm_rels_buf = std::vector<osm_rel_idx_t>{};
-      auto pos_buf = point{};
-      for (auto& [n, node] : node_cache_) {
-        auto& [pos, osm_rels] = node;
-        utl::sort(osm_rels);
-
-        auto const existing = t.get(db, to_idx(n));
-        if (existing.has_value()) {
-          read_buf(span(*existing), osm_rels_buf, pos_buf);
-          auto const middle = osm_rels_buf.insert(
-              end(osm_rels_buf), begin(osm_rels), end(osm_rels));
-          std::inplace_merge(begin(osm_rels_buf), middle, end(osm_rels_buf));
-          osm_rels_buf.erase(
-              std::unique(begin(osm_rels_buf), end(osm_rels_buf)),
-              end(osm_rels_buf));
-          write_buf(buf, osm_rels_buf, pos_buf);
-        } else {
-          write_buf(buf, osm_rels, pos);
+      auto node_idx = node_idx_t{0U};
+      auto node = node_info{};
+      auto buf = std::vector<std::uint8_t>{};
+      auto c = lmdb::cursor{t, nodes_db};
+      for (auto el = c.get(lmdb::cursor_op::FIRST); el;
+           el = c.get(lmdb::cursor_op::NEXT)) {
+        if (!node_info::has_more_than_one_way(el->second)) {
+          continue;
         }
 
-        t.put(db, to_idx(n), view(buf));
+        auto const osm_node_idx = osm_node_idx_t{lmdb::as_int(el->first)};
+
+        node.read(el->second);
+        node.n_ = node_idx++;
+        node.write(buf);
+        c.put(el->first, view(buf));
+
+        fmt::println("{} => {}", node_idx, osm_node_idx);
+        node_map.push_back(osm_node_idx);
       }
+    }
+
+    auto g = graph{};
+    {  // Create graph edges.
+      auto edge_map = edge_map_t{cista::mmap{edge_map_path.c_str()}};
+
+      auto rel = way_info{};
+      auto nodes = std::vector<std::tuple<node_idx_t, point, distance_t>>{};
+      auto out = cista::raw::mutable_fws_multimap<node_idx_t, edge_idx_t>{};
+      auto in = cista::raw::mutable_fws_multimap<node_idx_t, edge_idx_t>{};
+      auto rels_db = t.dbi_open(kRelDb);
+      auto c = lmdb::cursor{t, rels_db};
+      for (auto el = c.get(lmdb::cursor_op::FIRST); el;
+           el = c.get(lmdb::cursor_op::NEXT)) {
+        nodes.clear();
+        rel.read(el->second);
+
+        // collect graph nodes
+        auto pred_pos = std::make_optional<point>();
+        auto distance = 0.0;
+        for (auto const& n : rel.nodes_) {
+          auto node = t.get(nodes_db, to_idx(n));
+
+          if (!node.has_value()) {
+            fmt::println("node {} not found", n);
+            continue;
+          }
+
+          auto const pos = node_info::read_point(*node);
+          if (pred_pos.has_value()) {
+            distance += geo::distance(pos, *pred_pos);
+          }
+
+          if (auto const node_idx = node_info::read_node_idx(*node);
+              node_idx != node_idx_t::invalid()) {
+            nodes.emplace_back(node_idx, pos, distance);
+            distance = 0.0;
+          }
+
+          pred_pos = pos;
+        }
+
+        // build edges
+        for (auto const [a, b] : utl::pairwise(nodes)) {
+          auto const [from, from_pos, _] = a;
+          auto const [to, to_pos, dist] = b;
+          auto edge_idx = g.add_edge(from, to, rel.edge_flags_, dist);
+          edge_map.push_back(osm_way_idx_t{lmdb::as_int(el->first)});
+          out[from].push_back(edge_idx);
+          in[to].push_back(edge_idx);
+        }
+      }
+
+      for (auto const& edges : out) {
+        g.out_edges_.emplace_back(edges);
+      }
+
+      for (auto const& edges : in) {
+        g.in_edges_.emplace_back(edges);
+      }
+    }
+
+    g.write(graph_path);
+  }
+
+  void write(hash_map<osm_way_idx_t, way_info>& rels) {
+    auto l = std::lock_guard{flush_mutex_};
+
+    auto buf = std::vector<std::uint8_t>{};
+    auto t = lmdb::txn{env_};
+    auto db = t.dbi_open(kRelDb);
+
+    for (auto const& [r, rel] : rels) {
+      rel.write(buf);
+      t.put(db, to_idx(r), view(buf));
     }
 
     t.commit();
-
-    node_cache_.clear();
-    rel_cache_.clear();
   }
 
-  hash_map<osm_node_idx_t, std::pair<point, std::vector<osm_rel_idx_t>>>
-      node_cache_;
-  hash_map<osm_rel_idx_t, std::pair<edge_flags_t, std::vector<osm_node_idx_t>>>
-      rel_cache_;
+  void write(hash_map<osm_node_idx_t, node_info>& nodes) {
+    auto l = std::lock_guard{flush_mutex_};
+
+    auto buf = std::vector<std::uint8_t>{};
+    auto t = lmdb::txn{env_};
+    auto db = t.dbi_open(kNodeDb);
+    auto existing_node = node_info{};
+
+    for (auto& [n, node] : nodes) {
+      utl::sort(node.ways_);
+
+      auto const existing = t.get(db, to_idx(n));
+      if (existing.has_value()) {
+        existing_node.read(*existing);
+        existing_node.merge(node);
+        existing_node.write(buf);
+      } else {
+        node.write(buf);
+      }
+
+      t.put(db, to_idx(n), view(buf));
+    }
+
+    t.commit();
+  }
+
+  void get_node(osm_node_idx_t const i, node_info& nfo) {
+    auto t = lmdb::txn{env_, lmdb::txn_flags::RDONLY};
+    auto db = t.dbi_open(kNodeDb);
+    auto const val = t.get(db, to_idx(i));
+    utl::verify(val.has_value(), "osm node {} not found", i);
+    nfo.read(*val);
+  }
+
+  void get_way(osm_way_idx_t const i, way_info& nfo) {
+    auto t = lmdb::txn{env_, lmdb::txn_flags::RDONLY};
+    auto db = t.dbi_open(kRelDb);
+    auto const val = t.get(db, to_idx(i));
+    utl::verify(val.has_value(), "osm node {} not found", i);
+    nfo.read(*val);
+  }
+
   lmdb::env env_;
+  std::mutex flush_mutex_;
 };
 
-db::db(std::filesystem::path const& path, std::uint64_t const max_size)
+db::db(fs::path const& path, std::uint64_t const max_size)
     : impl_(std::make_unique<impl>(path, max_size)) {}
 
 db::~db() = default;
 
-void db::add_node(osm_node_idx_t const i, point const pos) {
-  impl_->add_node(i, pos);
+void db::write_graph(fs::path const& graph_path,
+                     fs::path const& node_map_path,
+                     fs::path const& edge_map_path) {
+  impl_->write_graph(graph_path, node_map_path, edge_map_path);
 }
 
-void db::add_relation(osm_rel_idx_t const i, osmium::WayNodeList const& l) {
-  impl_->add_relation(i, l);
-}
+void db::get_node(osm_node_idx_t i, node_info& nfo) { impl_->get_node(i, nfo); }
+void db::get_way(osm_way_idx_t i, way_info& nfo) { impl_->get_way(i, nfo); }
+
+void db::write(hash_map<osm_way_idx_t, way_info>& x) { impl_->write(x); }
+void db::write(hash_map<osm_node_idx_t, node_info>& x) { impl_->write(x); }
 
 }  // namespace osr

@@ -1,0 +1,277 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<osm version="0.6" generator="CGImap 0.8.10 (2227093 spike-08.openstreetmap.org)"
+     copyright="OpenStreetMap and contributors" attribution="http://www.openstreetmap.org/copyright"
+     license="http://opendatacommons.org/licenses/odbl/1-0/">
+    <bounds minlat="49.8500700" minlon="9.0069100" maxlat="49.8522300" maxlon="9.0128300"/>
+    <node id="571741543" visible="true" version="2" changeset="36161847" timestamp="2015-12-25T16:47:49Z" user="mtb-odw"
+          uid="317912" lat="49.8490969" lon="9.0194967"/>
+    <node id="571741549" visible="true" version="4" changeset="36161847" timestamp="2015-12-25T16:47:49Z" user="mtb-odw"
+          uid="317912" lat="49.8493945" lon="9.0188492"/>
+    <node id="571741555" visible="true" version="3" changeset="36161847" timestamp="2015-12-25T16:47:50Z" user="mtb-odw"
+          uid="317912" lat="49.8497281" lon="9.0178482"/>
+    <node id="571741558" visible="true" version="3" changeset="36161847" timestamp="2015-12-25T16:47:50Z" user="mtb-odw"
+          uid="317912" lat="49.8498893" lon="9.0171358"/>
+    <node id="571741560" visible="true" version="3" changeset="40353346" timestamp="2016-06-28T21:14:35Z" user="AymOSM"
+          uid="2251725" lat="49.8500594" lon="9.0165440"/>
+    <node id="571741563" visible="true" version="4" changeset="40353346" timestamp="2016-06-28T21:14:35Z" user="AymOSM"
+          uid="2251725" lat="49.8503948" lon="9.0142670"/>
+    <node id="571741567" visible="true" version="3" changeset="36161847" timestamp="2015-12-25T16:47:49Z" user="mtb-odw"
+          uid="317912" lat="49.8505060" lon="9.0120181"/>
+    <node id="571741576" visible="true" version="3" changeset="10590650" timestamp="2012-02-05T06:20:01Z"
+          user="SGiersch" uid="157286" lat="49.8508242" lon="9.0107985"/>
+    <node id="571741577" visible="true" version="3" changeset="10590650" timestamp="2012-02-05T06:20:01Z"
+          user="SGiersch" uid="157286" lat="49.8510321" lon="9.0099778"/>
+    <node id="571741578" visible="true" version="4" changeset="36161847" timestamp="2015-12-25T16:47:49Z" user="mtb-odw"
+          uid="317912" lat="49.8513261" lon="9.0091586"/>
+    <node id="571741579" visible="true" version="4" changeset="36161847" timestamp="2015-12-25T16:47:49Z" user="mtb-odw"
+          uid="317912" lat="49.8516303" lon="9.0085463"/>
+    <node id="571741580" visible="true" version="2" changeset="36161847" timestamp="2015-12-25T16:47:49Z" user="mtb-odw"
+          uid="317912" lat="49.8516589" lon="9.0082786"/>
+    <node id="571741581" visible="true" version="2" changeset="36161847" timestamp="2015-12-25T16:47:49Z" user="mtb-odw"
+          uid="317912" lat="49.8516359" lon="9.0079254"/>
+    <node id="571741584" visible="true" version="2" changeset="135605942" timestamp="2023-05-02T08:52:15Z" user="AymOSM"
+          uid="2251725" lat="49.8514834" lon="9.0077876"/>
+    <node id="571741586" visible="true" version="1" changeset="3225614" timestamp="2009-11-27T05:41:31Z"
+          user="grobistollo" uid="166450" lat="49.8511436" lon="9.0078329"/>
+    <node id="571741589" visible="true" version="1" changeset="3225614" timestamp="2009-11-27T05:41:31Z"
+          user="grobistollo" uid="166450" lat="49.8505949" lon="9.0082727"/>
+    <node id="571741591" visible="true" version="1" changeset="3225614" timestamp="2009-11-27T05:41:31Z"
+          user="grobistollo" uid="166450" lat="49.8501400" lon="9.0087863"/>
+    <node id="571741593" visible="true" version="2" changeset="36161847" timestamp="2015-12-25T16:47:49Z" user="mtb-odw"
+          uid="317912" lat="49.8496546" lon="9.0091468"/>
+    <node id="571741596" visible="true" version="1" changeset="3225614" timestamp="2009-11-27T05:41:32Z"
+          user="grobistollo" uid="166450" lat="49.8493730" lon="9.0092154"/>
+    <node id="571741603" visible="true" version="2" changeset="36161847" timestamp="2015-12-25T16:47:49Z" user="mtb-odw"
+          uid="317912" lat="49.8490213" lon="9.0089639"/>
+    <node id="571741605" visible="true" version="2" changeset="36161847" timestamp="2015-12-25T16:47:49Z" user="mtb-odw"
+          uid="317912" lat="49.8487198" lon="9.0085777"/>
+    <node id="571741607" visible="true" version="2" changeset="36161847" timestamp="2015-12-25T16:47:49Z" user="mtb-odw"
+          uid="317912" lat="49.8477956" lon="9.0068640"/>
+    <node id="571741609" visible="true" version="2" changeset="36161847" timestamp="2015-12-25T16:47:49Z" user="mtb-odw"
+          uid="317912" lat="49.8475699" lon="9.0064311"/>
+    <node id="571741611" visible="true" version="3" changeset="135605942" timestamp="2023-05-02T08:52:15Z" user="AymOSM"
+          uid="2251725" lat="49.8473558" lon="9.0061928"/>
+    <node id="571741614" visible="true" version="3" changeset="36179344" timestamp="2015-12-26T16:10:19Z" user="mtb-odw"
+          uid="317912" lat="49.8470260" lon="9.0059444"/>
+    <node id="571741616" visible="true" version="3" changeset="36179344" timestamp="2015-12-26T16:10:19Z" user="mtb-odw"
+          uid="317912" lat="49.8465553" lon="9.0065522"/>
+    <node id="571741618" visible="true" version="3" changeset="36179344" timestamp="2015-12-26T16:10:19Z" user="mtb-odw"
+          uid="317912" lat="49.8464619" lon="9.0075854"/>
+    <node id="571741620" visible="true" version="2" changeset="36161847" timestamp="2015-12-25T16:47:49Z" user="mtb-odw"
+          uid="317912" lat="49.8460899" lon="9.0079669"/>
+    <node id="571741623" visible="true" version="2" changeset="36161847" timestamp="2015-12-25T16:47:49Z" user="mtb-odw"
+          uid="317912" lat="49.8458621" lon="9.0082762"/>
+    <node id="571741626" visible="true" version="4" changeset="135605942" timestamp="2023-05-02T08:52:15Z" user="AymOSM"
+          uid="2251725" lat="49.8458069" lon="9.0090463"/>
+    <node id="1069053241" visible="true" version="1" changeset="6787445" timestamp="2010-12-28T12:07:31Z" user="uboot"
+          uid="26299" lat="49.8504178" lon="9.0108232"/>
+    <node id="1069053290" visible="true" version="2" changeset="10590650" timestamp="2012-02-05T06:19:51Z"
+          user="SGiersch" uid="157286" lat="49.8507176" lon="9.0109532"/>
+    <node id="1069053309" visible="true" version="1" changeset="6787445" timestamp="2010-12-28T12:07:34Z" user="uboot"
+          uid="26299" lat="49.8508134" lon="9.0096905"/>
+    <node id="1069053317" visible="true" version="2" changeset="40353346" timestamp="2016-06-28T21:14:35Z" user="AymOSM"
+          uid="2251725" lat="49.8503626" lon="9.0151365"/>
+    <node id="1069053375" visible="true" version="1" changeset="6787445" timestamp="2010-12-28T12:07:36Z" user="uboot"
+          uid="26299" lat="49.8512639" lon="9.0087892"/>
+    <node id="1069053460" visible="true" version="2" changeset="10590650" timestamp="2012-02-05T06:19:53Z"
+          user="SGiersch" uid="157286" lat="49.8515361" lon="9.0084281"/>
+    <node id="1069053536" visible="true" version="2" changeset="10590650" timestamp="2012-02-05T06:19:53Z"
+          user="SGiersch" uid="157286" lat="49.8513116" lon="9.0089446"/>
+    <node id="1069053542" visible="true" version="2" changeset="10590650" timestamp="2012-02-05T06:19:53Z"
+          user="SGiersch" uid="157286" lat="49.8509855" lon="9.0100055"/>
+    <node id="1618538498" visible="true" version="3" changeset="127376050" timestamp="2022-10-11T18:59:08Z"
+          user="osm915" uid="3245367" lat="49.8487342" lon="9.0199029"/>
+    <node id="3061195216" visible="true" version="1" changeset="25251716" timestamp="2014-09-05T16:13:03Z"
+          user="osthess" uid="2197502" lat="49.8506867" lon="9.0112941"/>
+    <node id="3061195220" visible="true" version="1" changeset="25251716" timestamp="2014-09-05T16:13:03Z"
+          user="osthess" uid="2197502" lat="49.8515372" lon="9.0164915"/>
+    <node id="3909447867" visible="true" version="2" changeset="36179344" timestamp="2015-12-26T16:10:19Z"
+          user="mtb-odw" uid="317912" lat="49.8465515" lon="9.0070704"/>
+    <node id="3909447878" visible="true" version="2" changeset="40353346" timestamp="2016-06-28T21:14:35Z" user="AymOSM"
+          uid="2251725" lat="49.8504405" lon="9.0138801"/>
+    <node id="3909447879" visible="true" version="2" changeset="40353346" timestamp="2016-06-28T21:14:35Z" user="AymOSM"
+          uid="2251725" lat="49.8504772" lon="9.0133200"/>
+    <node id="3909447880" visible="true" version="1" changeset="36161847" timestamp="2015-12-25T16:47:49Z"
+          user="mtb-odw" uid="317912" lat="49.8507824" lon="9.0080334"/>
+    <node id="3909447881" visible="true" version="1" changeset="36161847" timestamp="2015-12-25T16:47:49Z"
+          user="mtb-odw" uid="317912" lat="49.8482698" lon="9.0077902"/>
+    <node id="3909447882" visible="true" version="1" changeset="36161847" timestamp="2015-12-25T16:47:49Z"
+          user="mtb-odw" uid="317912" lat="49.8479774" lon="9.0073229"/>
+    <node id="3909447883" visible="true" version="1" changeset="36161847" timestamp="2015-12-25T16:47:49Z"
+          user="mtb-odw" uid="317912" lat="49.8466703" lon="9.0062138"/>
+    <node id="3909447884" visible="true" version="1" changeset="36161847" timestamp="2015-12-25T16:47:49Z"
+          user="mtb-odw" uid="317912" lat="49.8468156" lon="9.0060567"/>
+    <node id="3910927185" visible="true" version="1" changeset="36179344" timestamp="2015-12-26T16:10:19Z"
+          user="mtb-odw" uid="317912" lat="49.8457842" lon="9.0087156"/>
+    <node id="3910927186" visible="true" version="1" changeset="36179344" timestamp="2015-12-26T16:10:19Z"
+          user="mtb-odw" uid="317912" lat="49.8471821" lon="9.0060071"/>
+    <node id="3910927187" visible="true" version="1" changeset="36179344" timestamp="2015-12-26T16:10:19Z"
+          user="mtb-odw" uid="317912" lat="49.8465193" lon="9.0073810"/>
+    <node id="3910927188" visible="true" version="1" changeset="36179344" timestamp="2015-12-26T16:10:19Z"
+          user="mtb-odw" uid="317912" lat="49.8463422" lon="9.0077447"/>
+    <node id="4270537781" visible="true" version="1" changeset="40353346" timestamp="2016-06-28T21:14:33Z" user="AymOSM"
+          uid="2251725" lat="49.8508267" lon="9.0127143"/>
+    <node id="4270537782" visible="true" version="1" changeset="40353346" timestamp="2016-06-28T21:14:33Z" user="AymOSM"
+          uid="2251725" lat="49.8511026" lon="9.0143222"/>
+    <node id="4270537783" visible="true" version="1" changeset="40353346" timestamp="2016-06-28T21:14:33Z" user="AymOSM"
+          uid="2251725" lat="49.8513618" lon="9.0157096"/>
+    <node id="4270537784" visible="true" version="1" changeset="40353346" timestamp="2016-06-28T21:14:33Z" user="AymOSM"
+          uid="2251725" lat="49.8514538" lon="9.0162283"/>
+    <node id="5520805512" visible="true" version="1" changeset="57719010" timestamp="2018-04-01T18:08:58Z"
+          user="aseerel4c26" uid="694726" lat="49.8498635" lon="9.0172500"/>
+    <node id="6064927789" visible="true" version="1" changeset="64547231" timestamp="2018-11-15T23:05:02Z" user="AymOSM"
+          uid="2251725" lat="49.8513342" lon="9.0155620"/>
+    <node id="6064927796" visible="true" version="1" changeset="64547231" timestamp="2018-11-15T23:05:02Z" user="AymOSM"
+          uid="2251725" lat="49.8494649" lon="9.0186380"/>
+    <node id="6064927797" visible="true" version="1" changeset="64547231" timestamp="2018-11-15T23:05:02Z" user="AymOSM"
+          uid="2251725" lat="49.8494046" lon="9.0188188"/>
+    <node id="10861898494" visible="true" version="1" changeset="135605942" timestamp="2023-05-02T08:52:15Z"
+          user="AymOSM" uid="2251725" lat="49.8516718" lon="9.0080973"/>
+    <node id="10861898495" visible="true" version="1" changeset="135605942" timestamp="2023-05-02T08:52:15Z"
+          user="AymOSM" uid="2251725" lat="49.8515627" lon="9.0078353"/>
+    <node id="10861898496" visible="true" version="1" changeset="135605942" timestamp="2023-05-02T08:52:15Z"
+          user="AymOSM" uid="2251725" lat="49.8513382" lon="9.0077833"/>
+    <way id="92026641" visible="true" version="2" changeset="8789329" timestamp="2011-07-21T14:48:53Z" user="Elefant"
+         uid="78958">
+        <nd ref="1069053241"/>
+        <nd ref="1069053290"/>
+        <nd ref="1069053542"/>
+        <nd ref="1069053536"/>
+        <nd ref="1069053460"/>
+        <nd ref="1069053375"/>
+        <nd ref="1069053309"/>
+        <nd ref="1069053241"/>
+        <tag k="landuse" v="meadow"/>
+        <tag k="source" v="Bing SAT"/>
+    </way>
+    <way id="143553896" visible="true" version="10" changeset="135605942" timestamp="2023-05-02T08:52:15Z" user="AymOSM"
+         uid="2251725">
+        <nd ref="1618538498"/>
+        <nd ref="571741543"/>
+        <nd ref="571741549"/>
+        <nd ref="6064927797"/>
+        <nd ref="6064927796"/>
+        <nd ref="571741555"/>
+        <nd ref="5520805512"/>
+        <nd ref="571741558"/>
+        <nd ref="571741560"/>
+        <nd ref="1069053317"/>
+        <nd ref="571741563"/>
+        <nd ref="3909447878"/>
+        <nd ref="3909447879"/>
+        <nd ref="571741567"/>
+        <nd ref="3061195216"/>
+        <nd ref="571741576"/>
+        <nd ref="571741577"/>
+        <nd ref="571741578"/>
+        <nd ref="571741579"/>
+        <nd ref="571741580"/>
+        <nd ref="10861898494"/>
+        <nd ref="571741581"/>
+        <nd ref="10861898495"/>
+        <nd ref="571741584"/>
+        <nd ref="10861898496"/>
+        <nd ref="571741586"/>
+        <nd ref="3909447880"/>
+        <nd ref="571741589"/>
+        <nd ref="571741591"/>
+        <nd ref="571741593"/>
+        <nd ref="571741596"/>
+        <nd ref="571741603"/>
+        <nd ref="571741605"/>
+        <nd ref="3909447881"/>
+        <nd ref="3909447882"/>
+        <nd ref="571741607"/>
+        <nd ref="571741609"/>
+        <nd ref="571741611"/>
+        <nd ref="3910927186"/>
+        <nd ref="571741614"/>
+        <nd ref="3909447884"/>
+        <nd ref="3909447883"/>
+        <nd ref="571741616"/>
+        <nd ref="3909447867"/>
+        <nd ref="3910927187"/>
+        <nd ref="571741618"/>
+        <nd ref="3910927188"/>
+        <nd ref="571741620"/>
+        <nd ref="571741623"/>
+        <nd ref="3910927185"/>
+        <nd ref="571741626"/>
+        <tag k="highway" v="track"/>
+        <tag k="surface" v="compacted"/>
+        <tag k="tracktype" v="grade3"/>
+    </way>
+    <way id="427884083" visible="true" version="2" changeset="64547231" timestamp="2018-11-15T23:05:04Z" user="AymOSM"
+         uid="2251725">
+        <nd ref="3061195216"/>
+        <nd ref="4270537781"/>
+        <nd ref="4270537782"/>
+        <nd ref="6064927789"/>
+        <nd ref="4270537783"/>
+        <nd ref="4270537784"/>
+        <nd ref="3061195220"/>
+        <tag k="highway" v="track"/>
+        <tag k="surface" v="compacted"/>
+    </way>
+    <relation id="33719" visible="true" version="31" changeset="139803051" timestamp="2023-08-12T21:23:42Z"
+              user="Nepomuk0" uid="8339221">
+        <member type="way" ref="1182700427" role="outer"/>
+        <member type="way" ref="410029268" role="inner"/>
+        <member type="way" ref="164051181" role="inner"/>
+        <member type="way" ref="92026641" role="inner"/>
+        <member type="way" ref="27507894" role="inner"/>
+        <member type="way" ref="27507952" role="inner"/>
+        <member type="way" ref="34027367" role="inner"/>
+        <member type="way" ref="45266857" role="inner"/>
+        <member type="way" ref="128309605" role="inner"/>
+        <member type="way" ref="300690773" role="inner"/>
+        <member type="way" ref="264336563" role="inner"/>
+        <member type="way" ref="264336560" role="inner"/>
+        <member type="way" ref="163556518" role="inner"/>
+        <member type="way" ref="292914157" role="inner"/>
+        <member type="way" ref="465244715" role="inner"/>
+        <member type="way" ref="118930122" role="inner"/>
+        <member type="way" ref="849578865" role="inner"/>
+        <tag k="landuse" v="forest"/>
+        <tag k="leaf_cycle" v="mixed"/>
+        <tag k="leaf_type" v="mixed"/>
+        <tag k="source" v="Bing et al"/>
+        <tag k="type" v="multipolygon"/>
+    </relation>
+    <relation id="5804337" visible="true" version="6" changeset="78815196" timestamp="2019-12-24T10:58:55Z"
+              user="mtb-odw" uid="317912">
+        <member type="way" ref="148784497" role=""/>
+        <member type="way" ref="143553896" role=""/>
+        <member type="way" ref="337378637" role=""/>
+        <member type="way" ref="302014842" role=""/>
+        <member type="way" ref="387700853" role=""/>
+        <member type="way" ref="163558106" role=""/>
+        <member type="way" ref="154569244" role=""/>
+        <member type="way" ref="154569246" role=""/>
+        <member type="way" ref="38299925" role=""/>
+        <member type="way" ref="154569234" role=""/>
+        <member type="way" ref="27388320" role=""/>
+        <member type="way" ref="352595816" role=""/>
+        <member type="way" ref="369853658" role=""/>
+        <member type="way" ref="27388323" role=""/>
+        <member type="way" ref="352595819" role=""/>
+        <member type="way" ref="302014847" role=""/>
+        <member type="way" ref="27388313" role=""/>
+        <member type="way" ref="337378634" role=""/>
+        <member type="way" ref="27388309" role=""/>
+        <member type="way" ref="337593819" role=""/>
+        <member type="way" ref="148784496" role=""/>
+        <tag k="name" v="Rundwanderweg Wald-Amorbach 1 : Goldloch-Weg"/>
+        <tag k="network" v="lwn"/>
+        <tag k="operator" v="Geo-Naturpark Bergstraße-Odenwald"/>
+        <tag k="osmc:status" v="complete"/>
+        <tag k="osmc:symbol" v="white"/>
+        <tag k="ref" v="WA1"/>
+        <tag k="roundtrip" v="yes"/>
+        <tag k="route" v="hiking"/>
+        <tag k="short_name" v="Goldloch-Weg"/>
+        <tag k="symbol" v="Weißer, oben offener Ring, darin &quot;WA&quot;, in der Mitte eine &quot;1&quot;"/>
+        <tag k="type" v="route"/>
+        <tag k="wiki:symbol" v="White_1_in_white_circle_with_WA_above.svg"/>
+    </relation>
+</osm>

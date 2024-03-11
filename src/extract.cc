@@ -8,14 +8,18 @@
 #include "osmium/handler/node_locations_for_ways.hpp"
 #include "osmium/index/map/flex_mem.hpp"
 #include "osmium/io/pbf_input.hpp"
+#include "osmium/io/xml_input.hpp"
 
 #include "utl/progress_tracker.h"
+#include "utl/to_vec.h"
 
 #include "tiles/osm/hybrid_node_idx.h"
 #include "tiles/osm/tmp_file.h"
 #include "tiles/util_parallel.h"
 
 #include "osr/db.h"
+#include "osr/node_info.h"
+#include "osr/way_info.h"
 
 namespace osm = osmium;
 namespace osm_io = osmium::io;
@@ -27,27 +31,57 @@ namespace fs = std::filesystem;
 
 namespace osr {
 
+constexpr auto const kFlushSize = 100'000;
+
 struct feature_handler : public osmium::handler::Handler {
   feature_handler(db& db) : db_{db} {}
 
-  void way(osmium::Way const& w) { w.nodes(); }
-
-  void node(osmium::Node const& n) {
-    db_.add_node(osm_node_idx_t{n.id()}, point::from_location(n.location()));
+  ~feature_handler() {
+    flush_nodes();
+    flush_rels();
   }
 
-  void area(osmium::Area const& a) { CISTA_UNUSED_PARAM(a); }
+  void way(osmium::Way const& w) {
+    auto const i = osm_way_idx_t{w.id()};
+    rel_cache_[i].nodes_ =
+        utl::to_vec(w.nodes(), [&](osmium::NodeRef const& x) {
+          node_cache_[osm_node_idx_t{x.ref()}].ways_.emplace_back(i);
+          return osm_node_idx_t{x.ref()};
+        });
+
+    if (rel_cache_.size() > kFlushSize) {
+      flush_rels();
+    }
+  }
+
+  void node(osmium::Node const& n) {
+    node_cache_[osm_node_idx_t{n.id()}].p_ = point::from_location(n.location());
+
+    if (node_cache_.size() > kFlushSize) {
+      flush_nodes();
+    }
+  }
+
+  void flush_nodes() {
+    db_.write(node_cache_);
+    node_cache_.clear();
+  }
+
+  void flush_rels() {
+    db_.write(rel_cache_);
+    rel_cache_.clear();
+  }
 
   db& db_;
+  hash_map<osm_node_idx_t, node_info> node_cache_;
+  hash_map<osm_way_idx_t, way_info> rel_cache_;
 };
 
-void extract(fs::path const& in,
-             fs::path const& graph_out,
-             fs::path const& db_out,
-             fs::path const& tmp,
-             std::size_t const db_max_size) {
-  CISTA_UNUSED_PARAM(graph_out);
-  CISTA_UNUSED_PARAM(db_out);
+void extract(config const& conf) {
+  auto const& in = conf.in_;
+  auto const& tmp = conf.tmp_;
+  auto const& db_out = conf.db_;
+  auto const& db_max_size = conf.db_max_size_;
 
   auto input_file = osm_io::File{};
   auto file_size = std::size_t{0U};
@@ -89,10 +123,31 @@ void extract(fs::path const& in,
 
   auto mp_queue = tiles::in_order_queue<osm_mem::Buffer>{};
   auto db = osr::db{db_out, db_max_size};
-  {  // Extract streets, places, and areas.
+  {  // Extract.
     pt->status("Load OSM / Pass 2");
     auto const thread_count =
         std::max(2, static_cast<int>(std::thread::hardware_concurrency()));
+
+    // poor mans thread local (we don't know the threads themselves)
+    auto next_handlers_slot = std::atomic_size_t{0U};
+    auto handlers = std::vector<std::pair<std::thread::id, feature_handler>>{};
+    handlers.reserve(thread_count);
+    for (auto i = 0; i < thread_count; ++i) {
+      handlers.emplace_back(std::thread::id{}, feature_handler{db});
+    }
+    auto const get_handler = [&]() -> feature_handler& {
+      auto const thread_id = std::this_thread::get_id();
+      if (auto it = std::find_if(
+              begin(handlers), end(handlers),
+              [&](auto const& pair) { return pair.first == thread_id; });
+          it != end(handlers)) {
+        return it->second;
+      }
+      auto slot = next_handlers_slot.fetch_add(1);
+      utl::verify(slot < handlers.size(), "more threads than expected");
+      handlers[slot].first = thread_id;
+      return handlers[slot].second;
+    };
 
     // pool must be destructed before handlers!
     auto pool = osmium::thread::Pool{thread_count,
@@ -124,7 +179,7 @@ void extract(fs::path const& in,
             mp_queue.process_in_order(idx, std::move(buf), [&](auto buf2) {
               auto p = std::make_shared<osm_mem::Buffer>(
                   std::forward<decltype(buf2)>(buf2));
-              pool.submit([&, p] { osm::apply(*p, handler); });
+              pool.submit([&, p] { osm::apply(*p, get_handler()); });
             });
           }
         } catch (std::exception const& e) {
@@ -150,6 +205,8 @@ void extract(fs::path const& in,
     reader.close();
     pt->update(pt->in_high_);
   }
+
+  db.write_graph(conf.graph_, conf.node_map_, conf.edge_map_);
 }
 
 }  // namespace osr

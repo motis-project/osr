@@ -1,13 +1,7 @@
-#include "osr/types.h"
-
-#include <filesystem>
+#include "osr/config.h"
 
 namespace osr {
 
-void extract(std::filesystem::path const& in,
-             std::filesystem::path const& graph_out,
-             std::filesystem::path const& db_out,
-             std::filesystem::path const& tmp,
-             std::size_t db_max_size);
+void extract(config const&);
 
 }  // namespace osr

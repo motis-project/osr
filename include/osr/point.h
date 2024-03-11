@@ -32,6 +32,9 @@ struct point {
 
   operator geo::latlng() const { return as_latlng(); }
 
+  double lat() const { return as_latlng().lat_; }
+  double lng() const { return as_latlng().lng_; }
+
   std::int32_t lat_, lng_;
 };
 
