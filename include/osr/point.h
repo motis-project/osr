@@ -39,3 +39,8 @@ struct point {
 };
 
 }  // namespace osr
+
+#include "fmt/ostream.h"
+
+template <>
+struct fmt::formatter<osr::point> : ostream_formatter {};

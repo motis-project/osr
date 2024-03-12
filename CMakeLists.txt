@@ -1,6 +1,21 @@
 cmake_minimum_required(VERSION 3.10)
 project(osr)
 
+if (MSVC)
+    # PDB debug information is not supported by buildcache.
+    # Store debug info in the object files.
+    option(OSR_DEBUG_SYMBOLS "generate debug symbols (debug builds)" ON)
+    if (OSR_DEBUG_SYMBOLS)
+        set(OSR_MSVC_DEBUG_FLAGS "/Z7")
+    else ()
+        set(OSR_MSVC_DEBUG_FLAGS "")
+    endif ()
+    string(REPLACE "/Zi" "${OSR_MSVC_DEBUG_FLAGS}" CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG}")
+    string(REPLACE "/Zi" "${OSR_MSVC_DEBUG_FLAGS}" CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG}")
+    string(REPLACE "/Zi" "${OSR_MSVC_DEBUG_FLAGS}" CMAKE_C_FLAGS_RELWITHDEBINFO "${CMAKE_C_FLAGS_RELWITHDEBINFO}")
+    string(REPLACE "/Zi" "${OSR_MSVC_DEBUG_FLAGS}" CMAKE_CXX_FLAGS_RELWITHDEBINFO "${CMAKE_CXX_FLAGS_RELWITHDEBINFO}")
+endif ()
+
 if (NOT DEFINED CMAKE_MSVC_RUNTIME_LIBRARY)
     if (OSR_MIMALLOC)
         set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>DLL")
@@ -9,8 +24,25 @@ if (NOT DEFINED CMAKE_MSVC_RUNTIME_LIBRARY)
     endif ()
 endif ()
 
+option(OSR_MIMALLOC "use mimalloc" OFF)
+if (OSR_MIMALLOC AND WIN32)
+    set(MI_BUILD_SHARED ON)
+endif ()
+
 include(cmake/buildcache.cmake)
 include(cmake/pkg.cmake)
+
+if (OSR_MIMALLOC)
+    if (WIN32)
+        set(osr-mimalloc-lib mimalloc)
+        target_link_libraries(cista INTERFACE mimalloc)
+    else ()
+        set(osr-mimalloc-lib mimalloc-obj)
+        target_link_libraries(cista INTERFACE mimalloc-static)
+    endif ()
+    target_compile_definitions(cista INTERFACE CISTA_USE_MIMALLOC=1)
+    target_compile_definitions(boost INTERFACE BOOST_ASIO_DISABLE_STD_ALIGNED_ALLOC=1)
+endif ()
 
 # --- LINT ---
 option(OSR_LINT "Run clang-tidy with the compiler." OFF)
@@ -93,3 +125,24 @@ file(GLOB_RECURSE osr-test-files test/*cc)
 add_executable(osr-test ${osr-test-files})
 target_include_directories(osr-test PRIVATE ${CMAKE_CURRENT_BINARY_DIR}/generated)
 target_link_libraries(osr-test gtest osr)
+
+# --- MIMALLOC ---
+if (OSR_MIMALLOC)
+    target_link_libraries(osr-extract ${osr-mimalloc-lib})
+    if (WIN32)
+        add_custom_command(
+                TARGET osr-extract POST_BUILD
+                COMMAND "${CMAKE_COMMAND}" -E copy
+                $<TARGET_FILE:mimalloc>
+                $<TARGET_FILE_DIR:osr>
+                COMMENT "Copy mimalloc.dll to output directory"
+        )
+        add_custom_command(
+                TARGET osr-extract POST_BUILD
+                COMMAND "${CMAKE_COMMAND}" -E copy
+                "${CMAKE_CURRENT_BINARY_DIR}/deps/mimalloc/mimalloc-redirect.dll"
+                $<TARGET_FILE_DIR:osr>
+                COMMENT "Copy mimalloc-redirect.dll to output directory"
+        )
+    endif ()
+endif ()

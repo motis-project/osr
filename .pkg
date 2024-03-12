@@ -2,6 +2,10 @@
   url=git@github.com:motis-project/libosmium.git
   branch=master
   commit=6e6d6b3081cc8bdf25dda89730e25c36eb995516
+[conf]
+  url=git@github.com:motis-project/conf.git
+  branch=master
+  commit=aab49490c6b77027938b74265f386144364aa266
 [geo]
   url=git@github.com:motis-project/geo.git
   branch=master

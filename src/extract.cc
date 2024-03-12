@@ -31,7 +31,34 @@ namespace fs = std::filesystem;
 
 namespace osr {
 
-constexpr auto const kFlushSize = 100'000;
+constexpr auto const kFlushSize = 10'000;
+
+template <typename T>
+struct poor_mans_thread_local {
+  poor_mans_thread_local(std::size_t const thread_count, T handler) {
+    handlers_.reserve(thread_count);
+    for (auto i = 0U; i != thread_count; ++i) {
+      handlers_.emplace_back(std::thread::id{}, handler);
+    }
+  }
+
+  T& get_handler() {
+    auto const thread_id = std::this_thread::get_id();
+    if (auto it = std::find_if(
+            begin(handlers_), end(handlers_),
+            [&](auto const& pair) { return pair.first == thread_id; });
+        it != end(handlers_)) {
+      return it->second;
+    }
+    auto slot = next_handlers_slot_.fetch_add(1);
+    utl::verify(slot < handlers_.size(), "more threads than expected");
+    handlers_[slot].first = thread_id;
+    return handlers_[slot].second;
+  };
+
+  std::vector<std::pair<std::thread::id, T>> handlers_;
+  std::atomic_size_t next_handlers_slot_{0};
+};
 
 struct feature_handler : public osmium::handler::Handler {
   feature_handler(db& db) : db_{db} {}
@@ -42,6 +69,10 @@ struct feature_handler : public osmium::handler::Handler {
   }
 
   void way(osmium::Way const& w) {
+    if (!w.tags().has_key("highway")) {
+      return;
+    }
+
     auto const i = osm_way_idx_t{w.id()};
     rel_cache_[i].nodes_ =
         utl::to_vec(w.nodes(), [&](osmium::NodeRef const& x) {
@@ -79,7 +110,6 @@ struct feature_handler : public osmium::handler::Handler {
 
 void extract(config const& conf) {
   auto const& in = conf.in_;
-  auto const& tmp = conf.tmp_;
   auto const& db_out = conf.db_;
   auto const& db_max_size = conf.db_max_size_;
 
@@ -95,117 +125,34 @@ void extract(config const& conf) {
   }
 
   auto pt = utl::get_active_progress_tracker_or_activate("import");
-  pt->status("Load OSM").out_mod(3.F).in_high(2 * file_size);
+  pt->status("Load OSM").out_mod(3.F).in_high(file_size);
 
-  auto const node_idx_file =
-      tiles::tmp_file{(tmp / "idx.bin").generic_string()};
-  auto const node_dat_file =
-      tiles::tmp_file{(tmp / "dat.bin").generic_string()};
-  auto node_idx =
-      tiles::hybrid_node_idx{node_idx_file.fileno(), node_dat_file.fileno()};
+  auto db = osr::db{db_out, db_max_size};
 
-  {  // Collect node coordinates.
-    pt->status("Load OSM / Pass 1");
-    auto node_idx_builder = tiles::hybrid_node_idx_builder{node_idx};
-
-    auto reader = osm_io::Reader{input_file, osm_eb::node | osm_eb::relation,
-                                 osmium::io::read_meta::no};
+  auto const thread_count =
+      std::max(2, static_cast<int>(std::thread::hardware_concurrency()));
+  auto handlers = poor_mans_thread_local<feature_handler>{
+      static_cast<std::size_t>(thread_count), feature_handler{db}};
+  {
+    auto thread_pool = osmium::thread::Pool{
+        thread_count, static_cast<size_t>(thread_count * 8)};
+    auto reader = osmium::io::Reader{
+        input_file,
+        osmium::osm_entity_bits::node | osmium::osm_entity_bits::way,
+        osmium::io::read_meta::no};
+    auto handler = feature_handler{db};
     while (auto buffer = reader.read()) {
       pt->update(reader.offset());
-      osm::apply(buffer, node_idx_builder);
+      auto p = std::make_shared<osm_mem::Buffer>(
+          std::forward<decltype(buffer)>(buffer));
+      thread_pool.submit([&, p] { osm::apply(*p, handlers.get_handler()); });
     }
-    reader.close();
-
-    node_idx_builder.finish();
-    std::clog << "Hybrid Node Index Statistics:\n";
-    node_idx_builder.dump_stats();
   }
 
-  auto mp_queue = tiles::in_order_queue<osm_mem::Buffer>{};
-  auto db = osr::db{db_out, db_max_size};
-  {  // Extract.
-    pt->status("Load OSM / Pass 2");
-    auto const thread_count =
-        std::max(2, static_cast<int>(std::thread::hardware_concurrency()));
+  std::cout << "Last flush\n";
+  handlers.handlers_.clear();  // trigger flush
 
-    // poor mans thread local (we don't know the threads themselves)
-    auto next_handlers_slot = std::atomic_size_t{0U};
-    auto handlers = std::vector<std::pair<std::thread::id, feature_handler>>{};
-    handlers.reserve(thread_count);
-    for (auto i = 0; i < thread_count; ++i) {
-      handlers.emplace_back(std::thread::id{}, feature_handler{db});
-    }
-    auto const get_handler = [&]() -> feature_handler& {
-      auto const thread_id = std::this_thread::get_id();
-      if (auto it = std::find_if(
-              begin(handlers), end(handlers),
-              [&](auto const& pair) { return pair.first == thread_id; });
-          it != end(handlers)) {
-        return it->second;
-      }
-      auto slot = next_handlers_slot.fetch_add(1);
-      utl::verify(slot < handlers.size(), "more threads than expected");
-      handlers[slot].first = thread_id;
-      return handlers[slot].second;
-    };
-
-    // pool must be destructed before handlers!
-    auto pool = osmium::thread::Pool{thread_count,
-                                     static_cast<size_t>(thread_count * 8)};
-
-    auto reader = osm_io::Reader{input_file, pool, osmium::io::read_meta::no};
-    auto seq_reader = tiles::sequential_until_finish<osm_mem::Buffer>{[&] {
-      pt->update(reader.file_size() + reader.offset());
-      return reader.read();
-    }};
-
-    std::atomic_bool has_exception{false};
-    std::vector<std::future<void>> workers;
-    auto handler = feature_handler{db};
-    workers.reserve(thread_count / 2);
-    for (auto i = 0; i < thread_count / 2; ++i) {
-      workers.emplace_back(pool.submit([&] {
-        try {
-          while (true) {
-            auto opt = seq_reader.process();
-            if (!opt.has_value()) {
-              break;
-            }
-
-            auto& [idx, buf] = *opt;
-            tiles::update_locations(node_idx, buf);
-            osm::apply(buf, handler);
-
-            mp_queue.process_in_order(idx, std::move(buf), [&](auto buf2) {
-              auto p = std::make_shared<osm_mem::Buffer>(
-                  std::forward<decltype(buf2)>(buf2));
-              pool.submit([&, p] { osm::apply(*p, get_handler()); });
-            });
-          }
-        } catch (std::exception const& e) {
-          fmt::print(std::clog, "EXCEPTION CAUGHT: {} {}\n",
-                     std::this_thread::get_id(), e.what());
-          has_exception = true;
-        } catch (...) {
-          fmt::print(std::clog, "UNKNOWN EXCEPTION CAUGHT: {} \n",
-                     std::this_thread::get_id());
-          has_exception = true;
-        }
-      }));
-    }
-
-    utl::verify(!workers.empty(), "have no workers");
-    for (auto& worker : workers) {
-      worker.wait();
-    }
-
-    utl::verify(!has_exception, "load_osm: exception caught!");
-    utl::verify(mp_queue.queue_.empty(), "mp_queue not empty!");
-
-    reader.close();
-    pt->update(pt->in_high_);
-  }
-
+  std::cout << "Writing graph\n";
   db.write_graph(conf.graph_, conf.node_map_, conf.edge_map_);
 }
 

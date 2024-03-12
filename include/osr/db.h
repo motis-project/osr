@@ -17,6 +17,7 @@ struct db {
   db(std::filesystem::path const& path, std::uint64_t const max_size);
   ~db();
 
+  point get_node_pos(osm_node_idx_t);
   void get_node(osm_node_idx_t, node_info&);
   void get_way(osm_way_idx_t, way_info&);
 

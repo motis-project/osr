@@ -4,6 +4,9 @@
 #include <string_view>
 #include <vector>
 
+#include "fmt/ranges.h"
+#include "fmt/std.h"
+
 #include "osr/buf_io.h"
 #include "osr/point.h"
 #include "osr/types.h"
@@ -47,5 +50,9 @@ struct node_info {
   point p_;
   std::vector<osm_way_idx_t> ways_;
 };
+
+inline auto format_as(node_info const& i) {
+  return std::tuple{i.n_, i.p_, i.ways_};
+}
 
 }  // namespace osr

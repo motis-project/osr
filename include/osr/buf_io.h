@@ -19,9 +19,10 @@ void write_buf(std::vector<std::uint8_t>& buf, Vec&& data, T&&... t) {
   static_assert(std::is_trivially_copyable_v<
                 std::decay_t<typename std::decay_t<Vec>::value_type>>);
 
-  buf.resize((sizeof(std::decay_t<T>) + ...) +
-             data.size() *
-                 sizeof(std::decay_t<typename std::decay_t<Vec>::value_type>));
+  auto const n_vector_bytes =
+      data.size() *
+      sizeof(std::decay_t<typename std::decay_t<Vec>::value_type>);
+  buf.resize((sizeof(std::decay_t<T>) + ...) + n_vector_bytes);
 
   auto offset = std::size_t{0U};
   auto const write = [&](auto&& x) {
@@ -31,8 +32,8 @@ void write_buf(std::vector<std::uint8_t>& buf, Vec&& data, T&&... t) {
   };
 
   (write(t), ...);
-  for (auto const& x : data) {
-    write(x);
+  if (!data.empty()) {
+    std::memcpy(&buf[offset], data.data(), n_vector_bytes);
   }
 }
 
@@ -41,7 +42,7 @@ void read_buf(std::span<std::uint8_t const> buf, Vec& data, T&... t) {
   static_assert((std::is_trivially_copyable_v<T> && ...));
   static_assert(
       std::is_trivially_copyable_v<typename std::decay_t<Vec>::value_type>);
-  
+
   constexpr auto const required_size = (sizeof(std::decay_t<T>) + ...);
   utl::verify(buf.size() >= required_size, "buffer size {} < required size {}",
               buf.size(), required_size);
@@ -53,11 +54,12 @@ void read_buf(std::span<std::uint8_t const> buf, Vec& data, T&... t) {
     offset += size;
   };
 
-  data.clear();
-
   (read(t), ...);
-  while (offset <= buf.size() - sizeof(typename Vec::value_type)) {
-    read(data.emplace_back());
+
+  auto const n_remaining_bytes = (buf.size() - offset);
+  data.resize(n_remaining_bytes / sizeof(typename Vec::value_type));
+  if (!data.empty()) {
+    std::memcpy(data.data(), &buf[offset], n_remaining_bytes);
   }
 }
 

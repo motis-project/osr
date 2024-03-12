@@ -2,6 +2,8 @@
 
 #include "cista/mmap.h"
 
+#include "cista/strong.h"
+
 namespace osr {
 
 template <typename Key, typename T>
