@@ -126,6 +126,9 @@ add_executable(osr-test ${osr-test-files})
 target_include_directories(osr-test PRIVATE ${CMAKE_CURRENT_BINARY_DIR}/generated)
 target_link_libraries(osr-test gtest osr)
 
+# --- FUZZ ---
+add_subdirectory(fuzz)
+
 # --- MIMALLOC ---
 if (OSR_MIMALLOC)
     target_link_libraries(osr-extract ${osr-mimalloc-lib})

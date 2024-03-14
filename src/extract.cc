@@ -31,14 +31,16 @@ namespace fs = std::filesystem;
 
 namespace osr {
 
-constexpr auto const kFlushSize = 10'000;
+constexpr auto const kFlushSize = 1'000'000;
 
 template <typename T>
 struct poor_mans_thread_local {
-  poor_mans_thread_local(std::size_t const thread_count, T handler) {
+  template <typename... Args>
+  poor_mans_thread_local(std::size_t const thread_count, Args&&... args) {
     handlers_.reserve(thread_count);
     for (auto i = 0U; i != thread_count; ++i) {
-      handlers_.emplace_back(std::thread::id{}, handler);
+      handlers_.emplace_back(std::pair<std::thread::id, T>{
+          std::thread::id{}, T{std::forward<Args...>(args)...}});
     }
   }
 
@@ -54,19 +56,20 @@ struct poor_mans_thread_local {
     utl::verify(slot < handlers_.size(), "more threads than expected");
     handlers_[slot].first = thread_id;
     return handlers_[slot].second;
-  };
+  }
 
   std::vector<std::pair<std::thread::id, T>> handlers_;
   std::atomic_size_t next_handlers_slot_{0};
 };
 
 struct feature_handler : public osmium::handler::Handler {
-  feature_handler(db& db) : db_{db} {}
-
-  ~feature_handler() {
-    flush_nodes();
-    flush_rels();
-  }
+  feature_handler() = default;
+  feature_handler(db& db) : db_{&db} {}
+  feature_handler(feature_handler const&) = default;
+  feature_handler& operator=(feature_handler const&) = default;
+  feature_handler(feature_handler&&) = default;
+  feature_handler& operator=(feature_handler&&) = default;
+  ~feature_handler() { x_flush(); }
 
   void way(osmium::Way const& w) {
     if (!w.tags().has_key("highway")) {
@@ -80,32 +83,44 @@ struct feature_handler : public osmium::handler::Handler {
           return osm_node_idx_t{x.ref()};
         });
 
-    if (rel_cache_.size() > kFlushSize) {
-      flush_rels();
+    if (rel_cache_.size() > kFlushSize || node_cache_.size() > kFlushSize) {
+      x_flush();
     }
   }
+
+  void x_flush() {
+    db_->write(node_cache_, true);
+    node_cache_.clear();
+
+    db_->write(rel_cache_);
+    rel_cache_.clear();
+  }
+
+  db* db_{nullptr};
+  hash_map<osm_node_idx_t, node_info> node_cache_;
+  hash_map<osm_way_idx_t, way_info> rel_cache_;
+};
+
+struct node_handler : public osmium::handler::Handler {
+  node_handler(db& db) : db_{&db} {}
+
+  ~node_handler() { x_flush(); }
 
   void node(osmium::Node const& n) {
     node_cache_[osm_node_idx_t{n.id()}].p_ = point::from_location(n.location());
 
     if (node_cache_.size() > kFlushSize) {
-      flush_nodes();
+      x_flush();
     }
   }
 
-  void flush_nodes() {
-    db_.write(node_cache_);
+  void x_flush() {
+    db_->write(node_cache_, false);
     node_cache_.clear();
   }
 
-  void flush_rels() {
-    db_.write(rel_cache_);
-    rel_cache_.clear();
-  }
-
-  db& db_;
   hash_map<osm_node_idx_t, node_info> node_cache_;
-  hash_map<osm_way_idx_t, way_info> rel_cache_;
+  db* db_;
 };
 
 void extract(config const& conf) {
@@ -125,27 +140,34 @@ void extract(config const& conf) {
   }
 
   auto pt = utl::get_active_progress_tracker_or_activate("import");
-  pt->status("Load OSM").out_mod(3.F).in_high(file_size);
+  pt->status("Load OSM").out_mod(3.F).in_high(file_size * 2U);
 
   auto db = osr::db{db_out, db_max_size};
 
   auto const thread_count =
       std::max(2, static_cast<int>(std::thread::hardware_concurrency()));
   auto handlers = poor_mans_thread_local<feature_handler>{
-      static_cast<std::size_t>(thread_count), feature_handler{db}};
-  {
+      static_cast<std::size_t>(thread_count), db};
+  {  // Read ways.
     auto thread_pool = osmium::thread::Pool{
         thread_count, static_cast<size_t>(thread_count * 8)};
-    auto reader = osmium::io::Reader{
-        input_file,
-        osmium::osm_entity_bits::node | osmium::osm_entity_bits::way,
-        osmium::io::read_meta::no};
-    auto handler = feature_handler{db};
+    auto reader = osmium::io::Reader{input_file, osmium::osm_entity_bits::way,
+                                     osmium::io::read_meta::no};
     while (auto buffer = reader.read()) {
       pt->update(reader.offset());
       auto p = std::make_shared<osm_mem::Buffer>(
           std::forward<decltype(buffer)>(buffer));
       thread_pool.submit([&, p] { osm::apply(*p, handlers.get_handler()); });
+    }
+  }
+
+  {  // Read nodes.
+    auto reader = osmium::io::Reader{input_file, osmium::osm_entity_bits::node,
+                                     osmium::io::read_meta::no};
+    auto handler = node_handler{db};
+    while (auto buffer = reader.read()) {
+      pt->update(reader.file_size() + reader.offset());
+      osmium::apply(buffer, handler);
     }
   }
 

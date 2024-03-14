@@ -2,6 +2,8 @@
 
 #include "cista/mmap.h"
 
+#include "utl/verify.h"
+
 #include "cista/strong.h"
 
 namespace osr {
@@ -20,14 +22,19 @@ struct basic_mmap_vec {
   }
 
   T& operator[](Key const i) {
-    utl_verify(i < size_, "mmap_vec: i={}, size={}", i, size_);
     return *reinterpret_cast<T*>(mmap_.data() + sizeof(T) * cista::to_idx(i));
   }
 
   T const& operator[](Key const i) const {
-    utl_verify(i < size_, "mmap_vec: i={}, size={}", i, size_);
     return *reinterpret_cast<T const*>(mmap_.data() +
                                        sizeof(T) * cista::to_idx(i));
+  }
+
+  std::size_t size() const { return size_; }
+
+  void resize(std::size_t const size) {
+    size_ = size;
+    mmap_.resize(size);
   }
 
   cista::mmap mmap_;

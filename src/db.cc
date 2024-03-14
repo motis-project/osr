@@ -49,7 +49,7 @@ struct db::impl {
   void write_graph(fs::path const& graph_path,
                    fs::path const& node_map_path,
                    fs::path const& edge_map_path) {
-    auto t = lmdb::txn{env_};
+    auto t = lmdb::txn{env_, lmdb::txn_flags::NOSYNC};
     auto nodes_db = t.dbi_open(kNodeDb);
 
     {  // Assign graph node ids to every node with >1 wayation.
@@ -139,11 +139,11 @@ struct db::impl {
         }
       }
 
-      for (auto const& edges : out) {
+      for (auto const edges : out) {
         g.out_edges_.emplace_back(edges);
       }
 
-      for (auto const& edges : in) {
+      for (auto const edges : in) {
         g.in_edges_.emplace_back(edges);
       }
     }
@@ -152,10 +152,10 @@ struct db::impl {
   }
 
   void write(hash_map<osm_way_idx_t, way_info>& ways) {
-    auto l = std::lock_guard{flush_mutex_};
+    auto l = std::lock_guard<std::mutex>{flush_mutex_};
 
     auto buf = std::vector<std::uint8_t>{};
-    auto t = lmdb::txn{env_};
+    auto t = lmdb::txn{env_, lmdb::txn_flags::NOSYNC};
     auto db = t.dbi_open(kWayDb);
 
     for (auto const& [r, way] : ways) {
@@ -166,11 +166,11 @@ struct db::impl {
     t.commit();
   }
 
-  void write(hash_map<osm_node_idx_t, node_info>& nodes) {
-    auto l = std::lock_guard{flush_mutex_};
+  void write(hash_map<osm_node_idx_t, node_info>& nodes, bool const create) {
+    auto l = std::lock_guard<std::mutex>{flush_mutex_};
 
     auto buf = std::vector<std::uint8_t>{};
-    auto t = lmdb::txn{env_};
+    auto t = lmdb::txn{env_, lmdb::txn_flags::NOSYNC};
     auto db = t.dbi_open(kNodeDb);
     auto existing_node = node_info{};
 
@@ -182,11 +182,11 @@ struct db::impl {
         existing_node.read(*existing);
         existing_node.merge(node);
         existing_node.write(buf);
-      } else {
+        t.put(db, to_idx(n), view(buf));
+      } else if (create) {
         node.write(buf);
+        t.put(db, to_idx(n), view(buf));
       }
-
-      t.put(db, to_idx(n), view(buf));
     }
 
     t.commit();
@@ -236,6 +236,8 @@ void db::get_node(osm_node_idx_t i, node_info& nfo) { impl_->get_node(i, nfo); }
 void db::get_way(osm_way_idx_t i, way_info& nfo) { impl_->get_way(i, nfo); }
 
 void db::write(hash_map<osm_way_idx_t, way_info>& x) { impl_->write(x); }
-void db::write(hash_map<osm_node_idx_t, node_info>& x) { impl_->write(x); }
+void db::write(hash_map<osm_node_idx_t, node_info>& x, bool const create) {
+  impl_->write(x, create);
+}
 
 }  // namespace osr

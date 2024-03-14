@@ -5,7 +5,7 @@
 [conf]
   url=git@github.com:motis-project/conf.git
   branch=master
-  commit=aab49490c6b77027938b74265f386144364aa266
+  commit=a32d491bd54800310a53ccba13f4ee9f6736ff3e
 [geo]
   url=git@github.com:motis-project/geo.git
   branch=master
@@ -33,7 +33,7 @@
 [tiles]
   url=git@github.com:motis-project/tiles.git
   branch=master
-  commit=abbf28537c2ac0271dc8e4e29ed47b0359265723
+  commit=7812f7ec273c577941844608298c66808daefde5
 [mimalloc]
   url=git@github.com:motis-project/mimalloc.git
   branch=master

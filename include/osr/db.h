@@ -22,7 +22,7 @@ struct db {
   void get_way(osm_way_idx_t, way_info&);
 
   void write(hash_map<osm_way_idx_t, way_info>&);
-  void write(hash_map<osm_node_idx_t, node_info>&);
+  void write(hash_map<osm_node_idx_t, node_info>&, bool create);
 
   void write_graph(std::filesystem::path const& graph_path,
                    std::filesystem::path const& node_map_path,
