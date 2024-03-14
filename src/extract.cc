@@ -31,7 +31,8 @@ namespace fs = std::filesystem;
 
 namespace osr {
 
-constexpr auto const kFlushSize = 1'000'000;
+constexpr auto const kFlushSizeStart = 100'000;
+constexpr auto const kFlushSize = 500'000;
 
 template <typename T>
 struct poor_mans_thread_local {
@@ -39,8 +40,8 @@ struct poor_mans_thread_local {
   poor_mans_thread_local(std::size_t const thread_count, Args&&... args) {
     handlers_.reserve(thread_count);
     for (auto i = 0U; i != thread_count; ++i) {
-      handlers_.emplace_back(std::pair<std::thread::id, T>{
-          std::thread::id{}, T{std::forward<Args...>(args)...}});
+      handlers_.emplace_back(
+          std::pair<std::thread::id, T>{std::thread::id{}, T{args...}});
     }
   }
 
@@ -64,7 +65,8 @@ struct poor_mans_thread_local {
 
 struct feature_handler : public osmium::handler::Handler {
   feature_handler() = default;
-  feature_handler(db& db) : db_{&db} {}
+  feature_handler(db& db, std::mutex& flush_mutex)
+      : flush_mutex_{&flush_mutex}, db_{&db} {}
   feature_handler(feature_handler const&) = default;
   feature_handler& operator=(feature_handler const&) = default;
   feature_handler(feature_handler&&) = default;
@@ -85,10 +87,18 @@ struct feature_handler : public osmium::handler::Handler {
 
     if (rel_cache_.size() > kFlushSize || node_cache_.size() > kFlushSize) {
       x_flush();
+      return;
+    }
+
+    if (rel_cache_.size() > kFlushSizeStart ||
+        node_cache_.size() > kFlushSizeStart) {
+      try_flush();
     }
   }
 
   void x_flush() {
+    auto const lock = std::scoped_lock<std::mutex>{*flush_mutex_};
+
     db_->write(node_cache_, true);
     node_cache_.clear();
 
@@ -96,13 +106,27 @@ struct feature_handler : public osmium::handler::Handler {
     rel_cache_.clear();
   }
 
+  void try_flush() {
+    auto const lock =
+        std::unique_lock<std::mutex>{*flush_mutex_, std::try_to_lock};
+    if (lock.owns_lock()) {
+      db_->write(node_cache_, true);
+      node_cache_.clear();
+
+      db_->write(rel_cache_);
+      rel_cache_.clear();
+    }
+  }
+
+  std::mutex* flush_mutex_{nullptr};
   db* db_{nullptr};
   hash_map<osm_node_idx_t, node_info> node_cache_;
   hash_map<osm_way_idx_t, way_info> rel_cache_;
 };
 
 struct node_handler : public osmium::handler::Handler {
-  node_handler(db& db) : db_{&db} {}
+  node_handler(db& db, std::mutex& flush_mutex)
+      : flush_mutex_{&flush_mutex}, db_{&db} {}
 
   ~node_handler() { x_flush(); }
 
@@ -115,42 +139,40 @@ struct node_handler : public osmium::handler::Handler {
   }
 
   void x_flush() {
+    auto const lock = std::scoped_lock<std::mutex>{*flush_mutex_};
     db_->write(node_cache_, false);
     node_cache_.clear();
   }
 
   hash_map<osm_node_idx_t, node_info> node_cache_;
+  std::mutex* flush_mutex_{nullptr};
   db* db_;
 };
 
 void extract(config const& conf) {
-  auto const& in = conf.in_;
-  auto const& db_out = conf.db_;
-  auto const& db_max_size = conf.db_max_size_;
-
   auto input_file = osm_io::File{};
   auto file_size = std::size_t{0U};
   try {
-    input_file = osm_io::File{in};
+    input_file = osm_io::File{conf.in_};
     file_size =
         osm_io::Reader{input_file, osmium::io::read_meta::no}.file_size();
   } catch (...) {
-    fmt::println("load_osm failed [file={}]", in);
+    fmt::println("load_osm failed [file={}]", conf.in_);
     throw;
   }
 
   auto pt = utl::get_active_progress_tracker_or_activate("import");
   pt->status("Load OSM").out_mod(3.F).in_high(file_size * 2U);
 
-  auto db = osr::db{db_out, db_max_size};
+  auto flush_mutex = std::mutex{};
+  auto db = osr::db{conf.out_};
 
-  auto const thread_count =
-      std::max(2, static_cast<int>(std::thread::hardware_concurrency()));
   auto handlers = poor_mans_thread_local<feature_handler>{
-      static_cast<std::size_t>(thread_count), db};
+      static_cast<std::size_t>(
+          osmium::thread::Pool::default_instance().num_threads()),
+      db, flush_mutex};
   {  // Read ways.
-    auto thread_pool = osmium::thread::Pool{
-        thread_count, static_cast<size_t>(thread_count * 8)};
+    auto& thread_pool = osmium::thread::Pool::default_instance();
     auto reader = osmium::io::Reader{input_file, osmium::osm_entity_bits::way,
                                      osmium::io::read_meta::no};
     while (auto buffer = reader.read()) {
@@ -164,7 +186,7 @@ void extract(config const& conf) {
   {  // Read nodes.
     auto reader = osmium::io::Reader{input_file, osmium::osm_entity_bits::node,
                                      osmium::io::read_meta::no};
-    auto handler = node_handler{db};
+    auto handler = node_handler{db, flush_mutex};
     while (auto buffer = reader.read()) {
       pt->update(reader.file_size() + reader.offset());
       osmium::apply(buffer, handler);
@@ -175,7 +197,7 @@ void extract(config const& conf) {
   handlers.handlers_.clear();  // trigger flush
 
   std::cout << "Writing graph\n";
-  db.write_graph(conf.graph_, conf.node_map_, conf.edge_map_);
+  db.write_graph();
 }
 
 }  // namespace osr

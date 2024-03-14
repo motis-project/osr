@@ -14,7 +14,7 @@
 namespace osr {
 
 struct db {
-  db(std::filesystem::path const& path, std::uint64_t const max_size);
+  db(std::filesystem::path const&);
   ~db();
 
   point get_node_pos(osm_node_idx_t);
@@ -24,9 +24,7 @@ struct db {
   void write(hash_map<osm_way_idx_t, way_info>&);
   void write(hash_map<osm_node_idx_t, node_info>&, bool create);
 
-  void write_graph(std::filesystem::path const& graph_path,
-                   std::filesystem::path const& node_map_path,
-                   std::filesystem::path const& edge_map_path);
+  void write_graph();
 
   void write_debug(std::ostream&);
 

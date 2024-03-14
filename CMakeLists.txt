@@ -1,6 +1,8 @@
 cmake_minimum_required(VERSION 3.10)
 project(osr)
 
+cmake_policy(SET CMP0079 NEW)
+
 if (MSVC)
     # PDB debug information is not supported by buildcache.
     # Store debug info in the object files.
@@ -98,23 +100,27 @@ target_compile_features(osr PUBLIC cxx_std_23)
 target_compile_options(osr PRIVATE ${osr-compile-options})
 target_link_libraries(osr
         osmium
+        zlibstatic
+        protozero
+        expat
         geo
         cista
         utl
-        protozero
         tiles-import-library
         rtree
         tg
         lmdb
         unordered_dense
         boost-thread
-        expat
         rapidjson
 )
 
 # --- MAIN ---
 add_executable(osr-extract exe/extract.cc)
 target_link_libraries(osr-extract osr)
+
+add_executable(osr-count exe/count.cc)
+target_link_libraries(osr-count osmium protozero expat zlibstatic)
 
 # --- TEST ---
 configure_file(

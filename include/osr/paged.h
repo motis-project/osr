@@ -3,6 +3,7 @@
 #include "osr/mmap_vec.h"
 
 #include "cista/memory_holder.h"
+#include "cista/serialization.h"
 
 #include "osr/types.h"
 #include "utl/verify.h"
@@ -14,25 +15,14 @@ namespace osr {
 template <typename Key,
           typename SizeType = std::uint64_t,
           SizeType MinPageSize = 16U,
-          SizeType MaxPageSize = 4096U>
+          SizeType MaxPageSize = 65536U>
 struct mmm {
   using size_type = SizeType;
 
+  static constexpr auto const kMode =
+      cista::mode::WITH_INTEGRITY | cista::mode::WITH_STATIC_VERSION;
+
   struct page {
-    page(size_type const size,
-         size_type const capacity,
-         size_type const start) {
-      size_ = size;
-      capacity_ = capacity;
-      start_ = start;
-    }
-
-    page() {
-      size_ = 0U;
-      capacity_ = 0U;
-      start_ = 0U;
-    }
-
     friend std::ostream& operator<<(std::ostream& out, page const& p) {
       return out << "(start=" << p.start_ << ", capacity=" << p.capacity_
                  << ", size=" << p.size_ << ")";
@@ -50,26 +40,24 @@ struct mmm {
       std::memcpy(data(m), d.data(), d.size());
     }
 
-    union {
-      size_type next_;
-      size_type size_;
-    };
-    size_type capacity_, start_;
+    size_type size_{0U};
+    size_type capacity_{0U};
+    size_type start_{0U};
   };
 
   static constexpr size_type free_list_index(size_type const capacity) {
-    return std::countr_zero(capacity) - std::countr_zero(MinPageSize);
+    return static_cast<size_type>(std::countr_zero(capacity) -
+                                  std::countr_zero(MinPageSize));
   }
 
-  explicit mmm(std::filesystem::path const& p)
-      : data_{cista::mmap{p.c_str()}},
+  explicit mmm(std::filesystem::path const& data_path)
+      : data_{cista::mmap{data_path.c_str()}},
         map_{cista::raw::make_unique<hash_map<Key, page>>()} {}
 
-  std::string_view get(Key const i) const {
+  std::optional<std::string_view> get(Key const i) const {
     auto const it = map_->find(i);
-    utl::verify(it != end(*map_), "key {} not found", i);
-    //    std::cerr << "  GET " << i << " => " << it->second << "\n";
-    return it->second.view(*this);
+    return it == end(*map_) ? std::nullopt
+                            : std::optional{it->second.view(*this)};
   }
 
   void put(Key const i, std::string_view data) {
@@ -95,6 +83,16 @@ struct mmm {
 
   void size() const { return map_->size(); }
 
+  void write_index(std::filesystem::path const& p) {
+    auto mmap = cista::mmap{p.c_str(), cista::mmap::protection::WRITE};
+    auto writer = cista::buf<cista::mmap>(std::move(mmap));
+
+    {
+      //    auto const timer = scoped_timer{"graph.write"};
+      cista::serialize<kMode>(writer, *map_.el_.get());
+    }
+  }
+
   page update_page(page const& p, std::string_view data) {
     if (data.size() <= p.capacity_) {
       p.write(*this, data);
@@ -113,6 +111,9 @@ struct mmm {
   page create_page(std::size_t const size) {
     auto const capacity = cista::next_power_of_two(std::max(MinPageSize, size));
     auto const i = free_list_index(capacity);
+    utl::verify(i < free_list_.size(),
+                "size={}, capacity={}, i={}, free_list.size={} over capacity",
+                size, capacity, i, free_list_.size());
     if (!free_list_[i].empty()) {
       auto start = free_list_[i].pop(*this);
       //      std::cerr << "  USING FREE LIST [capacity=" << capacity << "]: "
@@ -128,12 +129,16 @@ struct mmm {
       //                << "\n";
       auto const start = data_.size();
       data_.resize(data_.size() + capacity);
-      return page(size, capacity, start);
+      return page{size, capacity, start};
     }
     return page{};
   }
 
   void free_page(page p) {
+    utl::verify(free_list_index(p.capacity_) < free_list_.size(),
+                "free_page: page={} i={}, free_list.size={} over capacity",
+                fmt::streamed(p), free_list_index(p.capacity_),
+                free_list_.size());
     //    std::cerr << "    FREE PAGE: " << p << "\n";
     free_list_[free_list_index(p.capacity_)].push(*this, p.start_);
   }
@@ -141,6 +146,9 @@ struct mmm {
   template <typename T>
   T read(size_type const offset) {
     static_assert(std::is_trivially_copyable_v<T>);
+    utl::verify(offset < data_.size() - sizeof(T),
+                "read<{}>({}): invalid offset={}, size={}",
+                cista::type_str<T>(), sizeof(T), offset, data_.size());
     auto x = T{};
     std::memcpy(&x, &data_[offset], sizeof(x));
     return x;
@@ -158,16 +166,15 @@ struct mmm {
     }
 
     void push(mmm& m, size_type const x) {
-      //      std::cerr << "  PUSH curr_next=" << next_ << ", x=" << x << "\n";
+      m.fl_dbg_ << "  PUSH curr_next=" << next_ << ", x=" << x << std::endl;
       m.write(x, next_);
       next_ = x;
     }
 
     size_type pop(mmm& m) {
+      m.fl_dbg_ << "  POP curr_next=" << next_ << std::endl;
+      utl::verify(!empty(), "invalid read access to empty free list entry");
       auto const next_next = m.read<size_type>(next_);
-      //      std::cerr << "  POP curr_next=" << next_ << ", next_next=" <<
-      //      next_next
-      //                << "\n";
       auto start = next_;
       next_ = next_next;
       return start;
@@ -176,6 +183,8 @@ struct mmm {
     size_type next_{std::numeric_limits<size_type>::max()};
   };
 
+  std::filesystem::path dir_;
+  std::ofstream fl_dbg_{dir_ / "fl.txt"};
   mmap_vec<std::uint8_t> data_;
   cista::wrapped<hash_map<Key, page>> map_;
   std::array<node, free_list_index(MaxPageSize) + 1U> free_list_{};

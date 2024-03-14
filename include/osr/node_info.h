@@ -25,6 +25,11 @@ struct node_info {
     ways_.erase(std::unique(begin(ways_), end(ways_)), end(ways_));
   }
 
+  static void write_node_idx(std::string_view s, node_idx_t const n) {
+    auto const s_mut = const_cast<char*>(s.data());
+    std::memcpy(s_mut, &n, sizeof(node_idx_t));
+  }
+
   void write(std::vector<std::uint8_t>& buf) const {
     write_buf(buf, ways_, n_, p_);
   }

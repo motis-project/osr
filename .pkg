@@ -1,7 +1,7 @@
 [osmium]
   url=git@github.com:motis-project/libosmium.git
   branch=master
-  commit=6e6d6b3081cc8bdf25dda89730e25c36eb995516
+  commit=d5cc2a02d997c2b464d37d37c3a75cd9efa23dc4
 [conf]
   url=git@github.com:motis-project/conf.git
   branch=master
