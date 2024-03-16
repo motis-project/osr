@@ -113,8 +113,11 @@ struct ways {
   vector<std::pair<osm_node_idx_t, node_idx_t>> osm_node_to_graph_;  // #1
   vector_map<way_idx_t, osm_way_idx_t> way_osm_idx_;
   vecvec<way_idx_t, point, std::uint64_t> way_polylines_;
-  vecvec<way_idx_t, osm_node_idx_t, std::uint64_t> way_nodes_;
-  vecvec<way_idx_t, edge_idx_t, std::uint64_t> way_edges_;
+  vecvec<way_idx_t, osm_node_idx_t, std::uint64_t> way_osm_nodes_;
+  vecvec<way_idx_t, node_idx_t, std::uint64_t> way_multi_nodes_;
+  vecvec<way_idx_t, std::uint16_t> way_multi_node_section_distances_;
+  vecvec<node_idx_t, way_idx_t, std::uint64_t> multi_node_ways_;
+  vecvec<node_idx_t, std::uint8_t, std::uint64_t> multi_node_way_node_idx_;
   multi_counter node_way_counter_;
 };
 
