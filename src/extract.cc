@@ -97,11 +97,53 @@ void extract(config const& conf) {
 
     auto reader = osm_io::Reader{input_file, pool, osm_eb::way,
                                  osmium::io::read_meta::no};
-    while (auto buf = reader.read()) {
-      pt->update(file_size + reader.offset());
-      tiles::update_locations(node_idx, buf);
-      osm::apply(buf, h);
+    auto seq_reader = tiles::sequential_until_finish<osm_mem::Buffer>{[&] {
+      pt->update(reader.file_size() + reader.offset());
+      return reader.read();
+    }};
+    std::atomic_bool has_exception{false};
+    std::vector<std::future<void>> workers;
+    workers.reserve(thread_count / 2U);
+    for (auto i = 0U; i < thread_count / 2U; ++i) {
+      workers.emplace_back(pool.submit([&] {
+        try {
+          while (true) {
+            auto opt = seq_reader.process();
+            if (!opt.has_value()) {
+              break;
+            }
+
+            auto& [idx, buf] = *opt;
+            tiles::update_locations(node_idx, buf);
+            osm::apply(buf, h);
+          }
+        } catch (std::exception const& e) {
+          fmt::print(std::clog, "EXCEPTION CAUGHT: {} {}\n",
+                     std::this_thread::get_id(), e.what());
+          has_exception = true;
+        } catch (...) {
+          fmt::print(std::clog, "UNKNOWN EXCEPTION CAUGHT: {} \n",
+                     std::this_thread::get_id());
+          has_exception = true;
+        }
+      }));
     }
+
+    utl::verify(!workers.empty(), "have no workers");
+    for (auto& worker : workers) {
+      worker.wait();
+    }
+
+    utl::verify(!has_exception, "load_osm: exception caught!");
+
+    reader.close();
+    pt->update(pt->in_high_);
+
+    //    while (auto buf = reader.read()) {
+    //      pt->update(file_size + reader.offset());
+    //      tiles::update_locations(node_idx, buf);
+    //      osm::apply(buf, h);
+    //    }
 
     reader.close();
     pt->update(pt->in_high_);

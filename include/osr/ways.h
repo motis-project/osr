@@ -52,8 +52,9 @@ struct ways {
 
     // Build edges.
     auto g = graph{};
-    auto out = cista::raw::mutable_fws_multimap<node_idx_t, edge_idx_t>{};
-    auto in = cista::raw::mutable_fws_multimap<node_idx_t, edge_idx_t>{};
+    auto out =
+        cista::raw::mutable_fws_multimap<node_idx_t, edge_idx_t>{};  // #2
+    auto in = cista::raw::mutable_fws_multimap<node_idx_t, edge_idx_t>{};  // #3
     auto edge_map = edge_map_t{cista::mmap{(p / "edge_map.bin").c_str()}};
     for (auto const [osm_way_idx, nodes, polyline] :
          utl::zip(way_osm_idx_, way_nodes_, way_polylines_)) {
@@ -109,7 +110,7 @@ struct ways {
     return it->second;
   }
 
-  vector<std::pair<osm_node_idx_t, node_idx_t>> osm_node_to_graph_;
+  vector<std::pair<osm_node_idx_t, node_idx_t>> osm_node_to_graph_;  // #1
   vector_map<way_idx_t, osm_way_idx_t> way_osm_idx_;
   vecvec<way_idx_t, point, std::uint64_t> way_polylines_;
   vecvec<way_idx_t, osm_node_idx_t, std::uint64_t> way_nodes_;

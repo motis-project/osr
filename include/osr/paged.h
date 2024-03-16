@@ -166,13 +166,11 @@ struct mmm {
     }
 
     void push(mmm& m, size_type const x) {
-      m.fl_dbg_ << "  PUSH curr_next=" << next_ << ", x=" << x << std::endl;
       m.write(x, next_);
       next_ = x;
     }
 
     size_type pop(mmm& m) {
-      m.fl_dbg_ << "  POP curr_next=" << next_ << std::endl;
       utl::verify(!empty(), "invalid read access to empty free list entry");
       auto const next_next = m.read<size_type>(next_);
       auto start = next_;
@@ -184,7 +182,6 @@ struct mmm {
   };
 
   std::filesystem::path dir_;
-  std::ofstream fl_dbg_{dir_ / "fl.txt"};
   mmap_vec<std::uint8_t> data_;
   cista::wrapped<hash_map<Key, page>> map_;
   std::array<node, free_list_index(MaxPageSize) + 1U> free_list_{};
