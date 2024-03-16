@@ -58,14 +58,6 @@ struct db::impl {
         auto const val = *ways_.get(osm_way_idx);
         way.read(val);
 
-        auto const dbg =
-            false;  // lmdb::as_int<osm_way_idx_t>(el->first) == 913798295;
-        auto const print_dbg = [&](auto& a, auto&&... x) {
-          if (dbg) {
-            fmt::println(fmt::runtime(a), std::forward<decltype(x)>(x)...);
-          }
-        };
-
         // collect graph nodes
         auto pred_pos = std::make_optional<point>();
         auto distance = 0.0;
@@ -78,15 +70,12 @@ struct db::impl {
           }
 
           auto const pos = node_info::read_point(*node);
-          print_dbg("node: n={}, node_idx={} at pos={}", n,
-                    node_info::read_node_idx(*node), pos);
           if (pred_pos.has_value()) {
             distance += geo::distance(pos, *pred_pos);
           }
 
           if (auto const node_idx = node_info::read_node_idx(*node);
               node_idx != node_idx_t::invalid()) {
-            print_dbg("  routing graph node!");
             nodes.emplace_back(node_idx, pos, distance);
             distance = 0.0;
           }
@@ -102,7 +91,6 @@ struct db::impl {
           edge_map.push_back(osm_way_idx);
           out[from].push_back(edge_idx);
           in[to].push_back(edge_idx);
-          print_dbg("edge [{}]: {} -> {}", edge_idx, from, to);
         }
       }
 
