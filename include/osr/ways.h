@@ -68,7 +68,7 @@ struct ways {
       auto pred_pos = std::make_optional<point>();
       auto from = node_idx_t::invalid();
       auto distance = 0.0;
-      auto i = std::uint8_t{0U};
+      auto i = std::uint16_t{0U};
       auto way_idx = way_idx_t{way_nodes_.size()};
       auto dists = way_node_dist_.add_back_sized(0U);
       auto nodes = way_nodes_.add_back_sized(0U);
@@ -90,7 +90,7 @@ struct ways {
           distance = 0.0;
           from = to;
 
-          if (i == std::numeric_limits<std::uint8_t>::max()) {
+          if (i == std::numeric_limits<std::uint16_t>::max()) {
             fmt::println("error: way with {} nodes", osm_way_idx);
           }
 
@@ -130,8 +130,8 @@ struct ways {
                 mm_vec<way_idx_t>{mm("node_ways_data.bin")}},
             mm_vec<cista::page<std::uint64_t>>{mm("node_ways_index.bin")}},
         node_in_way_idx_{
-            cista::paged<mm_vec<std::uint8_t>>{
-                mm_vec<std::uint8_t>{mm("node_in_way_idx_data.bin")}},
+            cista::paged<mm_vec<std::uint16_t>>{
+                mm_vec<std::uint16_t>{mm("node_in_way_idx_data.bin")}},
             mm_vec<cista::page<std::uint64_t>>{
                 mm("node_in_way_idx_index.bin")}} {}
 
@@ -149,7 +149,7 @@ struct ways {
   mm_vecvec<way_idx_t, node_idx_t, std::uint64_t> way_nodes_;
   mm_vecvec<way_idx_t, std::uint16_t, std::uint64_t> way_node_dist_;
   mm_paged_vecvec<node_idx_t, way_idx_t> node_ways_;
-  mm_paged_vecvec<node_idx_t, std::uint8_t> node_in_way_idx_;
+  mm_paged_vecvec<node_idx_t, std::uint16_t> node_in_way_idx_;
   multi_counter node_way_counter_;
 };
 
