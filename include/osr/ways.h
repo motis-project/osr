@@ -5,11 +5,11 @@
 
 #include "osmium/osm/way.hpp"
 
-#include "osr/graph.h"
+#include "utl/zip.h"
+
 #include "osr/multi_counter.h"
 #include "osr/point.h"
 #include "osr/types.h"
-#include "utl/zip.h"
 
 namespace osr {
 
@@ -33,91 +33,123 @@ struct ways {
 
     way_osm_idx_.push_back(osm_way_idx_t{w.id()});
     way_polylines_.emplace_back(w.nodes() | std::views::transform(get_point));
-    way_nodes_.emplace_back(w.nodes() | std::views::transform(get_node_id));
+    way_osm_nodes_.emplace_back(w.nodes() | std::views::transform(get_node_id));
   }
 
   void write_graph(std::filesystem::path const& p) {
-    auto node_map = node_map_t{cista::mmap{(p / "node_map.bin").c_str()}};
-    {  // Assign graph node ids to every node with >1 wayation.
+    std::cout << "WRITE GRAPH\n" << std::flush;
+
+    CISTA_UNUSED_PARAM(p)
+    auto pt = utl::get_active_progress_tracker_or_activate("osr");
+
+    {  // Assign graph node ids to every node with >1 way.
+      pt->status("Create graph nodes")
+          .in_high(node_way_counter_.size())
+          .out_bounds(60, 75);
+
       auto node_idx = node_idx_t{0U};
-      for (auto i = osm_node_idx_t{0U}; i != node_way_counter_.size(); ++i) {
-        if (!node_way_counter_.is_multi(to_idx(i))) {
-          continue;
-        }
-        node_map.push_back(i);
-        osm_node_to_graph_.push_back({i, node_idx});
+      node_way_counter_.multi_.for_each_set_bit([&](std::uint64_t const b_idx) {
+        auto const i = osm_node_idx_t{b_idx};
+        node_to_osm_.push_back(i);
+        osm_to_node_.push_back({i, node_idx});
         ++node_idx;
-      }
+        pt->update(b_idx);
+      });
+      node_ways_.resize(to_idx(node_idx));
+      node_in_way_idx_.resize(to_idx(node_idx));
     }
 
     // Build edges.
-    auto g = graph{};
-    auto out =
-        cista::raw::mutable_fws_multimap<node_idx_t, edge_idx_t>{};  // #2
-    auto in = cista::raw::mutable_fws_multimap<node_idx_t, edge_idx_t>{};  // #3
-    auto edge_map = edge_map_t{cista::mmap{(p / "edge_map.bin").c_str()}};
-    for (auto const [osm_way_idx, nodes, polyline] :
-         utl::zip(way_osm_idx_, way_nodes_, way_polylines_)) {
+    pt->status("Connect ways")
+        .in_high(way_osm_nodes_.size())
+        .out_bounds(75, 100);
+    for (auto const [osm_way_idx, osm_nodes, polyline] :
+         utl::zip(way_osm_idx_, way_osm_nodes_, way_polylines_)) {
       auto pred_pos = std::make_optional<point>();
       auto from = node_idx_t::invalid();
       auto distance = 0.0;
-
-      auto way_edges = way_edges_.add_back_sized(0U);
-      for (auto const [osm_node_idx, pos] : utl::zip(nodes, polyline)) {
+      auto i = std::uint8_t{0U};
+      auto way_idx = way_idx_t{way_nodes_.size()};
+      auto dists = way_node_dist_.add_back_sized(0U);
+      auto nodes = way_nodes_.add_back_sized(0U);
+      for (auto const [osm_node_idx, pos] : utl::zip(osm_nodes, polyline)) {
         if (pred_pos.has_value()) {
           distance += geo::distance(pos, *pred_pos);
         }
 
         if (node_way_counter_.is_multi(to_idx(osm_node_idx))) {
           auto const to = get_node_idx(osm_node_idx);
+          node_ways_[to].push_back(way_idx);
+          node_in_way_idx_[to].push_back(i);
+          nodes.push_back(to);
 
           if (from != node_idx_t::invalid()) {
-            auto edge_idx = g.add_edge(from, to, edge_flags_t{}, distance);
-            edge_map.push_back(osm_way_idx);
-            out[from].push_back(edge_idx);
-            in[to].push_back(edge_idx);
-            way_edges.push_back(edge_idx);
+            dists.push_back(distance);
           }
 
           distance = 0.0;
           from = to;
+
+          if (i == std::numeric_limits<std::uint8_t>::max()) {
+            fmt::println("error: way with {} nodes", osm_way_idx);
+          }
+
+          ++i;
         }
 
         pred_pos = pos;
       }
+      pt->increment();
     }
-
-    for (auto const edges : out) {
-      g.out_edges_.emplace_back(edges);
-    }
-    for (auto const edges : in) {
-      g.in_edges_.emplace_back(edges);
-    }
-
-    g.write(p / "graph.bin");
-
-    auto mmap = cista::mmap{(p / "ways.bin").generic_string().c_str(),
-                            cista::mmap::protection::WRITE};
-    auto writer = cista::buf<cista::mmap>(std::move(mmap));
-    cista::serialize<kMode>(writer, *this);
   }
 
   node_idx_t get_node_idx(osm_node_idx_t const i) {
     auto const it =
-        std::lower_bound(begin(osm_node_to_graph_), end(osm_node_to_graph_), i,
+        std::lower_bound(begin(osm_to_node_), end(osm_to_node_), i,
                          [](auto&& a, auto&& b) { return a.first < b; });
-    utl::verify(it != end(osm_node_to_graph_), "osm node {} not found", i);
+    utl::verify(it != end(osm_to_node_), "osm node {} not found", i);
     return it->second;
   }
 
-  vector<std::pair<osm_node_idx_t, node_idx_t>> osm_node_to_graph_;  // #1
-  vector_map<way_idx_t, osm_way_idx_t> way_osm_idx_;
-  vecvec<way_idx_t, point, std::uint64_t> way_polylines_;
-  vecvec<way_idx_t, osm_node_idx_t, std::uint64_t> way_osm_nodes_;
-  vecvec<way_idx_t, node_idx_t, std::uint64_t> way_multi_nodes_;
-  vecvec<way_idx_t, std::uint16_t> way_multi_node_section_distances_;
-  vecvec<node_idx_t, way_idx_t, std::uint64_t> multi_node_ways_;
-  vecvec<node_idx_t, std::uint8_t, std::uint64_t> multi_node_way_node_idx_;
+  ways(std::filesystem::path p, cista::mmap::protection const mode)
+      : p_{std::move(p)},
+        mode_{mode},
+        osm_to_node_{mm("osm_to_mode.bin")},
+        node_to_osm_{mm("node_to_osm.bin")},
+        way_osm_idx_{mm("way_osm_idx.bin")},
+        way_polylines_{mm_vec<point>{mm("way_polylines_data.bin")},
+                       mm_vec<std::uint64_t>{mm("way_polylines_index.bin")}},
+        way_osm_nodes_{mm_vec<osm_node_idx_t>{mm("way_osm_nodes_data.bin")},
+                       mm_vec<std::uint64_t>{mm("way_osm_nodes_index.bin")}},
+        way_nodes_{mm_vec<node_idx_t>{mm("way_nodes_data.bin")},
+                   mm_vec<std::uint64_t>{mm("way_nodes_index.bin")}},
+        way_node_dist_{mm_vec<std::uint16_t>{mm("way_node_dist_data.bin")},
+                       mm_vec<std::uint64_t>{mm("way_node_dist_index.bin")}},
+        node_ways_{
+            cista::paged<mm_vec<way_idx_t>>{
+                mm_vec<way_idx_t>{mm("node_ways_data.bin")}},
+            mm_vec<cista::page<std::uint64_t>>{mm("node_ways_index.bin")}},
+        node_in_way_idx_{
+            cista::paged<mm_vec<std::uint8_t>>{
+                mm_vec<std::uint8_t>{mm("node_in_way_idx_data.bin")}},
+            mm_vec<cista::page<std::uint64_t>>{
+                mm("node_in_way_idx_index.bin")}} {}
+
+  cista::mmap mm(char const* file) {
+    return cista::mmap{(p_ / file).c_str(), mode_};
+  }
+
+  std::filesystem::path p_;
+  cista::mmap::protection mode_;
+  mm_vec<pair<osm_node_idx_t, node_idx_t>> osm_to_node_;
+  mm_vec_map<node_idx_t, osm_node_idx_t> node_to_osm_;
+  mm_vec_map<way_idx_t, osm_way_idx_t> way_osm_idx_;
+  mm_vecvec<way_idx_t, point, std::uint64_t> way_polylines_;
+  mm_vecvec<way_idx_t, osm_node_idx_t, std::uint64_t> way_osm_nodes_;
+  mm_vecvec<way_idx_t, node_idx_t, std::uint64_t> way_nodes_;
+  mm_vecvec<way_idx_t, std::uint16_t, std::uint64_t> way_node_dist_;
+  mm_paged_vecvec<node_idx_t, way_idx_t> node_ways_;
+  mm_paged_vecvec<node_idx_t, std::uint8_t> node_in_way_idx_;
   multi_counter node_way_counter_;
 };
 

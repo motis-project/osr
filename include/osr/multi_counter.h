@@ -9,26 +9,23 @@ namespace osr {
 struct multi_counter {
   using size_type = bitvec64::size_type;
 
-  static constexpr size_type once_idx(size_type const i) { return i * 2U; }
-
-  static constexpr size_type multi_idx(size_type const i) {
-    return i * 2U + 1U;
-  }
-
-  bool is_multi(size_type const i) const { return v_[multi_idx(i)]; }
+  bool is_multi(size_type const i) const { return multi_[i]; }
 
   void increment(size_type const i) {
-    v_.resize(std::max(v_.size(), multi_idx(i) + 1U));
-    if (v_[once_idx(i)]) {
-      v_.set(multi_idx(i), true);
+    once_.resize(std::max(once_.size(), i + 1U));
+    multi_.resize(std::max(multi_.size(), i + 1U));
+    if (once_[i]) {
+      if (!multi_[i]) {
+        multi_.set(i, true);
+      }
     } else {
-      v_.set(once_idx(i), true);
+      once_.set(i, true);
     }
   }
 
-  size_type size() const noexcept { return v_.size() / 2; }
+  size_type size() const noexcept { return once_.size(); }
 
-  bitvec64 v_;
+  bitvec64 once_, multi_;
 };
 
 }  // namespace osr

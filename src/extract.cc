@@ -17,7 +17,6 @@
 #include "tiles/osm/tmp_file.h"
 #include "tiles/util_parallel.h"
 
-#include "osr/db.h"
 #include "osr/ways.h"
 
 namespace osm = osmium;
@@ -31,6 +30,8 @@ namespace fs = std::filesystem;
 namespace osr {
 
 struct handler : public osmium::handler::Handler {
+  handler(fs::path out) : w_{std::move(out), cista::mmap::protection::WRITE} {}
+
   void way(osmium::Way const& w) {
     if (!w.tags().has_key("highway")) {
       return;
@@ -63,7 +64,7 @@ void extract(config const& conf) {
   }
 
   auto pt = utl::get_active_progress_tracker_or_activate("osr");
-  pt->status("Load OSM").in_high(file_size * 2U);
+  pt->status("Load OSM").in_high(file_size * 2U).out_bounds(0, 30);
 
   auto const node_idx_file =
       tiles::tmp_file{(conf.out_ / "idx.bin").generic_string()};
@@ -86,9 +87,9 @@ void extract(config const& conf) {
     node_idx_builder.finish();
   }
 
-  auto h = handler{};
+  auto h = handler{conf.out_};
   {  // Extract streets, places, and areas.
-    pt->status("Load OSM / Pass 2");
+    pt->status("Load OSM / Pass 2").out_bounds(30, 60);
     auto const thread_count = std::max(2U, std::thread::hardware_concurrency());
 
     // pool must be destructed before handlers!
@@ -98,7 +99,7 @@ void extract(config const& conf) {
     auto reader = osm_io::Reader{input_file, pool, osm_eb::way,
                                  osmium::io::read_meta::no};
     auto seq_reader = tiles::sequential_until_finish<osm_mem::Buffer>{[&] {
-      pt->update(reader.file_size() + reader.offset());
+      pt->update(file_size + reader.offset());
       return reader.read();
     }};
     std::atomic_bool has_exception{false};
@@ -139,17 +140,9 @@ void extract(config const& conf) {
     reader.close();
     pt->update(pt->in_high_);
 
-    //    while (auto buf = reader.read()) {
-    //      pt->update(file_size + reader.offset());
-    //      tiles::update_locations(node_idx, buf);
-    //      osm::apply(buf, h);
-    //    }
-
     reader.close();
-    pt->update(pt->in_high_);
   }
 
-  std::cout << "Writing graph\n";
   h.w_.write_graph(conf.out_);
 }
 

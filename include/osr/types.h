@@ -6,13 +6,14 @@
 #include "ankerl/cista_adapter.h"
 
 #include "cista/containers/bitvec.h"
+#include "cista/containers/mmap_vec.h"
+#include "cista/containers/paged.h"
+#include "cista/containers/paged_vecvec.h"
 #include "cista/containers/vector.h"
 #include "cista/containers/vecvec.h"
 #include "cista/hashing.h"
 #include "cista/memory_holder.h"
 #include "cista/strong.h"
-
-#include "osr/mmap_vec.h"
 
 namespace osr {
 
@@ -25,8 +26,33 @@ using vector_map = cista::basic_vector<V, cista::raw::ptr, false, K>;
 template <typename T>
 using vector = cista::basic_vector<T, cista::raw::ptr, false, std::uint64_t>;
 
+template <typename K, typename V>
+using mm_vec_map = cista::basic_mmap_vec<V, K>;
+
+template <typename T>
+using mm_vec = cista::basic_mmap_vec<T, std::uint64_t>;
+
+template <typename K, typename V, typename SizeType = cista::base_t<K>>
+using mm_vecvec = cista::basic_vecvec<K, mm_vec<V>, mm_vec<SizeType>>;
+
+template <typename Key, typename T>
+struct mmap_paged_vecvec_helper {
+  using data_t = cista::paged<mm_vec<T>>;
+  using idx_t = mm_vec<typename data_t::page_t>;
+  using type = cista::paged_vecvec<idx_t, data_t, Key>;
+};
+
+template <typename Key, typename T>
+using mm_paged_vecvec = mmap_paged_vecvec_helper<Key, T>::type;
+
+template <typename T>
+using vector = cista::basic_vector<T, cista::raw::ptr, false, std::uint64_t>;
+
 using bitvec64 = cista::basic_bitvec<
     cista::basic_vector<std::uint64_t, cista::raw::ptr, false, std::uint64_t>>;
+
+template <typename First, typename Second>
+using pair = cista::pair<First, Second>;
 
 template <typename K,
           typename V,
@@ -39,12 +65,8 @@ using osm_way_idx_t = cista::strong<std::uint64_t, struct osm_way_idx_>;
 
 using way_idx_t = cista::strong<std::uint32_t, struct way_idx_>;
 using node_idx_t = cista::strong<std::uint32_t, struct node_idx_>;
-using edge_idx_t = cista::strong<std::uint32_t, struct edge_idx_>;
 
 using edge_flags_t = std::uint64_t;
 using distance_t = std::uint16_t;
-
-using edge_map_t = mmap_vec_map<edge_idx_t, osm_way_idx_t>;
-using node_map_t = mmap_vec_map<node_idx_t, osm_node_idx_t>;
 
 }  // namespace osr

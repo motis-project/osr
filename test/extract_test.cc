@@ -3,7 +3,6 @@
 #include <filesystem>
 
 #include "osr/extract.h"
-#include "osr/meta.h"
 
 namespace fs = std::filesystem;
 using namespace osr;
@@ -16,7 +15,4 @@ TEST(extract, wa) {
 
   auto const c = config{"test/map.osm", "/tmp/osr_test"};
   osr::extract(c);
-
-  auto m = meta{c};
-  std::cout << m.write() << "\n";
 }
