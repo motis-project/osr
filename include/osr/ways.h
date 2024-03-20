@@ -5,6 +5,8 @@
 
 #include "osmium/osm/way.hpp"
 
+#include "utl/progress_tracker.h"
+#include "utl/verify.h"
 #include "utl/zip.h"
 
 #include "osr/multi_counter.h"
@@ -13,33 +15,32 @@
 
 namespace osr {
 
-constexpr auto const kMode =
-    cista::mode::WITH_INTEGRITY | cista::mode::WITH_STATIC_VERSION;
-
 struct ways {
-  void way(osmium::Way const& w) {
-    if (!w.tags().has_key("highway")) {
-      return;
-    }
+  ways(std::filesystem::path p, cista::mmap::protection const mode)
+      : p_{std::move(p)},
+        mode_{mode},
+        osm_to_node_{mm("osm_to_mode.bin")},
+        node_to_osm_{mm("node_to_osm.bin")},
+        way_osm_idx_{mm("way_osm_idx.bin")},
+        way_polylines_{mm_vec<point>{mm("way_polylines_data.bin")},
+                       mm_vec<std::uint64_t>{mm("way_polylines_index.bin")}},
+        way_osm_nodes_{mm_vec<osm_node_idx_t>{mm("way_osm_nodes_data.bin")},
+                       mm_vec<std::uint64_t>{mm("way_osm_nodes_index.bin")}},
+        way_nodes_{mm_vec<node_idx_t>{mm("way_nodes_data.bin")},
+                   mm_vec<std::uint64_t>{mm("way_nodes_index.bin")}},
+        way_node_dist_{mm_vec<std::uint16_t>{mm("way_node_dist_data.bin")},
+                       mm_vec<std::uint64_t>{mm("way_node_dist_index.bin")}},
+        node_ways_{
+            cista::paged<mm_vec<way_idx_t>>{
+                mm_vec<way_idx_t>{mm("node_ways_data.bin")}},
+            mm_vec<cista::page<std::uint64_t>>{mm("node_ways_index.bin")}},
+        node_in_way_idx_{
+            cista::paged<mm_vec<std::uint16_t>>{
+                mm_vec<std::uint16_t>{mm("node_in_way_idx_data.bin")}},
+            mm_vec<cista::page<std::uint64_t>>{
+                mm("node_in_way_idx_index.bin")}} {}
 
-    auto const get_point = [](osmium::NodeRef const& n) {
-      return point::from_location(n.location());
-    };
-
-    auto const get_node_id = [&](osmium::NodeRef const& n) {
-      node_way_counter_.increment(n.positive_ref());
-      return osm_node_idx_t{n.positive_ref()};
-    };
-
-    way_osm_idx_.push_back(osm_way_idx_t{w.id()});
-    way_polylines_.emplace_back(w.nodes() | std::views::transform(get_point));
-    way_osm_nodes_.emplace_back(w.nodes() | std::views::transform(get_node_id));
-  }
-
-  void write_graph(std::filesystem::path const& p) {
-    std::cout << "WRITE GRAPH\n" << std::flush;
-
-    CISTA_UNUSED_PARAM(p)
+  void connect_ways() {
     auto pt = utl::get_active_progress_tracker_or_activate("osr");
 
     {  // Assign graph node ids to every node with >1 way.
@@ -111,29 +112,18 @@ struct ways {
     return it->second;
   }
 
-  ways(std::filesystem::path p, cista::mmap::protection const mode)
-      : p_{std::move(p)},
-        mode_{mode},
-        osm_to_node_{mm("osm_to_mode.bin")},
-        node_to_osm_{mm("node_to_osm.bin")},
-        way_osm_idx_{mm("way_osm_idx.bin")},
-        way_polylines_{mm_vec<point>{mm("way_polylines_data.bin")},
-                       mm_vec<std::uint64_t>{mm("way_polylines_index.bin")}},
-        way_osm_nodes_{mm_vec<osm_node_idx_t>{mm("way_osm_nodes_data.bin")},
-                       mm_vec<std::uint64_t>{mm("way_osm_nodes_index.bin")}},
-        way_nodes_{mm_vec<node_idx_t>{mm("way_nodes_data.bin")},
-                   mm_vec<std::uint64_t>{mm("way_nodes_index.bin")}},
-        way_node_dist_{mm_vec<std::uint16_t>{mm("way_node_dist_data.bin")},
-                       mm_vec<std::uint64_t>{mm("way_node_dist_index.bin")}},
-        node_ways_{
-            cista::paged<mm_vec<way_idx_t>>{
-                mm_vec<way_idx_t>{mm("node_ways_data.bin")}},
-            mm_vec<cista::page<std::uint64_t>>{mm("node_ways_index.bin")}},
-        node_in_way_idx_{
-            cista::paged<mm_vec<std::uint16_t>>{
-                mm_vec<std::uint16_t>{mm("node_in_way_idx_data.bin")}},
-            mm_vec<cista::page<std::uint64_t>>{
-                mm("node_in_way_idx_index.bin")}} {}
+  point get_node_pos(node_idx_t const i) const {
+    auto const osm_idx = node_to_osm_[i];
+    auto const way = node_ways_[i][0];
+    for (auto const [o, p] :
+         utl::zip(way_osm_nodes_[way], way_polylines_[way])) {
+      if (o == osm_idx) {
+        return p;
+      }
+    }
+    throw utl::fail("unable to find node {} [osm={}] in way {} [osm]", i,
+                    osm_idx, way, way_osm_idx_[way]);
+  }
 
   cista::mmap mm(char const* file) {
     return cista::mmap{(p_ / file).c_str(), mode_};

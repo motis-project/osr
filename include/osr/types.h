@@ -11,8 +11,6 @@
 #include "cista/containers/paged_vecvec.h"
 #include "cista/containers/vector.h"
 #include "cista/containers/vecvec.h"
-#include "cista/hashing.h"
-#include "cista/memory_holder.h"
 #include "cista/strong.h"
 
 namespace osr {

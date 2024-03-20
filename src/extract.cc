@@ -38,7 +38,21 @@ struct handler : public osmium::handler::Handler {
     }
 
     auto l = std::scoped_lock<std::mutex>{mutex_};
-    w_.way(w);
+
+    auto const get_point = [](osmium::NodeRef const& n) {
+      return point::from_location(n.location());
+    };
+
+    auto const get_node_id = [&](osmium::NodeRef const& n) {
+      w_.node_way_counter_.increment(n.positive_ref());
+      return osm_node_idx_t{n.positive_ref()};
+    };
+
+    w_.way_osm_idx_.push_back(osm_way_idx_t{w.id()});
+    w_.way_polylines_.emplace_back(w.nodes() |
+                                   std::views::transform(get_point));
+    w_.way_osm_nodes_.emplace_back(w.nodes() |
+                                   std::views::transform(get_node_id));
   }
 
   std::mutex mutex_;
@@ -143,7 +157,7 @@ void extract(config const& conf) {
     reader.close();
   }
 
-  h.w_.write_graph(conf.out_);
+  h.w_.connect_ways();
 }
 
 }  // namespace osr

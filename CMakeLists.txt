@@ -119,8 +119,8 @@ target_link_libraries(osr
 add_executable(osr-extract exe/extract.cc)
 target_link_libraries(osr-extract osr)
 
-add_executable(osr-count exe/count.cc)
-target_link_libraries(osr-count osmium protozero expat zlibstatic)
+add_executable(osr-serve exe/serve.cc)
+target_link_libraries(osr-serve osr)
 
 # --- TEST ---
 configure_file(
@@ -131,9 +131,6 @@ file(GLOB_RECURSE osr-test-files test/*cc)
 add_executable(osr-test ${osr-test-files})
 target_include_directories(osr-test PRIVATE ${CMAKE_CURRENT_BINARY_DIR}/generated)
 target_link_libraries(osr-test gtest osr)
-
-# --- FUZZ ---
-add_subdirectory(fuzz)
 
 # --- MIMALLOC ---
 if (OSR_MIMALLOC)
