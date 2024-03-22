@@ -9,7 +9,7 @@
 [geo]
   url=git@github.com:motis-project/geo.git
   branch=master
-  commit=bd2f571763022ec6339c2f72154585abb661275a
+  commit=ee76668f0f0454e4acd3c769e00c6868620e3490
 [cista]
   url=git@github.com:felixguendling/cista.git
   branch=master
@@ -21,7 +21,7 @@
 [utl]
   url=git@github.com:motis-project/utl.git
   branch=master
-  commit=6c9555ca87a0d7ef7fdc1ce1c9f0febde9608e66
+  commit=ed68a5325c5e378b9318c044336424e5d28eae44
 [protozero]
   url=git@github.com:motis-project/protozero.git
   branch=master
