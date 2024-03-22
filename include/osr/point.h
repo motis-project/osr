@@ -38,9 +38,6 @@ struct point {
   std::int32_t lat_, lng_;
 };
 
+inline auto format_as(point const p) { return std::pair{p.lat(), p.lng()}; }
+
 }  // namespace osr
-
-#include "fmt/ostream.h"
-
-template <>
-struct fmt::formatter<osr::point> : ostream_formatter {};

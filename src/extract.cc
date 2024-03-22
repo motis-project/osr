@@ -30,7 +30,9 @@ namespace fs = std::filesystem;
 namespace osr {
 
 struct handler : public osmium::handler::Handler {
-  handler(fs::path out) : w_{std::move(out), cista::mmap::protection::WRITE} {}
+  handler(fs::path out) : w_{std::move(out), cista::mmap::protection::WRITE} {
+    w_.node_way_counter_.reserve(12000000000);
+  }
 
   void way(osmium::Way const& w) {
     if (!w.tags().has_key("highway")) {

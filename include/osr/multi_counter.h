@@ -25,6 +25,11 @@ struct multi_counter {
 
   size_type size() const noexcept { return once_.size(); }
 
+  void reserve(size_type const size) {
+    once_.blocks_.reserve(size / bitvec64::bits_per_block);
+    multi_.blocks_.reserve(size / bitvec64::bits_per_block);
+  }
+
   bitvec64 once_, multi_;
 };
 

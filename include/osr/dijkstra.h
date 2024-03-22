@@ -1,0 +1,106 @@
+#pragma once
+
+#include "utl/helpers/algorithm.h"
+
+#include "osr/dial.h"
+#include "osr/types.h"
+#include "osr/ways.h"
+
+namespace osr {
+
+using dist_t = std::uint16_t;
+
+constexpr auto const kInfeasible = std::numeric_limits<dist_t>::max();
+
+struct label {
+  node_idx_t node_;
+  dist_t dist_;
+};
+
+struct get_bucket {
+  dist_t operator()(label const& l) { return l.dist_; }
+};
+
+struct dijkstra_state {
+  void reset(ways const& w, dist_t const max_dist) {
+    pq_.clear();
+    pq_.n_buckets(max_dist);
+    pred_.resize(w.n_nodes());
+    dist_.resize(w.n_nodes());
+    utl::fill(pred_, node_idx_t::invalid());
+    utl::fill(dist_, std::numeric_limits<dist_t>::max());
+  }
+
+  void add_start(node_idx_t const start, dist_t const start_dist) {
+    dist_[start] = start_dist;
+    pq_.push(label{.node_ = start, .dist_ = start_dist});
+  }
+
+  dial<label, get_bucket> pq_{get_bucket{}};
+  vector_map<node_idx_t, node_idx_t> pred_;
+  vector_map<node_idx_t, dist_t> dist_;
+};
+
+struct pedestrian {
+  dist_t operator()(std::uint16_t const dist) {
+    return static_cast<dist_t>(std::round(dist * 1.42F));
+  }
+};
+
+struct bike {
+  dist_t operator()(std::uint16_t const dist) {
+    return static_cast<dist_t>(std::round(dist * 1.42F));
+  }
+};
+
+struct car {
+  dist_t operator()(std::uint16_t const dist) {
+    return static_cast<dist_t>(std::round(dist * 1.42F));
+  }
+};
+
+template <typename EdgeWeightFn>
+void dijkstra(ways const& w,
+              dijkstra_state& s,
+              dist_t const max_dist,
+              EdgeWeightFn&& edge_weight_fn) {
+  while (!s.pq_.empty()) {
+    auto l = s.pq_.top();
+    s.pq_.pop();
+
+    if (s.dist_[l.node_] < l.dist_) {
+      continue;
+    }
+
+    for (auto const [way, i] :
+         utl::zip(w.node_ways_[l.node_], w.node_in_way_idx_[l.node_])) {
+      auto const expand = [&](std::uint16_t const from,
+                              std::uint16_t const to) {
+        auto const dist_idx = std::min(from, to);
+        auto const dist = w.way_node_dist_[way][dist_idx];
+        auto const edge_weight = edge_weight_fn(dist);
+        if (edge_weight == kInfeasible) {
+          return;
+        }
+        auto const new_dist = l.dist_ + edge_weight;
+        auto const target_node = w.way_nodes_[way][to];
+
+        if (new_dist < s.dist_[target_node] && new_dist < max_dist) {
+          s.dist_[target_node] = new_dist;
+          s.pred_[target_node] = w.way_nodes_[way][from];
+          s.pq_.push(label{.node_ = target_node,
+                           .dist_ = static_cast<dist_t>(new_dist)});
+        }
+      };
+
+      if (i != 0U) {
+        expand(i, i - 1);
+      }
+      if (i != w.way_nodes_[way].size() - 1U) {
+        expand(i, i + 1);
+      }
+    }
+  }
+}
+
+}  // namespace osr

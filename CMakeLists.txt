@@ -119,8 +119,10 @@ target_link_libraries(osr
 add_executable(osr-extract exe/extract.cc)
 target_link_libraries(osr-extract osr)
 
-add_executable(osr-serve exe/serve.cc)
-target_link_libraries(osr-serve osr)
+file(GLOB_RECURSE osr-backend-src exe/backend/*.cc)
+add_executable(osr-backend ${osr-backend-src})
+target_link_libraries(osr-backend osr web-server conf)
+target_include_directories(osr-backend PRIVATE exe/backend/include)
 
 # --- TEST ---
 configure_file(

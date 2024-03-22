@@ -66,3 +66,7 @@
   url=git@github.com:motis-project/expat.git
   branch=master
   commit=b8c26c40f1900899b95c795705e0252fc0c1350c
+[net]
+  url=git@github.com:motis-project/net.git
+  branch=master
+  commit=44674d2f3917e20b7019a0f7254d332522c36fb7

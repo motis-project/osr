@@ -104,11 +104,20 @@ struct ways {
     }
   }
 
-  node_idx_t get_node_idx(osm_node_idx_t const i) {
+  std::optional<node_idx_t> find_node_idx(osm_node_idx_t const i) const {
     auto const it =
         std::lower_bound(begin(osm_to_node_), end(osm_to_node_), i,
                          [](auto&& a, auto&& b) { return a.first < b; });
-    utl::verify(it != end(osm_to_node_), "osm node {} not found", i);
+    return it != end(osm_to_node_) && it->first == i ? std::optional{it->second}
+                                                     : std::nullopt;
+  }
+
+  node_idx_t get_node_idx(osm_node_idx_t const i) const {
+    auto const it =
+        std::lower_bound(begin(osm_to_node_), end(osm_to_node_), i,
+                         [](auto&& a, auto&& b) { return a.first < b; });
+    utl::verify(it != end(osm_to_node_) && it->first == i,
+                "osm node {} not found", i);
     return it->second;
   }
 
@@ -128,6 +137,9 @@ struct ways {
   cista::mmap mm(char const* file) {
     return cista::mmap{(p_ / file).c_str(), mode_};
   }
+
+  way_idx_t::value_t n_ways() const { return way_osm_idx_.size(); }
+  node_idx_t::value_t n_nodes() const { return node_to_osm_.size(); }
 
   std::filesystem::path p_;
   cista::mmap::protection mode_;
