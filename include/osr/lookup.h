@@ -18,16 +18,14 @@ struct start_dist {
   friend bool operator<(start_dist const& a, start_dist const& b) {
     return a.dist_ < b.dist_;
   }
-  double min() const { return std::min(init_left_.second, init_right_.second); }
   double dist_;
   geo::latlng best_;
   std::size_t best_segment_idx_;
   way_idx_t way_;
-  std::pair<node_idx_t, double> init_left_{node_idx_t::invalid(),
-                                           std::numeric_limits<double>::max()};
-  std::pair<node_idx_t, double> init_right_{node_idx_t::invalid(),
-                                            std::numeric_limits<double>::max()};
-  std::vector<geo::latlng> left_path_, right_path_;
+  std::tuple<node_idx_t, double, std::vector<geo::latlng>> init_left_{
+      node_idx_t::invalid(), std::numeric_limits<double>::max(), {}};
+  std::tuple<node_idx_t, double, std::vector<geo::latlng>> init_right_{
+      node_idx_t::invalid(), std::numeric_limits<double>::max(), {}};
 };
 
 template <typename PolyLine>
@@ -82,18 +80,23 @@ struct lookup {
   void init_right(geo::latlng const& query,
                   start_dist& d,
                   std::size_t const idx) const {
+    auto& [node, dist, path] = d.init_right_;
+
     auto const polyline = ways_.way_polylines_[d.way_];
     auto const osm_idx = ways_.way_osm_nodes_[d.way_];
     auto pos = d.best_;
-    auto dist = geo::distance(query, d.best_);
-    d.right_path_.push_back(query);
-    d.right_path_.push_back(d.best_);
+
+    dist = geo::distance(query, d.best_);
+    path.push_back(query);
+    path.push_back(d.best_);
     for (auto i = idx; i != polyline.size(); ++i) {
       dist += geo::distance(pos, polyline[i]);
       pos = polyline[i];
-      d.right_path_.push_back(pos);
-      if (auto const node = ways_.find_node_idx(osm_idx[i]); node.has_value()) {
-        d.init_right_ = {*node, dist};
+      path.push_back(pos);
+      auto const way_node = ways_.find_node_idx(osm_idx[i]);
+      if (way_node.has_value()) {
+        node = *way_node;
+        dist = dist;
         break;
       }
     }
@@ -102,19 +105,24 @@ struct lookup {
   void init_left(geo::latlng const& query,
                  start_dist& d,
                  std::size_t const idx) const {
+    auto& [node, dist, path] = d.init_left_;
+
     auto const polyline = ways_.way_polylines_[d.way_];
     auto const osm_idx = ways_.way_osm_nodes_[d.way_];
     auto pos = d.best_;
-    auto dist = geo::distance(query, d.best_);
-    d.left_path_.push_back(query);
-    d.left_path_.push_back(d.best_);
+
+    dist = geo::distance(query, d.best_);
+    path.push_back(query);
+    path.push_back(d.best_);
     for (auto j = 0U; j <= idx; ++j) {
       auto i = idx - j;
       dist += geo::distance(pos, polyline[i]);
       pos = polyline[i];
-      d.left_path_.push_back(pos);
-      if (auto const node = ways_.find_node_idx(osm_idx[i]); node.has_value()) {
-        d.init_left_ = {*node, dist};
+      path.push_back(pos);
+      auto const way_node = ways_.find_node_idx(osm_idx[i]);
+      if (way_node.has_value()) {
+        node = *way_node;
+        dist = dist;
         break;
       }
     }

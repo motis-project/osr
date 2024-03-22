@@ -24,10 +24,10 @@ class settings : public conf::configuration {
 public:
   explicit settings() : configuration("Options") {
     param(data_dir_, "data,d", "Data directory");
-    param(http_host_, "host", "HTTP host");
-    param(http_port_, "port", "HTTP port");
-    param(static_file_path_, "static", "Path to static files (ui/web)");
-    param(threads_, "routing-threads", "Number of routing threads");
+    param(http_host_, "host,h", "HTTP host");
+    param(http_port_, "port,p", "HTTP port");
+    param(static_file_path_, "static,s", "Path to static files (ui/web)");
+    param(threads_, "threads,t", "Number of routing threads");
   }
 
   fs::path data_dir_{"osr"};
@@ -68,8 +68,8 @@ int main(int argc, char const* argv[]) {
   parser.print_unrecognized(std::cout);
   parser.print_used(std::cout);
 
-  if (!fs::exists(opt.data_dir_)) {
-    fmt::println("file not found: {}", opt.data_dir_);
+  if (!fs::is_directory(opt.data_dir_)) {
+    fmt::println("directory not found: {}", opt.data_dir_);
     return 1;
   }
 

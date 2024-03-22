@@ -44,7 +44,7 @@ void write_node(ways const& x, Writer& w, node_idx_t const i, State const* s) {
     w.String("dist");
     w.Int(s->dist_[i]);
     w.String("pred");
-    w.Int(to_idx(s->pred_[i]));
+    w.Uint64(to_idx(s->pred_[i]));
   }
   w.EndObject();
 

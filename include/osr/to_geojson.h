@@ -8,10 +8,10 @@
 namespace osr {
 
 struct ways;
-struct state;
+struct dijkstra_state;
 
 std::string to_geojson(ways const&,
-                       state const*,
+                       dijkstra_state const*,
                        std::vector<geo::latlng> const* start_left_path,
                        std::vector<geo::latlng> const* start_right_path);
 

@@ -16,7 +16,7 @@ namespace osr {
 template <typename Writer>
 void write(ways const& x,
            Writer& w,
-           state const* s,
+           dijkstra_state const* s,
            std::vector<geo::latlng> const* start_left_path,
            std::vector<geo::latlng> const* start_right_path) {
   w.StartObject();
@@ -79,7 +79,7 @@ void write(ways const& x,
 }
 
 std::string to_geojson(ways const& x,
-                       state const* s,
+                       dijkstra_state const* s,
                        std::vector<geo::latlng> const* start_path_left,
                        std::vector<geo::latlng> const* start_path_right) {
   auto sb = rapidjson::StringBuffer{};
