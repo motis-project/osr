@@ -1,9 +1,49 @@
+<p align="center"><img src="docs/screenshot.png"></p>
+
+Demo (currently limited to 15 minutes walking): https://osr.motis-project.de
+
 # Open Street Router
 
-This project is a proof of concept for planet wide street routing (pedestrian, bike, car, etc.) on OpenStreetMap. The
+This project is a *proof of concept* for planet wide street routing (pedestrian, bike, car, etc.) on OpenStreetMap. The
 goal is to make it possible to import data on affordable low-end machines. This is mainly achieved by using compact data
 structures and [memory mapped](https://en.wikipedia.org/wiki/Memory-mapped_file) files. A planet import should not need
-more than 10GB of RAM but more RAM (and a fast SSD) will speed up the import.
+more than 10GB of RAM. More RAM (and a fast SSD) will speed up the import. The reverse geocoding to map geo coordinates to the routing graph is currently required to be in memory. This is around 25 GB of memory for the whole planet during production use. In the future, a memory mapped version of the r-tree should be implemented and evaluated.
+
+Directory with all created files after extract:
+
+```bash
+$ ll -h osr-planet/
+total 120G
+ 18G node_in_way_idx_data.bin
+6.5G node_in_way_idx_index.bin
+2.2G node_to_osm.bin
+ 35G node_ways_data.bin
+6.5G node_ways_index.bin
+4.3G osm_to_mode.bin
+755M way_node_dist_data.bin
+1.7G way_node_dist_index.bin
+2.3G way_nodes_data.bin
+1.7G way_nodes_index.bin
+1.7G way_osm_idx.bin
+ 19G way_osm_nodes_data.bin
+1.7G way_osm_nodes_index.bin
+ 19G way_polylines_data.bin
+1.7G way_polylines_index.bin
+```
+
+## Usage
+
+The PPR debug UI can be used for testing: https://github.com/motis-project/ppr/tree/master/ui/web
+
+```bash
+# --in     | -i     input file
+# --out    | -o     output directory (will be deleted + created)
+./osr-extract -i planet-latest.osm.pbf -o osr-planet
+
+# --data   | -d     the output from osr-extract
+# --static | -s     static HTML/JS/CSS assets to serve
+./osr-backend -d osr-planet -s /path/to/ppr/ui
+```
 
 ## Data Model
 
@@ -65,9 +105,17 @@ Reconstruction works as in the textbook version of Dijkstra's algorithm except f
 which is not part of the routing "graph" (geo coordinate to first `node_idx_t` and last `node_idx_t` to the geo
 coordinate).
 
-### TODO
+## Future Work
 
 This is only a first proof-of-concept. Many basic as well as advanced features can follow.
+
+Known Issues:
+
+- Routing performance can be improved
+  - by optionally locking data used during routing to prevent paging (`mlock`)
+  - by using A* or bidirectional A* for one to one queries 
+- If source and target are mapped to the same way, the path should not be forced to go through routing nodes
+- Consider the routing profile for initialization
 
 Basic:
 
