@@ -13,6 +13,16 @@ using namespace osr;
 using namespace boost::program_options;
 namespace fs = std::filesystem;
 
+struct config : public conf::configuration {
+  config(std::filesystem::path in, std::filesystem::path const& out)
+      : configuration{"Options"}, in_{std::move(in)}, out_{out} {
+    param(in_, "in,i", "OpenStreetMap .osm.pbf input path");
+    param(out_, "out,o", "output directory");
+  }
+
+  std::filesystem::path in_, out_;
+};
+
 int main(int ac, char const** av) {
   auto c = config{"./planet-latest.osm.pbf", "./osr"};
 
@@ -32,5 +42,5 @@ int main(int ac, char const** av) {
   utl::activate_progress_tracker("osr");
   auto const silencer = utl::global_progress_bars{false};
 
-  extract(c);
+  extract(c.in_, c.out_);
 }

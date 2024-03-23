@@ -86,7 +86,7 @@ void dijkstra(ways const& w,
         auto const target_node = w.way_nodes_[way][to];
 
         if (new_dist < s.dist_[target_node] && new_dist < max_dist) {
-          s.dist_[target_node] = new_dist;
+          s.dist_[target_node] = static_cast<dist_t>(new_dist);
           s.pred_[target_node] = w.way_nodes_[way][from];
           s.pq_.push(label{.node_ = target_node,
                            .dist_ = static_cast<dist_t>(new_dist)});

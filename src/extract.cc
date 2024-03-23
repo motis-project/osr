@@ -61,21 +61,21 @@ struct handler : public osmium::handler::Handler {
   ways w_;
 };
 
-void extract(config const& conf) {
+void extract(fs::path const& in, fs::path const& out) {
   auto ec = std::error_code{};
-  fs::remove_all(conf.out_, ec);
-  if (!fs::is_directory(conf.out_)) {
-    fs::create_directories(conf.out_);
+  fs::remove_all(out, ec);
+  if (!fs::is_directory(out)) {
+    fs::create_directories(out);
   }
 
   auto input_file = osm_io::File{};
   auto file_size = std::size_t{0U};
   try {
-    input_file = osm_io::File{conf.in_};
+    input_file = osm_io::File{in};
     file_size =
         osm_io::Reader{input_file, osmium::io::read_meta::no}.file_size();
   } catch (...) {
-    fmt::println("load_osm failed [file={}]", conf.in_);
+    fmt::println("load_osm failed [file={}]", in);
     throw;
   }
 
@@ -83,9 +83,9 @@ void extract(config const& conf) {
   pt->status("Load OSM").in_high(file_size * 2U).out_bounds(0, 30);
 
   auto const node_idx_file =
-      tiles::tmp_file{(conf.out_ / "idx.bin").generic_string()};
+      tiles::tmp_file{(out / "idx.bin").generic_string()};
   auto const node_dat_file =
-      tiles::tmp_file{(conf.out_ / "dat.bin").generic_string()};
+      tiles::tmp_file{(out / "dat.bin").generic_string()};
   auto node_idx =
       tiles::hybrid_node_idx{node_idx_file.fileno(), node_dat_file.fileno()};
 
@@ -103,7 +103,7 @@ void extract(config const& conf) {
     node_idx_builder.finish();
   }
 
-  auto h = handler{conf.out_};
+  auto h = handler{out};
   {  // Extract streets, places, and areas.
     pt->status("Load OSM / Pass 2").out_bounds(30, 60);
     auto const thread_count = std::max(2U, std::thread::hardware_concurrency());

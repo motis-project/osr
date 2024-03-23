@@ -44,8 +44,10 @@ start_dist distance_to_way(geo::latlng const& x, PolyLine&& c) {
     }
     ++segment_idx;
   }
-  return start_dist{
-      .dist_ = min, .best_ = best, .best_segment_idx_ = best_segment_idx};
+  return start_dist{.dist_ = min,
+                    .best_ = best,
+                    .best_segment_idx_ = best_segment_idx,
+                    .way_ = way_idx_t::invalid()};
 }
 
 struct lookup {
@@ -96,7 +98,6 @@ struct lookup {
       auto const way_node = ways_.find_node_idx(osm_idx[i]);
       if (way_node.has_value()) {
         node = *way_node;
-        dist = dist;
         break;
       }
     }
@@ -122,7 +123,6 @@ struct lookup {
       auto const way_node = ways_.find_node_idx(osm_idx[i]);
       if (way_node.has_value()) {
         node = *way_node;
-        dist = dist;
         break;
       }
     }
