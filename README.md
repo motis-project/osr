@@ -112,7 +112,15 @@ This is only a first proof-of-concept. Many basic as well as advanced features c
 Known Issues:
 
 - Routing performance can be improved
-  - by optionally locking data used during routing to prevent paging (`mlock`)
+  - by optionally locking data used during routing to prevent paging (`mlock`), required files are (total=72.45)
+    - 2.3G `way_nodes_data.bin`
+    - 1.7G `way_nodes_index.bin`
+    - 755M `way_node_dist_data.bin`
+    - 1.7G `way_node_dist_index.bin`
+    - 35G `node_ways_data.bin`
+    - 6.5G `node_ways_index.bin`
+    - 18G `node_in_way_idx_data.bin`
+    - 6.5G `node_in_way_idx_index.bin`
   - by using A* or bidirectional A* for one to one queries 
 - If source and target are mapped to the same way, the path should not be forced to go through routing nodes
 - Consider the routing profile for initialization
