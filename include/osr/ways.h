@@ -15,13 +15,39 @@
 
 namespace osr {
 
+enum speed_limit : std::uint8_t {
+  kmh_10,
+  kmh_30,
+  kmh_50,
+  kmh_70,
+  kmh_100,
+  kmh_120
+};
+
+struct way_properties {
+  std::uint8_t is_car_accessible_ : 1;
+  std::uint8_t is_bike_accessible_ : 1;
+  std::uint8_t is_walk_accessible_ : 1;
+  std::uint8_t oneway_car_ : 1;
+  std::uint8_t oneway_bike_ : 1;
+  std::uint8_t speed_limit_ : 3;
+};
+
+struct node_properties {
+  std::uint8_t is_bike_accessible_ : 1;
+  std::uint8_t is_walk_accessible_ : 1;
+  std::uint8_t is_car_accessible_ : 1;
+};
+
 struct ways {
   ways(std::filesystem::path p, cista::mmap::protection const mode)
       : p_{std::move(p)},
         mode_{mode},
         osm_to_node_{mm("osm_to_mode.bin")},
         node_to_osm_{mm("node_to_osm.bin")},
+        node_properties_{mm("node_properties.bin")},
         way_osm_idx_{mm("way_osm_idx.bin")},
+        way_properties_{mm("way_properties.bin")},
         way_polylines_{mm_vec<point>{mm("way_polylines_data.bin")},
                        mm_vec<std::uint64_t>{mm("way_polylines_index.bin")}},
         way_osm_nodes_{mm_vec<osm_node_idx_t>{mm("way_osm_nodes_data.bin")},
@@ -46,7 +72,7 @@ struct ways {
     {  // Assign graph node ids to every node with >1 way.
       pt->status("Create graph nodes")
           .in_high(node_way_counter_.size())
-          .out_bounds(60, 75);
+          .out_bounds(50, 60);
 
       auto node_idx = node_idx_t{0U};
       node_way_counter_.multi_.for_each_set_bit([&](std::uint64_t const b_idx) {
@@ -63,7 +89,7 @@ struct ways {
     // Build edges.
     pt->status("Connect ways")
         .in_high(way_osm_nodes_.size())
-        .out_bounds(75, 100);
+        .out_bounds(60, 90);
     for (auto const [osm_way_idx, osm_nodes, polyline] :
          utl::zip(way_osm_idx_, way_osm_nodes_, way_polylines_)) {
       auto pred_pos = std::make_optional<point>();
@@ -145,7 +171,9 @@ struct ways {
   cista::mmap::protection mode_;
   mm_vec<pair<osm_node_idx_t, node_idx_t>> osm_to_node_;
   mm_vec_map<node_idx_t, osm_node_idx_t> node_to_osm_;
+  mm_vec_map<node_idx_t, node_properties> node_properties_;
   mm_vec_map<way_idx_t, osm_way_idx_t> way_osm_idx_;
+  mm_vec_map<way_idx_t, way_properties> way_properties_;
   mm_vecvec<way_idx_t, point, std::uint64_t> way_polylines_;
   mm_vecvec<way_idx_t, osm_node_idx_t, std::uint64_t> way_osm_nodes_;
   mm_vecvec<way_idx_t, node_idx_t, std::uint64_t> way_nodes_;

@@ -112,7 +112,7 @@ This is only a first proof-of-concept. Many basic as well as advanced features c
 Known Issues:
 
 - Routing performance can be improved
-  - by optionally locking data used during routing to prevent paging (`mlock`), required files are (total=72.45)
+  - by optionally locking data used during routing to prevent paging (`mlock`), required files are (total=72.45 GB)
     - 2.3G `way_nodes_data.bin`
     - 1.7G `way_nodes_index.bin`
     - 755M `way_node_dist_data.bin`
@@ -121,7 +121,8 @@ Known Issues:
     - 6.5G `node_ways_index.bin`
     - 18G `node_in_way_idx_data.bin`
     - 6.5G `node_in_way_idx_index.bin`
-  - by using A* or bidirectional A* for one to one queries 
+  - by using A* or bidirectional A* for one to one queries
+  - Explore preprocessing-based approaches: landmarks, arc flags, transit node routing, multi-level-dijkstra, etc.
 - If source and target are mapped to the same way, the path should not be forced to go through routing nodes
 - Consider the routing profile for initialization
 
@@ -131,6 +132,9 @@ Basic:
 - Implement routing profiles for car, bike, etc.
 - Extract street names of ways for reconstruction.
 - Reconstruct description of way for navigation (including street names)
+- Turn restriction relations ([example](https://www.openstreetmap.org/relation/1654115))
+- One way restrictions ([example](https://www.openstreetmap.org/way/998075924))
+- Penalize u-turns
 
 Advanced:
 
@@ -141,3 +145,6 @@ Advanced:
 - Time-dependent routing (consider traffic flow forecast and/or live traffic)
 - Add height profile information to edges (relevant e.g. for bike routing) and use it in routing profiles
 - Combined routing for sharing mobility (e.g. walk to e-scooter, ride e-scooter, walk to destination)
+- `vehicle=destination` ([example](https://www.openstreetmap.org/way/61914850))
+- Start heading + destination heading
+- Make barriers / inaccessible nodes routing nodes (example: [way](https://www.openstreetmap.org/way/940718404), [node](https://www.openstreetmap.org/node/8712182900))
