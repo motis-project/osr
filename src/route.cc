@@ -116,10 +116,14 @@ path reconstruct(ways const& w,
   auto last = n;
   while (n != node_idx_t::invalid()) {
     last = n;
-    if (s.pred_[n] != node_idx_t::invalid()) {
-      add_path(w, n, s.pred_[n], p.polyline_);
+    auto const& e = s.dist_.at(n);
+    if (n == e.pred_) {
+      abort();
     }
-    n = s.pred_[n];
+    if (e.pred_ != node_idx_t::invalid()) {
+      add_path(w, n, e.pred_, p.polyline_);
+    }
+    n = e.pred_;
   }
   auto [left_node, _, left_poly] = start.init_left_;
   auto [right_node, _1, right_poly] = start.init_right_;
@@ -145,60 +149,54 @@ std::optional<path> route(ways const& w,
                           dist_t const max_dist,
                           routing_state& s,
                           EdgeWeightFn&& edge_weight_fn) {
-  {
-    auto const timer = utl::scoped_timer{"lookup"};
 
-    l.find(from, s.start_candidates_);
-    utl::verify(!s.start_candidates_.empty(),
-                "no start candidates around {} found", from);
+  l.find(from, s.start_candidates_);
+  utl::verify(!s.start_candidates_.empty(),
+              "no start candidates around {} found", from);
 
-    l.find(to, s.dest_candidates_);
-    utl::verify(!s.dest_candidates_.empty(),
-                "no destination candidates around {} found", to);
+  l.find(to, s.dest_candidates_);
+  utl::verify(!s.dest_candidates_.empty(),
+              "no destination candidates around {} found", to);
 
-    s.dijkstra_state_.reset(w, max_dist);
+  s.dijkstra_state_.reset(max_dist);
 
-    auto const& start = s.start_candidates_.front();
-    for (auto const x : {&start.init_left_, &start.init_right_}) {
-      auto const& [node, dist, _] = *x;
-      if (node != node_idx_t::invalid() && dist < max_dist) {
-        s.dijkstra_state_.add_start(node, dist);
+  auto const& start = s.start_candidates_.front();
+  for (auto const x : {&start.init_left_, &start.init_right_}) {
+    auto const& [node, dist, _] = *x;
+    if (node != node_idx_t::invalid() && dist < max_dist) {
+      s.dijkstra_state_.add_start(node, dist);
+    }
+  }
+
+  dijkstra(w, s.dijkstra_state_, max_dist, edge_weight_fn);
+
+  auto const dest = s.dest_candidates_.front();
+  auto best_dist = std::numeric_limits<dist_t>::max();
+  auto best_node = node_idx_t::invalid();
+  auto best_dest_path = static_cast<std::vector<geo::latlng> const*>(nullptr);
+  for (auto const x : {&dest.init_left_, &dest.init_right_}) {
+    auto const& [node, dist, dest_path] = *x;
+    if (node != node_idx_t::invalid() && dist < max_dist) {
+      auto const target_dist = s.dijkstra_state_.get_dist(node);
+      if (target_dist == kInfeasible) {
+        continue;
+      }
+
+      auto const total_dist = target_dist + dist;
+      if (total_dist < max_dist && total_dist < best_dist) {
+        best_dist = total_dist;
+        best_node = node;
+        best_dest_path = &dest_path;
       }
     }
   }
 
-  {
-    auto const timer = utl::scoped_timer{"routing"};
-    dijkstra(w, s.dijkstra_state_, max_dist, edge_weight_fn);
+  if (best_node == node_idx_t::invalid()) {
+    return std::nullopt;
   }
 
-  {
-    auto const timer = utl::scoped_timer{"reconstruct"};
-    
-    auto const dest = s.dest_candidates_.front();
-    auto best_dist = std::numeric_limits<dist_t>::max();
-    auto best_node = node_idx_t::invalid();
-    auto best_dest_path = static_cast<std::vector<geo::latlng> const*>(nullptr);
-    for (auto const x : {&dest.init_left_, &dest.init_right_}) {
-      auto const& [node, dist, dest_path] = *x;
-      if (node != node_idx_t::invalid() && dist < max_dist) {
-        auto const total_dist = s.dijkstra_state_.dist_[node] + dist;
-        if (total_dist < max_dist && total_dist < best_dist) {
-          best_dist = total_dist;
-          best_node = node;
-          best_dest_path = &dest_path;
-        }
-      }
-    }
-
-    if (best_node == node_idx_t::invalid()) {
-      return std::nullopt;
-    }
-
-    auto const& start = s.start_candidates_.front();
-    return reconstruct(w, s.dijkstra_state_, best_node, *best_dest_path,
-                       best_dist, start);
-  }
+  return reconstruct(w, s.dijkstra_state_, best_node, *best_dest_path,
+                     best_dist, start);
 }
 
 std::optional<path> route(ways const& w,

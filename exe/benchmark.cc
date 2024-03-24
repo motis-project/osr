@@ -66,7 +66,7 @@ int main(int argc, char const* argv[]) {
       while (i.fetch_add(1U) < opt.n_queries_) {
         auto const start =
             node_idx_t{cista::hash_combine(h, ++n, i.load()) % w.n_nodes()};
-        s.dijkstra_state_.reset(w, opt.max_dist_);
+        s.dijkstra_state_.reset(opt.max_dist_);
         s.dijkstra_state_.add_start(start, 0U);
         dijkstra(w, s.dijkstra_state_, opt.max_dist_, pedestrian{});
       }

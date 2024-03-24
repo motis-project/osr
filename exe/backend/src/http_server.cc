@@ -102,7 +102,7 @@ struct http_server::impl {
     auto const from = parse_latlng(query.at("start"));
     auto const to = parse_latlng(query.at("destination"));
     auto const max_it = query.find("max");
-    auto const max = max_it == query.end() ? 900 : max_it->value().as_int64();
+    auto const max = max_it == query.end() ? 7200 : max_it->value().as_int64();
     auto const profile_it = query.find("profile");
     auto const profile =
         profile_it == query.end() || !profile_it->value().is_string()

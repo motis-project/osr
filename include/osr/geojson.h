@@ -41,10 +41,13 @@ void write_node(ways const& x, Writer& w, node_idx_t const i, State const* s) {
                         }))
           .c_str());
   if (s != nullptr) {
-    w.String("dist");
-    w.Int(s->dist_[i]);
-    w.String("pred");
-    w.Uint64(to_idx(s->pred_[i]));
+    auto const it = s->dist_.find(i);
+    if (it != end(s->dist_)) {
+      w.String("dist");
+      w.Int(it->second.dist_);
+      w.String("pred");
+      w.Uint64(to_idx(it->second.pred_));
+    }
   }
   w.EndObject();
 
