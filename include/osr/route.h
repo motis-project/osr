@@ -10,7 +10,7 @@
 namespace osr {
 
 enum class search_profile : std::uint8_t {
-  kPedestrian,
+  kFoot,
   kBike,
   kCar,
 };

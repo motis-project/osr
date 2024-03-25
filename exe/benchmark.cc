@@ -68,7 +68,7 @@ int main(int argc, char const* argv[]) {
             node_idx_t{cista::hash_combine(h, ++n, i.load()) % w.n_nodes()};
         s.dijkstra_state_.reset(opt.max_dist_);
         s.dijkstra_state_.add_start(start, 0U);
-        dijkstra(w, s.dijkstra_state_, opt.max_dist_, pedestrian{});
+        dijkstra(w, s.dijkstra_state_, opt.max_dist_, foot{});
       }
     });
   }

@@ -77,77 +77,15 @@ speed_limit get_speed_limit(std::string_view highway) {
 speed_limit get_speed_limit(osm::Way const& w) {
   auto const& tags = w.tags();
   if (auto const max_speed = tags["maxspeed"];
-      max_speed != nullptr && is_number(max_speed)) {
+      max_speed != nullptr &&
+      is_number(max_speed) /* TODO: support units (kmh/mph) */) {
     return get_speed_limit(utl::parse<unsigned>(max_speed));
   } else {
     return get_speed_limit(tags["highway"]);
   }
 }
 
-bool is_car_accessible(std::string_view highway) {
-  switch (cista::hash(highway)) {
-    case cista::hash("motorway"):
-    case cista::hash("motorway_link"):
-    case cista::hash("trunk"):
-    case cista::hash("trunk_link"):
-    case cista::hash("primary"):
-    case cista::hash("primary_link"):
-    case cista::hash("secondary"):
-    case cista::hash("secondary_link"):
-    case cista::hash("tertiary"):
-    case cista::hash("tertiary_link"):
-    case cista::hash("residential"):
-    case cista::hash("living_street"):
-    case cista::hash("unclassified"):
-    case cista::hash("service"): return true;
-    default: return false;
-  }
-}
-
-bool is_bike_accessible(std::string_view highway) {
-  switch (cista::hash(highway)) {
-    case cista::hash("cycleway"):
-    case cista::hash("primary"):
-    case cista::hash("primary_link"):
-    case cista::hash("secondary"):
-    case cista::hash("secondary_link"):
-    case cista::hash("tertiary"):
-    case cista::hash("tertiary_link"):
-    case cista::hash("residential"):
-    case cista::hash("unclassified"):
-    case cista::hash("living_street"):
-    case cista::hash("road"):
-    case cista::hash("service"):
-    case cista::hash("track"):
-    case cista::hash("path"): return true;
-    default: return false;
-  }
-}
-
-bool is_walk_accessible(std::string_view highway) {
-  switch (cista::hash(highway)) {
-    case cista::hash("primary"):
-    case cista::hash("primary_link"):
-    case cista::hash("secondary"):
-    case cista::hash("secondary_link"):
-    case cista::hash("tertiary"):
-    case cista::hash("tertiary_link"):
-    case cista::hash("unclassified"):
-    case cista::hash("residential"):
-    case cista::hash("road"):
-    case cista::hash("living_street"):
-    case cista::hash("service"):
-    case cista::hash("track"):
-    case cista::hash("path"):
-    case cista::hash("steps"):
-    case cista::hash("pedestrian"):
-    case cista::hash("footway"):
-    case cista::hash("pier"): return true;
-    default: return false;
-  }
-}
-
-std::pair<bool, bool> is_one_way(osm::Way const& w) {
+std::pair<bool /* car */, bool /* bike */> is_one_way(osm::Way const& w) {
   auto const one_way = w.tags()["oneway"];
   auto const one_way_bike = w.tags()["oneway:bicycle"];
   auto const is_one_way = one_way != nullptr && one_way == "yes"sv;
@@ -158,11 +96,19 @@ std::pair<bool, bool> is_one_way(osm::Way const& w) {
 way_properties get_way_properties(osm::Way const& w) {
   auto const highway = w.tags()["highway"];
   auto const [one_way_car, one_way_bike] = is_one_way(w);
-  return {.is_car_accessible_ = is_car_accessible(highway),
-          .is_bike_accessible_ = is_bike_accessible(highway),
-          .is_walk_accessible_ = is_walk_accessible(highway),
-          .oneway_car_ = one_way_car,
-          .oneway_bike_ = one_way_bike,
+  auto const bicycle = w.tags()["bicycle"];
+  auto const foot = w.tags()["foot"];
+  return {.is_car_accessible_ = is_highway_car_accessible(highway),
+          .is_bike_accessible_ = is_highway_bike_accessible(highway) ||
+                                 bicycle == "yes"sv ||
+                                 bicycle == "designated"sv,
+          .is_walk_accessible_ =
+              foot != "no"sv && foot != "private"sv &&
+              foot != "destination"sv /* TODO */ &&
+              (is_highway_walk_accessible(highway) || foot == "yes"sv ||
+               foot == "designated"sv || foot == "permissive"sv),
+          .is_oneway_car_ = one_way_car,
+          .is_oneway_bike_ = one_way_bike,
           .speed_limit_ = get_speed_limit(w)};
 }
 
@@ -244,8 +190,8 @@ node_properties get_node_properties(osm::Node const& n) {
   };
 }
 
-struct way_handler : public osmium::handler::Handler {
-  way_handler(ways& w) : w_{w} { w_.node_way_counter_.reserve(12000000000); }
+struct way_handler : public osm::handler::Handler {
+  way_handler(ways& w) : w_{w} {}
 
   void way(osm::Way const& w) {
     if (!w.tags().has_key("highway")) {
@@ -275,13 +221,31 @@ struct way_handler : public osmium::handler::Handler {
   ways& w_;
 };
 
-struct node_handler : public osmium::handler::Handler {
+struct node_handler : public osm::handler::Handler {
   node_handler(ways& w) : w_{w} { w_.node_properties_.resize(w_.n_nodes()); }
 
   void node(osm::Node const& n) {
     if (auto const node_idx = w_.find_node_idx(osm_node_idx_t{n.id()});
         node_idx.has_value()) {
       w_.node_properties_[*node_idx] = get_node_properties(n);
+    }
+  }
+
+  ways& w_;
+};
+
+struct mark_inaccessible_handler : public osm::handler::Handler {
+  mark_inaccessible_handler(ways& w) : w_{w} {}
+
+  void node(osm::Node const& n) {
+    auto const access = n.tags()["access"];
+    auto const barrier = n.tags()["barrier"];
+    auto const accessible = is_access_foot_bike_accessible(access) &&
+                            is_barrier_foot_bike_accessible(barrier) &&
+                            is_access_car_accessible(access) &&
+                            is_barrier_car_accessible(barrier);
+    if (!accessible) {
+      w_.node_way_counter_.increment(n.id());
     }
   }
 
@@ -315,22 +279,24 @@ void extract(fs::path const& in, fs::path const& out) {
   auto node_idx =
       tiles::hybrid_node_idx{node_idx_file.fileno(), node_dat_file.fileno()};
 
+  auto w = ways{std::move(out), cista::mmap::protection::WRITE};
+  w.node_way_counter_.reserve(12000000000);
   {  // Collect node coordinates.
     pt->status("Load OSM / Coordinates").in_high(file_size).out_bounds(0, 20);
 
     auto node_idx_builder = tiles::hybrid_node_idx_builder{node_idx};
 
+    auto inaccessilbe_handler = mark_inaccessible_handler{w};
     auto reader =
         osm_io::Reader{input_file, osm_eb::node, osmium::io::read_meta::no};
     while (auto buffer = reader.read()) {
       pt->update(reader.offset());
-      osm::apply(buffer, node_idx_builder);
+      osm::apply(buffer, node_idx_builder, inaccessilbe_handler);
     }
     reader.close();
     node_idx_builder.finish();
   }
 
-  auto w = ways{std::move(out), cista::mmap::protection::WRITE};
   {  // Extract streets, places, and areas.
     pt->status("Load OSM / Ways").in_high(file_size).out_bounds(20, 50);
 

@@ -1,143 +1,94 @@
-#pragma once
+#include "boost/json.hpp"
+
+#include "utl/pairwise.h"
+#include "utl/pipes/transform.h"
+#include "utl/pipes/vec.h"
 
 #include "osr/ways.h"
 
 namespace osr {
 
-template <typename Writer, typename Location>
-void write_lon_lat(Writer& w, Location const& location) {
-  w.StartArray();
-  w.Double(location.lng());
-  w.Double(location.lat());
-  w.EndArray();
+boost::json::array to_array(point const& p) { return {p.lng(), p.lat()}; }
+
+template <typename Collection>
+boost::json::value to_line_string(Collection const& line) {
+  return {{"type", "LineString"},
+          {"coordinates", utl::all(line)  //
+                              | utl::transform(to_array)  //
+                              | utl::emplace_back_to<boost::json::array>()}};
 }
 
-template <typename Writer, typename Location>
-void write_point(Writer& w, Location const& loc) {
-  w.StartObject();
-  w.String("type");
-  w.String("Point");
-  w.String("coordinates");
-  write_lon_lat(w, loc);
-  w.EndObject();
+boost::json::value to_point(point const& p) {
+  return {{"type", "Point"}, {"coordinates", to_array(p)}};
 }
 
-template <typename Writer, typename State>
-void write_node(ways const& x, Writer& w, node_idx_t const i, State const* s) {
-  w.StartObject();
-  w.String("type");
-  w.String("Feature");
-
-  w.String("properties");
-  w.StartObject();
-  w.String("id");
-  w.Uint64(to_idx(i));
-  w.String("osm_node_id");
-  w.Uint64(to_idx(x.node_to_osm_[i]));
-  w.String("ways");
-  w.String(
-      fmt::format("{}", x.node_ways_[i] | std::views::transform([&](auto&& j) {
-                          return x.way_osm_idx_[j];
-                        }))
-          .c_str());
-  if (s != nullptr) {
-    auto const it = s->dist_.find(i);
-    if (it != end(s->dist_)) {
-      w.String("dist");
-      w.Int(it->second.dist_);
-      w.String("pred");
-      w.Uint64(to_idx(it->second.pred_));
+struct geojson_writer {
+  void write_way(way_idx_t const i) {
+    auto const nodes = w_.way_nodes_[i];
+    auto const way_nodes = utl::nwise<2>(nodes);
+    auto const dists = w_.way_node_dist_[i];
+    auto way_nodes_it = std::begin(way_nodes);
+    auto dist_it = std::begin(dists);
+    auto const p = w_.way_properties_[i];
+    for (; dist_it != end(dists); ++way_nodes_it, ++dist_it) {
+      auto const& [from, to] = *way_nodes_it;
+      auto const dist = *dist_it;
+      features_.emplace_back(boost::json::value{
+          {"type", "Feature"},
+          {"style", {{"stroke", "#ED333B"}}},
+          {"properties",
+           {{"osm_way_id", to_idx(w_.way_osm_idx_[i])},
+            {"distance", dist},
+            {"car", p.is_car_accessible()},
+            {"bike", p.is_bike_accessible()},
+            {"foot", p.is_walk_accessible()},
+            {"oneway_car", p.is_oneway_car()},
+            {"oneway_bike", p.is_oneway_bike()},
+            {"max_speed", p.max_speed_km_per_h()}}},
+          {"geometry", to_line_string(std::initializer_list<point>{
+                           w_.get_node_pos(from), w_.get_node_pos(to)})}});
     }
-  }
-  w.EndObject();
 
-  w.String("geometry");
-  write_point(w, x.get_node_pos(i));
+    features_.emplace_back(
+        boost::json::value{{"type", "Feature"},
+                           {"style", {{"stroke", "#33D17A"}}},
+                           {"properties",
+                            {{"osm_way_id", to_idx(w_.way_osm_idx_[i])},
+                             {"car", p.is_car_accessible()},
+                             {"bike", p.is_bike_accessible()},
+                             {"foot", p.is_walk_accessible()},
+                             {"oneway_car", p.is_oneway_car()},
+                             {"oneway_bike", p.is_oneway_bike()},
+                             {"max_speed", p.max_speed_km_per_h()}}},
+                           {"geometry", to_line_string(w_.way_polylines_[i])}});
 
-  w.String("id");
-  w.Uint64(to_idx(i));
-  w.EndObject();
-}
-
-template <typename Writer, typename Vec>
-void write_line_string(Writer& w, Vec const& line) {
-  w.StartObject();
-  w.String("type");
-  w.String("LineString");
-  w.String("coordinates");
-  w.StartArray();
-  for (auto const& loc : line) {
-    write_lon_lat(w, loc);
-  }
-  w.EndArray();
-  w.EndObject();
-}
-
-template <typename Writer>
-void write_way(ways const& x, Writer& w, way_idx_t const n) {
-  auto const way_nodes = utl::nwise<2>(x.way_nodes_[n]);
-  auto const dists = x.way_node_dist_[n];
-  auto way_nodes_it = std::begin(way_nodes);
-  auto dist_it = std::begin(dists);
-  utl::verify(way_nodes.size() == dists.size(),
-              "way {}: {} node pairs vs {} distances", n, way_nodes.size(),
-              dists.size());
-  for (; dist_it != end(dists); ++way_nodes_it, ++dist_it) {
-    auto const& [from, to] = *way_nodes_it;
-    auto const dist = *dist_it;
-    w.StartObject();
-    w.String("type");
-    w.String("Feature");
-
-    w.String("properties");
-    w.StartObject();
-    w.String("distance");
-    w.Uint(dist);
-    w.String("osm_way_id");
-    w.Uint64(to_idx(x.way_osm_idx_[n]));
-    w.String("way_idx");
-    w.Uint64(to_idx(n));
-    w.EndObject();
-
-    w.String("geometry");
-    auto const from_pos = x.get_node_pos(from);
-    auto const to_pos = x.get_node_pos(to);
-    write_line_string(w, std::initializer_list<geo::latlng>{from_pos, to_pos});
-
-    w.String("style");
-    w.StartObject();
-    w.String("stroke");
-    w.String("#FF0000");
-    w.EndObject();
-
-    w.EndObject();
+    nodes_.insert(begin(nodes), end(nodes));
   }
 
-  w.StartObject();
+  std::string finish() {
+    for (auto const n : nodes_) {
+      auto const p = w_.node_properties_[n];
+      features_.emplace_back(boost::json::value{
+          {"type", "Feature"},
+          {"properties",
+           {
+               {"osm_node_id", to_idx(w_.node_to_osm_[n])},
+               {"car", p.is_car_accessible()},
+               {"bike", p.is_bike_accessible()},
+               {"foot", p.is_walk_accessible()},
+           }},
+          {"geometry",
+           {{"type", "Point"},
+            {"coordinates", to_array(w_.get_node_pos(n))}}}});
+    }
 
-  w.String("type");
-  w.String("Feature");
+    return boost::json::serialize(boost::json::value{
+        {"type", "FeatureCollection"}, {"features", features_}});
+  }
 
-  w.String("properties");
-  w.StartObject();
-  w.String("osm_way_id");
-  w.Uint64(to_idx(x.way_osm_idx_[n]));
-  w.String("way_idx");
-  w.Uint64(to_idx(n));
-  w.String("stroke");
-  w.String("#00FF00");
-  w.String("stroke-opacity");
-  w.Double(0.3);
-  w.EndObject();
-
-  w.String("geometry");
-  write_line_string(w, x.way_polylines_[n]);
-
-  w.String("style");
-  w.StartObject();
-  w.EndObject();
-
-  w.EndObject();
-}
+  ways const& w_;
+  boost::json::array features_;
+  hash_set<node_idx_t> nodes_;
+};
 
 }  // namespace osr

@@ -8,7 +8,7 @@ namespace osr {
 
 search_profile read_profile(std::string_view s) {
   switch (cista::hash(s)) {
-    case cista::hash("pedestrian"): return search_profile::kPedestrian;
+    case cista::hash("foot"): return search_profile::kFoot;
     case cista::hash("bike"): return search_profile::kBike;
     case cista::hash("car"): return search_profile::kCar;
   }
@@ -17,7 +17,7 @@ search_profile read_profile(std::string_view s) {
 
 std::string_view to_str(search_profile const p) {
   switch (p) {
-    case search_profile::kPedestrian: return "pedestrian";
+    case search_profile::kFoot: return "pedestrian";
     case search_profile::kCar: return "car";
     case search_profile::kBike: return "bike";
   }
@@ -150,17 +150,24 @@ std::optional<path> route(ways const& w,
                           routing_state& s,
                           EdgeWeightFn&& edge_weight_fn) {
 
-  l.find(from, s.start_candidates_);
+  l.find(from, s.start_candidates_, edge_weight_fn);
   utl::verify(!s.start_candidates_.empty(),
               "no start candidates around {} found", from);
 
-  l.find(to, s.dest_candidates_);
+  l.find(to, s.dest_candidates_, edge_weight_fn);
   utl::verify(!s.dest_candidates_.empty(),
               "no destination candidates around {} found", to);
 
   s.dijkstra_state_.reset(max_dist);
 
   auto const& start = s.start_candidates_.front();
+  std::cout << "START: way=" << w.way_osm_idx_[start.way_]
+            << ", dist=" << start.dist_
+            << ", left=" << w.node_to_osm_[std::get<0>(start.init_left_)]
+            << ", dist=" << std::get<1>(start.init_left_)
+            << ", right=" << w.node_to_osm_[std::get<0>(start.init_right_)]
+            << ", dist=" << std::get<1>(start.init_right_) << "\n";
+
   for (auto const x : {&start.init_left_, &start.init_right_}) {
     auto const& [node, dist, _] = *x;
     if (node != node_idx_t::invalid() && dist < max_dist) {
@@ -171,11 +178,25 @@ std::optional<path> route(ways const& w,
   dijkstra(w, s.dijkstra_state_, max_dist, edge_weight_fn);
 
   auto const dest = s.dest_candidates_.front();
+
+  std::cout << "DEST: way=" << w.way_osm_idx_[dest.way_]
+            << ", dist=" << dest.dist_ << ", left="
+            << (std::get<0>(dest.init_left_) == node_idx_t::invalid()
+                    ? osm_node_idx_t::invalid()
+                    : w.node_to_osm_[std::get<0>(dest.init_left_)])
+            << ", dist=" << std::get<1>(dest.init_left_) << ", right="
+            << (std::get<0>(dest.init_right_) == node_idx_t::invalid()
+                    ? osm_node_idx_t::invalid()
+                    : w.node_to_osm_[std::get<0>(dest.init_right_)])
+            << ", dist=" << std::get<1>(dest.init_right_) << "\n";
+
   auto best_dist = std::numeric_limits<dist_t>::max();
   auto best_node = node_idx_t::invalid();
   auto best_dest_path = static_cast<std::vector<geo::latlng> const*>(nullptr);
   for (auto const x : {&dest.init_left_, &dest.init_right_}) {
     auto const& [node, dist, dest_path] = *x;
+    std::cout << "  DEST " << w.node_to_osm_[node] << ": dist=" << dist
+              << ", target_dist=" << s.dijkstra_state_.get_dist(node) << "\n";
     if (node != node_idx_t::invalid() && dist < max_dist) {
       auto const target_dist = s.dijkstra_state_.get_dist(node);
       if (target_dist == kInfeasible) {
@@ -207,8 +228,8 @@ std::optional<path> route(ways const& w,
                           routing_state& s,
                           search_profile const profile) {
   switch (profile) {
-    case search_profile::kPedestrian:
-      return route(w, l, from, to, max_dist, s, pedestrian{});
+    case search_profile::kFoot:
+      return route(w, l, from, to, max_dist, s, foot{});
     case search_profile::kBike:
       return route(w, l, from, to, max_dist, s, bike{});
     case search_profile::kCar: return route(w, l, from, to, max_dist, s, car{});

@@ -16,6 +16,7 @@
 #include "net/web_server/serve_static.h"
 #include "net/web_server/web_server.h"
 
+#include "osr/geojson.h"
 #include "osr/lookup.h"
 #include "osr/route.h"
 
@@ -61,18 +62,22 @@ json::value to_json(std::vector<geo::latlng> const& polyline) {
 }
 
 std::string to_json(std::optional<path> const& p) {
-  auto res = json::object{};
-  auto routes = json::array{};
-  if (p.has_value()) {
-    auto route = json::object{};
-    route["distance"] = 0U;  // TODO
-    route["duration"] = p->time_;
-    route["path"] = to_json(p->polyline_);
-    route["steps"] = json::array{};
-    routes.emplace_back(route);
-  }
-  res["routes"] = routes;
-  return json::serialize(res);
+  return json::serialize(boost::json::value{
+      {"routes",
+       p.has_value() ? json::array{json::value{{"distance", 0U},  // TODO
+                                               {"duration", p->time_},
+                                               {"path", to_json(p->polyline_)},
+                                               {"steps", json::array{}}}}
+                     : json::array{}}});
+}
+
+std::string get_graph(ways const& w,
+                      lookup const& l,
+                      geo::latlng const& min,
+                      geo::latlng const& max) {
+  auto gj = geojson_writer{.w_ = w};
+  l.find(min, max, [&](way_idx_t const w) { gj.write_way(w); });
+  return gj.finish();
 }
 
 struct http_server::impl {
@@ -106,18 +111,23 @@ struct http_server::impl {
     auto const profile_it = query.find("profile");
     auto const profile =
         profile_it == query.end() || !profile_it->value().is_string()
-            ? to_str(search_profile::kPedestrian)
+            ? to_str(search_profile::kFoot)
             : profile_it->value().as_string();
     auto const res = json_response(
         req, to_json(route(w_, l_, from, to, max, *s, read_profile(profile))));
     return cb(res);
   }
 
-  //  void handle_graph(web_server::http_req_t const& req,
-  //                    web_server::http_res_cb_t const& cb) {
-  //    cb(json_response(req,
-  //                     to_json(get_graph(w_, l_, parse_graph_request(req)))));
-  //  }
+  void handle_graph(web_server::http_req_t const& req,
+                    web_server::http_res_cb_t const& cb) {
+    auto const query = boost::json::parse(req.body()).as_object();
+    auto const waypoints = query.at("waypoints").as_array();
+    auto const min = point::from_latlng(
+        {waypoints[1].as_double(), waypoints[0].as_double()});
+    auto const max = point::from_latlng(
+        {waypoints[3].as_double(), waypoints[2].as_double()});
+    cb(json_response(req, get_graph(w_, l_, min, max)));
+  }
 
   void handle_static(web_server::http_req_t&& req,
                      web_server::http_res_cb_t&& cb) {
@@ -142,13 +152,13 @@ struct http_server::impl {
                 handle_route(req1, cb1);
               },
               req, cb);
-          //        } else if (target.starts_with("/api/graph")) {
-          //          return run_parallel(
-          //              [this](web_server::http_req_t const& req1,
-          //                     web_server::http_res_cb_t const& cb1) {
-          //                handle_graph(req1, cb1);
-          //              },
-          //              req, cb);
+        } else if (target.starts_with("/api/graph")) {
+          return run_parallel(
+              [this](web_server::http_req_t const& req1,
+                     web_server::http_res_cb_t const& cb1) {
+                handle_graph(req1, cb1);
+              },
+              req, cb);
         } else {
           return cb(json_response(req, R"({"error": "Not found"})",
                                   http::status::not_found));

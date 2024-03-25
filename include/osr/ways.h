@@ -21,19 +21,68 @@ enum speed_limit : std::uint8_t {
   kmh_50,
   kmh_70,
   kmh_100,
-  kmh_120
+  kmh_120,
 };
 
+constexpr std::uint16_t to_kmh(speed_limit const l) {
+  switch (l) {
+    case speed_limit::kmh_10: return 10U;
+    case speed_limit::kmh_30: return 30U;
+    case speed_limit::kmh_50: return 50U;
+    case speed_limit::kmh_70: return 70U;
+    case speed_limit::kmh_100: return 100U;
+    case speed_limit::kmh_120: return 120U;
+    default: std::unreachable();
+  }
+}
+
+constexpr std::uint16_t to_meters_per_second(speed_limit const l) {
+  return to_kmh(l) / 3.6;
+}
+
 struct way_properties {
+  inline friend std::ostream& operator<<(std::ostream& out,
+                                         way_properties const& p) {
+    return out << "(car_accessible=" << p.is_car_accessible()
+               << ", bike_accessible=" << p.is_bike_accessible()
+               << ", foot_accessible=" << p.is_walk_accessible()
+               << ", oneway_car=" << p.is_oneway_car()
+               << ", oneway_bike=" << p.is_oneway_bike()
+               << ", speed_limit=" << p.max_speed_km_per_h() << ")";
+  }
+
+  bool is_car_accessible() const { return is_car_accessible_; }
+  bool is_bike_accessible() const { return is_bike_accessible_; }
+  bool is_walk_accessible() const { return is_walk_accessible_; }
+  bool is_oneway_car() const { return is_oneway_car_; }
+  bool is_oneway_bike() const { return is_oneway_bike_; }
+  std::uint16_t max_speed_m_per_s() const {
+    return to_meters_per_second(static_cast<speed_limit>(speed_limit_));
+  }
+  std::uint16_t max_speed_km_per_h() const {
+    return to_kmh(static_cast<speed_limit>(speed_limit_));
+  }
+
   std::uint8_t is_car_accessible_ : 1;
   std::uint8_t is_bike_accessible_ : 1;
   std::uint8_t is_walk_accessible_ : 1;
-  std::uint8_t oneway_car_ : 1;
-  std::uint8_t oneway_bike_ : 1;
+  std::uint8_t is_oneway_car_ : 1;
+  std::uint8_t is_oneway_bike_ : 1;
   std::uint8_t speed_limit_ : 3;
 };
 
 struct node_properties {
+  inline friend std::ostream& operator<<(std::ostream& out,
+                                         node_properties const& p) {
+    return out << "(car_accessible=" << p.is_car_accessible()
+               << ", bike_accessible=" << p.is_bike_accessible()
+               << ", foot_accessible=" << p.is_walk_accessible() << ")";
+  }
+
+  bool is_car_accessible() const { return is_car_accessible_; }
+  bool is_bike_accessible() const { return is_bike_accessible_; }
+  bool is_walk_accessible() const { return is_walk_accessible_; }
+
   std::uint8_t is_bike_accessible_ : 1;
   std::uint8_t is_walk_accessible_ : 1;
   std::uint8_t is_car_accessible_ : 1;

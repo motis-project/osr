@@ -5,14 +5,10 @@
 #include "utl/helpers/algorithm.h"
 #include "utl/pairwise.h"
 
+#include "dijkstra.h"
 #include "rtree.h"
 
 namespace osr {
-
-enum class direction : std::uint8_t {
-  kLeft,
-  kRight,
-};
 
 struct start_dist {
   friend bool operator<(start_dist const& a, start_dist const& b) {
@@ -60,12 +56,18 @@ struct lookup {
 
   ~lookup() { rtree_free(rtree_); }
 
-  void find(geo::latlng const& query, std::vector<start_dist>& results) const {
+  template <typename WeightFn>
+  void find(geo::latlng const& query,
+            std::vector<start_dist>& results,
+            WeightFn&& fn) const {
     results.clear();
     find(query, [&](way_idx_t const way) {
-      auto d = distance_to_way(query, ways_.way_polylines_[way]);
-      d.way_ = way;
-      results.emplace_back(d);
+      if (fn(ways_.way_properties_[way], direction::kForward, 0U) !=
+          kInfeasible) {
+        auto d = distance_to_way(query, ways_.way_polylines_[way]);
+        d.way_ = way;
+        results.emplace_back(std::move(d));
+      }
     });
     utl::sort(results);
 
@@ -129,11 +131,17 @@ struct lookup {
   }
 
   template <typename Fn>
-  void find(geo::latlng const& query, Fn&& fn) const {
-    auto const min =
-        std::array<double, 2U>{query.lng_ - 0.01, query.lat_ - 0.01};
-    auto const max =
-        std::array<double, 2U>{query.lng_ + 0.01, query.lat_ + 0.01};
+  void find(geo::latlng const& x, Fn&& fn) const {
+    find({x.lat() - 0.01, x.lng() - 0.01}, {x.lat() + 0.01, x.lng() + 0.01},
+         std::forward<Fn>(fn));
+  }
+
+  template <typename Fn>
+  void find(geo::latlng const& a, geo::latlng const& b, Fn&& fn) const {
+    auto const min = std::array<double, 2U>{std::min(a.lng_, b.lng_),
+                                            std::min(a.lat_, b.lat_)};
+    auto const max = std::array<double, 2U>{std::max(a.lng_, b.lng_),
+                                            std::max(a.lat_, b.lat_)};
     rtree_search(
         rtree_, min.data(), max.data(),
         [](double const* /* min */, double const* /* max */, void const* item,
