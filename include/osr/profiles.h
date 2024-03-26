@@ -102,7 +102,7 @@ template <typename T>
 bool is_accessible(tags const& o, osm_obj_type const type) {
   auto const override = T::access_override(o);
   return override == override::kWhitelist ||
-         (T::default_access(o, type) && override == override::kBlacklist);
+         (T::default_access(o, type) && override != override::kBlacklist);
 }
 
 struct foot_profile {

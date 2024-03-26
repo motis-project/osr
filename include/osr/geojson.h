@@ -35,7 +35,7 @@ struct geojson_writer {
       auto const dist = *dist_it;
       features_.emplace_back(boost::json::value{
           {"type", "Feature"},
-          {"style", {{"stroke", "#ED333B"}}},
+          {"style", {{"stroke", "#0000FF"}}},
           {"properties",
            {{"osm_way_id", to_idx(w_.way_osm_idx_[i])},
             {"distance", dist},
@@ -54,9 +54,9 @@ struct geojson_writer {
                            {"style", {{"stroke", "#33D17A"}}},
                            {"properties",
                             {{"osm_way_id", to_idx(w_.way_osm_idx_[i])},
-                             {"car", p.is_car_accessible()},
-                             {"bike", p.is_bike_accessible()},
-                             {"foot", p.is_foot_accessible()},
+                             {"access_car", p.is_car_accessible()},
+                             {"access_bike", p.is_bike_accessible()},
+                             {"access_foot", p.is_foot_accessible()},
                              {"oneway_car", p.is_oneway_car()},
                              {"oneway_bike", p.is_oneway_bike()},
                              {"max_speed", p.max_speed_km_per_h()}}},

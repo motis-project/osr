@@ -24,8 +24,8 @@ constexpr std::string_view to_str(direction const d) {
   switch (d) {
     case direction::kForward: return "FWD";
     case direction::kBackward: return "FWD";
-    default: std::unreachable();
   }
+  std::unreachable();
 }
 
 struct label {
@@ -68,7 +68,7 @@ struct foot {
                     direction,
                     std::uint16_t const dist) {
     if (e.is_foot_accessible()) {
-      return static_cast<dist_t>(std::round(dist * 1.5F));
+      return static_cast<dist_t>(std::round(dist / 1.4F));
     } else {
       return kInfeasible;
     }
@@ -85,7 +85,7 @@ struct bike {
                     std::uint16_t const dist) {
     if (e.is_bike_accessible() &&
         (dir == direction::kForward || !e.is_oneway_bike())) {
-      return static_cast<dist_t>(std::round(dist * 3.5F));
+      return static_cast<dist_t>(std::round(dist / 3.5F));
     } else {
       return kInfeasible;
     }
@@ -100,9 +100,9 @@ struct car {
   dist_t operator()(way_properties const& e,
                     direction const dir,
                     std::uint16_t const dist) {
-    if (e.is_bike_accessible() &&
+    if (e.is_car_accessible() &&
         (dir == direction::kForward || !e.is_oneway_car())) {
-      return e.max_speed_m_per_s() * dist * 0.8;
+      return (dist / (e.max_speed_m_per_s() * 0.9));
     } else {
       return kInfeasible;
     }
@@ -137,15 +137,11 @@ void dijkstra(ways const& w,
         auto const dist = w.way_node_dist_[way][dist_idx];
         auto const edge_weight = weight_fn(w.way_properties_[way], dir, dist);
         if (edge_weight == kInfeasible) {
-          fmt::println("way={} infeasible in dir={}: {}", w.way_osm_idx_[way],
-                       to_str(dir), fmt::streamed(w.way_properties_[way]));
           return;
         }
         auto const target_node = w.way_nodes_[way][to];
         auto const node_weight = weight_fn(w.node_properties_[target_node]);
         if (node_weight == kInfeasible) {
-          fmt::println("node={} infeasible: {}", w.node_to_osm_[target_node],
-                       fmt::streamed(w.node_properties_[target_node]));
           return;
         }
         auto const new_dist = l.dist_ + edge_weight + node_weight;

@@ -32,8 +32,8 @@ constexpr std::uint16_t to_kmh(speed_limit const l) {
     case speed_limit::kmh_70: return 70U;
     case speed_limit::kmh_100: return 100U;
     case speed_limit::kmh_120: return 120U;
-    default: std::unreachable();
   }
+  std::unreachable();
 }
 
 constexpr std::uint16_t to_meters_per_second(speed_limit const l) {

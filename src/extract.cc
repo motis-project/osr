@@ -115,6 +115,12 @@ struct way_handler : public osm::handler::Handler {
       return;
     }
 
+    auto const p = get_way_properties(w);
+    if (!p.is_foot_accessible() && !p.is_bike_accessible() &&
+        !p.is_car_accessible()) {
+      return;
+    }
+
     auto l = std::scoped_lock<std::mutex>{mutex_};
 
     auto const get_point = [](osmium::NodeRef const& n) {
@@ -131,7 +137,7 @@ struct way_handler : public osm::handler::Handler {
                                    std::views::transform(get_point));
     w_.way_osm_nodes_.emplace_back(w.nodes() |
                                    std::views::transform(get_node_id));
-    w_.way_properties_.emplace_back(get_way_properties(w));
+    w_.way_properties_.emplace_back(p);
   }
 
   std::mutex mutex_;
@@ -161,7 +167,7 @@ struct mark_inaccessible_handler : public osm::handler::Handler {
         is_accessible<bike_profile>(t, osm_obj_type::kNode) &&
         is_accessible<foot_profile>(t, osm_obj_type::kNode);
     if (!accessible) {
-      w_.node_way_counter_.increment(n.id());
+      w_.node_way_counter_.increment(n.positive_id());
     }
   }
 
