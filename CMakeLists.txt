@@ -108,8 +108,6 @@ target_link_libraries(osr
         utl
         tiles-import-library
         rtree
-        tg
-        lmdb
         unordered_dense
         boost-thread
         rapidjson
