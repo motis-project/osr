@@ -102,7 +102,7 @@ struct car {
                     std::uint16_t const dist) {
     if (e.is_car_accessible() &&
         (dir == direction::kForward || !e.is_oneway_car())) {
-      return (dist / (e.max_speed_m_per_s() * 0.9));
+      return (dist / e.max_speed_m_per_s());
     } else {
       return kInfeasible;
     }
