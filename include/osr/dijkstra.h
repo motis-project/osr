@@ -67,7 +67,7 @@ struct foot {
   dist_t operator()(way_properties const& e,
                     direction,
                     std::uint16_t const dist) {
-    if (e.is_walk_accessible()) {
+    if (e.is_foot_accessible()) {
       return static_cast<dist_t>(std::round(dist * 1.5F));
     } else {
       return kInfeasible;

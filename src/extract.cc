@@ -11,6 +11,7 @@
 #include "osmium/io/xml_input.hpp"
 
 #include "utl/helpers/algorithm.h"
+#include "utl/parser/arg_parser.h"
 #include "utl/progress_tracker.h"
 #include "utl/to_vec.h"
 
@@ -18,8 +19,8 @@
 #include "tiles/osm/tmp_file.h"
 #include "tiles/util_parallel.h"
 
+#include "osr/profiles.h"
 #include "osr/ways.h"
-#include "utl/parser/arg_parser.h"
 
 namespace osm = osmium;
 namespace osm_io = osmium::io;
@@ -85,109 +86,25 @@ speed_limit get_speed_limit(osm::Way const& w) {
   }
 }
 
-std::pair<bool /* car */, bool /* bike */> is_one_way(osm::Way const& w) {
-  auto const one_way = w.tags()["oneway"];
-  auto const one_way_bike = w.tags()["oneway:bicycle"];
-  auto const is_one_way = one_way != nullptr && one_way == "yes"sv;
-  return {is_one_way,
-          is_one_way && (one_way_bike == nullptr || one_way_bike != "no"sv)};
-}
-
 way_properties get_way_properties(osm::Way const& w) {
-  auto const highway = w.tags()["highway"];
-  auto const [one_way_car, one_way_bike] = is_one_way(w);
-  auto const bicycle = w.tags()["bicycle"];
-  auto const foot = w.tags()["foot"];
-  return {.is_car_accessible_ = is_highway_car_accessible(highway),
-          .is_bike_accessible_ = is_highway_bike_accessible(highway) ||
-                                 bicycle == "yes"sv ||
-                                 bicycle == "designated"sv,
-          .is_walk_accessible_ =
-              foot != "no"sv && foot != "private"sv &&
-              foot != "destination"sv /* TODO */ &&
-              (is_highway_walk_accessible(highway) || foot == "yes"sv ||
-               foot == "designated"sv || foot == "permissive"sv),
-          .is_oneway_car_ = one_way_car,
-          .is_oneway_bike_ = one_way_bike,
-          .speed_limit_ = get_speed_limit(w)};
-}
-
-bool is_access_foot_bike_accessible(char const* access) {
-  if (access == nullptr) {
-    return true;
-  }
-  switch (cista::hash(std::string_view{access})) {
-    case cista::hash("no"):
-    case cista::hash("private"):
-    case cista::hash("agricultural"):
-    case cista::hash("delivery"): return false;
-    default: return true;
-  }
-}
-
-bool is_access_car_accessible(char const* access) {
-  if (access == nullptr) {
-    return true;
-  }
-  switch (cista::hash(std::string_view{access})) {
-    case cista::hash("no"):
-    case cista::hash("agricultural"):
-    case cista::hash("forestry"):
-    case cista::hash("emergency"):
-    case cista::hash("psv"):
-    case cista::hash("customers"):
-    case cista::hash("private"):
-    case cista::hash("delivery"): return false;
-    // case cista::hash("destination"): TODO
-    default: return true;
-  }
-}
-
-bool is_barrier_foot_bike_accessible(char const* barrier) {
-  if (barrier == nullptr) {
-    return true;
-  }
-
-  switch (cista::hash(std::string_view{barrier})) {
-    case cista::hash("yes"):
-    case cista::hash("wall"):
-    case cista::hash("fence"): return false;
-    default: return true;
-  }
-}
-
-bool is_barrier_car_accessible(char const* barrier) {
-  if (barrier == nullptr) {
-    return true;
-  }
-
-  switch (cista::hash(std::string_view{barrier})) {
-    case cista::hash("cattle_grid"):
-    case cista::hash("border_control"):
-    case cista::hash("toll_booth"):
-    case cista::hash("sally_port"):
-    case cista::hash("gate"):
-    case cista::hash("lift_gate"):
-    case cista::hash("no"):
-    case cista::hash("entrance"):
-    case cista::hash("height_restrictor"):  // TODO
-    case cista::hash("arch"): return true;
-    default: return false;
-  }
+  auto const t = tags{w};
+  return {
+      .is_foot_accessible_ = is_accessible<foot_profile>(t, osm_obj_type::kWay),
+      .is_bike_accessible_ = is_accessible<bike_profile>(t, osm_obj_type::kWay),
+      .is_car_accessible_ = is_accessible<car_profile>(t, osm_obj_type::kWay),
+      .is_oneway_car_ = t.oneway_,
+      .is_oneway_bike_ = t.oneway_ && !t.not_oneway_bike_,
+      .speed_limit_ = get_speed_limit(w)};
 }
 
 node_properties get_node_properties(osm::Node const& n) {
-  auto const access = n.tags()["access"];
-  auto const barrier = n.tags()["barrier"];
-  auto const is_foot_bike_accessible = is_access_foot_bike_accessible(access) &&
-                                       is_barrier_foot_bike_accessible(barrier);
-  auto const is_car_accessible =
-      is_access_car_accessible(access) && is_barrier_car_accessible(barrier);
+  auto const t = tags{n};
   return {
-      .is_bike_accessible_ = is_foot_bike_accessible,
-      .is_walk_accessible_ = is_foot_bike_accessible,
-      .is_car_accessible_ = is_car_accessible,
-  };
+      .is_foot_accessible_ =
+          is_accessible<foot_profile>(t, osm_obj_type::kNode),
+      .is_bike_accessible_ =
+          is_accessible<bike_profile>(t, osm_obj_type::kNode),
+      .is_car_accessible_ = is_accessible<car_profile>(t, osm_obj_type::kNode)};
 }
 
 struct way_handler : public osm::handler::Handler {
@@ -238,12 +155,11 @@ struct mark_inaccessible_handler : public osm::handler::Handler {
   mark_inaccessible_handler(ways& w) : w_{w} {}
 
   void node(osm::Node const& n) {
-    auto const access = n.tags()["access"];
-    auto const barrier = n.tags()["barrier"];
-    auto const accessible = is_access_foot_bike_accessible(access) &&
-                            is_barrier_foot_bike_accessible(barrier) &&
-                            is_access_car_accessible(access) &&
-                            is_barrier_car_accessible(barrier);
+    auto const t = tags{n};
+    auto const accessible =
+        is_accessible<car_profile>(t, osm_obj_type::kNode) &&
+        is_accessible<bike_profile>(t, osm_obj_type::kNode) &&
+        is_accessible<foot_profile>(t, osm_obj_type::kNode);
     if (!accessible) {
       w_.node_way_counter_.increment(n.id());
     }

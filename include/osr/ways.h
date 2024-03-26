@@ -45,7 +45,7 @@ struct way_properties {
                                          way_properties const& p) {
     return out << "(car_accessible=" << p.is_car_accessible()
                << ", bike_accessible=" << p.is_bike_accessible()
-               << ", foot_accessible=" << p.is_walk_accessible()
+               << ", foot_accessible=" << p.is_foot_accessible()
                << ", oneway_car=" << p.is_oneway_car()
                << ", oneway_bike=" << p.is_oneway_bike()
                << ", speed_limit=" << p.max_speed_km_per_h() << ")";
@@ -53,7 +53,7 @@ struct way_properties {
 
   bool is_car_accessible() const { return is_car_accessible_; }
   bool is_bike_accessible() const { return is_bike_accessible_; }
-  bool is_walk_accessible() const { return is_walk_accessible_; }
+  bool is_foot_accessible() const { return is_foot_accessible_; }
   bool is_oneway_car() const { return is_oneway_car_; }
   bool is_oneway_bike() const { return is_oneway_bike_; }
   std::uint16_t max_speed_m_per_s() const {
@@ -63,9 +63,9 @@ struct way_properties {
     return to_kmh(static_cast<speed_limit>(speed_limit_));
   }
 
-  std::uint8_t is_car_accessible_ : 1;
+  std::uint8_t is_foot_accessible_ : 1;
   std::uint8_t is_bike_accessible_ : 1;
-  std::uint8_t is_walk_accessible_ : 1;
+  std::uint8_t is_car_accessible_ : 1;
   std::uint8_t is_oneway_car_ : 1;
   std::uint8_t is_oneway_bike_ : 1;
   std::uint8_t speed_limit_ : 3;
@@ -81,10 +81,10 @@ struct node_properties {
 
   bool is_car_accessible() const { return is_car_accessible_; }
   bool is_bike_accessible() const { return is_bike_accessible_; }
-  bool is_walk_accessible() const { return is_walk_accessible_; }
+  bool is_walk_accessible() const { return is_foot_accessible_; }
 
+  std::uint8_t is_foot_accessible_ : 1;
   std::uint8_t is_bike_accessible_ : 1;
-  std::uint8_t is_walk_accessible_ : 1;
   std::uint8_t is_car_accessible_ : 1;
 };
 
