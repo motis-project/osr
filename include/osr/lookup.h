@@ -56,6 +56,8 @@ struct lookup {
 
   ~lookup() { rtree_free(rtree_); }
 
+  start_dist get_match(geo::latlng const&) { return {}; }
+
   template <typename WeightFn>
   void find(geo::latlng const& query,
             std::vector<start_dist>& results,
