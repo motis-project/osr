@@ -19,6 +19,7 @@
 #include "osr/geojson.h"
 #include "osr/lookup.h"
 #include "osr/route.h"
+#include "osr/weight.h"
 
 using namespace net;
 using net::web_server;
@@ -74,10 +75,11 @@ std::string to_json(std::optional<path> const& p) {
 std::string get_graph(ways const& w,
                       lookup const& l,
                       geo::latlng const& min,
-                      geo::latlng const& max) {
+                      geo::latlng const& max,
+                      dijkstra_state const* s) {
   auto gj = geojson_writer{.w_ = w};
   l.find(min, max, [&](way_idx_t const w) { gj.write_way(w); });
-  return gj.finish();
+  return gj.finish(s);
 }
 
 struct http_server::impl {
@@ -97,24 +99,29 @@ struct http_server::impl {
     }
   }
 
+  dijkstra_state* get_dijkstra_state() {
+    static auto s = boost::thread_specific_ptr<dijkstra_state>{};
+    if (s.get() == nullptr) {
+      s.reset(new dijkstra_state{});
+    }
+    return s.get();
+  }
+
   void handle_route(web_server::http_req_t const& req,
                     web_server::http_res_cb_t const& cb) {
-    auto s = boost::thread_specific_ptr<routing_state>{};
-    if (s.get() == nullptr) {
-      s.reset(new routing_state{});
-    }
-    auto const query = boost::json::parse(req.body()).as_object();
-    auto const from = parse_latlng(query.at("start"));
-    auto const to = parse_latlng(query.at("destination"));
-    auto const max_it = query.find("max");
-    auto const max = max_it == query.end() ? 7200 : max_it->value().as_int64();
-    auto const profile_it = query.find("profile");
+    auto const q = boost::json::parse(req.body()).as_object();
+    auto const profile_it = q.find("profile");
     auto const profile =
-        profile_it == query.end() || !profile_it->value().is_string()
-            ? to_str(search_profile::kFoot)
-            : profile_it->value().as_string();
+        to_profile(profile_it == q.end() || !profile_it->value().is_string()
+                       ? to_str(search_profile::kFoot)
+                       : profile_it->value().as_string());
+    auto const from = parse_latlng(q.at("start"));
+    auto const to = parse_latlng(q.at("destination"));
+    auto const max_it = q.find("max");
+    auto const max = max_it == q.end() ? 3600 : max_it->value().as_int64();
     auto const res = json_response(
-        req, to_json(route(w_, l_, from, to, max, *s, read_profile(profile))));
+        req,
+        to_json(route(w_, l_, from, to, max, profile, *get_dijkstra_state())));
     return cb(res);
   }
 
@@ -126,7 +133,7 @@ struct http_server::impl {
         {waypoints[1].as_double(), waypoints[0].as_double()});
     auto const max = point::from_latlng(
         {waypoints[3].as_double(), waypoints[2].as_double()});
-    cb(json_response(req, get_graph(w_, l_, min, max)));
+    cb(json_response(req, get_graph(w_, l_, min, max, get_dijkstra_state())));
   }
 
   void handle_static(web_server::http_req_t&& req,

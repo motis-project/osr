@@ -41,16 +41,6 @@ constexpr std::uint16_t to_meters_per_second(speed_limit const l) {
 }
 
 struct way_properties {
-  inline friend std::ostream& operator<<(std::ostream& out,
-                                         way_properties const& p) {
-    return out << "(car_accessible=" << p.is_car_accessible()
-               << ", bike_accessible=" << p.is_bike_accessible()
-               << ", foot_accessible=" << p.is_foot_accessible()
-               << ", oneway_car=" << p.is_oneway_car()
-               << ", oneway_bike=" << p.is_oneway_bike()
-               << ", speed_limit=" << p.max_speed_km_per_h() << ")";
-  }
-
   bool is_car_accessible() const { return is_car_accessible_; }
   bool is_bike_accessible() const { return is_bike_accessible_; }
   bool is_foot_accessible() const { return is_foot_accessible_; }
@@ -72,13 +62,6 @@ struct way_properties {
 };
 
 struct node_properties {
-  inline friend std::ostream& operator<<(std::ostream& out,
-                                         node_properties const& p) {
-    return out << "(car_accessible=" << p.is_car_accessible()
-               << ", bike_accessible=" << p.is_bike_accessible()
-               << ", foot_accessible=" << p.is_walk_accessible() << ")";
-  }
-
   bool is_car_accessible() const { return is_car_accessible_; }
   bool is_bike_accessible() const { return is_bike_accessible_; }
   bool is_walk_accessible() const { return is_foot_accessible_; }
@@ -194,6 +177,10 @@ struct ways {
     utl::verify(it != end(osm_to_node_) && it->first == i,
                 "osm node {} not found", i);
     return it->second;
+  }
+
+  bool is_loop(way_idx_t const w) const {
+    return way_nodes_[w].back() == way_nodes_[w].front();
   }
 
   point get_node_pos(node_idx_t const i) const {

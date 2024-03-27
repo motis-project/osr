@@ -1,5 +1,7 @@
 #pragma once
 
+#include <variant>
+
 #include "fmt/core.h"
 
 #include "utl/helpers/algorithm.h"
@@ -7,7 +9,6 @@
 #include "osr/dial.h"
 #include "osr/types.h"
 #include "osr/ways.h"
-#include "utl/timer.h"
 
 namespace osr {
 
@@ -20,10 +21,15 @@ enum class direction : std::uint8_t {
   kBackward,
 };
 
+constexpr direction opposite(direction const dir) {
+  return dir == direction::kForward ? direction::kBackward
+                                    : direction::kForward;
+}
+
 constexpr std::string_view to_str(direction const d) {
   switch (d) {
-    case direction::kForward: return "FWD";
-    case direction::kBackward: return "FWD";
+    case direction::kForward: return "forward";
+    case direction::kBackward: return "backward";
   }
   std::unreachable();
 }
@@ -59,58 +65,13 @@ struct dijkstra_state {
     return it == end(dist_) ? kInfeasible : it->second.dist_;
   }
 
+  std::optional<entry> get(node_idx_t const n) const {
+    auto const it = dist_.find(n);
+    return it == end(dist_) ? std::nullopt : std::optional{it->second};
+  }
+
   dial<label, get_bucket> pq_{get_bucket{}};
   hash_map<node_idx_t, entry> dist_;
-};
-
-struct foot {
-  dist_t operator()(way_properties const& e,
-                    direction,
-                    std::uint16_t const dist) {
-    if (e.is_foot_accessible()) {
-      return static_cast<dist_t>(std::round(dist / 1.4F));
-    } else {
-      return kInfeasible;
-    }
-  }
-
-  dist_t operator()(node_properties const& n) {
-    return n.is_walk_accessible() ? 0U : kInfeasible;
-  }
-};
-
-struct bike {
-  dist_t operator()(way_properties const& e,
-                    direction const dir,
-                    std::uint16_t const dist) {
-    if (e.is_bike_accessible() &&
-        (dir == direction::kForward || !e.is_oneway_bike())) {
-      return static_cast<dist_t>(std::round(dist / 3.5F));
-    } else {
-      return kInfeasible;
-    }
-  }
-
-  dist_t operator()(node_properties const& n) {
-    return n.is_bike_accessible() ? 0U : kInfeasible;
-  }
-};
-
-struct car {
-  dist_t operator()(way_properties const& e,
-                    direction const dir,
-                    std::uint16_t const dist) {
-    if (e.is_car_accessible() &&
-        (dir == direction::kForward || !e.is_oneway_car())) {
-      return (dist / e.max_speed_m_per_s());
-    } else {
-      return kInfeasible;
-    }
-  }
-
-  dist_t operator()(node_properties const& n) {
-    return n.is_car_accessible() ? 0U : kInfeasible;
-  }
 };
 
 template <typename WeightFn>

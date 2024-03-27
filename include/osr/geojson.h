@@ -4,6 +4,7 @@
 #include "utl/pipes/transform.h"
 #include "utl/pipes/vec.h"
 
+#include "osr/dijkstra.h"
 #include "osr/ways.h"
 
 namespace osr {
@@ -65,18 +66,21 @@ struct geojson_writer {
     nodes_.insert(begin(nodes), end(nodes));
   }
 
-  std::string finish() {
+  std::string finish(dijkstra_state const* s) {
     for (auto const n : nodes_) {
       auto const p = w_.node_properties_[n];
+      auto const e = s == nullptr ? std::nullopt : s->get(n);
       features_.emplace_back(boost::json::value{
           {"type", "Feature"},
           {"properties",
-           {
-               {"osm_node_id", to_idx(w_.node_to_osm_[n])},
-               {"car", p.is_car_accessible()},
-               {"bike", p.is_bike_accessible()},
-               {"foot", p.is_walk_accessible()},
-           }},
+           {{"osm_node_id", to_idx(w_.node_to_osm_[n])},
+            {"car", p.is_car_accessible()},
+            {"bike", p.is_bike_accessible()},
+            {"foot", p.is_walk_accessible()},
+            {"pred", to_idx(e && e->pred_ != node_idx_t::invalid()
+                                ? w_.node_to_osm_[e->pred_]
+                                : osm_node_idx_t::invalid())},
+            {"dist", e ? e->dist_ : -1}}},
           {"geometry",
            {{"type", "Point"},
             {"coordinates", to_array(w_.get_node_pos(n))}}}});

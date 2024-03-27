@@ -15,7 +15,10 @@ struct tags {
     for (auto const& t : o.tags()) {
       switch (cista::hash(std::string_view{t.key()})) {
         using namespace std::string_view_literals;
-        case cista::hash("oneway"): oneway_ = t.value() == "yes"sv; break;
+        case cista::hash("oneway"): oneway_ |= t.value() == "yes"sv; break;
+        case cista::hash("junction"):
+          oneway_ |= t.value() == "roundabout"sv;
+          break;
         case cista::hash("oneway:bicycle"):
           not_oneway_bike_ = t.value() == "no"sv;
           break;
@@ -62,6 +65,7 @@ struct tags {
   }
 
   // https://wiki.openstreetmap.org/wiki/Key:oneway
+  // https://wiki.openstreetmap.org/wiki/Tag:junction=roundabout
   bool oneway_{false};
 
   // https://wiki.openstreetmap.org/wiki/Key:oneway:bicycle

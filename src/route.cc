@@ -1,12 +1,16 @@
 #include "osr/route.h"
 
+#include "utl/concat.h"
+
 #include "osr/dijkstra.h"
+#include "osr/infinite.h"
 #include "osr/lookup.h"
-#include "utl/timer.h"
+#include "osr/reverse.h"
+#include "osr/weight.h"
 
 namespace osr {
 
-search_profile read_profile(std::string_view s) {
+search_profile to_profile(std::string_view s) {
   switch (cista::hash(s)) {
     case cista::hash("foot"): return search_profile::kFoot;
     case cista::hash("bike"): return search_profile::kBike;
@@ -24,33 +28,24 @@ std::string_view to_str(search_profile const p) {
   throw utl::fail("{} is not a valid profile", static_cast<std::uint8_t>(p));
 }
 
-dist_t get_dist(ways const& w,
-                way_idx_t const way,
-                std::uint16_t const from,
-                std::uint16_t const to) {
-  auto sum = dist_t{0U};
-  for (auto i = from; i != to; ++i) {
-    sum += w.way_node_dist_[way][i];
-  }
-  return sum;
-}
-
+template <typename EdgeWeightFn>
 void add_path(ways const& w,
+              dijkstra_state const& s,
               node_idx_t const from,
               node_idx_t const to,
-              std::vector<geo::latlng>& path) {
+              std::vector<geo::latlng>& path,
+              EdgeWeightFn&& edge_weight) {
   struct candidate {
     way_idx_t way_;
     std::uint16_t from_, to_;
-    bool forward_;
+    bool is_loop_;
   };
 
-  // Find ways that are going through from AND to.
-  // Ways are sorted, so we compute the set intersection in O(N).
   auto const from_ways = utl::zip(w.node_ways_[from], w.node_in_way_idx_[from]);
   auto const to_ways = utl::zip(w.node_ways_[to], w.node_in_way_idx_[to]);
-  auto a = begin(from_ways), b = begin(to_ways);
+  auto const expected_dist = s.get_dist(from) - s.get_dist(to);
   auto intersection = std::vector<candidate>{};
+  auto a = begin(from_ways), b = begin(to_ways);
   while (a != end(from_ways) && b != end(to_ways)) {
     auto const& [a_way, a_idx] = *a;
     auto const& [b_way, b_idx] = *b;
@@ -59,60 +54,61 @@ void add_path(ways const& w,
     } else if (b_way < a_way) {
       ++b;
     } else {
-      intersection.emplace_back(a_way, std::min(a_idx, b_idx),
-                                std::max(a_idx, b_idx), a_idx < b_idx);
+      auto const is_loop =
+          w.is_loop(a_way) && static_cast<unsigned>(std::abs(a_idx - b_idx)) ==
+                                  w.way_nodes_[a_way].size() - 2U;
+      auto const is_neighbor = std::abs(a_idx - b_idx) == 1;
+      auto const dist = edge_weight(
+          w.way_properties_[a_way],
+          ((a_idx > b_idx) ^ is_loop) ? direction::kForward
+                                      : direction::kBackward,
+          w.way_node_dist_[a_way][is_loop ? std::max(a_idx, b_idx)
+                                          : std::min(a_idx, b_idx)]);
+      if (expected_dist == dist && (is_neighbor || is_loop)) {
+        intersection.emplace_back(a_way, a_idx, b_idx, is_loop);
+      }
       ++a;
       ++b;
     }
   }
 
-  // Use the way that goes through both with the shortest distance.
-  // TODO: check with the profile if the way can be used!
-  // TODO: use duration instead of distance (like the SSSP algorithm).
-  auto best_dist = kInfeasible;
-  auto best_i = 0U;
-  auto i = 0U;
-  for (auto const& [way, from_idx, to_idx, _] : intersection) {
-    auto const dist = get_dist(w, way, from_idx, to_idx);
-    if (dist < best_dist) {
-      best_i = i;
-      best_dist = dist;
-    }
-    ++i;
+  if (intersection.empty()) {
+    [[unlikely]];
+    throw std::runtime_error{"EMPTY SET INTERSECTION"};
   }
 
   // Go through way, collect all coordinates into the polyline.
-  auto const& [way, from_idx, to_idx, forward] = intersection[best_i];
+  auto const& [way, from_idx, to_idx, is_loop] = intersection[0U];
+  auto j = 0U;
   auto active = false;
-  auto tmp = std::vector<geo::latlng>{};
   for (auto const [osm_idx, coord] :
-       utl::zip(w.way_osm_nodes_[way], w.way_polylines_[way])) {
+       infinite(reverse(utl::zip(w.way_osm_nodes_[way], w.way_polylines_[way]),
+                        (from_idx > to_idx) ^ is_loop),
+                is_loop)) {
+    if (j++ == 2 * w.way_polylines_[way].size() + 1U) {
+      [[unlikely]];
+      throw std::runtime_error{"INFINITE LOOP ERROR"};
+    }
     if (!active && w.node_to_osm_[w.way_nodes_[way][from_idx]] == osm_idx) {
       active = true;
     }
     if (active) {
-      tmp.emplace_back(coord);
-
+      path.emplace_back(coord);
       if (w.node_to_osm_[w.way_nodes_[way][to_idx]] == osm_idx) {
         break;
       }
     }
   }
-
-  if (!forward) {
-    std::reverse(begin(tmp), end(tmp));
-  }
-  path.insert(end(path), begin(tmp), end(tmp));
 }
 
+template <typename EdgeWeightFn>
 path reconstruct(ways const& w,
                  dijkstra_state const& s,
-                 node_idx_t const dest,
-                 std::vector<geo::latlng> const& dest_path,
-                 dist_t const dist,
-                 start_dist const& start) {
-  auto p = path{.time_ = dist, .polyline_ = dest_path};
-  auto n = dest;
+                 way_candidate const& start,
+                 node_candidate const& dest,
+                 EdgeWeightFn&& edge_weight) {
+  auto n = dest.node_;
+  auto p = path{.time_ = s.get_dist(n), .polyline_ = dest.path_};
   auto last = n;
   while (n != node_idx_t::invalid()) {
     last = n;
@@ -121,23 +117,13 @@ path reconstruct(ways const& w,
       abort();
     }
     if (e.pred_ != node_idx_t::invalid()) {
-      add_path(w, n, e.pred_, p.polyline_);
+      add_path(w, s, n, e.pred_, p.polyline_, edge_weight);
     }
     n = e.pred_;
   }
-  auto [left_node, _, left_poly] = start.init_left_;
-  auto [right_node, _1, right_poly] = start.init_right_;
-
-  if (left_node == last) {
-    std::reverse(begin(left_poly), end(left_poly));
-    p.polyline_.insert(end(p.polyline_), begin(left_poly), end(left_poly));
-  } else {
-    std::reverse(begin(right_poly), end(right_poly));
-    p.polyline_.insert(end(p.polyline_), begin(right_poly), end(right_poly));
-  }
-
+  utl::concat(p.polyline_, last == start.left_.node_ ? start.left_.path_
+                                                     : start.right_.path_);
   std::reverse(begin(p.polyline_), end(p.polyline_));
-
   return p;
 }
 
@@ -147,56 +133,52 @@ std::optional<path> route(ways const& w,
                           geo::latlng const& from,
                           geo::latlng const& to,
                           dist_t const max_dist,
-                          routing_state& s,
+                          dijkstra_state& s,
                           EdgeWeightFn&& edge_weight_fn) {
+  auto const from_match = l.match(from, false, edge_weight_fn);
+  auto const to_match = l.match(to, true, edge_weight_fn);
 
-  l.find(from, s.start_candidates_, edge_weight_fn);
-  utl::verify(!s.start_candidates_.empty(),
-              "no start candidates around {} found", from);
-
-  l.find(to, s.dest_candidates_, edge_weight_fn);
-  utl::verify(!s.dest_candidates_.empty(),
-              "no destination candidates around {} found", to);
-
-  s.dijkstra_state_.reset(max_dist);
-
-  auto const& start = s.start_candidates_.front();
-  for (auto const x : {&start.init_left_, &start.init_right_}) {
-    auto const& [node, dist, _] = *x;
-    if (node != node_idx_t::invalid() && dist < max_dist) {
-      s.dijkstra_state_.add_start(node, dist);
-    }
-  }
-
-  dijkstra(w, s.dijkstra_state_, max_dist, edge_weight_fn);
-
-  auto const dest = s.dest_candidates_.front();
-  auto best_dist = std::numeric_limits<dist_t>::max();
-  auto best_node = node_idx_t::invalid();
-  auto best_dest_path = static_cast<std::vector<geo::latlng> const*>(nullptr);
-  for (auto const x : {&dest.init_left_, &dest.init_right_}) {
-    auto const& [node, dist, dest_path] = *x;
-    if (node != node_idx_t::invalid() && dist < max_dist) {
-      auto const target_dist = s.dijkstra_state_.get_dist(node);
-      if (target_dist == kInfeasible) {
-        continue;
-      }
-
-      auto const total_dist = target_dist + dist;
-      if (total_dist < max_dist && total_dist < best_dist) {
-        best_dist = total_dist;
-        best_node = node;
-        best_dest_path = &dest_path;
-      }
-    }
-  }
-
-  if (best_node == node_idx_t::invalid()) {
+  if (from_match.empty() || to_match.empty()) {
     return std::nullopt;
   }
 
-  return reconstruct(w, s.dijkstra_state_, best_node, *best_dest_path,
-                     best_dist, start);
+  s.reset(max_dist);
+
+  for (auto const& start : from_match) {
+    if (start.left_.valid()) {
+      s.add_start(start.left_.node_, start.left_.weight_);
+    }
+    if (start.right_.valid()) {
+      s.add_start(start.right_.node_, start.right_.weight_);
+    }
+
+    dijkstra(w, s, max_dist, edge_weight_fn);
+
+    for (auto const& dest : to_match) {
+      auto best_dist = std::numeric_limits<dist_t>::max();
+      auto best_candidate = static_cast<node_candidate const*>(nullptr);
+      for (auto const x : {&dest.left_, &dest.right_}) {
+        if (x->valid() && x->dist_to_node_ < max_dist) {
+          auto const target_dist = s.get_dist(x->node_);
+          if (target_dist == kInfeasible) {
+            continue;
+          }
+
+          auto const total_dist = target_dist + x->weight_;
+          if (total_dist < max_dist && total_dist < best_dist) {
+            best_dist = static_cast<dist_t>(total_dist);
+            best_candidate = x;
+          }
+        }
+      }
+
+      if (best_candidate != nullptr) {
+        return reconstruct(w, s, start, *best_candidate, edge_weight_fn);
+      }
+    }
+  }
+
+  return std::nullopt;
 }
 
 std::optional<path> route(ways const& w,
@@ -204,8 +186,8 @@ std::optional<path> route(ways const& w,
                           geo::latlng const& from,
                           geo::latlng const& to,
                           dist_t const max_dist,
-                          routing_state& s,
-                          search_profile const profile) {
+                          search_profile const profile,
+                          dijkstra_state& s) {
   switch (profile) {
     case search_profile::kFoot:
       return route(w, l, from, to, max_dist, s, foot{});

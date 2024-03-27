@@ -10,22 +10,54 @@
 
 namespace osr {
 
-struct start_dist {
-  friend bool operator<(start_dist const& a, start_dist const& b) {
-    return a.dist_ < b.dist_;
-  }
-  double dist_;
-  geo::latlng best_;
-  std::size_t best_segment_idx_;
-  way_idx_t way_;
-  std::tuple<node_idx_t, double, std::vector<geo::latlng>> init_left_{
-      node_idx_t::invalid(), std::numeric_limits<double>::max(), {}};
-  std::tuple<node_idx_t, double, std::vector<geo::latlng>> init_right_{
-      node_idx_t::invalid(), std::numeric_limits<double>::max(), {}};
+struct node_candidate {
+  bool valid() const { return node_ != node_idx_t::invalid(); }
+
+  node_idx_t node_{node_idx_t::invalid()};
+  double dist_to_node_{0.0};
+  dist_t weight_{0U};
+  std::vector<geo::latlng> path_{};
 };
 
+struct way_candidate {
+  friend bool operator<(way_candidate const& a, way_candidate const& b) {
+    return a.dist_to_way_ < b.dist_to_way_;
+  }
+
+  double dist_to_way_;
+  geo::latlng best_;
+  std::size_t segment_idx_;
+  way_idx_t way_{way_idx_t::invalid()};
+  node_candidate left_{}, right_{};
+};
+
+enum class cflow { kContinue, kBreak };
+
+template <typename T, typename Collection, typename Fn>
+void till_the_end(T const& start,
+                  Collection const& c,
+                  direction const dir,
+                  Fn&& fn) {
+  if (dir == direction::kForward) {
+    for (auto i = start; i != c.size(); ++i) {
+      if (fn(c[i]) == cflow::kBreak) {
+        break;
+      }
+    }
+  } else {
+    for (auto j = 0U; j <= start; ++j) {
+      auto i = start - j;
+      if (fn(c[i]) == cflow::kBreak) {
+        break;
+      }
+    }
+  }
+}
+
+using match_t = std::vector<way_candidate>;
+
 template <typename PolyLine>
-start_dist distance_to_way(geo::latlng const& x, PolyLine&& c) {
+way_candidate distance_to_way(geo::latlng const& x, PolyLine&& c) {
   auto min = std::numeric_limits<double>::max();
   auto best = geo::latlng{};
   auto best_segment_idx = 0U;
@@ -40,10 +72,7 @@ start_dist distance_to_way(geo::latlng const& x, PolyLine&& c) {
     }
     ++segment_idx;
   }
-  return start_dist{.dist_ = min,
-                    .best_ = best,
-                    .best_segment_idx_ = best_segment_idx,
-                    .way_ = way_idx_t::invalid()};
+  return {.dist_to_way_ = min, .best_ = best, .segment_idx_ = best_segment_idx};
 }
 
 struct lookup {
@@ -56,80 +85,73 @@ struct lookup {
 
   ~lookup() { rtree_free(rtree_); }
 
-  start_dist get_match(geo::latlng const&) { return {}; }
+  match_t get_match(geo::latlng const&) { return {}; }
 
   template <typename WeightFn>
-  void find(geo::latlng const& query,
-            std::vector<start_dist>& results,
-            WeightFn&& fn) const {
-    results.clear();
+  match_t match(geo::latlng const& query,
+                bool const reverse,
+                WeightFn&& fn) const {
+    auto way_candidates = std::vector<way_candidate>{};
     find(query, [&](way_idx_t const way) {
       if (fn(ways_.way_properties_[way], direction::kForward, 0U) !=
           kInfeasible) {
         auto d = distance_to_way(query, ways_.way_polylines_[way]);
-        d.way_ = way;
-        results.emplace_back(std::move(d));
+        if (d.dist_to_way_ < 100) {
+          auto& wc = way_candidates.emplace_back(std::move(d));
+          wc.way_ = way;
+          wc.left_ =
+              find_next_node(wc, query, direction::kBackward, reverse, fn);
+          wc.right_ =
+              find_next_node(wc, query, direction::kForward, reverse, fn);
+        }
       }
     });
-    utl::sort(results);
-
-    for (auto i = 0U; i != std::min(std::size_t{10U}, results.size()); ++i) {
-      init(query, results[i]);
-    }
+    utl::sort(way_candidates);
+    return way_candidates;
   }
 
-  void init(geo::latlng const& query, start_dist& d) const {
-    init_right(query, d, d.best_segment_idx_ + 1U);
-    init_left(query, d, d.best_segment_idx_);
-  }
-
-  void init_right(geo::latlng const& query,
-                  start_dist& d,
-                  std::size_t const idx) const {
-    auto& [node, dist, path] = d.init_right_;
-
-    auto const polyline = ways_.way_polylines_[d.way_];
-    auto const osm_idx = ways_.way_osm_nodes_[d.way_];
-    auto pos = d.best_;
-
-    dist = geo::distance(query, d.best_);
-    path.push_back(query);
-    path.push_back(d.best_);
-    for (auto i = idx; i != polyline.size(); ++i) {
-      dist += geo::distance(pos, polyline[i]);
-      pos = polyline[i];
-      path.push_back(pos);
-      auto const way_node = ways_.find_node_idx(osm_idx[i]);
-      if (way_node.has_value()) {
-        node = *way_node;
-        break;
-      }
+  template <typename EdgeWeightFn>
+  node_candidate find_next_node(way_candidate const& wc,
+                                geo::latlng const& query,
+                                direction const dir,
+                                bool const reverse,
+                                EdgeWeightFn&& edge_weight) const {
+    auto const p = ways_.way_properties_[wc.way_];
+    auto const edge_dir = reverse ? opposite(dir) : dir;
+    if (edge_weight(p, edge_dir, 0U) == kInfeasible) {
+      return node_candidate{};
     }
-  }
 
-  void init_left(geo::latlng const& query,
-                 start_dist& d,
-                 std::size_t const idx) const {
-    auto& [node, dist, path] = d.init_left_;
+    auto const off_road_length = geo::distance(query, wc.best_);
+    auto c = node_candidate{.dist_to_node_ = off_road_length,
+                            .weight_ = edge_weight(p, edge_dir, 0U),
+                            .path_ = {query, wc.best_}};
+    auto const polyline = ways_.way_polylines_[wc.way_];
+    auto const osm_nodes = ways_.way_osm_nodes_[wc.way_];
 
-    auto const polyline = ways_.way_polylines_[d.way_];
-    auto const osm_idx = ways_.way_osm_nodes_[d.way_];
-    auto pos = d.best_;
+    till_the_end(wc.segment_idx_ + (dir == direction::kForward ? 1U : 0U),
+                 utl::zip(polyline, osm_nodes), dir, [&](auto&& x) {
+                   auto const& [pos, osm_node_idx] = x;
 
-    dist = geo::distance(query, d.best_);
-    path.push_back(query);
-    path.push_back(d.best_);
-    for (auto j = 0U; j <= idx; ++j) {
-      auto i = idx - j;
-      dist += geo::distance(pos, polyline[i]);
-      pos = polyline[i];
-      path.push_back(pos);
-      auto const way_node = ways_.find_node_idx(osm_idx[i]);
-      if (way_node.has_value()) {
-        node = *way_node;
-        break;
-      }
+                   auto const segment_dist = geo::distance(c.path_.back(), pos);
+                   c.dist_to_node_ += segment_dist;
+                   c.weight_ += edge_weight(p, edge_dir, segment_dist);
+                   c.path_.push_back(pos);
+
+                   auto const way_node = ways_.find_node_idx(osm_node_idx);
+                   if (way_node.has_value()) {
+                     c.node_ = *way_node;
+                     return cflow::kBreak;
+                   }
+
+                   return cflow::kContinue;
+                 });
+
+    if (!reverse) {
+      std::reverse(begin(c.path_), end(c.path_));
     }
+
+    return c;
   }
 
   template <typename Fn>
