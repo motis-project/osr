@@ -111,10 +111,6 @@ bool is_accessible(tags const& o, osm_obj_type const type) {
 
 struct foot_profile {
   static override access_override(tags const& t) {
-    if (t.access_ == override::kBlacklist) {
-      return override::kBlacklist;
-    }
-
     switch (cista::hash(t.barrier_)) {
       case cista::hash("yes"):
       case cista::hash("wall"):
@@ -130,6 +126,10 @@ struct foot_profile {
       case cista::hash("yes"):
       case cista::hash("permissive"): [[fallthrough]];
       case cista::hash("designated"): return override::kWhitelist;
+    }
+
+    if (t.access_ == override::kBlacklist) {
+      return override::kBlacklist;
     }
 
     return override::kNone;
@@ -165,9 +165,6 @@ struct foot_profile {
 
 struct bike_profile {
   static override access_override(tags const& t) {
-    if (t.access_ == override::kBlacklist) {
-      return override::kBlacklist;
-    }
 
     switch (cista::hash(t.barrier_)) {
       case cista::hash("yes"):
@@ -185,6 +182,10 @@ struct bike_profile {
       case cista::hash("yes"):
       case cista::hash("permissive"): [[fallthrough]];
       case cista::hash("designated"): return override::kWhitelist;
+    }
+
+    if (t.access_ == override::kBlacklist) {
+      return override::kBlacklist;
     }
 
     return t.vehicle_;
