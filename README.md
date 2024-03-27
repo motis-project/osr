@@ -1,6 +1,6 @@
 <p align="center"><img src="docs/screenshot.png"></p>
 
-Demo (currently limited to 15 minutes walking): https://osr.motis-project.de
+Demo (currently limited to 1h radius): https://osr.motis-project.de
 
 # Open Street Router
 
