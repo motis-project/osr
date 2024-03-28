@@ -28,12 +28,14 @@ public:
     param(http_port_, "port,p", "HTTP port");
     param(static_file_path_, "static,s", "Path to static files (ui/web)");
     param(threads_, "threads,t", "Number of routing threads");
+    param(lock_, "lock,l", "Lock to memory");
   }
 
   fs::path data_dir_{"osr"};
   std::string http_host_{"0.0.0.0"};
   std::string http_port_{"8000"};
   std::string static_file_path_;
+  bool lock_{true};
   unsigned threads_{std::thread::hardware_concurrency()};
 };
 
@@ -74,6 +76,10 @@ int main(int argc, char const* argv[]) {
   }
 
   auto const w = ways{opt.data_dir_, cista::mmap::protection::READ};
+  if (opt.lock_) {
+    w.lock();
+  }
+
   auto const l = lookup{w};
 
   auto ioc = boost::asio::io_context{};

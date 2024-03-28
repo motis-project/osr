@@ -1,11 +1,13 @@
 #pragma once
 
+#include <sys/mman.h>
 #include <filesystem>
 #include <ranges>
 
 #include "osmium/osm/way.hpp"
 
 #include "utl/progress_tracker.h"
+#include "utl/timer.h"
 #include "utl/verify.h"
 #include "utl/zip.h"
 
@@ -97,6 +99,40 @@ struct ways {
                 mm_vec<std::uint16_t>{mm("node_in_way_idx_data.bin")}},
             mm_vec<cista::page<std::uint64_t>>{
                 mm("node_in_way_idx_index.bin")}} {}
+
+  void lock() const {
+    auto const timer = utl::scoped_timer{"lock"};
+
+    mlock(osm_to_node_.mmap_.data(), osm_to_node_.mmap_.size());
+    mlock(node_to_osm_.mmap_.data(), node_to_osm_.mmap_.size());
+    mlock(node_properties_.mmap_.data(), node_properties_.mmap_.size());
+    mlock(way_osm_idx_.mmap_.data(), way_osm_idx_.mmap_.size());
+    mlock(way_properties_.mmap_.data(), way_properties_.mmap_.size());
+
+    mlock(way_polylines_.data_.mmap_.data(), way_polylines_.data_.mmap_.size());
+    mlock(way_polylines_.bucket_starts_.mmap_.data(),
+          way_polylines_.bucket_starts_.mmap_.size());
+
+    mlock(way_osm_nodes_.data_.mmap_.data(), way_osm_nodes_.data_.mmap_.size());
+    mlock(way_osm_nodes_.bucket_starts_.mmap_.data(),
+          way_osm_nodes_.bucket_starts_.mmap_.size());
+
+    mlock(way_nodes_.data_.mmap_.data(), way_nodes_.data_.mmap_.size());
+    mlock(way_nodes_.bucket_starts_.mmap_.data(),
+          way_nodes_.bucket_starts_.mmap_.size());
+
+    mlock(way_node_dist_.data_.mmap_.data(), way_node_dist_.data_.mmap_.size());
+    mlock(way_node_dist_.bucket_starts_.mmap_.data(),
+          way_node_dist_.bucket_starts_.mmap_.size());
+
+    mlock(node_ways_.paged_.data_.mmap_.data(),
+          node_ways_.paged_.data_.mmap_.size());
+    mlock(node_ways_.idx_.mmap_.data(), node_ways_.idx_.mmap_.size());
+
+    mlock(node_in_way_idx_.paged_.data_.mmap_.data(),
+          node_in_way_idx_.paged_.data_.mmap_.size());
+    mlock(node_in_way_idx_.idx_.mmap_.data(), node_ways_.idx_.mmap_.size());
+  }
 
   void connect_ways() {
     auto pt = utl::get_active_progress_tracker_or_activate("osr");
