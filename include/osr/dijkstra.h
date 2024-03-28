@@ -70,8 +70,16 @@ struct dijkstra_state {
     return it == end(dist_) ? std::nullopt : std::optional{it->second};
   }
 
+  struct hash {
+    using is_avalanching = void;
+    auto operator()(node_idx_t const& obj) const noexcept -> uint64_t {
+      return ankerl::unordered_dense::detail::wyhash::hash(
+          static_cast<uint64_t>(to_idx(obj)));
+    }
+  };
+
   dial<label, get_bucket> pq_{get_bucket{}};
-  hash_map<node_idx_t, entry> dist_;
+  ankerl::unordered_dense::map<node_idx_t, entry, hash> dist_;
 };
 
 template <typename WeightFn>
@@ -87,14 +95,14 @@ void dijkstra(ways const& w,
       continue;
     }
 
-    for (auto const [way, i] :
-         utl::zip(w.node_ways_[l.node_], w.node_in_way_idx_[l.node_])) {
+    for (auto const [way, i] : utl::zip_unchecked(
+             w.node_ways_[l.node_], w.node_in_way_idx_[l.node_])) {
       auto const expand = [&](std::uint16_t const from, std::uint16_t const to,
                               direction const dir) {
+        if (weight_fn(w.way_properties_[way], dir, 0U) == kInfeasible) {
+          return;
+        }
         auto const dist_idx = std::min(from, to);
-        // TODO check if it gets faster with checking for infeasibility first
-        // with dist=0, only then lookup the actual distance (memory access =
-        // costly)
         auto const dist = w.way_node_dist_[way][dist_idx];
         auto const edge_weight = weight_fn(w.way_properties_[way], dir, dist);
         if (edge_weight == kInfeasible) {

@@ -28,23 +28,21 @@ std::string_view to_str(search_profile const p) {
   throw utl::fail("{} is not a valid profile", static_cast<std::uint8_t>(p));
 }
 
-template <typename EdgeWeightFn>
-void add_path(ways const& w,
-              dijkstra_state const& s,
-              node_idx_t const from,
-              node_idx_t const to,
-              std::vector<geo::latlng>& path,
-              EdgeWeightFn&& edge_weight) {
-  struct candidate {
-    way_idx_t way_;
-    std::uint16_t from_, to_;
-    bool is_loop_;
-  };
+struct connecting_way {
+  way_idx_t way_;
+  std::uint16_t from_, to_;
+  bool is_loop_;
+};
 
+template <typename EdgeWeightFn>
+connecting_way find_connecting_way(ways const& w,
+                                   dijkstra_state const& s,
+                                   node_idx_t const from,
+                                   node_idx_t const to,
+                                   EdgeWeightFn&& edge_weight) {
   auto const from_ways = utl::zip(w.node_ways_[from], w.node_in_way_idx_[from]);
   auto const to_ways = utl::zip(w.node_ways_[to], w.node_in_way_idx_[to]);
   auto const expected_dist = s.get_dist(from) - s.get_dist(to);
-  auto intersection = std::vector<candidate>{};
   auto a = begin(from_ways), b = begin(to_ways);
   while (a != end(from_ways) && b != end(to_ways)) {
     auto const& [a_way, a_idx] = *a;
@@ -65,30 +63,33 @@ void add_path(ways const& w,
           w.way_node_dist_[a_way][is_loop ? std::max(a_idx, b_idx)
                                           : std::min(a_idx, b_idx)]);
       if (expected_dist == dist && (is_neighbor || is_loop)) {
-        intersection.emplace_back(a_way, a_idx, b_idx, is_loop);
+        return {a_way, a_idx, b_idx, is_loop};
       }
       ++a;
       ++b;
     }
   }
 
-  if (intersection.empty()) {
-    [[unlikely]];
-    throw std::runtime_error{"EMPTY SET INTERSECTION"};
-  }
+  [[unlikely]];
+  throw utl::fail("no connecting way found");
+}
 
-  // Go through way, collect all coordinates into the polyline.
-  auto const& [way, from_idx, to_idx, is_loop] = intersection[0U];
+template <typename EdgeWeightFn>
+void add_path(ways const& w,
+              dijkstra_state const& s,
+              node_idx_t const from,
+              node_idx_t const to,
+              std::vector<geo::latlng>& path,
+              EdgeWeightFn&& edge_weight) {
+  auto const& [way, from_idx, to_idx, is_loop] =
+      find_connecting_way(w, s, from, to, edge_weight);
   auto j = 0U;
   auto active = false;
   for (auto const [osm_idx, coord] :
        infinite(reverse(utl::zip(w.way_osm_nodes_[way], w.way_polylines_[way]),
                         (from_idx > to_idx) ^ is_loop),
                 is_loop)) {
-    if (j++ == 2 * w.way_polylines_[way].size() + 1U) {
-      [[unlikely]];
-      throw std::runtime_error{"INFINITE LOOP ERROR"};
-    }
+    utl::verify(j++ != 2 * w.way_polylines_[way].size() + 1U, "infinite loop");
     if (!active && w.node_to_osm_[w.way_nodes_[way][from_idx]] == osm_idx) {
       active = true;
     }
