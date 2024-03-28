@@ -103,19 +103,8 @@ struct ways {
   void lock() const {
     auto const timer = utl::scoped_timer{"lock"};
 
-    mlock(osm_to_node_.mmap_.data(), osm_to_node_.mmap_.size());
-    mlock(node_to_osm_.mmap_.data(), node_to_osm_.mmap_.size());
     mlock(node_properties_.mmap_.data(), node_properties_.mmap_.size());
-    mlock(way_osm_idx_.mmap_.data(), way_osm_idx_.mmap_.size());
     mlock(way_properties_.mmap_.data(), way_properties_.mmap_.size());
-
-    mlock(way_polylines_.data_.mmap_.data(), way_polylines_.data_.mmap_.size());
-    mlock(way_polylines_.bucket_starts_.mmap_.data(),
-          way_polylines_.bucket_starts_.mmap_.size());
-
-    mlock(way_osm_nodes_.data_.mmap_.data(), way_osm_nodes_.data_.mmap_.size());
-    mlock(way_osm_nodes_.bucket_starts_.mmap_.data(),
-          way_osm_nodes_.bucket_starts_.mmap_.size());
 
     mlock(way_nodes_.data_.mmap_.data(), way_nodes_.data_.mmap_.size());
     mlock(way_nodes_.bucket_starts_.mmap_.data(),
@@ -132,6 +121,20 @@ struct ways {
     mlock(node_in_way_idx_.paged_.data_.mmap_.data(),
           node_in_way_idx_.paged_.data_.mmap_.size());
     mlock(node_in_way_idx_.idx_.mmap_.data(), node_ways_.idx_.mmap_.size());
+  }
+
+  void mlock_extra() {
+    mlock(osm_to_node_.mmap_.data(), osm_to_node_.mmap_.size());
+    mlock(way_osm_idx_.mmap_.data(), way_osm_idx_.mmap_.size());
+    mlock(node_to_osm_.mmap_.data(), node_to_osm_.mmap_.size());
+
+    mlock(way_polylines_.data_.mmap_.data(), way_polylines_.data_.mmap_.size());
+    mlock(way_polylines_.bucket_starts_.mmap_.data(),
+          way_polylines_.bucket_starts_.mmap_.size());
+
+    mlock(way_osm_nodes_.data_.mmap_.data(), way_osm_nodes_.data_.mmap_.size());
+    mlock(way_osm_nodes_.bucket_starts_.mmap_.data(),
+          way_osm_nodes_.bucket_starts_.mmap_.size());
   }
 
   void connect_ways() {
