@@ -13,22 +13,24 @@ Directory with all created files after extract:
 
 ```bash
 $ ll -h osr-planet/
-total 120G
- 18G node_in_way_idx_data.bin
-6.5G node_in_way_idx_index.bin
-2.2G node_to_osm.bin
- 35G node_ways_data.bin
-6.5G node_ways_index.bin
-4.3G osm_to_mode.bin
-755M way_node_dist_data.bin
-1.7G way_node_dist_index.bin
-2.3G way_nodes_data.bin
-1.7G way_nodes_index.bin
-1.7G way_osm_idx.bin
+total 115G
+ 17G node_in_way_idx_data.bin
+6,1G node_in_way_idx_index.bin
+260M node_properties.bin
+2,1G node_to_osm.bin
+ 33G node_ways_data.bin
+6,1G node_ways_index.bin
+4,1G osm_to_mode.bin
+717M way_node_dist_data.bin
+1,6G way_node_dist_index.bin
+2,2G way_nodes_data.bin
+1,6G way_nodes_index.bin
+1,6G way_osm_idx.bin
  19G way_osm_nodes_data.bin
-1.7G way_osm_nodes_index.bin
+1,6G way_osm_nodes_index.bin
  19G way_polylines_data.bin
-1.7G way_polylines_index.bin
+1,6G way_polylines_index.bin
+200M way_properties.bin
 ```
 
 ## Usage
@@ -112,15 +114,17 @@ This is only a first proof-of-concept. Many basic as well as advanced features c
 Known Issues:
 
 - Routing performance can be improved
-  - by optionally locking data used during routing to prevent paging (`mlock`), required files are (total=72.45 GB)
-    - 2.3G `way_nodes_data.bin`
-    - 1.7G `way_nodes_index.bin`
-    - 755M `way_node_dist_data.bin`
-    - 1.7G `way_node_dist_index.bin`
-    - 35G `node_ways_data.bin`
-    - 6.5G `node_ways_index.bin`
-    - 18G `node_in_way_idx_data.bin`
-    - 6.5G `node_in_way_idx_index.bin`
+  - by optionally locking data used during routing to prevent paging (`mlock`), required files are (total=68.8 GB)
+    -  17G `node_in_way_idx_data.bin`
+    - 6,1G `node_in_way_idx_index.bin`
+    - 260M `node_properties.bin`
+    -  33G `node_ways_data.bin`
+    - 6,1G `node_ways_index.bin`
+    - 717M `way_node_dist_data.bin`
+    - 1,6G `way_node_dist_index.bin`
+    - 2,2G `way_nodes_data.bin`
+    - 1,6G `way_nodes_index.bin`
+    - 200M `way_properties.bin`
   - by using A* or bidirectional A* for one to one queries
   - Explore preprocessing-based approaches: landmarks, arc flags, transit node routing, multi-level-dijkstra, etc.
 - If source and target are mapped to the same way, the path should not be forced to go through routing nodes
@@ -128,8 +132,6 @@ Known Issues:
 
 Basic:
 
-- Extract routing-relevant edge attributes
-- Implement routing profiles for car, bike, etc.
 - Extract street names of ways for reconstruction.
 - Reconstruct description of way for navigation (including street names)
 - Turn restriction relations ([example](https://www.openstreetmap.org/relation/1654115))
