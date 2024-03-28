@@ -134,8 +134,7 @@ Basic:
 
 - Extract street names of ways for reconstruction.
 - Reconstruct description of way for navigation (including street names)
-- Turn restriction relations ([example](https://www.openstreetmap.org/relation/1654115))
-- One way restrictions ([example](https://www.openstreetmap.org/way/998075924))
+- Turn restriction relations ([example](https://www.openstreetmap.org/relation/1654115), [example](https://www.openstreetmap.org/node/516914))
 - Penalize u-turns
 
 Advanced:
