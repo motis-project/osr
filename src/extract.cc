@@ -184,7 +184,7 @@ void extract(fs::path const& in, fs::path const& out) {
   auto input_file = osm_io::File{};
   auto file_size = std::size_t{0U};
   try {
-    input_file = osm_io::File{in};
+    input_file = osm_io::File{in.generic_string()};
     file_size =
         osm_io::Reader{input_file, osmium::io::read_meta::no}.file_size();
   } catch (...) {

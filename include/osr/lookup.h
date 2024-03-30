@@ -190,7 +190,7 @@ struct lookup {
         std::array<double, 2U>{b.top_right().lon(), b.top_right().lat()};
 
     rtree_insert(rtree_, min_corner.data(), max_corner.data(),
-                 reinterpret_cast<void*>(to_idx(way)));
+                 reinterpret_cast<void*>(static_cast<std::size_t>(to_idx(way))));
   }
 
   rtree* rtree_;
