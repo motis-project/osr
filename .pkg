@@ -45,7 +45,7 @@
 [rtree.c]
   url=git@github.com:triptix-tech/rtree.c.git
   branch=master
-  commit=498f993c38e80f21d55ab72f14675b72fca991cc
+  commit=6b9cea47858a5910e38ec2fa89ab48a1635167a6
 [fmt]
   url=git@github.com:motis-project/fmt.git
   branch=master
