@@ -32,6 +32,7 @@ struct connecting_way {
   way_idx_t way_;
   std::uint16_t from_, to_;
   bool is_loop_;
+  std::uint16_t distance_;
 };
 
 template <typename EdgeWeightFn>
@@ -56,32 +57,32 @@ connecting_way find_connecting_way(ways const& w,
           w.is_loop(a_way) && static_cast<unsigned>(std::abs(a_idx - b_idx)) ==
                                   w.way_nodes_[a_way].size() - 2U;
       auto const is_neighbor = std::abs(a_idx - b_idx) == 1;
-      auto const dist = edge_weight(
-          w.way_properties_[a_way],
-          ((a_idx > b_idx) ^ is_loop) ? direction::kForward
-                                      : direction::kBackward,
+      auto const distance =
           w.way_node_dist_[a_way][is_loop ? std::max(a_idx, b_idx)
-                                          : std::min(a_idx, b_idx)]);
+                                          : std::min(a_idx, b_idx)];
+      auto const dist =
+          edge_weight(w.way_properties_[a_way],
+                      ((a_idx > b_idx) ^ is_loop) ? direction::kForward
+                                                  : direction::kBackward,
+                      distance);
       if (expected_dist == dist && (is_neighbor || is_loop)) {
-        return {a_way, a_idx, b_idx, is_loop};
+        return {a_way, a_idx, b_idx, is_loop, distance};
       }
       ++a;
       ++b;
     }
   }
-
-  [[unlikely]];
   throw utl::fail("no connecting way found");
 }
 
 template <typename EdgeWeightFn>
-void add_path(ways const& w,
-              dijkstra_state const& s,
-              node_idx_t const from,
-              node_idx_t const to,
-              std::vector<geo::latlng>& path,
-              EdgeWeightFn&& edge_weight) {
-  auto const& [way, from_idx, to_idx, is_loop] =
+double add_path(ways const& w,
+                dijkstra_state const& s,
+                node_idx_t const from,
+                node_idx_t const to,
+                std::vector<geo::latlng>& path,
+                EdgeWeightFn&& edge_weight) {
+  auto const& [way, from_idx, to_idx, is_loop, distance] =
       find_connecting_way(w, s, from, to, edge_weight);
   auto j = 0U;
   auto active = false;
@@ -100,6 +101,7 @@ void add_path(ways const& w,
       }
     }
   }
+  return distance;
 }
 
 template <typename EdgeWeightFn>
@@ -109,7 +111,8 @@ path reconstruct(ways const& w,
                  node_candidate const& dest,
                  EdgeWeightFn&& edge_weight) {
   auto n = dest.node_;
-  auto p = path{.time_ = s.get_dist(n), .polyline_ = dest.path_};
+  auto polyline = dest.path_;
+  auto dist = 0.0;
   auto last = n;
   while (n != node_idx_t::invalid()) {
     last = n;
@@ -118,14 +121,18 @@ path reconstruct(ways const& w,
       abort();
     }
     if (e.pred_ != node_idx_t::invalid()) {
-      add_path(w, s, n, e.pred_, p.polyline_, edge_weight);
+      dist += add_path(w, s, n, e.pred_, polyline, edge_weight);
     }
     n = e.pred_;
   }
-  utl::concat(p.polyline_, last == start.left_.node_ ? start.left_.path_
-                                                     : start.right_.path_);
-  std::reverse(begin(p.polyline_), end(p.polyline_));
-  return p;
+  auto const& start_node =
+      last == start.left_.node_ ? start.left_ : start.right_;
+  utl::concat(polyline, start_node.path_);
+  std::reverse(begin(polyline), end(polyline));
+  return {.time_ = static_cast<dist_t>(start_node.weight_ + s.get_dist(n) +
+                                       dest.weight_),
+          .dist_ = start_node.dist_to_node_ + dist + dest.dist_to_node_,
+          .polyline_ = std::move(polyline)};
 }
 
 template <typename EdgeWeightFn>
