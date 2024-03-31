@@ -9,11 +9,6 @@
 
 namespace osr {
 
-enum class search_dir : std::uint8_t {
-  kForward,
-  kBackward,
-};
-
 enum class search_profile : std::uint8_t {
   kFoot,
   kBike,
@@ -25,17 +20,10 @@ search_profile to_profile(std::string_view s);
 std::string_view to_str(search_profile const p);
 
 struct path {
-  dist_t time_;
+  dist_t time_{kInfeasible};
   double dist_{0.0};
-  std::vector<geo::latlng> polyline_;
+  std::vector<geo::latlng> polyline_{};
 };
-
-// void route(ways const&,
-//            match_t const& from,
-//            dist_t max_dist,
-//            search_profile,
-//            search_dir,
-//            dijkstra_state&);
 
 std::optional<path> route(ways const&,
                           lookup const&,
@@ -45,10 +33,13 @@ std::optional<path> route(ways const&,
                           search_profile,
                           dijkstra_state&);
 
-std::optional<path> reconstruct(ways const&,
-                                dijkstra_state const&,
-                                match_t const& to,
-                                search_profile,
-                                search_dir);
+std::vector<std::optional<path>> route(ways const&,
+                                       lookup const&,
+                                       geo::latlng const& from,
+                                       std::vector<geo::latlng> const& to,
+                                       dist_t max_dist,
+                                       search_profile,
+                                       direction,
+                                       dijkstra_state&);
 
 }  // namespace osr

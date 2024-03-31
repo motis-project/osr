@@ -26,6 +26,11 @@ constexpr direction opposite(direction const dir) {
                                     : direction::kForward;
 }
 
+template <direction Dir>
+constexpr direction flip(direction const dir) {
+  return Dir == direction::kForward ? dir : opposite(dir);
+}
+
 constexpr std::string_view to_str(direction const d) {
   switch (d) {
     case direction::kForward: return "forward";
@@ -82,7 +87,7 @@ struct dijkstra_state {
   ankerl::unordered_dense::map<node_idx_t, entry, hash> dist_;
 };
 
-template <typename WeightFn>
+template <direction Dir, typename WeightFn>
 void dijkstra(ways const& w,
               dijkstra_state& s,
               dist_t const max_dist,
@@ -124,13 +129,24 @@ void dijkstra(ways const& w,
       };
 
       if (i != 0U) {
-        expand(i, i - 1, direction::kBackward);
+        expand(i, i - 1, flip<Dir>(direction::kBackward));
       }
       if (i != w.way_nodes_[way].size() - 1U) {
-        expand(i, i + 1, direction::kForward);
+        expand(i, i + 1, flip<Dir>(direction::kForward));
       }
     }
   }
+}
+
+template <typename WeightFn>
+void dijkstra(ways const& w,
+              dijkstra_state& s,
+              dist_t const max_dist,
+              direction const dir,
+              WeightFn&& weight_fn) {
+  dir == direction::kForward
+      ? dijkstra<direction::kForward>(w, s, max_dist, weight_fn)
+      : dijkstra<direction::kBackward>(w, s, max_dist, weight_fn);
 }
 
 }  // namespace osr

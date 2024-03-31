@@ -21,7 +21,7 @@
 [utl]
   url=git@github.com:motis-project/utl.git
   branch=master
-  commit=860acfffb6ce5ddb0797007d5781a7fe398d1c2c
+  commit=6d33bb24d5058ebfe07be57588f211afacab2e15
 [protozero]
   url=git@github.com:motis-project/protozero.git
   branch=master
@@ -45,7 +45,7 @@
 [rtree.c]
   url=git@github.com:triptix-tech/rtree.c.git
   branch=master
-  commit=498f993c38e80f21d55ab72f14675b72fca991cc
+  commit=6ed73a7dc4f1184f2b5b2acd8ac1c2b28a273057
 [fmt]
   url=git@github.com:motis-project/fmt.git
   branch=master

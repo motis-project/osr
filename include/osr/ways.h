@@ -1,6 +1,11 @@
 #pragma once
 
+#if defined(_WIN32) || defined(_WIN64)
+#include "Memoryapi.h"
+#define mlock(addr, size) VirtualLock((LPVOID)addr, (SIZE_T) size)
+#else
 #include <sys/mman.h>
+#endif
 #include <filesystem>
 #include <ranges>
 
@@ -182,7 +187,7 @@ struct ways {
           nodes.push_back(to);
 
           if (from != node_idx_t::invalid()) {
-            dists.push_back(distance);
+            dists.push_back(static_cast<std::uint16_t>(std::round(distance)));
           }
 
           distance = 0.0;
@@ -236,7 +241,7 @@ struct ways {
   }
 
   cista::mmap mm(char const* file) {
-    return cista::mmap{(p_ / file).c_str(), mode_};
+    return cista::mmap{(p_ / file).generic_string().c_str(), mode_};
   }
 
   way_idx_t::value_t n_ways() const { return way_osm_idx_.size(); }

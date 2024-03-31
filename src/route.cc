@@ -1,6 +1,7 @@
 #include "osr/route.h"
 
 #include "utl/concat.h"
+#include "utl/to_vec.h"
 
 #include "osr/dijkstra.h"
 #include "osr/infinite.h"
@@ -135,6 +136,35 @@ path reconstruct(ways const& w,
           .polyline_ = std::move(polyline)};
 }
 
+std::pair<node_candidate const*, dist_t> best_candidate(match_t const& m,
+                                                        dijkstra_state const& s,
+                                                        dist_t const max_dist) {
+  for (auto const& dest : m) {
+    auto best_dist = std::numeric_limits<dist_t>::max();
+    auto best = static_cast<node_candidate const*>(nullptr);
+
+    for (auto const x : {&dest.left_, &dest.right_}) {
+      if (x->valid() && x->dist_to_node_ < max_dist) {
+        auto const target_dist = s.get_dist(x->node_);
+        if (target_dist == kInfeasible) {
+          continue;
+        }
+
+        auto const total_dist = target_dist + x->weight_;
+        if (total_dist < max_dist && total_dist < best_dist) {
+          best_dist = static_cast<dist_t>(total_dist);
+          best = x;
+        }
+      }
+
+      if (best != nullptr) {
+        return {best, best_dist};
+      }
+    }
+  }
+  return {nullptr, kInfeasible};
+}
+
 template <typename EdgeWeightFn>
 std::optional<path> route(ways const& w,
                           lookup const& l,
@@ -160,29 +190,11 @@ std::optional<path> route(ways const& w,
       s.add_start(start.right_.node_, start.right_.weight_);
     }
 
-    dijkstra(w, s, max_dist, edge_weight_fn);
+    dijkstra<direction::kForward>(w, s, max_dist, edge_weight_fn);
 
-    for (auto const& dest : to_match) {
-      auto best_dist = std::numeric_limits<dist_t>::max();
-      auto best_candidate = static_cast<node_candidate const*>(nullptr);
-      for (auto const x : {&dest.left_, &dest.right_}) {
-        if (x->valid() && x->dist_to_node_ < max_dist) {
-          auto const target_dist = s.get_dist(x->node_);
-          if (target_dist == kInfeasible) {
-            continue;
-          }
-
-          auto const total_dist = target_dist + x->weight_;
-          if (total_dist < max_dist && total_dist < best_dist) {
-            best_dist = static_cast<dist_t>(total_dist);
-            best_candidate = x;
-          }
-        }
-      }
-
-      if (best_candidate != nullptr) {
-        return reconstruct(w, s, start, *best_candidate, edge_weight_fn);
-      }
+    auto const [best, _] = best_candidate(to_match, s, max_dist);
+    if (best != nullptr) {
+      return reconstruct(w, s, start, *best, edge_weight_fn);
     }
   }
 
@@ -202,6 +214,77 @@ std::optional<path> route(ways const& w,
     case search_profile::kBike:
       return route(w, l, from, to, max_dist, s, bike{});
     case search_profile::kCar: return route(w, l, from, to, max_dist, s, car{});
+  }
+  throw utl::fail("invalid profile");
+}
+
+template <typename EdgeWeightFn>
+std::vector<std::optional<path>> route(ways const& w,
+                                       lookup const& l,
+                                       geo::latlng const& from,
+                                       std::vector<geo::latlng> const& to,
+                                       dist_t const max_dist,
+                                       direction const dir,
+                                       dijkstra_state& s,
+                                       EdgeWeightFn&& edge_weight_fn) {
+  auto const from_match = l.match(from, false, edge_weight_fn);
+  auto const to_match = utl::to_vec(
+      to, [&](auto&& x) { return l.match(x, true, edge_weight_fn); });
+
+  auto result = std::vector<std::optional<path>>{};
+  result.resize(to.size());
+
+  if (from_match.empty()) {
+    return result;
+  }
+
+  s.reset(max_dist);
+  for (auto const& start : from_match) {
+    if (start.left_.valid()) {
+      s.add_start(start.left_.node_, start.left_.weight_);
+    }
+    if (start.right_.valid()) {
+      s.add_start(start.right_.node_, start.right_.weight_);
+    }
+
+    dijkstra(w, s, max_dist, dir, edge_weight_fn);
+
+    auto found = 0U;
+    for (auto const [m, r] : utl::zip(to_match, result)) {
+      if (r.has_value()) {
+        ++found;
+      } else {
+        auto const [_, time] = best_candidate(m, s, max_dist);
+        if (time != kInfeasible) {
+          r = std::make_optional(path{.time_ = time});
+          ++found;
+        }
+      }
+    }
+
+    if (found == result.size()) {
+      return result;
+    }
+  }
+
+  return result;
+}
+
+std::vector<std::optional<path>> route(ways const& w,
+                                       lookup const& l,
+                                       geo::latlng const& from,
+                                       std::vector<geo::latlng> const& to,
+                                       dist_t const max_dist,
+                                       search_profile const profile,
+                                       direction const dir,
+                                       dijkstra_state& s) {
+  switch (profile) {
+    case search_profile::kFoot:
+      return route(w, l, from, to, max_dist, dir, s, foot{});
+    case search_profile::kBike:
+      return route(w, l, from, to, max_dist, dir, s, bike{});
+    case search_profile::kCar:
+      return route(w, l, from, to, max_dist, dir, s, car{});
   }
   throw utl::fail("invalid profile");
 }
