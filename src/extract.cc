@@ -118,8 +118,7 @@ struct way_handler : public osm::handler::Handler {
     }
 
     auto const p = is_highway ? get_way_properties(w) : it->second;
-    if (!p.is_foot_accessible() && !p.is_bike_accessible() &&
-        !p.is_car_accessible()) {
+    if (!p.is_accessible()) {
       return;
     }
 
