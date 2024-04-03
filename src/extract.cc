@@ -75,7 +75,7 @@ speed_limit get_speed_limit(std::string_view highway) {
   }
 }
 
-speed_limit get_speed_limit(osm::Way const& w) {
+speed_limit get_speed_limit(osm::OSMObject const& w) {
   auto const& tags = w.tags();
   if (auto const max_speed = tags["maxspeed"];
       max_speed != nullptr &&
@@ -86,7 +86,7 @@ speed_limit get_speed_limit(osm::Way const& w) {
   }
 }
 
-way_properties get_way_properties(osm::Way const& w) {
+way_properties get_way_properties(osm::OSMObject const& w) {
   auto const t = tags{w};
   return {
       .is_foot_accessible_ = is_accessible<foot_profile>(t, osm_obj_type::kWay),
@@ -108,20 +108,22 @@ node_properties get_node_properties(osm::Node const& n) {
 }
 
 struct way_handler : public osm::handler::Handler {
-  way_handler(ways& w) : w_{w} {}
+  way_handler(ways& w, hash_map<osm_way_idx_t, way_properties>& rel_ways)
+      : w_{w}, rel_ways_{rel_ways} {}
 
   void way(osm::Way const& w) {
-    if (!w.tags().has_key("highway")) {
+    auto const osm_way_idx = osm_way_idx_t{w.positive_id()};
+    auto const it = rel_ways_.find(osm_way_idx);
+    auto const is_highway = w.tags().has_key("highway");
+    if (it == end(rel_ways_) && !is_highway) {
       return;
     }
 
-    auto const p = get_way_properties(w);
+    auto const p = is_highway ? get_way_properties(w) : it->second;
     if (!p.is_foot_accessible() && !p.is_bike_accessible() &&
         !p.is_car_accessible()) {
       return;
     }
-
-    auto l = std::scoped_lock<std::mutex>{mutex_};
 
     auto const get_point = [](osmium::NodeRef const& n) {
       return point::from_location(n.location());
@@ -132,6 +134,7 @@ struct way_handler : public osm::handler::Handler {
       return osm_node_idx_t{n.positive_ref()};
     };
 
+    auto l = std::scoped_lock<std::mutex>{mutex_};
     w_.way_osm_idx_.push_back(osm_way_idx_t{w.id()});
     w_.way_polylines_.emplace_back(w.nodes() |
                                    std::views::transform(get_point));
@@ -142,6 +145,7 @@ struct way_handler : public osm::handler::Handler {
 
   std::mutex mutex_;
   ways& w_;
+  hash_map<osm_way_idx_t, way_properties>& rel_ways_;
 };
 
 struct node_handler : public osm::handler::Handler {
@@ -174,6 +178,30 @@ struct mark_inaccessible_handler : public osm::handler::Handler {
   ways& w_;
 };
 
+struct rel_ways_handler : public osm::handler::Handler {
+  rel_ways_handler(hash_map<osm_way_idx_t, way_properties>& rel_ways)
+      : rel_ways_{rel_ways} {}
+
+  void relation(osm::Relation const& r) {
+    if (!r.tags().has_key("highway")) {
+      return;
+    }
+
+    auto const p = get_way_properties(r);
+    if (!p.is_accessible()) {
+      return;
+    }
+
+    for (auto const& m : r.members()) {
+      if (m.type() == osm::item_type::way) {
+        rel_ways_.emplace(osm_way_idx_t{m.positive_ref()}, p);
+      }
+    }
+  }
+
+  hash_map<osm_way_idx_t, way_properties>& rel_ways_;
+};
+
 void extract(fs::path const& in, fs::path const& out) {
   auto ec = std::error_code{};
   fs::remove_all(out, ec);
@@ -201,6 +229,7 @@ void extract(fs::path const& in, fs::path const& out) {
   auto node_idx =
       tiles::hybrid_node_idx{node_idx_file.fileno(), node_dat_file.fileno()};
 
+  auto rel_ways = hash_map<osm_way_idx_t, way_properties>{};
   auto w = ways{std::move(out), cista::mmap::protection::WRITE};
   w.node_way_counter_.reserve(12000000000);
   {  // Collect node coordinates.
@@ -209,11 +238,12 @@ void extract(fs::path const& in, fs::path const& out) {
     auto node_idx_builder = tiles::hybrid_node_idx_builder{node_idx};
 
     auto inaccessilbe_handler = mark_inaccessible_handler{w};
-    auto reader =
-        osm_io::Reader{input_file, osm_eb::node, osmium::io::read_meta::no};
+    auto rel_ways_h = rel_ways_handler{rel_ways};
+    auto reader = osm_io::Reader{input_file, osm_eb::node | osm_eb::relation,
+                                 osmium::io::read_meta::no};
     while (auto buffer = reader.read()) {
       pt->update(reader.offset());
-      osm::apply(buffer, node_idx_builder, inaccessilbe_handler);
+      osm::apply(buffer, node_idx_builder, inaccessilbe_handler, rel_ways_h);
     }
     reader.close();
     node_idx_builder.finish();
@@ -237,7 +267,7 @@ void extract(fs::path const& in, fs::path const& out) {
     auto has_exception = std::atomic_bool{false};
     auto workers = std::vector<std::future<void>>{};
     workers.reserve(thread_count / 2U);
-    auto h = way_handler{w};
+    auto h = way_handler{w, rel_ways};
     for (auto i = 0U; i < thread_count / 2U; ++i) {
       workers.emplace_back(pool.submit([&] {
         try {

@@ -2,7 +2,7 @@
 
 #if defined(_WIN32) || defined(_WIN64)
 #include "Memoryapi.h"
-#define mlock(addr, size) VirtualLock((LPVOID)addr, (SIZE_T) size)
+#define mlock(addr, size) VirtualLock((LPVOID)addr, (SIZE_T)size)
 #else
 #include <sys/mman.h>
 #endif
@@ -48,6 +48,9 @@ constexpr std::uint16_t to_meters_per_second(speed_limit const l) {
 }
 
 struct way_properties {
+  bool is_accessible() const {
+    return is_car_accessible() || is_bike_accessible() || is_foot_accessible();
+  }
   bool is_car_accessible() const { return is_car_accessible_; }
   bool is_bike_accessible() const { return is_bike_accessible_; }
   bool is_foot_accessible() const { return is_foot_accessible_; }

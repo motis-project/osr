@@ -8,7 +8,6 @@
 #include "osr/dijkstra.h"
 #include "osr/extract.h"
 #include "osr/lookup.h"
-#include "osr/to_geojson.h"
 #include "osr/ways.h"
 
 namespace fs = std::filesystem;
@@ -23,11 +22,4 @@ TEST(extract, wa) {
   osr::extract("test/map.osm", "/tmp/osr_test");
 
   auto w = osr::ways{"/tmp/osr_test", cista::mmap::protection::READ};
-
-  auto s = dijkstra_state{};
-  auto l = lookup{w};
-
-  auto const max_dist = 900;
-  auto r = std::vector<start_dist>{};
-  l.find({49.87810348736298, 8.653064959841231}, r);
 }
