@@ -31,6 +31,28 @@ enum speed_limit : std::uint8_t {
   kmh_120,
 };
 
+constexpr auto const kMinLevel = -4.0F;
+constexpr auto const kMaxLevel = 4.0F;
+
+constexpr level_t to_level(float const f) {
+  return level_t{static_cast<std::uint8_t>((f - kMinLevel) / 0.25F)};
+}
+
+constexpr float to_float(level_t const l) {
+  return kMinLevel + (to_idx(l) / 4.0F);
+}
+
+constexpr auto const kLevelBits = cista::constexpr_trailing_zeros(
+    cista::next_power_of_two(to_idx(to_level(kMaxLevel))));
+
+static_assert(kLevelBits == 5U);
+
+enum node_type : std::uint8_t {
+  kEntry,
+  kEntrance,
+  kElevator,
+};
+
 constexpr std::uint16_t to_kmh(speed_limit const l) {
   switch (l) {
     case speed_limit::kmh_10: return 10U;
@@ -56,12 +78,14 @@ struct way_properties {
   bool is_foot_accessible() const { return is_foot_accessible_; }
   bool is_oneway_car() const { return is_oneway_car_; }
   bool is_oneway_bike() const { return is_oneway_bike_; }
+  bool is_elevator() const { return is_elevator_; }
   std::uint16_t max_speed_m_per_s() const {
     return to_meters_per_second(static_cast<speed_limit>(speed_limit_));
   }
   std::uint16_t max_speed_km_per_h() const {
     return to_kmh(static_cast<speed_limit>(speed_limit_));
   }
+  level_t get_level() const { return level_t{level_}; }
 
   std::uint8_t is_foot_accessible_ : 1;
   std::uint8_t is_bike_accessible_ : 1;
@@ -69,7 +93,12 @@ struct way_properties {
   std::uint8_t is_oneway_car_ : 1;
   std::uint8_t is_oneway_bike_ : 1;
   std::uint8_t speed_limit_ : 3;
+
+  std::uint8_t level_ : 5;
+  std::uint8_t is_elevator_ : 1;
 };
+
+static_assert(sizeof(way_properties) == 2);
 
 struct node_properties {
   bool is_car_accessible() const { return is_car_accessible_; }
@@ -79,13 +108,14 @@ struct node_properties {
   std::uint8_t is_foot_accessible_ : 1;
   std::uint8_t is_bike_accessible_ : 1;
   std::uint8_t is_car_accessible_ : 1;
+  std::uint8_t is_elevator_ : 1;
+  std::uint8_t is_entrance_ : 1;
 };
 
 struct ways {
   ways(std::filesystem::path p, cista::mmap::protection const mode)
       : p_{std::move(p)},
         mode_{mode},
-        osm_to_node_{mm("osm_to_mode.bin")},
         node_to_osm_{mm("node_to_osm.bin")},
         node_properties_{mm("node_properties.bin")},
         way_osm_idx_{mm("way_osm_idx.bin")},
@@ -131,20 +161,6 @@ struct ways {
     mlock(node_in_way_idx_.idx_.mmap_.data(), node_ways_.idx_.mmap_.size());
   }
 
-  void mlock_extra() {
-    mlock(osm_to_node_.mmap_.data(), osm_to_node_.mmap_.size());
-    mlock(way_osm_idx_.mmap_.data(), way_osm_idx_.mmap_.size());
-    mlock(node_to_osm_.mmap_.data(), node_to_osm_.mmap_.size());
-
-    mlock(way_polylines_.data_.mmap_.data(), way_polylines_.data_.mmap_.size());
-    mlock(way_polylines_.bucket_starts_.mmap_.data(),
-          way_polylines_.bucket_starts_.mmap_.size());
-
-    mlock(way_osm_nodes_.data_.mmap_.data(), way_osm_nodes_.data_.mmap_.size());
-    mlock(way_osm_nodes_.bucket_starts_.mmap_.data(),
-          way_osm_nodes_.bucket_starts_.mmap_.size());
-  }
-
   void connect_ways() {
     auto pt = utl::get_active_progress_tracker_or_activate("osr");
 
@@ -157,7 +173,6 @@ struct ways {
       node_way_counter_.multi_.for_each_set_bit([&](std::uint64_t const b_idx) {
         auto const i = osm_node_idx_t{b_idx};
         node_to_osm_.push_back(i);
-        osm_to_node_.push_back({i, node_idx});
         ++node_idx;
         pt->update(b_idx);
       });
@@ -210,20 +225,19 @@ struct ways {
   }
 
   std::optional<node_idx_t> find_node_idx(osm_node_idx_t const i) const {
-    auto const it =
-        std::lower_bound(begin(osm_to_node_), end(osm_to_node_), i,
-                         [](auto&& a, auto&& b) { return a.first < b; });
-    return it != end(osm_to_node_) && it->first == i ? std::optional{it->second}
-                                                     : std::nullopt;
+    auto const it = std::lower_bound(begin(node_to_osm_), end(node_to_osm_), i,
+                                     [](auto&& a, auto&& b) { return a < b; });
+    if (it == end(node_to_osm_) || *it != i) {
+      return std::nullopt;
+    }
+    return std::make_optional(node_idx_t{static_cast<node_idx_t::value_t>(
+        std::distance(begin(node_to_osm_), it))});
   }
 
   node_idx_t get_node_idx(osm_node_idx_t const i) const {
-    auto const it =
-        std::lower_bound(begin(osm_to_node_), end(osm_to_node_), i,
-                         [](auto&& a, auto&& b) { return a.first < b; });
-    utl::verify(it != end(osm_to_node_) && it->first == i,
-                "osm node {} not found", i);
-    return it->second;
+    auto const j = find_node_idx(i);
+    utl::verify(j.has_value(), "osm node {} not found", i);
+    return *j;
   }
 
   bool is_loop(way_idx_t const w) const {
@@ -252,7 +266,6 @@ struct ways {
 
   std::filesystem::path p_;
   cista::mmap::protection mode_;
-  mm_vec<pair<osm_node_idx_t, node_idx_t>> osm_to_node_;
   mm_vec_map<node_idx_t, osm_node_idx_t> node_to_osm_;
   mm_vec_map<node_idx_t, node_properties> node_properties_;
   mm_vec_map<way_idx_t, osm_way_idx_t> way_osm_idx_;

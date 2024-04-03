@@ -85,16 +85,16 @@ struct lookup {
 
   ~lookup() { rtree_free(rtree_); }
 
-  match_t get_match(geo::latlng const&) { return {}; }
-
   template <typename WeightFn>
   match_t match(geo::latlng const& query,
                 bool const reverse,
-                WeightFn&& fn) const {
+                WeightFn&& fn,
+                level_t const lvl = level_t::invalid()) const {
     auto way_candidates = std::vector<way_candidate>{};
     find(query, [&](way_idx_t const way) {
-      if (fn(ways_.way_properties_[way], direction::kForward, 0U) !=
-          kInfeasible) {
+      auto const p = ways_.way_properties_[way];
+      if (fn(p, direction::kForward, 0U) != kInfeasible &&
+          (lvl == level_t::invalid() || p.get_level() == lvl)) {
         auto d = distance_to_way(query, ways_.way_polylines_[way]);
         if (d.dist_to_way_ < 100) {
           auto& wc = way_candidates.emplace_back(std::move(d));
@@ -189,8 +189,9 @@ struct lookup {
     auto const max_corner =
         std::array<double, 2U>{b.top_right().lon(), b.top_right().lat()};
 
-    rtree_insert(rtree_, min_corner.data(), max_corner.data(),
-                 reinterpret_cast<void*>(static_cast<std::size_t>(to_idx(way))));
+    rtree_insert(
+        rtree_, min_corner.data(), max_corner.data(),
+        reinterpret_cast<void*>(static_cast<std::size_t>(to_idx(way))));
   }
 
   rtree* rtree_;

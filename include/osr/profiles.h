@@ -4,6 +4,9 @@
 
 #include "osmium/osm/object.hpp"
 
+#include "osr/types.h"
+#include "osr/ways.h"
+
 namespace osr {
 
 enum class osm_obj_type : std::uint8_t { kWay, kNode };
@@ -25,12 +28,24 @@ struct tags {
         case cista::hash("motor_vehicle"): motor_vehicle_ = t.value(); break;
         case cista::hash("foot"): foot_ = t.value(); break;
         case cista::hash("bicycle"): bicycle_ = t.value(); break;
-        case cista::hash("highway"): highway_ = t.value(); break;
+        case cista::hash("highway"):
+          highway_ = t.value();
+          if (highway_ == "elevator") {
+            is_elevator_ = true;
+          }
+          break;
+        case cista::hash("level"):
+          level_ = to_level(
+              std::clamp(utl::parse<float>(t.value()), kMinLevel, kMaxLevel));
+          break;
+        case cista::hash("entrance"): is_entrance_ = true; break;
         case cista::hash("sidewalk"): sidewalk_ = t.value(); break;
         case cista::hash("cycleway"): cycleway_ = t.value(); break;
         case cista::hash("motorcar"): motorcar_ = t.value(); break;
         case cista::hash("barrier"): barrier_ = t.value(); break;
-
+        case cista::hash("public_transport"):
+          is_platform_ |= t.value() == "platform"sv;
+          break;
         case cista::hash("vehicle"):
           switch (cista::hash(std::string_view{t.value()})) {
             case cista::hash("private"):
@@ -42,7 +57,6 @@ struct tags {
             case cista::hash("yes"): vehicle_ = override::kWhitelist; break;
           }
           break;
-
         case cista::hash("access"):
           switch (cista::hash(std::string_view{t.value()})) {
             case cista::hash("no"):
@@ -60,6 +74,7 @@ struct tags {
             case cista::hash("yes"): access_ = override::kWhitelist; break;
           }
           break;
+        case cista::hash("max_speed"): max_speed_ = t.value(); break;
       }
     }
   }
@@ -95,11 +110,26 @@ struct tags {
   // https://wiki.openstreetmap.org/wiki/Key:cycleway
   std::string_view cycleway_;
 
+  // https://wiki.openstreetmap.org/wiki/Key:maxspeed
+  std::string_view max_speed_;
+
   // https://wiki.openstreetmap.org/wiki/Key:vehicle
   override vehicle_{override::kNone};
 
   // https://wiki.openstreetmap.org/wiki/Key:access
   override access_{override::kNone};
+
+  // https://wiki.openstreetmap.org/wiki/Key:public%20transport
+  bool is_platform_{false};
+
+  // https://wiki.openstreetmap.org/wiki/Tag:highway=elevator
+  bool is_elevator_{false};
+
+  // https://wiki.openstreetmap.org/wiki/Key:entrance
+  bool is_entrance_{false};
+
+  // https://wiki.openstreetmap.org/wiki/Key:level
+  level_t level_{to_level(0.0F)};
 };
 
 template <typename T>
@@ -126,6 +156,10 @@ struct foot_profile {
       case cista::hash("yes"):
       case cista::hash("permissive"): [[fallthrough]];
       case cista::hash("designated"): return override::kWhitelist;
+    }
+
+    if (t.is_platform_) {
+      return override::kWhitelist;
     }
 
     if (t.access_ == override::kBlacklist) {

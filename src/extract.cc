@@ -53,36 +53,30 @@ constexpr speed_limit get_speed_limit(unsigned const x) {
   }
 }
 
-speed_limit get_speed_limit(std::string_view highway) {
-  switch (cista::hash(highway)) {
-    case cista::hash("motorway"): return get_speed_limit(90);
-    case cista::hash("motorway_link"): return get_speed_limit(45);
-    case cista::hash("trunk"): return get_speed_limit(85);
-    case cista::hash("trunk_link"): return get_speed_limit(40);
-    case cista::hash("primary"): return get_speed_limit(65);
-    case cista::hash("primary_link"): return get_speed_limit(30);
-    case cista::hash("secondary"): return get_speed_limit(55);
-    case cista::hash("secondary_link"): return get_speed_limit(25);
-    case cista::hash("tertiary"): return get_speed_limit(40);
-    case cista::hash("tertiary_link"): return get_speed_limit(20);
-    case cista::hash("unclassified"): return get_speed_limit(25);
-    case cista::hash("residential"): return get_speed_limit(25);
-    case cista::hash("living_street"): return get_speed_limit(10);
-    case cista::hash("service"): return get_speed_limit(15);
-    case cista::hash("track"): return get_speed_limit(12);
-    case cista::hash("path"): return get_speed_limit(13);
-    default: return speed_limit::kmh_10;
-  }
-}
-
-speed_limit get_speed_limit(osm::OSMObject const& w) {
-  auto const& tags = w.tags();
-  if (auto const max_speed = tags["maxspeed"];
-      max_speed != nullptr &&
-      is_number(max_speed) /* TODO: support units (kmh/mph) */) {
-    return get_speed_limit(utl::parse<unsigned>(max_speed));
+speed_limit get_speed_limit(tags const& t) {
+  if (!t.max_speed_.empty() &&
+      is_number(t.max_speed_) /* TODO: support units (kmh/mph) */) {
+    return get_speed_limit(utl::parse<unsigned>(t.max_speed_));
   } else {
-    return get_speed_limit(tags["highway"]);
+    switch (cista::hash(t.highway_)) {
+      case cista::hash("motorway"): return get_speed_limit(90);
+      case cista::hash("motorway_link"): return get_speed_limit(45);
+      case cista::hash("trunk"): return get_speed_limit(85);
+      case cista::hash("trunk_link"): return get_speed_limit(40);
+      case cista::hash("primary"): return get_speed_limit(65);
+      case cista::hash("primary_link"): return get_speed_limit(30);
+      case cista::hash("secondary"): return get_speed_limit(55);
+      case cista::hash("secondary_link"): return get_speed_limit(25);
+      case cista::hash("tertiary"): return get_speed_limit(40);
+      case cista::hash("tertiary_link"): return get_speed_limit(20);
+      case cista::hash("unclassified"): return get_speed_limit(25);
+      case cista::hash("residential"): return get_speed_limit(25);
+      case cista::hash("living_street"): return get_speed_limit(10);
+      case cista::hash("service"): return get_speed_limit(15);
+      case cista::hash("track"): return get_speed_limit(12);
+      case cista::hash("path"): return get_speed_limit(13);
+      default: return speed_limit::kmh_10;
+    }
   }
 }
 
@@ -94,7 +88,9 @@ way_properties get_way_properties(osm::OSMObject const& w) {
       .is_car_accessible_ = is_accessible<car_profile>(t, osm_obj_type::kWay),
       .is_oneway_car_ = t.oneway_,
       .is_oneway_bike_ = t.oneway_ && !t.not_oneway_bike_,
-      .speed_limit_ = get_speed_limit(w)};
+      .speed_limit_ = get_speed_limit(t),
+      .level_ = to_idx(t.level_),
+      .is_elevator_ = t.is_elevator_};
 }
 
 node_properties get_node_properties(osm::Node const& n) {
@@ -104,7 +100,9 @@ node_properties get_node_properties(osm::Node const& n) {
           is_accessible<foot_profile>(t, osm_obj_type::kNode),
       .is_bike_accessible_ =
           is_accessible<bike_profile>(t, osm_obj_type::kNode),
-      .is_car_accessible_ = is_accessible<car_profile>(t, osm_obj_type::kNode)};
+      .is_car_accessible_ = is_accessible<car_profile>(t, osm_obj_type::kNode),
+      .is_elevator_ = t.is_elevator_,
+      .is_entrance_ = t.is_entrance_};
 }
 
 struct way_handler : public osm::handler::Handler {
@@ -183,10 +181,6 @@ struct rel_ways_handler : public osm::handler::Handler {
       : rel_ways_{rel_ways} {}
 
   void relation(osm::Relation const& r) {
-    if (!r.tags().has_key("highway")) {
-      return;
-    }
-
     auto const p = get_way_properties(r);
     if (!p.is_accessible()) {
       return;

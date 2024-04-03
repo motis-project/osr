@@ -45,7 +45,9 @@ struct geojson_writer {
             {"foot", p.is_foot_accessible()},
             {"oneway_car", p.is_oneway_car()},
             {"oneway_bike", p.is_oneway_bike()},
-            {"max_speed", p.max_speed_km_per_h()}}},
+            {"max_speed", p.max_speed_km_per_h()},
+            {"level", to_float(level_t{p.level_})},
+            {"is_elevator", p.is_elevator()}}},
           {"geometry", to_line_string(std::initializer_list<point>{
                            w_.get_node_pos(from), w_.get_node_pos(to)})}});
     }
@@ -60,7 +62,9 @@ struct geojson_writer {
                              {"access_foot", p.is_foot_accessible()},
                              {"oneway_car", p.is_oneway_car()},
                              {"oneway_bike", p.is_oneway_bike()},
-                             {"max_speed", p.max_speed_km_per_h()}}},
+                             {"max_speed", p.max_speed_km_per_h()},
+                             {"level", to_float(level_t{p.level_})},
+                             {"is_elevator", p.is_elevator()}}},
                            {"geometry", to_line_string(w_.way_polylines_[i])}});
 
     nodes_.insert(begin(nodes), end(nodes));
@@ -80,7 +84,9 @@ struct geojson_writer {
             {"pred", to_idx(e && e->pred_ != node_idx_t::invalid()
                                 ? w_.node_to_osm_[e->pred_]
                                 : osm_node_idx_t::invalid())},
-            {"dist", e ? e->dist_ : -1}}},
+            {"dist", e ? e->dist_ : -1},
+            {"level", static_cast<bool>(p.is_elevator_)},
+            {"is_elevator", static_cast<bool>(p.is_entrance_)}}},
           {"geometry",
            {{"type", "Point"},
             {"coordinates", to_array(w_.get_node_pos(n))}}}});
