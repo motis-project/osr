@@ -156,10 +156,10 @@ std::pair<node_candidate const*, dist_t> best_candidate(match_t const& m,
           best = x;
         }
       }
+    }
 
-      if (best != nullptr) {
-        return {best, best_dist};
-      }
+    if (best != nullptr) {
+      return {best, best_dist};
     }
   }
   return {nullptr, kInfeasible};

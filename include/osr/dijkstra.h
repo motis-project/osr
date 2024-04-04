@@ -56,8 +56,11 @@ struct dijkstra_state {
   }
 
   void add_start(node_idx_t const start, dist_t const start_dist) {
-    dist_[start] = {node_idx_t::invalid(), start_dist};
-    pq_.push(label{.node_ = start, .dist_ = start_dist});
+    auto& e = dist_[start];
+    if (start_dist < e.dist_) {
+      e.dist_ = start_dist;
+      pq_.push(label{.node_ = start, .dist_ = start_dist});
+    }
   }
 
   struct entry {
