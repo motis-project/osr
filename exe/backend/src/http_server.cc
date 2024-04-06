@@ -35,7 +35,8 @@ void set_cors_headers(http::response<Body>& res) {
   using namespace boost::beast::http;
   res.set(field::access_control_allow_origin, "*");
   res.set(field::access_control_allow_headers,
-          "X-Requested-With, Content-Type, Accept, Authorization");
+          "X-Content-Type-Options, X-Requested-With, Content-Type, Accept, "
+          "Authorization");
   res.set(field::access_control_allow_methods, "GET, POST, OPTIONS");
   res.set(field::access_control_max_age, "3600");
 }
@@ -70,6 +71,12 @@ std::string to_json(std::optional<path> const& p) {
                                                {"path", to_json(p->polyline_)},
                                                {"steps", json::array{}}}}
                      : json::array{}}});
+}
+
+std::string to_geojson(std::optional<path> const& p) {
+  return json::serialize(p.has_value()
+                             ? to_line_string(p->polyline_)
+                             : json::value{{"error", "no path found"}});
 }
 
 std::string get_graph(ways const& w,
@@ -119,10 +126,29 @@ struct http_server::impl {
     auto const to = parse_latlng(q.at("destination"));
     auto const max_it = q.find("max");
     auto const max = max_it == q.end() ? 3600 : max_it->value().as_int64();
-    auto const res = json_response(
-        req,
-        to_json(route(w_, l_, from, to, max, profile, *get_dijkstra_state())));
+    auto const res =
+        json_response(req, to_geojson(route(w_, l_, from, to, max, profile,
+                                            *get_dijkstra_state())));
     return cb(res);
+  }
+
+  void handle_levels(web_server::http_req_t const& req,
+                     web_server::http_res_cb_t const& cb) {
+    auto const query = boost::json::parse(req.body()).as_object();
+    auto const waypoints = query.at("waypoints").as_array();
+    auto const min = point::from_latlng(
+        {waypoints[1].as_double(), waypoints[0].as_double()});
+    auto const max = point::from_latlng(
+        {waypoints[3].as_double(), waypoints[2].as_double()});
+    auto levels = hash_set<level_t>{};
+    l_.find(min, max, [&](way_idx_t const x) {
+      levels.emplace(w_.way_properties_[x].get_level());
+    });
+    cb(json_response(
+        req, json::serialize(
+                 utl::all(levels)  //
+                 | utl::transform([](auto&& l) { return to_float(l); })  //
+                 | utl::emplace_back_to<json::array>())));
   }
 
   void handle_graph(web_server::http_req_t const& req,
@@ -159,6 +185,13 @@ struct http_server::impl {
                 handle_route(req1, cb1);
               },
               req, cb);
+        } else if (target.starts_with("/api/levels")) {
+          return run_parallel(
+              [this](web_server::http_req_t const& req1,
+                     web_server::http_res_cb_t const& cb1) {
+                handle_levels(req1, cb1);
+              },
+              req, cb);
         } else if (target.starts_with("/api/graph")) {
           return run_parallel(
               [this](web_server::http_req_t const& req1,
@@ -186,17 +219,23 @@ struct http_server::impl {
                     web_server::http_req_t const& req,
                     web_server::http_res_cb_t const& cb) {
     boost::asio::post(thread_pool_, [req, cb, handler, this]() {
-      handler(req, [req, cb, this](web_server::http_res_t&& res) {
-        boost::asio::post(ioc_, [cb, req, res{std::move(res)}]() mutable {
-          try {
-            cb(std::move(res));
-          } catch (std::exception const& e) {
-            return cb(json_response(
-                req, fmt::format(R"({{"error": "{}"}})", e.what()),
-                http::status::internal_server_error));
-          }
+      try {
+        handler(req, [req, cb, this](web_server::http_res_t&& res) {
+          boost::asio::post(ioc_, [cb, req, res{std::move(res)}]() mutable {
+            try {
+              cb(std::move(res));
+            } catch (std::exception const& e) {
+              return cb(json_response(
+                  req, fmt::format(R"({{"error": "{}"}})", e.what()),
+                  http::status::internal_server_error));
+            }
+          });
         });
-      });
+      } catch (std::exception const& e) {
+        return cb(json_response(req,
+                                fmt::format(R"({{"error": "{}"}})", e.what()),
+                                http::status::internal_server_error));
+      }
     });
   }
 

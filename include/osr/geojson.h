@@ -11,12 +11,15 @@ namespace osr {
 
 boost::json::array to_array(point const& p) { return {p.lng(), p.lat()}; }
 
+boost::json::array to_array(geo::latlng const& p) { return {p.lng(), p.lat()}; }
+
 template <typename Collection>
 boost::json::value to_line_string(Collection const& line) {
-  return {{"type", "LineString"},
-          {"coordinates", utl::all(line)  //
-                              | utl::transform(to_array)  //
-                              | utl::emplace_back_to<boost::json::array>()}};
+  auto x = boost::json::array{};
+  for (auto const& p : line) {
+    x.emplace_back(boost::json::array{p.lng(), p.lat()});
+  }
+  return {{"type", "LineString"}, {"coordinates", x}};
 }
 
 boost::json::value to_point(point const& p) {
@@ -36,9 +39,9 @@ struct geojson_writer {
       auto const dist = *dist_it;
       features_.emplace_back(boost::json::value{
           {"type", "Feature"},
-          {"style", {{"stroke", "#0000FF"}}},
           {"properties",
-           {{"osm_way_id", to_idx(w_.way_osm_idx_[i])},
+           {{"type", "edge"},
+            {"osm_way_id", to_idx(w_.way_osm_idx_[i])},
             {"distance", dist},
             {"car", p.is_car_accessible()},
             {"bike", p.is_bike_accessible()},
@@ -48,15 +51,15 @@ struct geojson_writer {
             {"max_speed", p.max_speed_km_per_h()},
             {"level", to_float(level_t{p.level_})},
             {"is_elevator", p.is_elevator()}}},
-          {"geometry", to_line_string(std::initializer_list<point>{
+          {"geometry", to_line_string(std::initializer_list<geo::latlng>{
                            w_.get_node_pos(from), w_.get_node_pos(to)})}});
     }
 
     features_.emplace_back(
         boost::json::value{{"type", "Feature"},
-                           {"style", {{"stroke", "#33D17A"}}},
                            {"properties",
-                            {{"osm_way_id", to_idx(w_.way_osm_idx_[i])},
+                            {{"type", "geometry"},
+                             {"osm_way_id", to_idx(w_.way_osm_idx_[i])},
                              {"access_car", p.is_car_accessible()},
                              {"access_bike", p.is_bike_accessible()},
                              {"access_foot", p.is_foot_accessible()},
@@ -83,7 +86,7 @@ struct geojson_writer {
             {"foot", p.is_walk_accessible()},
             {"pred", to_idx(e && e->pred_ != node_idx_t::invalid()
                                 ? w_.node_to_osm_[e->pred_]
-                                : osm_node_idx_t::invalid())},
+                                : osm_node_idx_t{0U})},
             {"dist", e ? e->dist_ : -1},
             {"level", static_cast<bool>(p.is_elevator_)},
             {"is_elevator", static_cast<bool>(p.is_entrance_)}}},

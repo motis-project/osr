@@ -67,8 +67,15 @@ connecting_way find_connecting_way(ways const& w,
                                                   : direction::kBackward,
                       distance);
       if (expected_dist == dist && (is_neighbor || is_loop)) {
+        if (expected_dist != dist) {
+          fmt::println(
+              "way={}, dist={}, expected={}, is_neighbor={}, is_loop={}",
+              w.way_osm_idx_[a_way], dist, expected_dist, is_neighbor, is_loop);
+        }
+
         return {a_way, a_idx, b_idx, is_loop, distance};
       }
+
       ++a;
       ++b;
     }
