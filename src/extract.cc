@@ -80,8 +80,7 @@ speed_limit get_speed_limit(tags const& t) {
   }
 }
 
-way_properties get_way_properties(osm::OSMObject const& w) {
-  auto const t = tags{w};
+way_properties get_way_properties(tags const& t) {
   return {
       .is_foot_accessible_ = is_accessible<foot_profile>(t, osm_obj_type::kWay),
       .is_bike_accessible_ = is_accessible<bike_profile>(t, osm_obj_type::kWay),
@@ -112,12 +111,14 @@ struct way_handler : public osm::handler::Handler {
   void way(osm::Way const& w) {
     auto const osm_way_idx = osm_way_idx_t{w.positive_id()};
     auto const it = rel_ways_.find(osm_way_idx);
-    auto const is_highway = w.tags().has_key("highway");
-    if (it == end(rel_ways_) && !is_highway) {
+    auto const t = tags{w};
+    if (it == end(rel_ways_) && t.highway_.empty() && !t.is_platform_) {
       return;
     }
 
-    auto const p = is_highway ? get_way_properties(w) : it->second;
+    auto const p = (t.is_platform_ || !t.highway_.empty())
+                       ? get_way_properties(t)
+                       : it->second;
     if (!p.is_accessible()) {
       return;
     }
@@ -180,7 +181,7 @@ struct rel_ways_handler : public osm::handler::Handler {
       : rel_ways_{rel_ways} {}
 
   void relation(osm::Relation const& r) {
-    auto const p = get_way_properties(r);
+    auto const p = get_way_properties(tags{r});
     if (!p.is_accessible()) {
       return;
     }

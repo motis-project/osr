@@ -44,7 +44,8 @@ struct tags {
         case cista::hash("motorcar"): motorcar_ = t.value(); break;
         case cista::hash("barrier"): barrier_ = t.value(); break;
         case cista::hash("public_transport"):
-          is_platform_ |= t.value() == "platform"sv;
+          is_platform_ |=
+              t.value() == "platform"sv || t.value() == "stop_area"sv;
           break;
         case cista::hash("vehicle"):
           switch (cista::hash(std::string_view{t.value()})) {
