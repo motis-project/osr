@@ -124,6 +124,8 @@ export const style = (map) => {
                         "cemetery", "#e0e4dd",
                         "beach", "#fffcd3",
 
+                        "public_transport", "rgba(218,140,140,0.3)",
+
                         "magenta"]
                 }
             },
@@ -169,7 +171,7 @@ export const style = (map) => {
                     "fill-opacity":
                         ["interpolate", ["linear"], ["zoom"],
                             14, 0,
-                            16, 1,
+                            16, 0.8,
                         ]
                 }
             },

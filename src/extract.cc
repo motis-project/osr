@@ -112,7 +112,9 @@ struct way_handler : public osm::handler::Handler {
     auto const osm_way_idx = osm_way_idx_t{w.positive_id()};
     auto const it = rel_ways_.find(osm_way_idx);
     auto const t = tags{w};
-    if (it == end(rel_ways_) && t.highway_.empty() && !t.is_platform_) {
+    if ((it == end(rel_ways_) && t.highway_.empty() && !t.is_platform_) ||
+        (t.highway_.empty() && !t.is_platform_ && it != end(rel_ways_) &&
+         t.landuse_)) {
       return;
     }
 

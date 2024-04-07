@@ -18,6 +18,7 @@ struct tags {
     for (auto const& t : o.tags()) {
       switch (cista::hash(std::string_view{t.key()})) {
         using namespace std::string_view_literals;
+        case cista::hash("landuse"): landuse_ = true; break;
         case cista::hash("oneway"): oneway_ |= t.value() == "yes"sv; break;
         case cista::hash("junction"):
           oneway_ |= t.value() == "roundabout"sv;
@@ -119,6 +120,9 @@ struct tags {
 
   // https://wiki.openstreetmap.org/wiki/Key:access
   override access_{override::kNone};
+
+  // https://wiki.openstreetmap.org/wiki/Key:landuse
+  bool landuse_{false};
 
   // https://wiki.openstreetmap.org/wiki/Key:public%20transport
   bool is_platform_{false};
