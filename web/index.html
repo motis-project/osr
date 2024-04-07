@@ -63,6 +63,10 @@
             text-align: center;
             text-decoration: none;
         }
+
+        .context {
+            margin: 0.5em;
+        }
     </style>
 </head>
 <body>
@@ -302,28 +306,22 @@
         }
     });
 
-    map.on('click', 'graph-node', (e) => {
-        new maplibregl.Popup()
-            .setLngLat(e.lngLat)
-            .setDOMContent(toTable(e.features[0].properties))
-            .addTo(map);
-        e.stopPropagation();
-    });
+    ['graph-node', 'graph-edge', 'graph-geometry'].forEach((layer) => {
+        map.on('click', layer, (e) => {
+            new maplibregl.Popup()
+                .setLngLat(e.lngLat)
+                .setDOMContent(toTable(e.features[0].properties))
+                .addTo(map);
+            e.originalEvent.stopPropagation();
+        });
 
-    map.on('click', 'graph-edge', (e) => {
-        new maplibregl.Popup()
-            .setLngLat(e.lngLat)
-            .setDOMContent(toTable(e.features[0].properties))
-            .addTo(map);
-        e.stopPropagation();
-    });
+        map.on('mouseenter', layer, () => {
+            map.getCanvas().style.cursor = 'pointer';
+        });
 
-    map.on('click', 'graph-geometry', (e) => {
-        new maplibregl.Popup()
-            .setLngLat(e.lngLat)
-            .setDOMContent(toTable(e.features[0].properties))
-            .addTo(map);
-        e.stopPropagation();
+        map.on('mouseleave', layer, () => {
+            map.getCanvas().style.cursor = '';
+        });
     });
 
     const startMarker = new maplibregl.Marker({
@@ -349,6 +347,47 @@
             query.destination = [x.lng, x.lat];
             updateRoute();
         });
+
+    let popup = null;
+    map.on('contextmenu', (e) => {
+        if (popup != null) {
+            popup.remove();
+        }
+        popup = new maplibregl.Popup({
+            anchor: 'top-left'
+        });
+        const x = e.lngLat;
+
+        const actionsDiv = document.createElement('div');
+        const setStart = document.createElement('a');
+        setStart.classList.add('context');
+        setStart.href = '#';
+        setStart.innerText = "start";
+        setStart.onclick = (e) => {
+            startMarker.setLngLat(x);
+            query.start = [x.lng, x.lat];
+            popup.remove();
+            updateRoute();
+        };
+        actionsDiv.appendChild(setStart);
+
+        const setDest = document.createElement('a');
+        setDest.classList.add('context');
+        setDest.href = '#';
+        setDest.innerText = "destination";
+        setDest.onclick = (e) => {
+            destinationMarker.setLngLat(x);
+            query.destination = [x.lng, x.lat];
+            popup.remove();
+            updateRoute();
+        };
+        actionsDiv.appendChild(setDest);
+
+        popup
+            .setLngLat(x)
+            .setDOMContent(actionsDiv)
+            .addTo(map);
+    });
 </script>
 </body>
 </html>
