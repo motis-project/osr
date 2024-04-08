@@ -20,6 +20,7 @@
 #include "osr/lookup.h"
 #include "osr/route.h"
 #include "osr/weight.h"
+#include "utl/to_vec.h"
 
 using namespace net;
 using net::web_server;
@@ -144,11 +145,12 @@ struct http_server::impl {
     l_.find(min, max, [&](way_idx_t const x) {
       levels.emplace(w_.way_properties_[x].get_level());
     });
-    cb(json_response(
-        req, json::serialize(
-                 utl::all(levels)  //
-                 | utl::transform([](auto&& l) { return to_float(l); })  //
-                 | utl::emplace_back_to<json::array>())));
+    auto levels_sorted =
+        utl::to_vec(levels, [](level_t const l) { return to_float(l); });
+    utl::sort(levels_sorted, [](auto&& a, auto&& b) { return a > b; });
+    cb(json_response(req,
+                     json::serialize(utl::all(levels_sorted)  //
+                                     | utl::emplace_back_to<json::array>())));
   }
 
   void handle_graph(web_server::http_req_t const& req,

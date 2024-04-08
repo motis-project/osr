@@ -66,7 +66,19 @@ const sport_outline = "#b3e998";
 const building = "#ded7d3";
 const building_outline = "#cfc8c4";
 
-export const style = (map) => {
+export const style = (map, level) => {
+    console.log('level', level);
+
+    const matchLevel = (expression) => {
+        return ["all",
+                    ["any",
+                        ["!has", "level"],
+                        ["==", ["get", "level"], level]
+                    ],
+                expression
+            ];
+    }
+
     map.setStyle({
         "version": 8,
         "sources": {
@@ -77,6 +89,7 @@ export const style = (map) => {
             }
         },
         "glyphs": "/glyphs/{fontstack}/{range}.pbf",
+        "sprite": "http://localhost:8000/sprite",
         "layers": [
             {
                 "id": "background",
@@ -108,7 +121,8 @@ export const style = (map) => {
                 "filter": [
                     "!in",
                     "landuse",
-                    "park"
+                    "park",
+                    "public_transport"
                 ],
                 "paint": {
                     "fill-color": ["match", ["get", "landuse"],
@@ -123,8 +137,6 @@ export const style = (map) => {
                         "nature_heavy", "#a3e39c",
                         "cemetery", "#e0e4dd",
                         "beach", "#fffcd3",
-
-                        "public_transport", "rgba(218,140,140,0.3)",
 
                         "magenta"]
                 }
@@ -176,6 +188,83 @@ export const style = (map) => {
                 }
             },
             {
+                "id": "indoor-corridor",
+                "type": "fill",
+                "source": "osm",
+                "source-layer": "indoor",
+                "filter": [
+                    "all",
+                    ["==", "indoor", "corridor"],
+                    ["==", "level", level]
+                ],
+                "paint": {
+                    "fill-color": "#fdfcfa",
+                    "fill-opacity": 0.8
+                }
+            },
+            {
+                "id": "indoor",
+                "type": "fill",
+                "source": "osm",
+                "source-layer": "indoor",
+                "filter": [
+                    "all",
+                    ["!in", "indoor", "corridor", "wall", "elevator"],
+                    ["==", "level", level]
+                ],
+                "paint": {
+                    "fill-color": "#d4edff",
+                    "fill-opacity": 0.8
+                }
+            },
+            {
+                "id": "indoor-outline",
+                "type": "line",
+                "source": "osm",
+                "source-layer": "indoor",
+                "filter": [
+                    "all",
+                    ["!in", "indoor", "corridor", "wall", "elevator"],
+                    ["==", "level", level]
+                ],
+                "minzoom": 18,
+                "paint": {
+                    "line-color": "#808080",
+                    "line-width": 2
+                }
+            },
+            {
+                "id": "indoor-names",
+                "type": "symbol",
+                "source": "osm",
+                "source-layer": "indoor",
+                "minzoom": 18,
+                "filter": ["any", ["!has", "level"], ["==", "level", level]],
+                "layout": {
+                    "symbol-placement": "point",
+                    "text-field": ["get", "name"],
+                    "text-font": ["Noto Sans Display Regular"],
+                    "text-size": 12,
+                },
+                "paint": {
+                    "text-color": "#333333"
+                }
+            },
+            {
+                "id": "landuse-public-transport",
+                "type": "fill",
+                "source": "osm",
+                "source-layer": "landuse",
+                "filter": [
+                    "all",
+                    ["==", "landuse", "public_transport"],
+                    ["any", ["!has", "level"], ["==", "level", level]]
+                ],
+                "paint": {
+                    "fill-color": "rgba(218,140,140,0.3)"
+                }
+            },
+            {
                 "id": "footway",
                 "type": "line",
                 "source": "osm",
@@ -183,7 +272,7 @@ export const style = (map) => {
                 "filter": [
                     "in",
                     "highway",
-                    "footway", "track", "steps", "cycleway", "path", "unclassified"
+                    "footway", "track", "cycleway", "path", "unclassified", "service"
                 ],
                 "layout": {
                     "line-cap": "round",
@@ -204,6 +293,66 @@ export const style = (map) => {
                             20, ["+", ["*", ["var", "base"], 8], 1]
                         ]
                     ]
+                }
+            },
+            {
+                "id": "steps",
+                "type": "line",
+                "source": "osm",
+                "source-layer": "road",
+                "minzoom": 18,
+                "filter": ["==", "highway", "steps"],
+                "paint": {
+                    "line-dasharray": [ 0.5, 0.5 ],
+                    "line-color": "#ff4524",
+                    "line-opacity": 1,
+                    "line-width": [
+                        "let",
+                        "base", 0.4,
+                        ["interpolate", ["linear"], ["zoom"],
+                            5, ["+", ["*", ["var", "base"], 0.1], 1],
+                            9, ["+", ["*", ["var", "base"], 0.4], 1],
+                            12, ["+", ["*", ["var", "base"], 1], 1],
+                            16, ["+", ["*", ["var", "base"], 4], 1],
+                            20, ["+", ["*", ["var", "base"], 8], 1]
+                        ]
+                    ]
+                }
+            },
+            {
+                "id": "indoor-elevator-outline",
+                "type": "circle",
+                "source": "osm",
+                "source-layer": "indoor",
+                "minzoom": 18,
+                "filter": ["==", "indoor", "elevator"],
+                "paint": {
+                    'circle-color': "#808080",
+                    'circle-radius': 16,
+                }
+            },
+            {
+                "id": "indoor-elevator",
+                "type": "circle",
+                "source": "osm",
+                "source-layer": "indoor",
+                "minzoom": 18,
+                "filter": ["==", "indoor", "elevator"],
+                "paint": {
+                    'circle-color': '#d4edff',
+                    'circle-radius': 14,
+                }
+            },
+            {
+                "id": "indoor-elevator-icon",
+                "type": "symbol",
+                "source": "osm",
+                "source-layer": "indoor",
+                "minzoom": 18,
+                "filter": ["==", "indoor", "elevator"],
+                "layout": {
+                    "icon-image": "elevator",
+                    "icon-size": 0.9
                 }
             },
             {
@@ -434,11 +583,13 @@ export const style = (map) => {
         ]
     });
 
-    map.addImage(
-        "shield",
-        ...createShield({
-            fill: "hsl(0, 0%, 98%)",
-            stroke: "hsl(0, 0%, 75%)",
-        })
-    );
+    if (!map.hasImage("shield")) {
+        map.addImage(
+            "shield",
+            ...createShield({
+                fill: "hsl(0, 0%, 98%)",
+                stroke: "hsl(0, 0%, 75%)",
+            })
+        );
+    }
 };

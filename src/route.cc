@@ -1,5 +1,7 @@
 #include "osr/route.h"
 
+#include "fmt/ranges.h"
+
 #include "utl/concat.h"
 #include "utl/to_vec.h"
 
@@ -49,6 +51,7 @@ connecting_way find_connecting_way(ways const& w,
   while (a != end(from_ways) && b != end(to_ways)) {
     auto const& [a_way, a_idx] = *a;
     auto const& [b_way, b_idx] = *b;
+
     if (a_way < b_way) {
       ++a;
     } else if (b_way < a_way) {
@@ -66,20 +69,45 @@ connecting_way find_connecting_way(ways const& w,
                       ((a_idx > b_idx) ^ is_loop) ? direction::kForward
                                                   : direction::kBackward,
                       distance);
+
+      auto const print_debug = [&]() {
+        [[unlikely]];
+        fmt::println(
+            "no match: way={}, n={}, a_idx={} [osm={}], b_idx={} [osm={}], "
+            "dist_match={} "
+            "[expected={}, actual={}], is_neighbor={}, "
+            "is_loop={}",
+            w.way_osm_idx_[a_way], w.way_nodes_[a_way].size(), a_idx,
+            w.node_to_osm_[w.way_nodes_[a_way][a_idx]], b_idx,
+            w.node_to_osm_[w.way_nodes_[b_way][b_idx]], (expected_dist == dist),
+            expected_dist, dist, is_neighbor, is_loop);
+      };
+
       if (expected_dist == dist && (is_neighbor || is_loop)) {
         if (expected_dist != dist) {
-          fmt::println(
-              "way={}, dist={}, expected={}, is_neighbor={}, is_loop={}",
-              w.way_osm_idx_[a_way], dist, expected_dist, is_neighbor, is_loop);
+          print_debug();
         }
 
         return {a_way, a_idx, b_idx, is_loop, distance};
+      } else {
+        print_debug();
       }
 
       ++a;
       ++b;
     }
   }
+
+  fmt::println("from={}, to={}", w.node_to_osm_[from], w.node_to_osm_[to]);
+  fmt::println("from ways:");
+  for (auto const& [from_way, from_idx] : from_ways) {
+    fmt::println(" {} {}", w.way_osm_idx_[from_way], from_idx);
+  }
+  fmt::println("to ways:");
+  for (auto const& [to_way, to_idx] : to_ways) {
+    fmt::println(" {} {}", w.way_osm_idx_[to_way], to_idx);
+  }
+
   throw utl::fail("no connecting way found");
 }
 

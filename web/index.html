@@ -34,19 +34,43 @@
             border-radius: 3px;
             box-shadow: 0 1px 2px rgba(0, 0, 0, .1);
             padding: 10px;
-            display: block;
-            width: 16px;
-            height: 16px;
+            display: flex;
+            width: 28px;
+            height: 28px;
             text-align: center;
+            align-items: center;
+            justify-content: center;
             text-decoration: none;
             color: black;
+            margin-bottom: 16px;
+        }
+
+        .level {
+            margin-top: 4px;
+            position: relative;
+            top: 5px;
+            left: 5px;
+            z-index: 1000;
+            background: #fff;
+            border-radius: 3px;
+            box-shadow: 0 1px 2px rgba(0, 0, 0, .1);
+            padding: 9.5px;
+            display: flex;
+            width: 28px;
+            height: 28px;
+            text-align: center;
+            align-items: center;
+            justify-content: center;
+            text-decoration: none;
+            color: black;
+            font-size: 10pt;
         }
 
         .active {
             background: #8fff7b;
         }
 
-        #graph-toggle:hover {
+        #graph-toggle:hover, .level:hover {
             background: #EEE;
         }
 
@@ -71,6 +95,7 @@
 </head>
 <body>
 <a id="graph-toggle" href="#" onclick="toggleGraph()">G</a>
+<div id="levels"></div>
 <select id="profile" onchange="selectProfile(event)">
     <option value="foot" selected>foot</option>
     <option value="bike">bike</option>
@@ -154,14 +179,8 @@
         return table;
     }
 
-    let controller = new AbortController();
-    let signal = controller.signal;
     const getRoute = async () => {
-        controller.abort();
-        controller = new AbortController();
-        signal = controller.signal;
         const response = await fetch(`${window.origin}/api/route`, {
-            signal,
             method: 'POST',
             mode: 'cors',
             headers: {
@@ -198,8 +217,40 @@
         return await response.json();
     };
 
+    const getLevels = async (bounds) => {
+        const response = await fetch(`${window.origin}/api/levels`, {
+            method: 'POST',
+            mode: 'cors',
+            headers: {
+                'Access-Control-Allow-Origin': '*',
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                waypoints: bounds.toArray().flat()
+            })
+        });
+        return await response.json();
+    }
+
+    let currentLevel = 0;
+    const levelsDom = document.getElementById('levels');
+    const setLevels = async (levels) => {
+        levelsDom.innerHTML = '';
+        levels.forEach(l => {
+            const levelLink = document.createElement('a');
+            levelLink.href = '#';
+            levelLink.textContent = `${l}`;
+            levelLink.classList.add('level');
+            levelLink.onclick = () => {
+                currentLevel = l;
+                style(map, l);
+            };
+            levelsDom.appendChild(levelLink);
+        })
+    }
+
     map.on('load', async () => {
-        style(map);
+        style(map, 0);
 
         /* --- PATH --- */
         map.addSource('path', {
@@ -303,6 +354,11 @@
     map.on('moveend', async () => {
         if (graphActive) {
             map.getSource('graph').setData(await getGraph(map.getBounds()));
+        }
+        if (map.getZoom() < 18) {
+            setLevels([]);
+        } else {
+            setLevels(await getLevels(map.getBounds()));
         }
     });
 
