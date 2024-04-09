@@ -105,7 +105,7 @@
 <script type="module">
     import {style} from "./style.js";
 
-    const start = [8.6671065, 49.8747541];
+    const start = [8.663205312233744, 50.106847864540164];
     const destination = [8.65463, 49.87802];
     const query = {
         start, destination,
@@ -130,7 +130,7 @@
             sources: {},
             layers: [],
         },
-        zoom: 14,
+        zoom: 18,
         transformRequest: (url, resourceType) => {
             if (url.startsWith('/')) {
                 return {url: `http://localhost:8081${url}`}

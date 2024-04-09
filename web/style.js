@@ -270,9 +270,20 @@ export const style = (map, level) => {
                 "source": "osm",
                 "source-layer": "road",
                 "filter": [
-                    "in",
-                    "highway",
-                    "footway", "track", "cycleway", "path", "unclassified", "service"
+                    "all",
+                    [
+                        "in",
+                        "highway",
+                        "footway", "track", "cycleway", "path", "unclassified", "service"
+                    ],
+                    level === 0
+                        ?
+                        ["any",
+                            ["!has", "level"],
+                            ["==", "level", level]
+                        ]
+                        :
+                        ["==", "level", level]
                 ],
                 "layout": {
                     "line-cap": "round",
@@ -301,7 +312,24 @@ export const style = (map, level) => {
                 "source": "osm",
                 "source-layer": "road",
                 "minzoom": 18,
-                "filter": ["==", "highway", "steps"],
+                "filter": [
+                    "all",
+                    ["==", "highway", "steps"],
+                    level === 0
+                        ?
+                        ["any",
+                            ["!has", "from_level"],
+                            ["any",
+                                ["==", "from_level", level],
+                                ["==", "to_level", level]
+                            ]
+                        ]
+                        :
+                        ["any",
+                            ["==", "from_level", level],
+                            ["==", "to_level", level]
+                        ]
+                ],
                 "paint": {
                     "line-dasharray": [ 0.5, 0.5 ],
                     "line-color": "#ff4524",
@@ -325,7 +353,12 @@ export const style = (map, level) => {
                 "source": "osm",
                 "source-layer": "indoor",
                 "minzoom": 18,
-                "filter": ["==", "indoor", "elevator"],
+                "filter": [
+                    "all",
+                    ["==", "indoor", "elevator"],
+                    ["<=", "from_level", level],
+                    [">=", "to_level", level]
+                ],
                 "paint": {
                     'circle-color': "#808080",
                     'circle-radius': 16,
@@ -337,9 +370,14 @@ export const style = (map, level) => {
                 "source": "osm",
                 "source-layer": "indoor",
                 "minzoom": 18,
-                "filter": ["==", "indoor", "elevator"],
+                "filter": [
+                    "all",
+                    ["==", "indoor", "elevator"],
+                    ["<=", "from_level", level],
+                    [">=", "to_level", level]
+                ],
                 "paint": {
-                    'circle-color': '#d4edff',
+                    'circle-color': '#bcf1ba',
                     'circle-radius': 14,
                 }
             },
@@ -349,7 +387,12 @@ export const style = (map, level) => {
                 "source": "osm",
                 "source-layer": "indoor",
                 "minzoom": 18,
-                "filter": ["==", "indoor", "elevator"],
+                "filter": [
+                    "all",
+                    ["==", "indoor", "elevator"],
+                    ["<=", "from_level", level],
+                    [">=", "to_level", level]
+                ],
                 "layout": {
                     "icon-image": "elevator",
                     "icon-size": 0.9
@@ -478,7 +521,14 @@ export const style = (map, level) => {
                 "type": "line",
                 "source": "osm",
                 "source-layer": "rail",
-                "filter": ["==", "rail", "secondary"],
+                "filter": [
+                    "all",
+                    ["==", "rail", "secondary"],
+                    ["any",
+                        ["!has", "level"],
+                        ["==", "level", level]
+                    ]
+                ],
                 "paint": {
                     "line-color": rail,
                     "line-width": 1.15
@@ -489,7 +539,14 @@ export const style = (map, level) => {
                 "type": "line",
                 "source": "osm",
                 "source-layer": "rail",
-                "filter": ["==", "rail", "primary"],
+                "filter": [
+                    "all",
+                    ["==", "rail", "primary"],
+                    ["any",
+                        ["!has", "level"],
+                        ["==", "level", level]
+                    ]
+                ],
                 "paint": {
                     "line-color": rail,
                     "line-width": 1.3
