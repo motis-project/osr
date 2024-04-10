@@ -108,6 +108,7 @@ double add_path(ways const& w,
       }
     }
   }
+  std::reverse(begin(segment.polyline_), end(segment.polyline_));
   return distance;
 }
 

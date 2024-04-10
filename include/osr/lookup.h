@@ -151,7 +151,7 @@ struct lookup {
                    return cflow::kContinue;
                  });
 
-    if (!reverse) {
+    if (reverse) {
       std::reverse(begin(c.path_), end(c.path_));
     }
 
