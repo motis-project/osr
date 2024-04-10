@@ -88,8 +88,8 @@ struct geojson_writer {
                                 ? w_.node_to_osm_[e->pred_]
                                 : osm_node_idx_t{0U})},
             {"dist", e ? e->dist_ : -1},
-            {"level", static_cast<bool>(p.is_elevator_)},
-            {"is_elevator", static_cast<bool>(p.is_entrance_)}}},
+            {"is_entrance", static_cast<bool>(p.is_entrance_)},
+            {"is_elevator", static_cast<bool>(p.is_elevator_)}}},
           {"geometry",
            {{"type", "Point"},
             {"coordinates", to_array(w_.get_node_pos(n))}}}});

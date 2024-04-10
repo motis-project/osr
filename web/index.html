@@ -106,15 +106,18 @@
     import {style} from "./style.js";
 
     const start = [8.663205312233744, 50.106847864540164];
-    const destination = [8.65463, 49.87802];
+    const destination = [8.665205312233744, 50.106847864540164];
     const query = {
         start, destination,
+        start_level: 0.0,
+        destination_level: 0.0,
         profile: document.getElementById('profile').value
     };
 
     const updateRoute = async () => {
         try {
             const route = await getRoute();
+            console.log(route);
             if (!route.error) {
                 map.getSource('path').setData(route);
             }
@@ -190,11 +193,13 @@
             body: JSON.stringify({
                 start: {
                     lat: query.start[1],
-                    lng: query.start[0]
+                    lng: query.start[0],
+                    level: query.start_level
                 },
                 destination: {
                     lat: query.destination[1],
-                    lng: query.destination[0]
+                    lng: query.destination[0],
+                    level: query.destination_level
                 },
                 profile: query.profile
             })
@@ -211,6 +216,7 @@
                 'Content-Type': 'application/json'
             },
             body: JSON.stringify({
+                level: currentLevel,
                 waypoints: bounds.toArray().flat()
             })
         });
@@ -235,24 +241,29 @@
     let currentLevel = 0;
     const levelsDom = document.getElementById('levels');
     const setLevels = async (levels) => {
+        if (levels.length === 0) {
+            currentLevel = 0;
+            style(map, 0);
+            await addRouting();
+            await updateGraph();
+        }
         levelsDom.innerHTML = '';
         levels.forEach(l => {
             const levelLink = document.createElement('a');
             levelLink.href = '#';
             levelLink.textContent = `${l}`;
             levelLink.classList.add('level');
-            levelLink.onclick = () => {
+            levelLink.onclick = async () => {
                 currentLevel = l;
                 style(map, l);
+                await addRouting();
+                await updateGraph();
             };
             levelsDom.appendChild(levelLink);
         })
     }
 
-    map.on('load', async () => {
-        style(map, 0);
-
-        /* --- PATH --- */
+    const addRouting = async () => {
         map.addSource('path', {
             type: 'geojson',
             data: await getRoute()
@@ -265,6 +276,11 @@
                 'line-join': 'round',
                 'line-cap': 'round',
             },
+            'filter': [
+                'any',
+                ['!has', 'level'],
+                ['==', 'level', currentLevel]
+            ],
             'paint': {
                 'line-color': '#1966a4',
                 'line-width': 7.5,
@@ -279,27 +295,46 @@
                 'line-join': 'round',
                 'line-cap': 'round',
             },
+            'filter': [
+                'any',
+                ['!has', 'level'],
+                ['==', 'level', currentLevel]
+            ],
             'paint': {
                 'line-color': '#42a5f5',
                 'line-width': 5,
                 'line-opacity': 0.8
             }
         });
+    }
+
+    const updateLevels = async () => {
+        if (map.getZoom() < 18) {
+            setLevels([]);
+        } else {
+            setLevels(await getLevels(map.getBounds()));
+        }
+    }
+
+    map.on('load', async () => {
+        style(map, 0);
+        await updateLevels();
+        await addRouting();
     });
 
-    const graphToggle = document.getElementById("graph-toggle");
-    let graphActive = false;
-    window.toggleGraph = async () => {
-        if (graphActive) {
-            graphToggle.classList.remove('active');
-            graphActive = false;
-            map.removeLayer('graph-geometry');
-            map.removeLayer('graph-edge');
-            map.removeLayer('graph-node');
-            map.removeSource('graph');
+    const updateGraph = async () => {
+        if (!graphActive) {
+            try {
+                graphToggle.classList.remove('active');
+                map.removeLayer('graph-geometry');
+                map.removeLayer('graph-edge');
+                map.removeLayer('graph-node');
+                map.removeSource('graph');
+            } catch (e) {
+                // ignore, already removed
+            }
         } else {
             graphToggle.classList.add('active');
-            graphActive = true;
             map.addSource('graph', {
                 type: 'geojson',
                 data: await getGraph(map.getBounds())
@@ -308,7 +343,15 @@
                 'id': 'graph-geometry',
                 'type': 'line',
                 'source': 'graph',
-                'filter': ['==', 'type', 'geometry'],
+                'filter': [
+                    'all',
+                    ['==', 'type', 'geometry'],
+                    [
+                        'any',
+                        ['!has', 'level'],
+                        ['==', 'level', currentLevel]
+                    ]
+                ],
                 'layout': {
                     'line-join': 'round',
                     'line-cap': 'round',
@@ -323,7 +366,15 @@
                 'id': 'graph-edge',
                 'type': 'line',
                 'source': 'graph',
-                'filter': ['==', 'type', 'edge'],
+                'filter': [
+                    'all',
+                    ['==', 'type', 'edge'],
+                    [
+                        'any',
+                        ['!has', 'level'],
+                        ['==', 'level', currentLevel]
+                    ]
+                ],
                 'layout': {
                     'line-join': 'round',
                     'line-cap': 'round',
@@ -337,13 +388,23 @@
                 'id': 'graph-node',
                 'type': 'circle',
                 'source': 'graph',
-                'filter': ['==', '$type', 'Point'],
+                'filter': [
+                    'all',
+                    ['==', '$type', 'Point']
+                ],
                 'paint': {
                     'circle-color': '#11ffaf',
                     'circle-radius': 6,
                 }
             });
         }
+    }
+
+    const graphToggle = document.getElementById("graph-toggle");
+    let graphActive = false;
+    window.toggleGraph = async () => {
+        graphActive = !graphActive;
+        await updateGraph();
     }
 
     window.selectProfile = async (e) => {
@@ -355,11 +416,7 @@
         if (graphActive) {
             map.getSource('graph').setData(await getGraph(map.getBounds()));
         }
-        if (map.getZoom() < 18) {
-            setLevels([]);
-        } else {
-            setLevels(await getLevels(map.getBounds()));
-        }
+        updateLevels();
     });
 
     ['graph-node', 'graph-edge', 'graph-geometry'].forEach((layer) => {
@@ -389,6 +446,7 @@
         .on('dragend', async () => {
             const x = startMarker.getLngLat();
             query.start = [x.lng, x.lat];
+            query.start_level = currentLevel;
             updateRoute();
         });
 
@@ -401,6 +459,7 @@
         .on('dragend', async () => {
             const x = destinationMarker.getLngLat();
             query.destination = [x.lng, x.lat];
+            query.destination_level = currentLevel;
             updateRoute();
         });
 
@@ -422,6 +481,7 @@
         setStart.onclick = (e) => {
             startMarker.setLngLat(x);
             query.start = [x.lng, x.lat];
+            query.start_level = currentLevel;
             popup.remove();
             updateRoute();
         };
@@ -434,6 +494,7 @@
         setDest.onclick = (e) => {
             destinationMarker.setLngLat(x);
             query.destination = [x.lng, x.lat];
+            query.destination_level = currentLevel;
             popup.remove();
             updateRoute();
         };

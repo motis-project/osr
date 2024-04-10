@@ -10,6 +10,11 @@
 
 namespace osr {
 
+struct location {
+  geo::latlng pos_;
+  level_t lvl_;
+};
+
 struct node_candidate {
   bool valid() const { return node_ != node_idx_t::invalid(); }
 
@@ -86,23 +91,22 @@ struct lookup {
   ~lookup() { rtree_free(rtree_); }
 
   template <typename WeightFn>
-  match_t match(geo::latlng const& query,
+  match_t match(location const& query,
                 bool const reverse,
-                WeightFn&& fn,
-                level_t const lvl = level_t::invalid()) const {
+                WeightFn&& weight) const {
     auto way_candidates = std::vector<way_candidate>{};
-    find(query, [&](way_idx_t const way) {
+    find(query.pos_, [&](way_idx_t const way) {
       auto const p = ways_.way_properties_[way];
-      if (fn(p, direction::kForward, 0U) != kInfeasible &&
-          (lvl == level_t::invalid() || p.get_level() == lvl)) {
-        auto d = distance_to_way(query, ways_.way_polylines_[way]);
+      if (weight(p, direction::kForward, 0U) != kInfeasible &&
+          (query.lvl_ == level_t::invalid() || p.get_level() == query.lvl_)) {
+        auto d = distance_to_way(query.pos_, ways_.way_polylines_[way]);
         if (d.dist_to_way_ < 100) {
           auto& wc = way_candidates.emplace_back(std::move(d));
           wc.way_ = way;
           wc.left_ =
-              find_next_node(wc, query, direction::kBackward, reverse, fn);
+              find_next_node(wc, query, direction::kBackward, reverse, weight);
           wc.right_ =
-              find_next_node(wc, query, direction::kForward, reverse, fn);
+              find_next_node(wc, query, direction::kForward, reverse, weight);
         }
       }
     });
@@ -112,7 +116,7 @@ struct lookup {
 
   template <typename EdgeWeightFn>
   node_candidate find_next_node(way_candidate const& wc,
-                                geo::latlng const& query,
+                                location const& query,
                                 direction const dir,
                                 bool const reverse,
                                 EdgeWeightFn&& edge_weight) const {
@@ -122,10 +126,10 @@ struct lookup {
       return node_candidate{};
     }
 
-    auto const off_road_length = geo::distance(query, wc.best_);
+    auto const off_road_length = geo::distance(query.pos_, wc.best_);
     auto c = node_candidate{.dist_to_node_ = off_road_length,
                             .weight_ = edge_weight(p, edge_dir, 0U),
-                            .path_ = {query, wc.best_}};
+                            .path_ = {query.pos_, wc.best_}};
     auto const polyline = ways_.way_polylines_[wc.way_];
     auto const osm_nodes = ways_.way_osm_nodes_[wc.way_];
 

@@ -18,7 +18,11 @@ struct tags {
     for (auto const& t : o.tags()) {
       switch (cista::hash(std::string_view{t.key()})) {
         using namespace std::string_view_literals;
+        case cista::hash("building"): [[fallthrough]];
         case cista::hash("landuse"): landuse_ = true; break;
+        case cista::hash("railway"):
+          landuse_ |= t.value() == "station_area"sv;
+          break;
         case cista::hash("oneway"): oneway_ |= t.value() == "yes"sv; break;
         case cista::hash("junction"):
           oneway_ |= t.value() == "roundabout"sv;
