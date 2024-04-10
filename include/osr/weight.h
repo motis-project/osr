@@ -11,14 +11,14 @@ struct foot {
                     direction,
                     std::uint16_t const dist) {
     if (e.is_foot_accessible()) {
-      return static_cast<dist_t>(std::round(dist / 1.4F));
+      return static_cast<dist_t>(std::round(dist / 1.2F));
     } else {
       return kInfeasible;
     }
   }
 
   dist_t operator()(node_properties const& n) {
-    return n.is_walk_accessible() ? 0U : kInfeasible;
+    return (n.is_walk_accessible() ? (n.is_elevator_ ? 90U : 0U) : kInfeasible);
   }
 };
 

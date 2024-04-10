@@ -69,7 +69,8 @@ using osm_way_idx_t = cista::strong<std::uint64_t, struct osm_way_idx_>;
 using way_idx_t = cista::strong<std::uint32_t, struct way_idx_>;
 using node_idx_t = cista::strong<std::uint32_t, struct node_idx_>;
 
-using edge_flags_t = std::uint64_t;
+using level_t = cista::strong<std::uint8_t, struct level_>;
+
 using distance_t = std::uint16_t;
 
 }  // namespace osr

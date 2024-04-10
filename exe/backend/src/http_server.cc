@@ -20,6 +20,7 @@
 #include "osr/lookup.h"
 #include "osr/route.h"
 #include "osr/weight.h"
+#include "utl/to_vec.h"
 
 using namespace net;
 using net::web_server;
@@ -35,7 +36,8 @@ void set_cors_headers(http::response<Body>& res) {
   using namespace boost::beast::http;
   res.set(field::access_control_allow_origin, "*");
   res.set(field::access_control_allow_headers,
-          "X-Requested-With, Content-Type, Accept, Authorization");
+          "X-Content-Type-Options, X-Requested-With, Content-Type, Accept, "
+          "Authorization");
   res.set(field::access_control_allow_methods, "GET, POST, OPTIONS");
   res.set(field::access_control_max_age, "3600");
 }
@@ -49,9 +51,11 @@ web_server::string_res_t json_response(
   return res;
 }
 
-geo::latlng parse_latlng(json::value const& v) {
+location parse_location(json::value const& v) {
   auto const obj = v.as_object();
-  return {obj.at("lat").as_double(), obj.at("lng").as_double()};
+  return {obj.at("lat").as_double(), obj.at("lng").as_double(),
+          obj.contains("level") ? to_level(obj.at("level").to_number<float>())
+                                : level_t::invalid()};
 }
 
 json::value to_json(std::vector<geo::latlng> const& polyline) {
@@ -60,26 +64,6 @@ json::value to_json(std::vector<geo::latlng> const& polyline) {
     a.emplace_back(json::array{p.lng(), p.lat()});
   }
   return a;
-}
-
-std::string to_json(std::optional<path> const& p) {
-  return json::serialize(boost::json::value{
-      {"routes",
-       p.has_value() ? json::array{json::value{{"distance", 0U},  // TODO
-                                               {"duration", p->time_},
-                                               {"path", to_json(p->polyline_)},
-                                               {"steps", json::array{}}}}
-                     : json::array{}}});
-}
-
-std::string get_graph(ways const& w,
-                      lookup const& l,
-                      geo::latlng const& min,
-                      geo::latlng const& max,
-                      dijkstra_state const* s) {
-  auto gj = geojson_writer{.w_ = w};
-  l.find(min, max, [&](way_idx_t const w) { gj.write_way(w); });
-  return gj.finish(s);
 }
 
 struct http_server::impl {
@@ -115,25 +99,77 @@ struct http_server::impl {
         to_profile(profile_it == q.end() || !profile_it->value().is_string()
                        ? to_str(search_profile::kFoot)
                        : profile_it->value().as_string());
-    auto const from = parse_latlng(q.at("start"));
-    auto const to = parse_latlng(q.at("destination"));
+    auto const from = parse_location(q.at("start"));
+    auto const to = parse_location(q.at("destination"));
     auto const max_it = q.find("max");
     auto const max = max_it == q.end() ? 3600 : max_it->value().as_int64();
-    auto const res = json_response(
-        req,
-        to_json(route(w_, l_, from, to, max, profile, *get_dijkstra_state())));
-    return cb(res);
+
+    auto const p = route(w_, l_, from, to, max, profile, *get_dijkstra_state());
+    auto const response = json::serialize(
+        p.has_value()
+            ? boost::json::
+                  value{{"type", "FeatureCollection"},
+                        {"features",
+                         utl::all(p->segments_)  //
+                             |
+                             utl::transform([&](auto&& s) {
+                               return json::value{
+                                   {"type", "Feature"},
+                                   {"properties",
+                                    {{"level", to_float(s.level_)},
+                                     {"way",
+                                      s.way_ == way_idx_t::invalid()
+                                          ? 0U
+                                          : to_idx(w_.way_osm_idx_[s.way_])}}},
+                                   {"geometry", to_line_string(s.polyline_)}};
+                             })  //
+                             | utl::emplace_back_to<json::array>()}}
+            : json::value{{"error", "no path found"}});
+    return cb(json_response(req, response));
   }
 
-  void handle_graph(web_server::http_req_t const& req,
-                    web_server::http_res_cb_t const& cb) {
+  void handle_levels(web_server::http_req_t const& req,
+                     web_server::http_res_cb_t const& cb) {
     auto const query = boost::json::parse(req.body()).as_object();
     auto const waypoints = query.at("waypoints").as_array();
     auto const min = point::from_latlng(
         {waypoints[1].as_double(), waypoints[0].as_double()});
     auto const max = point::from_latlng(
         {waypoints[3].as_double(), waypoints[2].as_double()});
-    cb(json_response(req, get_graph(w_, l_, min, max, get_dijkstra_state())));
+    auto levels = hash_set<level_t>{};
+    l_.find(min, max, [&](way_idx_t const x) {
+      levels.emplace(w_.way_properties_[x].get_level());
+    });
+    auto levels_sorted =
+        utl::to_vec(levels, [](level_t const l) { return to_float(l); });
+    utl::sort(levels_sorted, [](auto&& a, auto&& b) { return a > b; });
+    cb(json_response(req,
+                     json::serialize(utl::all(levels_sorted)  //
+                                     | utl::emplace_back_to<json::array>())));
+  }
+
+  void handle_graph(web_server::http_req_t const& req,
+                    web_server::http_res_cb_t const& cb) {
+    auto const query = boost::json::parse(req.body()).as_object();
+    auto const level = query.contains("level")
+                           ? to_level(query.at("level").to_number<float>())
+                           : level_t::invalid();
+    auto const waypoints = query.at("waypoints").as_array();
+    auto const min = point::from_latlng(
+        {waypoints[1].as_double(), waypoints[0].as_double()});
+    auto const max = point::from_latlng(
+        {waypoints[3].as_double(), waypoints[2].as_double()});
+
+    auto gj = geojson_writer{.w_ = w_};
+    l_.find(min, max, [&](way_idx_t const w) {
+      if (level == level_t::invalid() ||
+          w_.way_properties_[w].get_level() == level) {
+        gj.write_way(w);
+      }
+    });
+
+    auto const s = get_dijkstra_state();
+    cb(json_response(req, gj.finish(s)));
   }
 
   void handle_static(web_server::http_req_t&& req,
@@ -157,6 +193,13 @@ struct http_server::impl {
               [this](web_server::http_req_t const& req1,
                      web_server::http_res_cb_t const& cb1) {
                 handle_route(req1, cb1);
+              },
+              req, cb);
+        } else if (target.starts_with("/api/levels")) {
+          return run_parallel(
+              [this](web_server::http_req_t const& req1,
+                     web_server::http_res_cb_t const& cb1) {
+                handle_levels(req1, cb1);
               },
               req, cb);
         } else if (target.starts_with("/api/graph")) {
@@ -186,17 +229,23 @@ struct http_server::impl {
                     web_server::http_req_t const& req,
                     web_server::http_res_cb_t const& cb) {
     boost::asio::post(thread_pool_, [req, cb, handler, this]() {
-      handler(req, [req, cb, this](web_server::http_res_t&& res) {
-        boost::asio::post(ioc_, [cb, req, res{std::move(res)}]() mutable {
-          try {
-            cb(std::move(res));
-          } catch (std::exception const& e) {
-            return cb(json_response(
-                req, fmt::format(R"({{"error": "{}"}})", e.what()),
-                http::status::internal_server_error));
-          }
+      try {
+        handler(req, [req, cb, this](web_server::http_res_t&& res) {
+          boost::asio::post(ioc_, [cb, req, res{std::move(res)}]() mutable {
+            try {
+              cb(std::move(res));
+            } catch (std::exception const& e) {
+              return cb(json_response(
+                  req, fmt::format(R"({{"error": "{}"}})", e.what()),
+                  http::status::internal_server_error));
+            }
+          });
         });
-      });
+      } catch (std::exception const& e) {
+        return cb(json_response(req,
+                                fmt::format(R"({{"error": "{}"}})", e.what()),
+                                http::status::internal_server_error));
+      }
     });
   }
 

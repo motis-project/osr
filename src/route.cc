@@ -1,5 +1,7 @@
 #include "osr/route.h"
 
+#include "fmt/ranges.h"
+
 #include "utl/concat.h"
 #include "utl/to_vec.h"
 
@@ -8,6 +10,7 @@
 #include "osr/lookup.h"
 #include "osr/reverse.h"
 #include "osr/weight.h"
+#include "utl/power_set_intersection.h"
 
 namespace osr {
 
@@ -45,35 +48,35 @@ connecting_way find_connecting_way(ways const& w,
   auto const from_ways = utl::zip(w.node_ways_[from], w.node_in_way_idx_[from]);
   auto const to_ways = utl::zip(w.node_ways_[to], w.node_in_way_idx_[to]);
   auto const expected_dist = s.get_dist(from) - s.get_dist(to);
-  auto a = begin(from_ways), b = begin(to_ways);
-  while (a != end(from_ways) && b != end(to_ways)) {
-    auto const& [a_way, a_idx] = *a;
-    auto const& [b_way, b_idx] = *b;
-    if (a_way < b_way) {
-      ++a;
-    } else if (b_way < a_way) {
-      ++b;
-    } else {
-      auto const is_loop =
-          w.is_loop(a_way) && static_cast<unsigned>(std::abs(a_idx - b_idx)) ==
-                                  w.way_nodes_[a_way].size() - 2U;
-      auto const is_neighbor = std::abs(a_idx - b_idx) == 1;
-      auto const distance =
-          w.way_node_dist_[a_way][is_loop ? std::max(a_idx, b_idx)
-                                          : std::min(a_idx, b_idx)];
-      auto const dist =
-          edge_weight(w.way_properties_[a_way],
-                      ((a_idx > b_idx) ^ is_loop) ? direction::kForward
-                                                  : direction::kBackward,
-                      distance);
-      if (expected_dist == dist && (is_neighbor || is_loop)) {
-        return {a_way, a_idx, b_idx, is_loop, distance};
-      }
-      ++a;
-      ++b;
-    }
-  }
-  throw utl::fail("no connecting way found");
+  auto conn = std::optional<connecting_way>{};
+  utl::power_set_intersection(
+      from_ways, to_ways,
+      [&](auto&& a, auto&& b) {
+        auto const& [a_way, a_idx] = a;
+        auto const& [b_way, b_idx] = b;
+        auto const is_loop = w.is_loop(a_way) &&
+                             static_cast<unsigned>(std::abs(a_idx - b_idx)) ==
+                                 w.way_nodes_[a_way].size() - 2U;
+        auto const is_neighbor = std::abs(a_idx - b_idx) == 1;
+        auto const distance =
+            w.way_node_dist_[a_way][is_loop ? std::max(a_idx, b_idx)
+                                            : std::min(a_idx, b_idx)];
+        auto const dist =
+            edge_weight(w.way_properties_[a_way],
+                        ((a_idx > b_idx) ^ is_loop) ? direction::kForward
+                                                    : direction::kBackward,
+                        distance);
+        if (expected_dist == dist && (is_neighbor || is_loop)) {
+          conn = {a_way, a_idx, b_idx, is_loop, distance};
+        }
+      },
+      [](auto&& a, auto&& b) {
+        auto const& [a_way, _0] = a;
+        auto const& [b_way, _1] = b;
+        return a_way < b_way;
+      });
+  utl::verify(conn.has_value(), "no connecting way found");
+  return *conn;
 }
 
 template <typename EdgeWeightFn>
@@ -81,12 +84,15 @@ double add_path(ways const& w,
                 dijkstra_state const& s,
                 node_idx_t const from,
                 node_idx_t const to,
-                std::vector<geo::latlng>& path,
+                std::vector<path::segment>& path,
                 EdgeWeightFn&& edge_weight) {
   auto const& [way, from_idx, to_idx, is_loop, distance] =
       find_connecting_way(w, s, from, to, edge_weight);
   auto j = 0U;
   auto active = false;
+  auto& segment = path.emplace_back();
+  segment.way_ = way;
+  segment.level_ = w.way_properties_[way].get_level();
   for (auto const [osm_idx, coord] :
        infinite(reverse(utl::zip(w.way_osm_nodes_[way], w.way_polylines_[way]),
                         (from_idx > to_idx) ^ is_loop),
@@ -96,7 +102,7 @@ double add_path(ways const& w,
       active = true;
     }
     if (active) {
-      path.emplace_back(coord);
+      segment.polyline_.emplace_back(coord);
       if (w.node_to_osm_[w.way_nodes_[way][to_idx]] == osm_idx) {
         break;
       }
@@ -108,11 +114,15 @@ double add_path(ways const& w,
 template <typename EdgeWeightFn>
 path reconstruct(ways const& w,
                  dijkstra_state const& s,
+                 way_idx_t const dest_way,
                  way_candidate const& start,
                  node_candidate const& dest,
                  EdgeWeightFn&& edge_weight) {
   auto n = dest.node_;
-  auto polyline = dest.path_;
+  auto segments = std::vector<path::segment>{
+      {.polyline_ = dest.path_,
+       .level_ = w.way_properties_[dest_way].get_level(),
+       .way_ = way_idx_t::invalid()}};
   auto dist = 0.0;
   auto last = n;
   while (n != node_idx_t::invalid()) {
@@ -122,23 +132,24 @@ path reconstruct(ways const& w,
       abort();
     }
     if (e.pred_ != node_idx_t::invalid()) {
-      dist += add_path(w, s, n, e.pred_, polyline, edge_weight);
+      dist += add_path(w, s, n, e.pred_, segments, edge_weight);
     }
     n = e.pred_;
   }
   auto const& start_node =
       last == start.left_.node_ ? start.left_ : start.right_;
-  utl::concat(polyline, start_node.path_);
-  std::reverse(begin(polyline), end(polyline));
+  segments.push_back({.polyline_ = start_node.path_,
+                      .level_ = w.way_properties_[start.way_].get_level(),
+                      .way_ = way_idx_t::invalid()});
+  std::reverse(begin(segments), end(segments));
   return {.time_ = static_cast<dist_t>(start_node.weight_ + s.get_dist(n) +
                                        dest.weight_),
           .dist_ = start_node.dist_to_node_ + dist + dest.dist_to_node_,
-          .polyline_ = std::move(polyline)};
+          .segments_ = segments};
 }
 
-std::pair<node_candidate const*, dist_t> best_candidate(match_t const& m,
-                                                        dijkstra_state const& s,
-                                                        dist_t const max_dist) {
+std::tuple<way_candidate const*, node_candidate const*, dist_t> best_candidate(
+    match_t const& m, dijkstra_state const& s, dist_t const max_dist) {
   for (auto const& dest : m) {
     auto best_dist = std::numeric_limits<dist_t>::max();
     auto best = static_cast<node_candidate const*>(nullptr);
@@ -156,20 +167,20 @@ std::pair<node_candidate const*, dist_t> best_candidate(match_t const& m,
           best = x;
         }
       }
+    }
 
-      if (best != nullptr) {
-        return {best, best_dist};
-      }
+    if (best != nullptr) {
+      return {&dest, best, best_dist};
     }
   }
-  return {nullptr, kInfeasible};
+  return {nullptr, nullptr, kInfeasible};
 }
 
 template <typename EdgeWeightFn>
 std::optional<path> route(ways const& w,
                           lookup const& l,
-                          geo::latlng const& from,
-                          geo::latlng const& to,
+                          location const& from,
+                          location const& to,
                           dist_t const max_dist,
                           dijkstra_state& s,
                           EdgeWeightFn&& edge_weight_fn) {
@@ -192,9 +203,10 @@ std::optional<path> route(ways const& w,
 
     dijkstra<direction::kForward>(w, s, max_dist, edge_weight_fn);
 
-    auto const [best, _] = best_candidate(to_match, s, max_dist);
-    if (best != nullptr) {
-      return reconstruct(w, s, start, *best, edge_weight_fn);
+    auto const [dest_way, dest_node, _] = best_candidate(to_match, s, max_dist);
+    if (dest_node != nullptr) {
+      return reconstruct(w, s, dest_way->way_, start, *dest_node,
+                         edge_weight_fn);
     }
   }
 
@@ -203,8 +215,8 @@ std::optional<path> route(ways const& w,
 
 std::optional<path> route(ways const& w,
                           lookup const& l,
-                          geo::latlng const& from,
-                          geo::latlng const& to,
+                          location const& from,
+                          location const& to,
                           dist_t const max_dist,
                           search_profile const profile,
                           dijkstra_state& s) {
@@ -221,8 +233,8 @@ std::optional<path> route(ways const& w,
 template <typename EdgeWeightFn>
 std::vector<std::optional<path>> route(ways const& w,
                                        lookup const& l,
-                                       geo::latlng const& from,
-                                       std::vector<geo::latlng> const& to,
+                                       location const& from,
+                                       std::vector<location> const& to,
                                        dist_t const max_dist,
                                        direction const dir,
                                        dijkstra_state& s,
@@ -254,7 +266,7 @@ std::vector<std::optional<path>> route(ways const& w,
       if (r.has_value()) {
         ++found;
       } else {
-        auto const [_, time] = best_candidate(m, s, max_dist);
+        auto const [_, _1, time] = best_candidate(m, s, max_dist);
         if (time != kInfeasible) {
           r = std::make_optional(path{.time_ = time});
           ++found;
@@ -272,8 +284,8 @@ std::vector<std::optional<path>> route(ways const& w,
 
 std::vector<std::optional<path>> route(ways const& w,
                                        lookup const& l,
-                                       geo::latlng const& from,
-                                       std::vector<geo::latlng> const& to,
+                                       location const& from,
+                                       std::vector<location> const& to,
                                        dist_t const max_dist,
                                        search_profile const profile,
                                        direction const dir,

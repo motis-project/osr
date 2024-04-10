@@ -33,6 +33,14 @@ total 115G
 200M way_properties.bin
 ```
 
+## Multi-Level Indoor Routing
+
+<p align="center"><img src="docs/levels.png"></p>
+
+## Car Outdoor Routing
+
+<p align="center"><img src="docs/car.png"></p>
+
 ## Usage
 
 The PPR debug UI can be used for testing: https://github.com/motis-project/ppr/tree/master/ui/web

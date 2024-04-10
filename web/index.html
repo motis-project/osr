@@ -1,35 +1,510 @@
 <!DOCTYPE html>
-<html>
-  <head>
-    <meta charset="utf-8" />
-    <title>Per Pedes Routing</title>
-    <meta
-      name="viewport"
-      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"
-    />
-    <link rel="stylesheet" href="css/deps/leaflet.css" />
-    <link rel="stylesheet" href="css/deps/leaflet-routing-machine.css" />
-    <link rel="stylesheet" href="css/deps/Leaflet.PolylineMeasure.css" />
-    <link rel="stylesheet" href="css/deps/leaflet.contextmenu.css" />
-    <link rel="stylesheet" href="css/deps/Control.Geocoder.css" />
-    <link rel="stylesheet" href="css/index.css" />
-  </head>
-  <body>
-    <div id="map" class="map">
-      <div id="search-profile-editor" class="leaflet-control">
-        <textarea id="search-profile-text"></textarea>
-        <input type="button" value="OK" id="search-profile-save" />
-      </div>
-    </div>
-    <script src="js/deps/leaflet-src.js"></script>
-    <script src="js/deps/leaflet-routing-machine.js"></script>
-    <script src="js/deps/Control.Geocoder.js"></script>
-    <script src="js/profiles.js"></script>
-    <script src="js/L.Routing.PPR.js"></script>
-    <script src="js/deps/Leaflet.PolylineMeasure.js"></script>
-    <script src="js/deps/leaflet.contextmenu.js"></script>
-    <script src="js/geojson-overlay.js"></script>
-    <script src="js/map-links.js"></script>
-    <script src="js/index.js"></script>
-  </body>
+<html lang="en">
+<head>
+    <title>Open Street Router</title>
+    <meta property="og:description" content="Pedestrian routing, bike routing and car routing for OpenStreetMap"/>
+    <meta charset='utf-8'>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link rel='stylesheet' href='https://unpkg.com/maplibre-gl@4.1.2/dist/maplibre-gl.css'/>
+    <script src='https://unpkg.com/maplibre-gl@4.1.2/dist/maplibre-gl.js'></script>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+        }
+
+        html, body, #map {
+            height: 100%;
+            font-family: ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
+        }
+
+        #map {
+            position: absolute;
+            top: 0;
+            bottom: 0;
+            width: 100%;
+        }
+
+        #graph-toggle {
+            position: relative;
+            top: 5px;
+            left: 5px;
+            z-index: 1000;
+            background: #fff;
+            border-radius: 3px;
+            box-shadow: 0 1px 2px rgba(0, 0, 0, .1);
+            padding: 10px;
+            display: flex;
+            width: 28px;
+            height: 28px;
+            text-align: center;
+            align-items: center;
+            justify-content: center;
+            text-decoration: none;
+            color: black;
+            margin-bottom: 16px;
+        }
+
+        .level {
+            margin-top: 4px;
+            position: relative;
+            top: 5px;
+            left: 5px;
+            z-index: 1000;
+            background: #fff;
+            border-radius: 3px;
+            box-shadow: 0 1px 2px rgba(0, 0, 0, .1);
+            padding: 9.5px;
+            display: flex;
+            width: 28px;
+            height: 28px;
+            text-align: center;
+            align-items: center;
+            justify-content: center;
+            text-decoration: none;
+            color: black;
+            font-size: 10pt;
+        }
+
+        .active {
+            background: #8fff7b;
+        }
+
+        #graph-toggle:hover, .level:hover {
+            background: #EEE;
+        }
+
+        .active:hover {
+            background: #bdffb1;
+        }
+
+        #profile {
+            position: absolute;
+            top: 5px;
+            right: 5px;
+            z-index: 1000;
+            box-shadow: 0 1px 2px rgba(0, 0, 0, .1);
+            text-align: center;
+            text-decoration: none;
+        }
+
+        .context {
+            margin: 0.5em;
+        }
+    </style>
+</head>
+<body>
+<a id="graph-toggle" href="#" onclick="toggleGraph()">G</a>
+<div id="levels"></div>
+<select id="profile" onchange="selectProfile(event)">
+    <option value="foot" selected>foot</option>
+    <option value="bike">bike</option>
+    <option value="car">car</option>
+</select>
+<div id="map"></div>
+<script type="module">
+    import {style} from "./style.js";
+
+    const start = [8.663205312233744, 50.106847864540164];
+    const destination = [8.665205312233744, 50.106847864540164];
+    const query = {
+        start, destination,
+        start_level: 0.0,
+        destination_level: 0.0,
+        profile: document.getElementById('profile').value
+    };
+
+    const updateRoute = async () => {
+        try {
+            const route = await getRoute();
+            console.log(route);
+            if (!route.error) {
+                map.getSource('path').setData(route);
+            }
+        } catch (e) {
+        }
+    }
+
+    const map = new maplibregl.Map({
+        container: 'map',
+        center: start,
+        style: {
+            version: 8,
+            sources: {},
+            layers: [],
+        },
+        zoom: 18,
+        transformRequest: (url, resourceType) => {
+            if (url.startsWith('/')) {
+                return {url: `http://localhost:8081${url}`}
+            }
+        }
+    });
+
+    const toTable = (properties) => {
+        var table = document.createElement("table");
+        table.classList.add("routing-graph", "properties");
+        for (var key in properties) {
+            var value = properties[key];
+            var row = document.createElement("tr");
+            var keyCell = document.createElement("td");
+            keyCell.innerText = key;
+            keyCell.className = "key";
+            var valueCell = document.createElement("td");
+            if (key == "osm_way_id" && value != 0) {
+                var osmLink = document.createElement("a");
+                osmLink.href = "https://www.openstreetmap.org/way/" + Math.abs(value);
+                osmLink.target = "_blank";
+                osmLink.innerText = value;
+                valueCell.appendChild(osmLink);
+            } else if (key == "osm_relation_id" && value != 0) {
+                var osmLink = document.createElement("a");
+                osmLink.href =
+                    "https://www.openstreetmap.org/relation/" + Math.abs(value);
+                osmLink.target = "_blank";
+                osmLink.innerText = value;
+                valueCell.appendChild(osmLink);
+            } else if (key == "osm_node_id" && value != 0) {
+                var osmLink = document.createElement("a");
+                osmLink.href =
+                    "https://www.openstreetmap.org/node/" + Math.abs(value);
+                osmLink.target = "_blank";
+                osmLink.innerText = value;
+                valueCell.appendChild(osmLink);
+            } else {
+                valueCell.innerText = value;
+            }
+            valueCell.className = "value";
+            row.appendChild(keyCell);
+            row.appendChild(valueCell);
+            table.appendChild(row);
+        }
+        return table;
+    }
+
+    const getRoute = async () => {
+        const response = await fetch(`${window.origin}/api/route`, {
+            method: 'POST',
+            mode: 'cors',
+            headers: {
+                'Access-Control-Allow-Origin': '*',
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                start: {
+                    lat: query.start[1],
+                    lng: query.start[0],
+                    level: query.start_level
+                },
+                destination: {
+                    lat: query.destination[1],
+                    lng: query.destination[0],
+                    level: query.destination_level
+                },
+                profile: query.profile
+            })
+        });
+        return await response.json();
+    };
+
+    const getGraph = async (bounds) => {
+        const response = await fetch(`${window.origin}/api/graph`, {
+            method: 'POST',
+            mode: 'cors',
+            headers: {
+                'Access-Control-Allow-Origin': '*',
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                level: currentLevel,
+                waypoints: bounds.toArray().flat()
+            })
+        });
+        return await response.json();
+    };
+
+    const getLevels = async (bounds) => {
+        const response = await fetch(`${window.origin}/api/levels`, {
+            method: 'POST',
+            mode: 'cors',
+            headers: {
+                'Access-Control-Allow-Origin': '*',
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                waypoints: bounds.toArray().flat()
+            })
+        });
+        return await response.json();
+    }
+
+    let currentLevel = 0;
+    const levelsDom = document.getElementById('levels');
+    const setLevels = async (levels) => {
+        if (levels.length === 0) {
+            currentLevel = 0;
+            style(map, 0);
+            await addRouting();
+            await updateGraph();
+        }
+        levelsDom.innerHTML = '';
+        levels.forEach(l => {
+            const levelLink = document.createElement('a');
+            levelLink.href = '#';
+            levelLink.textContent = `${l}`;
+            levelLink.classList.add('level');
+            levelLink.onclick = async () => {
+                currentLevel = l;
+                style(map, l);
+                await addRouting();
+                await updateGraph();
+            };
+            levelsDom.appendChild(levelLink);
+        })
+    }
+
+    const addRouting = async () => {
+        map.addSource('path', {
+            type: 'geojson',
+            data: await getRoute()
+        });
+        map.addLayer({
+            'id': 'path-outline',
+            'type': 'line',
+            'source': 'path',
+            'layout': {
+                'line-join': 'round',
+                'line-cap': 'round',
+            },
+            'filter': [
+                'any',
+                ['!has', 'level'],
+                ['==', 'level', currentLevel]
+            ],
+            'paint': {
+                'line-color': '#1966a4',
+                'line-width': 7.5,
+                'line-opacity': 0.8
+            }
+        });
+        map.addLayer({
+            'id': 'path',
+            'type': 'line',
+            'source': 'path',
+            'layout': {
+                'line-join': 'round',
+                'line-cap': 'round',
+            },
+            'filter': [
+                'any',
+                ['!has', 'level'],
+                ['==', 'level', currentLevel]
+            ],
+            'paint': {
+                'line-color': '#42a5f5',
+                'line-width': 5,
+                'line-opacity': 0.8
+            }
+        });
+    }
+
+    const updateLevels = async () => {
+        if (map.getZoom() < 18) {
+            setLevels([]);
+        } else {
+            setLevels(await getLevels(map.getBounds()));
+        }
+    }
+
+    map.on('load', async () => {
+        style(map, 0);
+        await updateLevels();
+        await addRouting();
+    });
+
+    const updateGraph = async () => {
+        if (!graphActive) {
+            try {
+                graphToggle.classList.remove('active');
+                map.removeLayer('graph-geometry');
+                map.removeLayer('graph-edge');
+                map.removeLayer('graph-node');
+                map.removeSource('graph');
+            } catch (e) {
+                // ignore, already removed
+            }
+        } else {
+            graphToggle.classList.add('active');
+            map.addSource('graph', {
+                type: 'geojson',
+                data: await getGraph(map.getBounds())
+            });
+            map.addLayer({
+                'id': 'graph-geometry',
+                'type': 'line',
+                'source': 'graph',
+                'filter': [
+                    'all',
+                    ['==', 'type', 'geometry'],
+                    [
+                        'any',
+                        ['!has', 'level'],
+                        ['==', 'level', currentLevel]
+                    ]
+                ],
+                'layout': {
+                    'line-join': 'round',
+                    'line-cap': 'round',
+                },
+                'paint': {
+                    'line-color': '#e55e5e',
+                    'line-width': 3,
+                    'line-opacity': 1
+                }
+            });
+            map.addLayer({
+                'id': 'graph-edge',
+                'type': 'line',
+                'source': 'graph',
+                'filter': [
+                    'all',
+                    ['==', 'type', 'edge'],
+                    [
+                        'any',
+                        ['!has', 'level'],
+                        ['==', 'level', currentLevel]
+                    ]
+                ],
+                'layout': {
+                    'line-join': 'round',
+                    'line-cap': 'round',
+                },
+                'paint': {
+                    'line-color': '#a300d9',
+                    'line-width': 3
+                }
+            });
+            map.addLayer({
+                'id': 'graph-node',
+                'type': 'circle',
+                'source': 'graph',
+                'filter': [
+                    'all',
+                    ['==', '$type', 'Point']
+                ],
+                'paint': {
+                    'circle-color': '#11ffaf',
+                    'circle-radius': 6,
+                }
+            });
+        }
+    }
+
+    const graphToggle = document.getElementById("graph-toggle");
+    let graphActive = false;
+    window.toggleGraph = async () => {
+        graphActive = !graphActive;
+        await updateGraph();
+    }
+
+    window.selectProfile = async (e) => {
+        query.profile = e.target.value;
+        map.getSource('path').setData(await getRoute());
+    };
+
+    map.on('moveend', async () => {
+        if (graphActive) {
+            map.getSource('graph').setData(await getGraph(map.getBounds()));
+        }
+        updateLevels();
+    });
+
+    ['graph-node', 'graph-edge', 'graph-geometry'].forEach((layer) => {
+        map.on('click', layer, (e) => {
+            new maplibregl.Popup()
+                .setLngLat(e.lngLat)
+                .setDOMContent(toTable(e.features[0].properties))
+                .addTo(map);
+            e.originalEvent.stopPropagation();
+        });
+
+        map.on('mouseenter', layer, () => {
+            map.getCanvas().style.cursor = 'pointer';
+        });
+
+        map.on('mouseleave', layer, () => {
+            map.getCanvas().style.cursor = '';
+        });
+    });
+
+    const startMarker = new maplibregl.Marker({
+        draggable: true,
+        color: 'green'
+    })
+        .setLngLat(start)
+        .addTo(map)
+        .on('dragend', async () => {
+            const x = startMarker.getLngLat();
+            query.start = [x.lng, x.lat];
+            query.start_level = currentLevel;
+            updateRoute();
+        });
+
+    const destinationMarker = new maplibregl.Marker({
+        draggable: true,
+        color: 'red'
+    })
+        .setLngLat(destination)
+        .addTo(map)
+        .on('dragend', async () => {
+            const x = destinationMarker.getLngLat();
+            query.destination = [x.lng, x.lat];
+            query.destination_level = currentLevel;
+            updateRoute();
+        });
+
+    let popup = null;
+    map.on('contextmenu', (e) => {
+        if (popup != null) {
+            popup.remove();
+        }
+        popup = new maplibregl.Popup({
+            anchor: 'top-left'
+        });
+        const x = e.lngLat;
+
+        const actionsDiv = document.createElement('div');
+        const setStart = document.createElement('a');
+        setStart.classList.add('context');
+        setStart.href = '#';
+        setStart.innerText = "start";
+        setStart.onclick = (e) => {
+            startMarker.setLngLat(x);
+            query.start = [x.lng, x.lat];
+            query.start_level = currentLevel;
+            popup.remove();
+            updateRoute();
+        };
+        actionsDiv.appendChild(setStart);
+
+        const setDest = document.createElement('a');
+        setDest.classList.add('context');
+        setDest.href = '#';
+        setDest.innerText = "destination";
+        setDest.onclick = (e) => {
+            destinationMarker.setLngLat(x);
+            query.destination = [x.lng, x.lat];
+            query.destination_level = currentLevel;
+            popup.remove();
+            updateRoute();
+        };
+        actionsDiv.appendChild(setDest);
+
+        popup
+            .setLngLat(x)
+            .setDOMContent(actionsDiv)
+            .addTo(map);
+    });
+</script>
+</body>
 </html>
