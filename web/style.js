@@ -89,7 +89,7 @@ export const style = (map, level) => {
             }
         },
         "glyphs": "/glyphs/{fontstack}/{range}.pbf",
-        "sprite": "http://localhost:8000/sprite",
+        "sprite": `${window.location.origin}/sprite`,
         "layers": [
             {
                 "id": "background",
