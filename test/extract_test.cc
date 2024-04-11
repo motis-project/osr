@@ -22,4 +22,12 @@ TEST(extract, wa) {
   osr::extract("test/map.osm", "/tmp/osr_test");
 
   auto w = osr::ways{"/tmp/osr_test", cista::mmap::protection::READ};
+
+  auto const n = w.find_node_idx(osm_node_idx_t{528944});
+  auto const rhoenring = w.find_way(osm_way_idx_t{120682496});
+  auto const arheilger = w.find_way(osm_way_idx_t{1068971150});
+
+  auto const is_restricted =
+      w.is_turn_restricted(n.value(), rhoenring.value(), arheilger.value());
+  EXPECT_TRUE(is_restricted);
 }

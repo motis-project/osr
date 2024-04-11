@@ -11,6 +11,8 @@
 
 #include "osmium/osm/way.hpp"
 
+#include "utl/equal_ranges_linear.h"
+#include "utl/helpers/algorithm.h"
 #include "utl/progress_tracker.h"
 #include "utl/timer.h"
 #include "utl/verify.h"
@@ -46,6 +48,16 @@ constexpr auto const kLevelBits = cista::constexpr_trailing_zeros(
     cista::next_power_of_two(to_idx(to_level(kMaxLevel))));
 
 static_assert(kLevelBits == 5U);
+
+struct resolved_restriction {
+  way_idx_t from_, to_;
+  node_idx_t via_;
+};
+
+struct restriction {
+  CISTA_FRIEND_COMPARABLE(restriction)
+  way_idx_t from_, to_;
+};
 
 enum node_type : std::uint8_t {
   kEntry,
@@ -136,7 +148,11 @@ struct ways {
             cista::paged<mm_vec<std::uint16_t>>{
                 mm_vec<std::uint16_t>{mm("node_in_way_idx_data.bin")}},
             mm_vec<cista::page<std::uint64_t>>{
-                mm("node_in_way_idx_index.bin")}} {}
+                mm("node_in_way_idx_index.bin")}},
+        node_is_restricted_{mm_vec<std::uint64_t>{mm("node_restricted.bin")}},
+        node_restrictions_{
+            mm_vec<restriction>{mm("node_restrictions_data.bin")},
+            mm_vec<std::uint32_t>{mm("node_restrictions_index.bin")}} {}
 
   void lock() const {
     auto const timer = utl::scoped_timer{"lock"};
@@ -161,6 +177,22 @@ struct ways {
     mlock(node_in_way_idx_.idx_.mmap_.data(), node_ways_.idx_.mmap_.size());
   }
 
+  void add_restriction(std::vector<resolved_restriction>& rs) {
+    using it_t = std::vector<resolved_restriction>::iterator;
+    utl::sort(rs, [](auto&& a, auto&& b) { return a.via_ < b.via_; });
+    utl::equal_ranges_linear(
+        begin(rs), end(rs), [](auto&& a, auto&& b) { return a.via_ == b.via_; },
+        [&](it_t const& lb, it_t const& ub) {
+          auto const range = std::span{lb, ub};
+          node_restrictions_.resize(to_idx(range.front().via_) + 1U);
+          node_is_restricted_.set(range.front().via_, true);
+          for (auto const& x : range) {
+            node_restrictions_[x.via_].push_back(restriction{x.from_, x.to_});
+          }
+        });
+    node_restrictions_.resize(node_to_osm_.size());
+  }
+
   void connect_ways() {
     auto pt = utl::get_active_progress_tracker_or_activate("osr");
 
@@ -178,6 +210,7 @@ struct ways {
       });
       node_ways_.resize(to_idx(node_idx));
       node_in_way_idx_.resize(to_idx(node_idx));
+      node_is_restricted_.resize(to_idx(node_idx));
     }
 
     // Build edges.
@@ -224,6 +257,26 @@ struct ways {
     }
   }
 
+  void mark_multi_level_nodes() {
+    for (auto i = node_idx_t{0U}; i != n_nodes(); ++i) {
+      auto const ref = way_properties_[node_ways_[i][0]].get_level();
+      for (auto j = 1U; j < node_ways_[i].size(); ++j) {
+        if (ref != way_properties_[node_ways_[i][j]].get_level()) {
+          node_is_restricted_.set(i, true);
+          break;
+        }
+      }
+    }
+  }
+
+  std::optional<way_idx_t> find_way(osm_way_idx_t const i) {
+    auto const it = std::lower_bound(begin(way_osm_idx_), end(way_osm_idx_), i);
+    return it != end(way_osm_idx_) && *it == i
+               ? std::optional{way_idx_t{
+                     std::distance(begin(way_osm_idx_), it)}}
+               : std::nullopt;
+  }
+
   std::optional<node_idx_t> find_node_idx(osm_node_idx_t const i) const {
     auto const it = std::lower_bound(begin(node_to_osm_), end(node_to_osm_), i,
                                      [](auto&& a, auto&& b) { return a < b; });
@@ -257,6 +310,18 @@ struct ways {
                     osm_idx, way, way_osm_idx_[way]);
   }
 
+  bool is_turn_restricted(node_idx_t const n,
+                          way_idx_t const from,
+                          way_idx_t const to) const {
+    if (!node_is_restricted_[n]) {
+      return false;
+    }
+    auto const r = node_restrictions_[n];
+    auto const level_change =
+        way_properties_[from].get_level() != way_properties_[to].get_level();
+    return level_change || utl::find(r, restriction{from, to}) != end(r);
+  }
+
   cista::mmap mm(char const* file) {
     return cista::mmap{(p_ / file).generic_string().c_str(), mode_};
   }
@@ -277,6 +342,8 @@ struct ways {
   mm_paged_vecvec<node_idx_t, way_idx_t> node_ways_;
   mm_paged_vecvec<node_idx_t, std::uint16_t> node_in_way_idx_;
   multi_counter node_way_counter_;
+  mm_bitvec<node_idx_t> node_is_restricted_;
+  mm_vecvec<node_idx_t, restriction> node_restrictions_;
 };
 
 }  // namespace osr

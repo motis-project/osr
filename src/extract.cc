@@ -33,6 +33,17 @@ using namespace std::string_view_literals;
 
 namespace osr {
 
+struct osm_restriction {
+  bool valid() const {
+    return from_ != osm_way_idx_t::invalid() &&
+           to_ != osm_way_idx_t::invalid() && via_ != osm_node_idx_t::invalid();
+  }
+
+  osm_way_idx_t from_{osm_way_idx_t::invalid()};
+  osm_way_idx_t to_{osm_way_idx_t::invalid()};
+  osm_node_idx_t via_{osm_node_idx_t::invalid()};
+};
+
 bool is_number(std::string_view s) {
   return utl::all_of(s, [](char const c) { return std::isdigit(c); });
 }
@@ -149,7 +160,9 @@ struct way_handler : public osm::handler::Handler {
 };
 
 struct node_handler : public osm::handler::Handler {
-  node_handler(ways& w) : w_{w} { w_.node_properties_.resize(w_.n_nodes()); }
+  node_handler(ways& w, std::vector<resolved_restriction>& r) : r_{r}, w_{w} {
+    w_.node_properties_.resize(w_.n_nodes());
+  }
 
   void node(osm::Node const& n) {
     if (auto const node_idx = w_.find_node_idx(osm_node_idx_t{n.id()});
@@ -157,6 +170,42 @@ struct node_handler : public osm::handler::Handler {
       w_.node_properties_[*node_idx] = get_node_properties(n);
     }
   }
+
+  void relation(osm::Relation const& r) {
+    if (r.tags()["type"] != "restriction"sv) {
+      return;
+    }
+
+    auto x = osm_restriction{};
+    for (auto const& m : r.members()) {
+      switch (cista::hash(std::string_view{m.role()})) {
+        case cista::hash("to"): x.to_ = osm_way_idx_t{m.positive_ref()}; break;
+        case cista::hash("from"):
+          x.from_ = osm_way_idx_t{m.positive_ref()};
+          break;
+        case cista::hash("via"):
+          x.via_ = osm_node_idx_t{m.positive_ref()};
+          break;
+      }
+    }
+    if (!x.valid()) {
+      return;
+    }
+
+    auto const from = w_.find_way(x.from_);
+    auto const to = w_.find_way(x.to_);
+    auto const via = w_.find_node_idx(x.via_);
+    if (!from.has_value() || !to.has_value() || !via.has_value()) {
+      return;
+    }
+
+    auto const l = std::scoped_lock{r_mutex_};
+    r_.emplace_back(
+        resolved_restriction{.from_ = *from, .to_ = *to, .via_ = *via});
+  }
+
+  std::vector<resolved_restriction>& r_;
+  std::mutex r_mutex_;
 
   ways& w_;
 };
@@ -304,6 +353,7 @@ void extract(fs::path const& in, fs::path const& out) {
 
   w.connect_ways();
 
+  auto r = std::vector<resolved_restriction>{};
   {
     pt->status("Load OSM / Node Properties")
         .in_high(file_size)
@@ -314,13 +364,14 @@ void extract(fs::path const& in, fs::path const& out) {
     auto pool =
         osmium::thread::Pool{static_cast<int>(thread_count), thread_count * 8U};
 
-    auto reader = osm_io::Reader{input_file, pool, osm_eb::node,
-                                 osmium::io::read_meta::no};
+    auto reader =
+        osm_io::Reader{input_file, pool, osm_eb::node | osm_eb::relation,
+                       osmium::io::read_meta::no};
     auto seq_reader = tiles::sequential_until_finish<osm_mem::Buffer>{[&] {
       pt->update(reader.offset());
       return reader.read();
     }};
-    auto h = node_handler{w};
+    auto h = node_handler{w, r};
     auto has_exception = std::atomic_bool{false};
     auto workers = std::vector<std::future<void>>{};
     workers.reserve(thread_count / 2U);
@@ -360,6 +411,9 @@ void extract(fs::path const& in, fs::path const& out) {
 
     reader.close();
   }
+
+  w.add_restriction(r);
+  w.mark_multi_level_nodes();
 }
 
 }  // namespace osr

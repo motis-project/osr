@@ -30,6 +30,9 @@ using mm_vec_map = cista::basic_mmap_vec<V, K>;
 template <typename T>
 using mm_vec = cista::basic_mmap_vec<T, std::uint64_t>;
 
+template <typename K>
+using mm_bitvec = cista::basic_bitvec<mm_vec<std::uint64_t>, K>;
+
 template <typename K, typename V, typename SizeType = cista::base_t<K>>
 using mm_vecvec = cista::basic_vecvec<K, mm_vec<V>, mm_vec<SizeType>>;
 
