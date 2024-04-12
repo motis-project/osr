@@ -56,7 +56,7 @@ struct resolved_restriction {
 
 struct restriction {
   CISTA_FRIEND_COMPARABLE(restriction)
-  way_idx_t from_, to_;
+  std::uint8_t from_, to_;
 };
 
 enum node_type : std::uint8_t {
@@ -177,6 +177,16 @@ struct ways {
     mlock(node_in_way_idx_.idx_.mmap_.data(), node_ways_.idx_.mmap_.size());
   }
 
+  way_pos_t get_way_pos(node_idx_t const node, way_idx_t const way) const {
+    auto const ways = node_ways_[node];
+    for (auto i = 0U; i != ways.size(); ++i) {
+      if (ways[i] == way) {
+        return i;
+      }
+    }
+    return 0U;
+  }
+
   void add_restriction(std::vector<resolved_restriction>& rs) {
     using it_t = std::vector<resolved_restriction>::iterator;
     utl::sort(rs, [](auto&& a, auto&& b) { return a.via_ < b.via_; });
@@ -187,7 +197,8 @@ struct ways {
           node_restrictions_.resize(to_idx(range.front().via_) + 1U);
           node_is_restricted_.set(range.front().via_, true);
           for (auto const& x : range) {
-            node_restrictions_[x.via_].push_back(restriction{x.from_, x.to_});
+            node_restrictions_[x.via_].push_back(restriction{
+                get_way_pos(x.via_, x.from_), get_way_pos(x.via_, x.to_)});
           }
         });
     node_restrictions_.resize(node_to_osm_.size());
@@ -310,16 +321,22 @@ struct ways {
                     osm_idx, way, way_osm_idx_[way]);
   }
 
-  bool is_turn_restricted(node_idx_t const n,
-                          way_idx_t const from,
-                          way_idx_t const to) const {
+  bool is_restricted(node_idx_t const n,
+                     std::uint8_t const from,
+                     std::uint8_t const to) const {
     if (!node_is_restricted_[n]) {
       return false;
     }
-    auto const r = node_restrictions_[n];
+    
     auto const level_change =
-        way_properties_[from].get_level() != way_properties_[to].get_level();
-    return level_change || utl::find(r, restriction{from, to}) != end(r);
+        way_properties_[node_ways_[n][from]].get_level() !=
+        way_properties_[node_ways_[n][to]].get_level();
+    if (level_change) {
+      return true;
+    }
+
+    auto const r = node_restrictions_[n];
+    return utl::find(r, restriction{from, to}) != end(r);
   }
 
   cista::mmap mm(char const* file) {

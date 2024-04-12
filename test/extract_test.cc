@@ -28,6 +28,6 @@ TEST(extract, wa) {
   auto const arheilger = w.find_way(osm_way_idx_t{1068971150});
 
   auto const is_restricted =
-      w.is_turn_restricted(n.value(), rhoenring.value(), arheilger.value());
+      w.is_restricted(n.value(), rhoenring.value(), arheilger.value());
   EXPECT_TRUE(is_restricted);
 }

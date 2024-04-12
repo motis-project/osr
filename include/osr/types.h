@@ -76,4 +76,6 @@ using level_t = cista::strong<std::uint8_t, struct level_>;
 
 using distance_t = std::uint16_t;
 
+using way_pos_t = std::uint8_t;
+
 }  // namespace osr

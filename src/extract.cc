@@ -21,6 +21,7 @@
 
 #include "osr/profiles.h"
 #include "osr/ways.h"
+#include "utl/enumerate.h"
 
 namespace osm = osmium;
 namespace osm_io = osmium::io;
@@ -172,7 +173,8 @@ struct node_handler : public osm::handler::Handler {
   }
 
   void relation(osm::Relation const& r) {
-    if (r.tags()["type"] != "restriction"sv) {
+    auto const type = r.tags()["type"];
+    if (type == nullptr || type != "restriction"sv) {
       return;
     }
 

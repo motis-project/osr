@@ -76,7 +76,7 @@ struct geojson_writer {
   std::string finish(dijkstra_state const* s) {
     for (auto const n : nodes_) {
       auto const p = w_.node_properties_[n];
-      auto const e = s == nullptr ? std::nullopt : s->get(n);
+      //      auto const e = s == nullptr ? std::nullopt : s->get(n);
       features_.emplace_back(boost::json::value{
           {"type", "Feature"},
           {"properties",
@@ -84,10 +84,10 @@ struct geojson_writer {
             {"car", p.is_car_accessible()},
             {"bike", p.is_bike_accessible()},
             {"foot", p.is_walk_accessible()},
-            {"pred", to_idx(e && e->pred_ != node_idx_t::invalid()
-                                ? w_.node_to_osm_[e->pred_]
-                                : osm_node_idx_t{0U})},
-            {"dist", e ? e->dist_ : -1},
+            //            {"pred", to_idx(e && e->pred_ != node_idx_t::invalid()
+            //                                ? w_.node_to_osm_[e->pred_]
+            //                                : osm_node_idx_t{0U})},
+            //            {"dist", e ? e->dist_ : -1},
             {"is_entrance", static_cast<bool>(p.is_entrance_)},
             {"is_elevator", static_cast<bool>(p.is_elevator_)}}},
           {"geometry",
