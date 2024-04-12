@@ -179,7 +179,7 @@ struct ways {
 
   way_pos_t get_way_pos(node_idx_t const node, way_idx_t const way) const {
     auto const ways = node_ways_[node];
-    for (auto i = 0U; i != ways.size(); ++i) {
+    for (auto i = way_pos_t{0U}; i != ways.size(); ++i) {
       if (ways[i] == way) {
         return i;
       }
@@ -327,7 +327,7 @@ struct ways {
     if (!node_is_restricted_[n]) {
       return false;
     }
-    
+
     auto const level_change =
         way_properties_[node_ways_[n][from]].get_level() !=
         way_properties_[node_ways_[n][to]].get_level();
