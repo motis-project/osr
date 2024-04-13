@@ -1,5 +1,7 @@
 #include "boost/json.hpp"
 
+#include "fmt/ranges.h"
+
 #include "utl/pairwise.h"
 #include "utl/pipes/transform.h"
 #include "utl/pipes/vec.h"
@@ -76,20 +78,67 @@ struct geojson_writer {
   std::string finish(dijkstra_state const* s) {
     for (auto const n : nodes_) {
       auto const p = w_.node_properties_[n];
-      //      auto const e = s == nullptr ? std::nullopt : s->get(n);
+      auto properties = boost::json::object{
+          {"osm_node_id", to_idx(w_.node_to_osm_[n])},
+          {"car", p.is_car_accessible()},
+          {"bike", p.is_bike_accessible()},
+          {"foot", p.is_walk_accessible()},
+          {"is_restricted", w_.node_is_restricted_[n]},
+          {"is_entrance", static_cast<bool>(p.is_entrance_)},
+          {"is_elevator", static_cast<bool>(p.is_elevator_)},
+          {"ways", fmt::format("{}", w_.node_ways_[n] |
+                                         std::views::transform([&](auto&& w) {
+                                           return w_.way_osm_idx_[w];
+                                         }))}};
+
+      if (w_.node_is_restricted_[n]) {
+        auto const e = s->restricted_dist_.find(n);
+        if (e != end(s->restricted_dist_)) {
+          auto ss = std::stringstream{};
+          ss << "[";
+          for (auto const [i, l] :
+               utl::enumerate(utl::zip(e->second.dist_, e->second.pred_,
+                                       e->second.pred_way_pos_))) {
+            auto const [dist, pred, pred_way_pos] = l;
+            if (dist != kInfeasible) {
+              ss << "(pred="
+                 << (pred == node_idx_t::invalid() ? osm_node_idx_t{0U}
+                                                   : w_.node_to_osm_[pred])
+                 << ", pred_way="
+                 << (pred == node_idx_t::invalid()
+                         ? osm_way_idx_t{0U}
+                         : w_.way_osm_idx_[w_.node_ways_[pred][pred_way_pos]])
+                 << ", way=" << w_.way_osm_idx_[w_.node_ways_[n][i]]
+                 << ", dist=" << dist << ") ";
+            }
+          }
+          ss << "]";
+          properties.emplace("label", ss.str());
+        } else {
+          properties.emplace("label", "unreachable");
+        }
+      } else {
+        auto const e = s->dist_.find(n);
+        if (e != end(s->dist_)) {
+          auto ss = std::stringstream{};
+          ss << "dist=" << e->second.dist_ << ", pred="
+             << (e->second.pred_ == node_idx_t::invalid()
+                     ? osm_node_idx_t{0U}
+                     : w_.node_to_osm_[e->second.pred_])
+             << ", pred_way="
+             << (e->second.pred_ == node_idx_t::invalid()
+                     ? osm_way_idx_t{0U}
+                     : w_.way_osm_idx_[w_.node_ways_[e->second.pred_]
+                                                    [e->second.pred_way_pos_]]);
+          properties.emplace("label", ss.str());
+        } else {
+          properties.emplace("label", "unreachable");
+        }
+      }
+
       features_.emplace_back(boost::json::value{
           {"type", "Feature"},
-          {"properties",
-           {{"osm_node_id", to_idx(w_.node_to_osm_[n])},
-            {"car", p.is_car_accessible()},
-            {"bike", p.is_bike_accessible()},
-            {"foot", p.is_walk_accessible()},
-            //            {"pred", to_idx(e && e->pred_ != node_idx_t::invalid()
-            //                                ? w_.node_to_osm_[e->pred_]
-            //                                : osm_node_idx_t{0U})},
-            //            {"dist", e ? e->dist_ : -1},
-            {"is_entrance", static_cast<bool>(p.is_entrance_)},
-            {"is_elevator", static_cast<bool>(p.is_elevator_)}}},
+          {"properties", properties},
           {"geometry",
            {{"type", "Point"},
             {"coordinates", to_array(w_.get_node_pos(n))}}}});

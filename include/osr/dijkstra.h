@@ -12,9 +12,9 @@
 
 namespace osr {
 
-#define OSR_DEBUG_DIJKSTRA
-#ifdef OSR_DEBUG_DIJSTRA
-#define trace(...) fmt::println(__VA_ARGS__)
+// #define OSR_DEBUG_DIJKSTRA
+#ifdef OSR_DEBUG_DIJKSTRA
+#define trace(...) fmt::println(std::cerr, __VA_ARGS__)
 #else
 #define trace(...)
 #endif
@@ -61,6 +61,7 @@ struct dijkstra_state {
     pq_.clear();
     pq_.n_buckets(max_dist);
     dist_.clear();
+    restricted_dist_.clear();
   }
 
   void add_start(ways const& w,
@@ -71,7 +72,7 @@ struct dijkstra_state {
         update_dist(start, w.get_way_pos(start, way), node_idx_t::invalid(), 0,
                     start_dist, w.node_is_restricted_[start]);
     if (is_updated) {
-      pq_.push(label{start, start_dist, w.get_way_pos(start, way)});
+      push(w, {start, start_dist, w.get_way_pos(start, way)});
     }
   }
 
@@ -157,6 +158,14 @@ struct dijkstra_state {
     }
   }
 
+  void push(ways const& w, label const& l) {
+    trace("    => INSERT (node={}, dist={}, restricted={}, way_pos={}, way={})",
+          w.node_to_osm_[l.node_], l.dist_, w.node_is_restricted_[l.node_],
+          l.way_pos_, w.way_osm_idx_[w.node_ways_[l.node_][l.way_pos_]]);
+    CISTA_UNUSED_PARAM(w);
+    pq_.push(l);
+  }
+
   struct hash {
     using is_avalanching = void;
     auto operator()(node_idx_t const& obj) const noexcept -> uint64_t {
@@ -187,19 +196,26 @@ void dijkstra(ways const& w,
     }
 
     trace("EXTRACT (node={}, dist={}, restricted={}, way_pos={}, way={})",
-          w.node_to_osm_[l.node()], l.dist(), l.is_restricted(),
-          l.pred_way_pos());
+          w.node_to_osm_[l.node_], l.dist_, n_restricted, l.way_pos_,
+          w.way_osm_idx_[w.node_ways_[l.node_][l.way_pos_]]);
 
     auto way_pos = way_pos_t{0U};
     for (auto const [way, i] : utl::zip_unchecked(
              w.node_ways_[l.node_], w.node_in_way_idx_[l.node_])) {
       auto const expand = [&](std::uint16_t const from, std::uint16_t const to,
                               direction const dir) {
+        trace("  way={}: from={} -> to={} (node={} -> node={})",
+              w.way_osm_idx_[way], from, to,
+              w.node_to_osm_[w.way_nodes_[way][from]],
+              w.node_to_osm_[w.way_nodes_[way][to]]);
+
         if (weight_fn(w.way_properties_[way], dir, 0U) == kInfeasible) {
+          trace("    => INFEASIBLE WAY");
           return;
         }
 
         if (n_restricted && w.is_restricted(l.node_, l.way_pos_, way_pos)) {
+          trace("    => RESTRICTED");
           return;
         }
 
@@ -207,27 +223,33 @@ void dijkstra(ways const& w,
         auto const dist = w.way_node_dist_[way][dist_idx];
         auto const edge_weight = weight_fn(w.way_properties_[way], dir, dist);
         if (edge_weight == kInfeasible) {
+          trace("    => INFEASIBLE WAY");
           return;
         }
 
         auto const target_node = w.way_nodes_[way][to];
         auto const node_weight = weight_fn(w.node_properties_[target_node]);
         if (node_weight == kInfeasible) {
+          trace("    => INFEASIBLE TARGET NODE");
           return;
         }
 
         auto const new_dist = l.dist_ + edge_weight + node_weight;
         if (new_dist >= max_dist) {
+          trace("    => MAX DIST REACHED");
           return;
         }
 
+        auto const target_node_way_pos = w.get_way_pos(target_node, way);
         auto const is_updated = s.update_dist(
-            target_node, way_pos, l.node_, l.way_pos_,
+            target_node, target_node_way_pos, l.node_, l.way_pos_,
             static_cast<dist_t>(new_dist), w.node_is_restricted_[target_node]);
         if (is_updated) {
-          s.pq_.push(label{.node_ = target_node,
-                           .dist_ = static_cast<dist_t>(new_dist),
-                           .way_pos_ = way_pos});
+          s.push(w, {.node_ = target_node,
+                     .dist_ = static_cast<dist_t>(new_dist),
+                     .way_pos_ = target_node_way_pos});
+        } else {
+          trace("    => NO UPDATE");
         }
       };
 

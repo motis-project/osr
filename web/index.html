@@ -393,7 +393,12 @@
                     ['==', '$type', 'Point']
                 ],
                 'paint': {
-                    'circle-color': '#11ffaf',
+                    'circle-color': [
+                        'match',
+                        ['get', 'label'],
+                        'unreachable', '#ff1150',
+                        '#11ffaf'
+                    ],
                     'circle-radius': 6,
                 }
             });

@@ -40,38 +40,53 @@ struct connecting_way {
 };
 
 template <typename EdgeWeightFn>
+connecting_way find_connecting_way(ways const& w,
+                                   node_idx_t const from,
+                                   node_idx_t const to,
+                                   dist_t const expected_dist,
+                                   EdgeWeightFn&& edge_weight) {
+  auto const from_ways = utl::zip(w.node_ways_[from], w.node_in_way_idx_[from]);
+  auto const to_ways = utl::zip(w.node_ways_[to], w.node_in_way_idx_[to]);
+  auto conn = std::optional<connecting_way>{};
+  utl::power_set_intersection(
+      from_ways, to_ways,
+      [&](auto&& a, auto&& b) {
+        auto const& [a_way, a_idx] = a;
+        auto const& [b_way, b_idx] = b;
+        auto const is_loop = w.is_loop(a_way) &&
+                             static_cast<unsigned>(std::abs(a_idx - b_idx)) ==
+                                 w.way_nodes_[a_way].size() - 2U;
+        auto const is_neighbor = std::abs(a_idx - b_idx) == 1;
+        auto const distance =
+            w.way_node_dist_[a_way][is_loop ? std::max(a_idx, b_idx)
+                                            : std::min(a_idx, b_idx)];
+        auto const dist =
+            edge_weight(w.way_properties_[a_way],
+                        ((a_idx > b_idx) ^ is_loop) ? direction::kForward
+                                                    : direction::kBackward,
+                        distance);
+        if (expected_dist == dist && (is_neighbor || is_loop)) {
+          conn = {a_way, a_idx, b_idx, is_loop, distance};
+        }
+      },
+      [](auto&& a, auto&& b) {
+        auto const& [a_way, _0] = a;
+        auto const& [b_way, _1] = b;
+        return a_way < b_way;
+      });
+  utl::verify(conn.has_value(), "no connecting way found");
+  return *conn;
+}
+
+template <typename EdgeWeightFn>
 double add_path(ways const& w,
-                dijkstra_state const& s,
                 node_idx_t const from,
-                way_pos_t const from_way_pos,
                 node_idx_t const to,
-                way_pos_t const to_way_pos,
+                dist_t const expected_dist,
                 std::vector<path::segment>& path,
                 EdgeWeightFn&& edge_weight) {
-  utl::verify(w.node_ways_[from][from_way_pos] == w.node_ways_[to][to_way_pos],
-              "ways don't match");
-
-  auto const way = w.node_ways_[from][from_way_pos];
-  auto const from_idx = w.node_in_way_idx_[from][from_way_pos];
-  auto const to_idx = w.node_in_way_idx_[to][to_way_pos];
-  auto const is_loop =
-      w.is_loop(way) && static_cast<unsigned>(std::abs(from_idx - to_idx)) ==
-                            w.way_nodes_[way].size() - 2U;
-  auto const distance =
-      w.way_node_dist_[way][is_loop ? std::max(from_idx, to_idx)
-                                    : std::min(from_idx, to_idx)];
-  auto const is_neighbor = std::abs(from_idx - to_idx) == 1;
-
-  auto const dist =
-      edge_weight(w.way_properties_[way],
-                  ((from_idx > to_idx) ^ is_loop) ? direction::kForward
-                                                  : direction::kBackward,
-                  distance);
-  auto const expected =
-      s.get(from, from_way_pos)->dist_ - s.get(to, to_way_pos)->dist_;
-  utl::verify(dist == expected, "dist does not match");
-  utl::verify(is_neighbor || is_loop, "not neighbor and not loop");
-
+  auto const& [way, from_idx, to_idx, is_loop, distance] =
+      find_connecting_way(w, from, to, expected_dist, edge_weight);
   auto j = 0U;
   auto active = false;
   auto& segment = path.emplace_back();
@@ -103,6 +118,8 @@ path reconstruct(ways const& w,
                  way_candidate const& start,
                  node_candidate const& dest,
                  EdgeWeightFn&& edge_weight) {
+  (void)(edge_weight);
+
   auto n = dest.node_;
   auto segments = std::vector<path::segment>{
       {.polyline_ = dest.path_,
@@ -110,17 +127,34 @@ path reconstruct(ways const& w,
        .way_ = way_idx_t::invalid()}};
   auto dist = 0.0;
   auto last = n;
-  auto way_pos = w.get_way_pos(n, dest_way);
+  auto way_pos = w.get_way_pos(n, dest_way);  // TODO potentially 2x for loops?
+  trace("RECONSTRUCT: dest_node={}, dest_way={}", w.node_to_osm_[n],
+        w.way_osm_idx_[dest_way]);
+  auto i = 0U;
   while (n != node_idx_t::invalid()) {
-    last = n;
-    auto const& e = s.get(n, way_pos);
-    utl::verify(e.has_value(), "pred not found");
-    if (n == e->pred_) {
+    ++i;
+    if (i > 100) {
       abort();
     }
+
+    last = n;
+    auto const& e = s.get(n, way_pos);
+    utl::verify(e.has_value(), "node={}, way={} not found", w.node_to_osm_[n],
+                w.way_osm_idx_[w.node_ways_[n][way_pos]]);
+    trace(
+        "RECONSTRUCT: node={} [way={}, way_pos={}], pred={} [way={}, "
+        "way_pos={}]",
+        w.node_to_osm_[n], w.way_osm_idx_[w.node_ways_[n][way_pos]], way_pos,
+        (e->pred_ == node_idx_t::invalid() ? osm_node_idx_t{0U}
+                                           : w.node_to_osm_[e->pred_]),
+        (e->pred_ == node_idx_t::invalid()
+             ? osm_way_idx_t{0U}
+             : w.way_osm_idx_[w.node_ways_[e->pred_][e->pred_way_pos_]]),
+        e->pred_way_pos_);
     if (e->pred_ != node_idx_t::invalid()) {
-      dist += add_path(w, s, n, way_pos, e->pred_, e->pred_way_pos_, segments,
-                       edge_weight);
+      auto const expected_dist =
+          e->dist_ - s.get(e->pred_, e->pred_way_pos_)->dist_;
+      dist += add_path(w, n, e->pred_, expected_dist, segments, edge_weight);
     }
     n = e->pred_;
     way_pos = e->pred_way_pos_;
@@ -133,7 +167,7 @@ path reconstruct(ways const& w,
   std::reverse(begin(segments), end(segments));
   return {.time_ = static_cast<dist_t>(
               start_node.weight_ +
-              s.get(n, w.get_way_pos(n, start.way_))->dist_ + dest.weight_),
+              s.get(n, w.get_way_pos(last, start.way_))->dist_ + dest.weight_),
           .dist_ = start_node.dist_to_node_ + dist + dest.dist_to_node_,
           .segments_ = segments};
 }
