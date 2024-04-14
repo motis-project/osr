@@ -57,24 +57,36 @@ connecting_way find_connecting_way(ways const& w,
                              static_cast<unsigned>(std::abs(a_idx - b_idx)) ==
                                  w.way_nodes_[a_way].size() - 2U;
         auto const is_neighbor = std::abs(a_idx - b_idx) == 1;
-        auto const distance =
+        auto const distance = static_cast<dist_t>(
             w.way_node_dist_[a_way][is_loop ? std::max(a_idx, b_idx)
-                                            : std::min(a_idx, b_idx)];
+                                            : std::min(a_idx, b_idx)]);
         auto const dist =
             edge_weight(w.way_properties_[a_way],
                         ((a_idx > b_idx) ^ is_loop) ? direction::kForward
                                                     : direction::kBackward,
-                        distance);
+                        distance) +
+            edge_weight(w.node_properties_[from]);
         if (expected_dist == dist && (is_neighbor || is_loop)) {
           conn = {a_way, a_idx, b_idx, is_loop, distance};
+          return;
         }
+        std::cout << "no match: expected=" << expected_dist
+                  << " vs dist=" << dist << ", is_neighbor=" << is_neighbor
+                  << ", is_loop=" << is_loop << ", edge_cost="
+                  << w.way_node_dist_[a_way][is_loop ? std::max(a_idx, b_idx)
+                                                     : std::min(a_idx, b_idx)]
+                  << ", node_cost[from]="
+                  << edge_weight(w.node_properties_[from])
+                  << ", node_cost[to]=" << edge_weight(w.node_properties_[to])
+                  << "\n";
       },
       [](auto&& a, auto&& b) {
         auto const& [a_way, _0] = a;
         auto const& [b_way, _1] = b;
         return a_way < b_way;
       });
-  utl::verify(conn.has_value(), "no connecting way found");
+  utl::verify(conn.has_value(), "no connecting way {} -> {} found",
+              w.node_to_osm_[from], w.node_to_osm_[to]);
   return *conn;
 }
 
@@ -101,7 +113,7 @@ double add_path(ways const& w,
       active = true;
     }
     if (active) {
-      segment.polyline_.emplace_back(coord);
+      //      segment.polyline_.emplace_back(coord);
       if (w.node_to_osm_[w.way_nodes_[way][to_idx]] == osm_idx) {
         break;
       }
@@ -127,7 +139,7 @@ path reconstruct(ways const& w,
        .way_ = way_idx_t::invalid()}};
   auto dist = 0.0;
   auto last = n;
-  auto way_pos = w.get_way_pos(n, dest_way);  // TODO potentially 2x for loops?
+  auto way_pos = w.get_way_pos(n, dest_way);
   trace("RECONSTRUCT: dest_node={}, dest_way={}", w.node_to_osm_[n],
         w.way_osm_idx_[dest_way]);
   auto i = 0U;
@@ -161,9 +173,9 @@ path reconstruct(ways const& w,
   }
   auto const& start_node =
       last == start.left_.node_ ? start.left_ : start.right_;
-  segments.push_back({.polyline_ = start_node.path_,
-                      .level_ = w.way_properties_[start.way_].get_level(),
-                      .way_ = way_idx_t::invalid()});
+  //  segments.push_back({.polyline_ = start_node.path_,
+  //                      .level_ = w.way_properties_[start.way_].get_level(),
+  //                      .way_ = way_idx_t::invalid()});
   std::reverse(begin(segments), end(segments));
   return {.time_ = static_cast<dist_t>(
               start_node.weight_ +
@@ -182,9 +194,14 @@ std::tuple<way_candidate const*, node_candidate const*, dist_t> best_candidate(
     auto best = static_cast<node_candidate const*>(nullptr);
 
     for (auto const x : {&dest.left_, &dest.right_}) {
+      trace("DEST: dist={}, node={}, way={}", x->weight_,
+            x->node_ == node_idx_t::invalid() ? osm_node_idx_t{0U}
+                                              : w.node_to_osm_[x->node_],
+            w.way_osm_idx_[dest.way_]);
       if (x->valid() && x->dist_to_node_ < max_dist) {
-        auto const target_dist =
-            s.get_dist(x->node_, w.get_way_pos(x->node_, dest.way_));
+        auto const [target_dist, pred_node, pred_way_pos] =
+            s.get_best_dist(x->node_);
+        trace("  target_dist={}", target_dist);
         if (target_dist == kInfeasible) {
           continue;
         }
@@ -222,10 +239,10 @@ std::optional<path> route(ways const& w,
   s.reset(max_dist);
 
   for (auto const& start : from_match) {
-    if (start.left_.valid()) {
+    if (start.left_.valid() && start.left_.weight_ < max_dist) {
       s.add_start(w, start.way_, start.left_.node_, start.left_.weight_);
     }
-    if (start.right_.valid()) {
+    if (start.right_.valid() && start.right_.weight_ < max_dist) {
       s.add_start(w, start.way_, start.right_.node_, start.right_.weight_);
     }
 

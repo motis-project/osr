@@ -12,13 +12,6 @@
 
 namespace osr {
 
-// #define OSR_DEBUG_DIJKSTRA
-#ifdef OSR_DEBUG_DIJKSTRA
-#define trace(...) fmt::println(std::cerr, __VA_ARGS__)
-#else
-#define trace(...)
-#endif
-
 using dist_t = std::uint16_t;
 
 constexpr auto const kInfeasible = std::numeric_limits<dist_t>::max();
@@ -59,7 +52,7 @@ struct get_bucket {
 struct dijkstra_state {
   void reset(dist_t const max_dist) {
     pq_.clear();
-    pq_.n_buckets(max_dist);
+    pq_.n_buckets(max_dist + 1U);
     dist_.clear();
     restricted_dist_.clear();
   }

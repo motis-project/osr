@@ -101,7 +101,8 @@ way_properties get_way_properties(tags const& t) {
       .is_oneway_bike_ = t.oneway_ && !t.not_oneway_bike_,
       .speed_limit_ = get_speed_limit(t),
       .level_ = to_idx(t.level_),
-      .is_elevator_ = t.is_elevator_};
+      .is_elevator_ = t.is_elevator_,
+      .is_steps_ = (t.highway_ == "steps"sv)};
 }
 
 node_properties get_node_properties(osm::Node const& n) {

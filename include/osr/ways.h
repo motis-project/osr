@@ -24,6 +24,13 @@
 
 namespace osr {
 
+#define OSR_DEBUG_DIJKSTRA
+#ifdef OSR_DEBUG_DIJKSTRA
+#define trace(...) fmt::println(std::cerr, __VA_ARGS__)
+#else
+#define trace(...)
+#endif
+
 enum speed_limit : std::uint8_t {
   kmh_10,
   kmh_30,
@@ -108,6 +115,7 @@ struct way_properties {
 
   std::uint8_t level_ : 5;
   std::uint8_t is_elevator_ : 1;
+  std::uint8_t is_steps_ : 1;
 };
 
 static_assert(sizeof(way_properties) == 2);
@@ -184,6 +192,7 @@ struct ways {
         return i;
       }
     }
+    trace("node {} not found in way {}", node_to_osm_[node], way_osm_idx_[way]);
     return 0U;
   }
 
@@ -328,9 +337,12 @@ struct ways {
       return false;
     }
 
-    auto const level_change =
-        way_properties_[node_ways_[n][from]].get_level() !=
-        way_properties_[node_ways_[n][to]].get_level();
+    auto const from_prop = way_properties_[node_ways_[n][from]];
+    auto const to_prop = way_properties_[node_ways_[n][to]];
+    auto const node_prop = node_properties_[n];
+    auto const level_change = !node_prop.is_elevator_ &&
+                              !(to_prop.is_elevator_ || to_prop.is_steps_) &&
+                              from_prop.get_level() != to_prop.get_level();
     if (level_change) {
       return true;
     }
