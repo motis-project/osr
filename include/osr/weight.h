@@ -10,6 +10,9 @@ struct foot {
   struct node {
     CISTA_FRIEND_COMPARABLE(node)
 
+    static constexpr node invalid() noexcept {
+      return {.n_ = node_idx_t::invalid(), .lvl_{level_t::invalid()}};
+    }
     constexpr node_idx_t get_node() const noexcept { return n_; }
 
     node_idx_t n_;
@@ -23,9 +26,11 @@ struct foot {
                  : std::optional{node{pred_, pred_lvl_}};
     }
     constexpr cost_t cost() const noexcept { return cost_; }
-    constexpr bool update(cost_t const c) noexcept {
+    constexpr bool update(cost_t const c, node const pred) noexcept {
       if (c < cost_) {
         cost_ = c;
+        pred_ = pred.n_;
+        pred_lvl_ = pred.lvl_;
         return true;
       }
       return false;
