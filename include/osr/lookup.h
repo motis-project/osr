@@ -20,7 +20,7 @@ struct node_candidate {
 
   node_idx_t node_{node_idx_t::invalid()};
   double dist_to_node_{0.0};
-  dist_t weight_{0U};
+  cost_t cost_{0U};
   std::vector<geo::latlng> path_{};
 };
 
@@ -90,45 +90,40 @@ struct lookup {
 
   ~lookup() { rtree_free(rtree_); }
 
-  template <typename WeightFn>
-  match_t match(location const& query,
-                bool const reverse,
-                WeightFn&& weight) const {
+  template <typename Profile>
+  match_t match(location const& query, bool const reverse) const {
     auto way_candidates = std::vector<way_candidate>{};
     find(query.pos_, [&](way_idx_t const way) {
       auto const p = ways_.way_properties_[way];
-      if (weight(p, direction::kForward, 0U) != kInfeasible &&
-          (query.lvl_ == level_t::invalid() || p.get_level() == query.lvl_)) {
-        auto d = distance_to_way(query.pos_, ways_.way_polylines_[way]);
-        if (d.dist_to_way_ < 100) {
-          auto& wc = way_candidates.emplace_back(std::move(d));
-          wc.way_ = way;
-          wc.left_ =
-              find_next_node(wc, query, direction::kBackward, reverse, weight);
-          wc.right_ =
-              find_next_node(wc, query, direction::kForward, reverse, weight);
-        }
+      auto d = distance_to_way(query.pos_, ways_.way_polylines_[way]);
+      if (d.dist_to_way_ < Profile::kMaxMatchDistance) {
+        auto& wc = way_candidates.emplace_back(std::move(d));
+        wc.way_ = way;
+        wc.left_ =
+            find_next_node<Profile>(wc, query, direction::kBackward, reverse);
+        wc.right_ =
+            find_next_node<Profile>(wc, query, direction::kForward, reverse);
       }
     });
     utl::sort(way_candidates);
     return way_candidates;
   }
 
-  template <typename EdgeWeightFn>
+  template <typename Profile>
   node_candidate find_next_node(way_candidate const& wc,
                                 location const& query,
                                 direction const dir,
-                                bool const reverse,
-                                EdgeWeightFn&& edge_weight) const {
-    auto const p = ways_.way_properties_[wc.way_];
+                                bool const reverse) const {
+    auto const way_prop = ways_.way_properties_[wc.way_];
     auto const edge_dir = reverse ? opposite(dir) : dir;
-    if (edge_weight(p, edge_dir, 0U) == kInfeasible) {
+    auto const way_cost = Profile::way_cost(way_prop, edge_dir, 0U);
+    if (way_cost == kInfeasible) {
       return node_candidate{};
     }
 
     auto const off_road_length = geo::distance(query.pos_, wc.best_);
     auto c = node_candidate{.dist_to_node_ = off_road_length,
-                            .weight_ = edge_weight(p, edge_dir, 0U),
+                            .cost_ = Profile::way_cost(way_prop, edge_dir, 0U),
                             .path_ = {query.pos_, wc.best_}};
     auto const polyline = ways_.way_polylines_[wc.way_];
     auto const osm_nodes = ways_.way_osm_nodes_[wc.way_];
@@ -139,7 +134,8 @@ struct lookup {
 
                    auto const segment_dist = geo::distance(c.path_.back(), pos);
                    c.dist_to_node_ += segment_dist;
-                   c.weight_ += edge_weight(p, edge_dir, segment_dist);
+                   c.cost_ +=
+                       Profile::way_cost(way_prop, edge_dir, segment_dist);
                    c.path_.push_back(pos);
 
                    auto const way_node = ways_.find_node_idx(osm_node_idx);

@@ -11,6 +11,7 @@
 #include "fmt/core.h"
 
 #include "utl/enumerate.h"
+#include "utl/to_vec.h"
 
 #include "net/web_server/responses.h"
 #include "net/web_server/serve_static.h"
@@ -20,7 +21,6 @@
 #include "osr/lookup.h"
 #include "osr/route.h"
 #include "osr/weight.h"
-#include "utl/to_vec.h"
 
 using namespace net;
 using net::web_server;
@@ -83,12 +83,13 @@ struct http_server::impl {
     }
   }
 
-  dijkstra_state* get_dijkstra_state() {
-    static auto s = boost::thread_specific_ptr<dijkstra_state>{};
+  template <typename Profile>
+  dijkstra<Profile>& get_dijkstra() {
+    static auto s = boost::thread_specific_ptr<dijkstra<Profile>>{};
     if (s.get() == nullptr) {
-      s.reset(new dijkstra_state{});
+      s.reset(new dijkstra<Profile>{});
     }
-    return s.get();
+    return *s.get();
   }
 
   void handle_route(web_server::http_req_t const& req,
@@ -102,9 +103,17 @@ struct http_server::impl {
     auto const from = parse_location(q.at("start"));
     auto const to = parse_location(q.at("destination"));
     auto const max_it = q.find("max");
-    auto const max = max_it == q.end() ? 3600 : max_it->value().as_int64();
+    auto const max = max_it == q.end() ? 200 : max_it->value().as_int64();
 
-    auto const p = route(w_, l_, from, to, max, profile, *get_dijkstra_state());
+    auto p = std::optional<path>{};
+    switch (profile) {
+      case search_profile::kFoot:
+        p = route(w_, l_, get_dijkstra<foot>(), from, to, max,
+                  direction::kForward);
+        break;
+      default: throw utl::fail("no implemented");
+    }
+
     auto const response = json::serialize(
         p.has_value()
             ? boost::json::
@@ -168,7 +177,7 @@ struct http_server::impl {
       }
     });
 
-    auto const s = get_dijkstra_state();
+    auto const s = get_dijkstra<foot>();
     cb(json_response(req, gj.finish(s)));
   }
 

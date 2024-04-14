@@ -99,22 +99,25 @@ way_properties get_way_properties(tags const& t) {
       .is_car_accessible_ = is_accessible<car_profile>(t, osm_obj_type::kWay),
       .is_oneway_car_ = t.oneway_,
       .is_oneway_bike_ = t.oneway_ && !t.not_oneway_bike_,
+      .is_elevator_ = t.is_elevator_,
+      .is_steps_ = (t.highway_ == "steps"sv),
       .speed_limit_ = get_speed_limit(t),
       .level_ = to_idx(t.level_),
-      .is_elevator_ = t.is_elevator_,
-      .is_steps_ = (t.highway_ == "steps"sv)};
+      .to_level_ = to_idx(t.level_to_)};
 }
 
 node_properties get_node_properties(osm::Node const& n) {
   auto const t = tags{n};
   return {
+      .from_level_ = to_idx(t.level_),
       .is_foot_accessible_ =
           is_accessible<foot_profile>(t, osm_obj_type::kNode),
       .is_bike_accessible_ =
           is_accessible<bike_profile>(t, osm_obj_type::kNode),
       .is_car_accessible_ = is_accessible<car_profile>(t, osm_obj_type::kNode),
       .is_elevator_ = t.is_elevator_,
-      .is_entrance_ = t.is_entrance_};
+      .is_entrance_ = t.is_entrance_,
+      .to_level_ = to_idx(t.level_to_)};
 }
 
 struct way_handler : public osm::handler::Handler {
@@ -416,7 +419,6 @@ void extract(fs::path const& in, fs::path const& out) {
   }
 
   w.add_restriction(r);
-  w.mark_multi_level_nodes();
 }
 
 }  // namespace osr

@@ -89,48 +89,76 @@ constexpr std::uint16_t to_meters_per_second(speed_limit const l) {
 }
 
 struct way_properties {
-  bool is_accessible() const {
+  constexpr bool is_accessible() const {
     return is_car_accessible() || is_bike_accessible() || is_foot_accessible();
   }
-  bool is_car_accessible() const { return is_car_accessible_; }
-  bool is_bike_accessible() const { return is_bike_accessible_; }
-  bool is_foot_accessible() const { return is_foot_accessible_; }
-  bool is_oneway_car() const { return is_oneway_car_; }
-  bool is_oneway_bike() const { return is_oneway_bike_; }
-  bool is_elevator() const { return is_elevator_; }
-  std::uint16_t max_speed_m_per_s() const {
+  constexpr bool is_car_accessible() const { return is_car_accessible_; }
+  constexpr bool is_bike_accessible() const { return is_bike_accessible_; }
+  constexpr bool is_foot_accessible() const { return is_foot_accessible_; }
+  constexpr bool is_oneway_car() const { return is_oneway_car_; }
+  constexpr bool is_oneway_bike() const { return is_oneway_bike_; }
+  constexpr bool is_elevator() const { return is_elevator_; }
+  constexpr bool is_steps() const { return is_steps_; }
+  constexpr std::uint16_t max_speed_m_per_s() const {
     return to_meters_per_second(static_cast<speed_limit>(speed_limit_));
   }
-  std::uint16_t max_speed_km_per_h() const {
+  constexpr std::uint16_t max_speed_km_per_h() const {
     return to_kmh(static_cast<speed_limit>(speed_limit_));
   }
-  level_t get_level() const { return level_t{level_}; }
+  constexpr level_t get_level() const { return level_t{level_}; }
+  constexpr level_t get_to_level() const { return level_t{to_level_}; }
+
+  constexpr bool can_use_steps(level_t const a, level_t const b) const {
+    return is_steps_ && std::min(a, b) == get_level() &&
+           std::max(a, b) == get_to_level();
+  }
 
   std::uint8_t is_foot_accessible_ : 1;
   std::uint8_t is_bike_accessible_ : 1;
   std::uint8_t is_car_accessible_ : 1;
   std::uint8_t is_oneway_car_ : 1;
   std::uint8_t is_oneway_bike_ : 1;
+  std::uint8_t is_elevator_ : 1;
+  std::uint8_t is_steps_ : 1;
+
   std::uint8_t speed_limit_ : 3;
 
   std::uint8_t level_ : 5;
-  std::uint8_t is_elevator_ : 1;
-  std::uint8_t is_steps_ : 1;
+
+  std::uint8_t to_level_ : 5;
 };
 
-static_assert(sizeof(way_properties) == 2);
+static_assert(sizeof(way_properties) == 3);
 
 struct node_properties {
-  bool is_car_accessible() const { return is_car_accessible_; }
-  bool is_bike_accessible() const { return is_bike_accessible_; }
-  bool is_walk_accessible() const { return is_foot_accessible_; }
+  constexpr bool is_car_accessible() const { return is_car_accessible_; }
+  constexpr bool is_bike_accessible() const { return is_bike_accessible_; }
+  constexpr bool is_walk_accessible() const { return is_foot_accessible_; }
+  constexpr bool is_elevator() const { return is_elevator_; }
+
+  constexpr level_t get_from_level() const { return level_t{from_level_}; }
+  constexpr level_t get_to_level() const { return level_t{to_level_}; }
+
+  constexpr bool can_use_elevator(level_t const from, level_t const to) const {
+    return is_elevator_ && is_in_range(from) && is_in_range(to);
+  }
+
+  constexpr bool is_in_range(level_t const l) const {
+    return get_from_level() <= l && l <= get_to_level();
+  }
+
+  std::uint8_t from_level_ : 5;
 
   std::uint8_t is_foot_accessible_ : 1;
   std::uint8_t is_bike_accessible_ : 1;
   std::uint8_t is_car_accessible_ : 1;
   std::uint8_t is_elevator_ : 1;
   std::uint8_t is_entrance_ : 1;
+
+  std::uint8_t to_level_ : 5;
 };
+
+static_assert(sizeof(node_properties) == 2);
 
 struct ways {
   ways(std::filesystem::path p, cista::mmap::protection const mode)
@@ -274,18 +302,6 @@ struct ways {
         pred_pos = pos;
       }
       pt->increment();
-    }
-  }
-
-  void mark_multi_level_nodes() {
-    for (auto i = node_idx_t{0U}; i != n_nodes(); ++i) {
-      auto const ref = way_properties_[node_ways_[i][0]].get_level();
-      for (auto j = 1U; j < node_ways_[i].size(); ++j) {
-        if (ref != way_properties_[node_ways_[i][j]].get_level()) {
-          node_is_restricted_.set(i, true);
-          break;
-        }
-      }
     }
   }
 

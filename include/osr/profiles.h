@@ -39,10 +39,18 @@ struct tags {
             is_elevator_ = true;
           }
           break;
-        case cista::hash("level"):
-          level_ = to_level(
-              std::clamp(utl::parse<float>(t.value()), kMinLevel, kMaxLevel));
+        case cista::hash("level"): {
+          auto s = utl::cstr{t.value()};
+          auto from_lvl = 0.0F, to_lvl = 0.0F;
+          utl::parse_arg(s, from_lvl);
+          if (s) {
+            ++s;
+            utl::parse_arg(s, to_lvl);
+          }
+          level_ = to_level(std::clamp(from_lvl, kMinLevel, kMaxLevel));
+          level_to_ = to_level(std::clamp(to_lvl, kMinLevel, kMaxLevel));
           break;
+        }
         case cista::hash("entrance"): is_entrance_ = true; break;
         case cista::hash("sidewalk"): sidewalk_ = t.value(); break;
         case cista::hash("cycleway"): cycleway_ = t.value(); break;
@@ -139,6 +147,7 @@ struct tags {
 
   // https://wiki.openstreetmap.org/wiki/Key:level
   level_t level_{to_level(0.0F)};
+  level_t level_to_{to_level(0.0F)};  // for elevators
 };
 
 template <typename T>
