@@ -135,6 +135,7 @@ struct node_properties {
   constexpr bool is_bike_accessible() const { return is_bike_accessible_; }
   constexpr bool is_walk_accessible() const { return is_foot_accessible_; }
   constexpr bool is_elevator() const { return is_elevator_; }
+  constexpr bool is_entrance() const { return is_entrance_; }
 
   constexpr level_t get_from_level() const { return level_t{from_level_}; }
   constexpr level_t get_to_level() const { return level_t{to_level_}; }

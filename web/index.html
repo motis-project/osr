@@ -7,6 +7,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <link rel='stylesheet' href='https://unpkg.com/maplibre-gl@4.1.2/dist/maplibre-gl.css'/>
     <script src='https://unpkg.com/maplibre-gl@4.1.2/dist/maplibre-gl.js'></script>
+    <script src="https://unpkg.com/maplibre-contour@0.0.5/dist/index.min.js"></script>
     <style>
         body {
             margin: 0;
@@ -117,7 +118,6 @@
     const updateRoute = async () => {
         try {
             const route = await getRoute();
-            console.log(route);
             if (!route.error) {
                 map.getSource('path').setData(route);
             }
@@ -238,11 +238,13 @@
         return await response.json();
     }
 
+    let graph = false;
     let currentLevel = 0;
     const levelsDom = document.getElementById('levels');
     const setLevels = async (levels) => {
         if (levels.length === 0) {
             currentLevel = 0;
+            graph = false;
             style(map, 0);
             await addRouting();
             await updateGraph();
@@ -255,6 +257,7 @@
             levelLink.classList.add('level');
             levelLink.onclick = async () => {
                 currentLevel = l;
+                graph = false;
                 style(map, l);
                 await addRouting();
                 await updateGraph();
@@ -323,7 +326,8 @@
     });
 
     const updateGraph = async () => {
-        if (!graphActive) {
+        if (!graphActive && graph) {
+            graph = false;
             try {
                 graphToggle.classList.remove('active');
                 map.removeLayer('graph-geometry');
@@ -333,7 +337,8 @@
             } catch (e) {
                 // ignore, already removed
             }
-        } else {
+        } else if (graphActive && !graph) {
+            graph = true;
             graphToggle.classList.add('active');
             map.addSource('graph', {
                 type: 'geojson',

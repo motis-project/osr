@@ -97,7 +97,7 @@ struct foot {
 
         auto const target_lvl = target_way_prop.get_level();
         auto const level_ok =
-            n.lvl_ == target_lvl ||
+            n.lvl_ == target_lvl || target_node_prop.is_entrance() ||
             (from_node_prop.can_use_elevator(n.lvl_, target_lvl)) ||
             (target_way_prop.can_use_steps(n.lvl_, target_lvl));
         if (!level_ok) {

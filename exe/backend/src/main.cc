@@ -80,17 +80,6 @@ int main(int argc, char const* argv[]) {
     w.lock();
   }
 
-  auto max = 0U;
-  auto n = node_idx_t::invalid();
-  for (auto i = node_idx_t{0U}; i != w.n_nodes(); ++i) {
-    auto const x = w.node_ways_[i];
-    if (max < x.size() && w.node_is_restricted_[i]) {
-      max = static_cast<unsigned>(x.size());
-      n = i;
-    }
-  }
-  std::cout << "MAX: " << max << "[ " << w.node_to_osm_[n] << "]\n";
-
   auto const l = lookup{w};
 
   auto ioc = boost::asio::io_context{};

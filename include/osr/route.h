@@ -157,10 +157,7 @@ path reconstruct(ways const& w,
        .level_ = w.way_properties_[dest_way].get_level(),
        .way_ = way_idx_t::invalid()}};
   auto dist = 0.0;
-  auto i = 0U;
   while (true) {
-    if (++i > 100) abort();
-
     auto const& e = d.cost_.at(n);
     auto const pred = e.pred();
     if (pred.has_value()) {
@@ -169,7 +166,6 @@ path reconstruct(ways const& w,
     } else {
       break;
     }
-
     n = *pred;
   }
 
