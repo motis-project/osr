@@ -1,5 +1,7 @@
 #include "osr/extract/extract.h"
 
+#include "boost/thread/tss.hpp"
+
 #include "fmt/core.h"
 #include "fmt/std.h"
 
@@ -165,6 +167,14 @@ struct way_handler : public osm::handler::Handler {
 };
 
 struct node_handler : public osm::handler::Handler {
+  struct cache {
+    void clear() {
+      from_.clear();
+      to_.clear();
+    }
+    std::vector<way_idx_t> from_, to_;
+  };
+
   node_handler(ways& w, std::vector<resolved_restriction>& r) : r_{r}, w_{w} {
     w_.node_properties_.resize(w_.n_nodes());
   }
@@ -177,37 +187,72 @@ struct node_handler : public osm::handler::Handler {
   }
 
   void relation(osm::Relation const& r) {
+    static auto c = boost::thread_specific_ptr<cache>{};
+    if (c.get() == nullptr) {
+      c.reset(new cache{});
+    }
+    c->clear();
+
     auto const type = r.tags()["type"];
     if (type == nullptr || type != "restriction"sv) {
       return;
     }
 
-    auto x = osm_restriction{};
-    for (auto const& m : r.members()) {
-      switch (cista::hash(std::string_view{m.role()})) {
-        case cista::hash("to"): x.to_ = osm_way_idx_t{m.positive_ref()}; break;
-        case cista::hash("from"):
-          x.from_ = osm_way_idx_t{m.positive_ref()};
-          break;
-        case cista::hash("via"):
-          x.via_ = osm_node_idx_t{m.positive_ref()};
-          break;
-      }
-    }
-    if (!x.valid()) {
+    auto const restriction_ptr = r.tags()["restriction"];
+    if (restriction_ptr == nullptr) {
       return;
     }
 
-    auto const from = w_.find_way(x.from_);
-    auto const to = w_.find_way(x.to_);
-    auto const via = w_.find_node_idx(x.via_);
-    if (!from.has_value() || !to.has_value() || !via.has_value()) {
+    auto const restriction_sv = std::string_view{restriction_ptr};
+    auto restriction_type = resolved_restriction::type::kNo;
+    if (restriction_sv.starts_with("no")) {
+      restriction_type = resolved_restriction::type::kNo;
+    } else if (restriction_sv.starts_with("only")) {
+      restriction_type = resolved_restriction::type::kOnly;
+    } else {
+      return;
+    }
+
+    auto via = node_idx_t::invalid();
+    for (auto const& m : r.members()) {
+      switch (cista::hash(std::string_view{m.role()})) {
+        case cista::hash("to"): {
+          auto const to = w_.find_way(osm_way_idx_t{m.positive_ref()});
+          if (to.has_value()) {
+            c->to_.emplace_back(*to);
+          }
+          break;
+        }
+
+        case cista::hash("from"): {
+          auto const from = w_.find_way(osm_way_idx_t{m.positive_ref()});
+          if (from.has_value()) {
+            c->from_.emplace_back(*from);
+          }
+          break;
+        }
+
+        case cista::hash("via"):
+          if (m.type() == osmium::item_type::node) {
+            auto const v = w_.find_node_idx(osm_node_idx_t{m.positive_ref()});
+            if (v.has_value()) {
+              via = *v;
+            }
+          }
+          break;
+      }
+    }
+
+    if (via == node_idx_t::invalid() || c->from_.empty() || c->to_.empty()) {
       return;
     }
 
     auto const l = std::scoped_lock{r_mutex_};
-    r_.emplace_back(
-        resolved_restriction{.from_ = *from, .to_ = *to, .via_ = *via});
+    for (auto const& from : c->from_) {
+      for (auto const& to : c->to_) {
+        r_.emplace_back(resolved_restriction{restriction_type, from, to, via});
+      }
+    }
   }
 
   std::vector<resolved_restriction>& r_;

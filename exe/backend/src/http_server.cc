@@ -109,14 +109,14 @@ struct http_server::impl {
 
     auto p = std::optional<path>{};
     switch (profile) {
-      case search_profile::kFoot:
-        p = route(w_, l_, get_dijkstra<foot>(), from, to, max,
-                  direction::kForward);
-        break;
-      case search_profile::kBike:
-        p = route(w_, l_, get_dijkstra<bike>(), from, to, max,
-                  direction::kForward);
-        break;
+        //      case search_profile::kFoot:
+        //        p = route(w_, l_, get_dijkstra<foot>(), from, to, max,
+        //                  direction::kForward);
+        //        break;
+        //      case search_profile::kBike:
+        //        p = route(w_, l_, get_dijkstra<bike>(), from, to, max,
+        //                  direction::kForward);
+        //        break;
       case search_profile::kCar:
         p = route(w_, l_, get_dijkstra<car>(), from, to, max,
                   direction::kForward);

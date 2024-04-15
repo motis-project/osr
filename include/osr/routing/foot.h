@@ -69,12 +69,8 @@ struct foot {
   static void resolve(ways const& w,
                       way_idx_t const way,
                       node_idx_t const n,
-                      level_t const lvl,
                       Fn&& f) {
-    if (lvl == level_t::invalid() ||
-        w.way_properties_[way].get_level() == lvl) {
-      f(node{n, lvl});
-    }
+    f(node{n, w.way_properties_[way].get_level()});
   }
 
   template <direction SearchDir, typename Fn>

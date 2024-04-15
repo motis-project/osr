@@ -96,7 +96,7 @@ struct lookup {
       auto const p = ways_.way_properties_[way];
       auto d = distance_to_way(query.pos_, ways_.way_polylines_[way]);
       if (d.dist_to_way_ < Profile::kMaxMatchDistance &&
-          p.get_level() == query.lvl_) {
+          (query.lvl_ == level_t::invalid() || p.get_level() == query.lvl_)) {
         auto& wc = way_candidates.emplace_back(std::move(d));
         wc.way_ = way;
         wc.left_ =
@@ -128,24 +128,27 @@ struct lookup {
     auto const polyline = ways_.way_polylines_[wc.way_];
     auto const osm_nodes = ways_.way_osm_nodes_[wc.way_];
 
-    till_the_end(wc.segment_idx_ + (dir == direction::kForward ? 1U : 0U),
-                 utl::zip(polyline, osm_nodes), dir, [&](auto&& x) {
-                   auto const& [pos, osm_node_idx] = x;
+    fmt::println("way={}, start={}", ways_.way_osm_idx_[wc.way_], c.cost_);
+    till_the_end(
+        wc.segment_idx_ + (dir == direction::kForward ? 1U : 0U),
+        utl::zip(polyline, osm_nodes), dir, [&](auto&& x) {
+          auto const& [pos, osm_node_idx] = x;
 
-                   auto const segment_dist = geo::distance(c.path_.back(), pos);
-                   c.dist_to_node_ += segment_dist;
-                   c.cost_ +=
-                       Profile::way_cost(way_prop, edge_dir, segment_dist);
-                   c.path_.push_back(pos);
+          auto const segment_dist = geo::distance(c.path_.back(), pos);
+          c.dist_to_node_ += segment_dist;
+          c.cost_ += Profile::way_cost(way_prop, edge_dir, segment_dist);
+          fmt::println("  +{}",
+                       Profile::way_cost(way_prop, edge_dir, segment_dist));
+          c.path_.push_back(pos);
 
-                   auto const way_node = ways_.find_node_idx(osm_node_idx);
-                   if (way_node.has_value()) {
-                     c.node_ = *way_node;
-                     return cflow::kBreak;
-                   }
+          auto const way_node = ways_.find_node_idx(osm_node_idx);
+          if (way_node.has_value()) {
+            c.node_ = *way_node;
+            return cflow::kBreak;
+          }
 
-                   return cflow::kContinue;
-                 });
+          return cflow::kContinue;
+        });
 
     if (reverse) {
       std::reverse(begin(c.path_), end(c.path_));

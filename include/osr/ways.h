@@ -11,6 +11,7 @@
 
 #include "osmium/osm/way.hpp"
 
+#include "utl/enumerate.h"
 #include "utl/equal_ranges_linear.h"
 #include "utl/helpers/algorithm.h"
 #include "utl/progress_tracker.h"
@@ -57,6 +58,7 @@ constexpr auto const kLevelBits = cista::constexpr_trailing_zeros(
 static_assert(kLevelBits == 5U);
 
 struct resolved_restriction {
+  enum class type { kNo, kOnly } type_;
   way_idx_t from_, to_;
   node_idx_t via_;
 };
@@ -234,9 +236,21 @@ struct ways {
           auto const range = std::span{lb, ub};
           node_restrictions_.resize(to_idx(range.front().via_) + 1U);
           node_is_restricted_.set(range.front().via_, true);
+
           for (auto const& x : range) {
-            node_restrictions_[x.via_].push_back(restriction{
-                get_way_pos(x.via_, x.from_), get_way_pos(x.via_, x.to_)});
+            if (x.type_ == resolved_restriction::type::kNo) {
+              node_restrictions_[x.via_].push_back(restriction{
+                  get_way_pos(x.via_, x.from_), get_way_pos(x.via_, x.to_)});
+            } else /* kOnly */ {
+              for (auto const [i, from] : utl::enumerate(node_ways_[x.via_])) {
+                for (auto const [j, to] : utl::enumerate(node_ways_[x.via_])) {
+                  if (x.from_ == from && x.to_ != to) {
+                    node_restrictions_[x.via_].push_back(restriction{
+                        static_cast<way_pos_t>(i), static_cast<way_pos_t>(j)});
+                  }
+                }
+              }
+            }
           }
         });
     node_restrictions_.resize(node_to_osm_.size());

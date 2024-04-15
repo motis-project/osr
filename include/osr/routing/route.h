@@ -64,49 +64,42 @@ struct connecting_way {
   std::uint16_t distance_;
 };
 
+template <direction SearchDir, typename Profile>
+connecting_way find_connecting_way(ways const& w,
+                                   typename Profile::node const to,
+                                   typename Profile::node const from,
+                                   cost_t const expected_cost) {
+  auto conn = std::optional<connecting_way>{};
+  Profile::template adjacent<SearchDir>(
+      w, from,
+      [&](typename Profile::node const target, cost_t const cost,
+          distance_t const dist, way_idx_t const way, std::uint16_t const a_idx,
+          std::uint16_t const b_idx) {
+        if (target == to && cost == expected_cost) {
+          auto const is_loop = w.is_loop(way) &&
+                               static_cast<unsigned>(std::abs(a_idx - b_idx)) ==
+                                   w.way_nodes_[way].size() - 2U;
+          conn = {way, a_idx, b_idx, is_loop, dist};
+        }
+      });
+  utl::verify(conn.has_value(), "no connecting way node/{} -> node/{} found",
+              w.node_to_osm_[from.get_node()], w.node_to_osm_[to.get_node()]);
+  return *conn;
+}
+
 template <typename Profile>
 connecting_way find_connecting_way(ways const& w,
                                    typename Profile::node const from,
                                    typename Profile::node const to,
-                                   cost_t const expected_dist) {
-  auto const from_ways = utl::zip(w.node_ways_[from.get_node()],
-                                  w.node_in_way_idx_[from.get_node()]);
-  auto const to_ways =
-      utl::zip(w.node_ways_[to.get_node()], w.node_in_way_idx_[to.get_node()]);
-  auto conn = std::optional<connecting_way>{};
-  utl::power_set_intersection(
-      from_ways, to_ways,
-      [&](auto&& a, auto&& b) {
-        auto const& [a_way, a_idx] = a;
-        auto const& [b_way, b_idx] = b;
-        auto const is_loop = w.is_loop(a_way) &&
-                             static_cast<unsigned>(std::abs(a_idx - b_idx)) ==
-                                 w.way_nodes_[a_way].size() - 2U;
-        auto const is_neighbor = std::abs(a_idx - b_idx) == 1;
-        auto const distance = static_cast<cost_t>(
-            w.way_node_dist_[a_way][is_loop ? (std::max(a_idx, b_idx) %
-                                               w.way_node_dist_[a_way].size())
-                                            : std::min(a_idx, b_idx)]);
-        auto const dist =
-            Profile::way_cost(w.way_properties_[a_way],
-                              ((a_idx > b_idx) ^ is_loop)
-                                  ? direction::kForward
-                                  : direction::kBackward,
-                              distance) +
-            Profile::node_cost(w.node_properties_[from.get_node()]);
-        if (expected_dist == dist && (is_neighbor || is_loop)) {
-          conn = {a_way, a_idx, b_idx, is_loop, distance};
-          return;
-        }
-      },
-      [](auto&& a, auto&& b) {
-        auto const& [a_way, _0] = a;
-        auto const& [b_way, _1] = b;
-        return a_way < b_way;
-      });
-  utl::verify(conn.has_value(), "no connecting way {} -> {} found",
-              w.node_to_osm_[from.get_node()], w.node_to_osm_[to.get_node()]);
-  return *conn;
+                                   cost_t const expected_cost,
+                                   direction const dir) {
+  if (dir == direction::kForward) {
+    return find_connecting_way<direction::kForward, Profile>(w, from, to,
+                                                             expected_cost);
+  } else {
+    return find_connecting_way<direction::kBackward, Profile>(w, from, to,
+                                                              expected_cost);
+  }
 }
 
 template <typename Profile>
@@ -114,9 +107,10 @@ double add_path(ways const& w,
                 typename Profile::node const from,
                 typename Profile::node const to,
                 cost_t const expected_cost,
-                std::vector<path::segment>& path) {
+                std::vector<path::segment>& path,
+                direction const dir) {
   auto const& [way, from_idx, to_idx, is_loop, distance] =
-      find_connecting_way<Profile>(w, from, to, expected_cost);
+      find_connecting_way<Profile>(w, from, to, expected_cost, dir);
   auto j = 0U;
   auto active = false;
   auto& segment = path.emplace_back();
@@ -148,7 +142,8 @@ path reconstruct(ways const& w,
                  node_candidate const& dest,
                  way_idx_t const dest_way,
                  typename Profile::node const dest_node,
-                 cost_t const cost) {
+                 cost_t const cost,
+                 direction const dir) {
   auto n = dest_node;
   auto segments = std::vector<path::segment>{
       {.polyline_ = dest.path_,
@@ -160,7 +155,7 @@ path reconstruct(ways const& w,
     auto const pred = e.pred(n);
     if (pred.has_value()) {
       auto const expected_dist = e.cost(n) - d.get_cost(*pred);
-      dist += add_path<Profile>(w, n, *pred, expected_dist, segments);
+      dist += add_path<Profile>(w, n, *pred, expected_dist, segments, dir);
     } else {
       break;
     }
@@ -194,23 +189,27 @@ best_candidate(ways const& w,
 
     for (auto const x : {&dest.left_, &dest.right_}) {
       if (x->valid() && x->cost_ < max) {
-        Profile::resolve(w, dest.way_, x->node_,
-                         w.way_properties_[dest.way_].get_level(),
-                         [&](auto&& node) {
-                           auto const target_cost = d.get_cost(node);
-                           if (target_cost == kInfeasible) {
-                             return;
-                           }
+        fmt::println("way={}, node={}, cost={}", w.way_osm_idx_[dest.way_],
+                     w.node_to_osm_[x->node_], x->cost_);
+        Profile::resolve(w, dest.way_, x->node_, [&](auto&& node) {
+          auto const target_cost = d.get_cost(node);
+          fmt::println("option: {} (target_cost={}, dest_cost={}) for {}",
+                       target_cost, x->cost_, target_cost + x->cost_,
+                       w.node_to_osm_[node.get_node()]);
+          if (target_cost == kInfeasible) {
+            return;
+          }
 
-                           auto const total_dist = target_cost + x->cost_;
-                           if (total_dist < max && total_dist < best_dist) {
-                             best = x;
-                             best_node = node;
-                             best_dist = static_cast<cost_t>(total_dist);
-                           }
-                         });
+          auto const total_cost = target_cost + x->cost_;
+          if (total_cost < max && total_cost < best_dist) {
+            best = x;
+            best_node = node;
+            best_dist = static_cast<cost_t>(total_cost);
+          }
+        });
       }
     }
+
     if (best != nullptr) {
       return std::tuple{best, &dest, best_node, best_dist};
     }
@@ -238,9 +237,9 @@ std::optional<path> route(ways const& w,
   for (auto const& start : from_match) {
     for (auto const* nc : {&start.left_, &start.right_}) {
       if (nc->valid() && nc->cost_ < max) {
-        Profile::resolve(
-            w, start.way_, nc->node_, from.lvl_,
-            [&](auto const node) { d.add_start({node, nc->cost_}); });
+        Profile::resolve(w, start.way_, nc->node_, [&](auto const node) {
+          d.add_start({node, nc->cost_});
+        });
       }
     }
 
@@ -249,7 +248,7 @@ std::optional<path> route(ways const& w,
     auto const c = best_candidate(w, d, to_match, max);
     if (c.has_value()) {
       auto const [nc, wc, node, cost] = *c;
-      return reconstruct<Profile>(w, d, start, *nc, wc->way_, node, cost);
+      return reconstruct<Profile>(w, d, start, *nc, wc->way_, node, cost, dir);
     }
   }
 

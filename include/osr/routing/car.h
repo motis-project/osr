@@ -105,13 +105,9 @@ struct car {
   static void resolve(ways const& w,
                       way_idx_t const way,
                       node_idx_t const n,
-                      level_t const lvl,
                       Fn&& f) {
-    if (lvl == level_t::invalid() ||
-        w.way_properties_[way].get_level() == lvl) {
-      f(node{n, w.get_way_pos(n, way), direction::kForward});
-      f(node{n, w.get_way_pos(n, way), direction::kBackward});
-    }
+    f(node{n, w.get_way_pos(n, way), direction::kForward});
+    f(node{n, w.get_way_pos(n, way), direction::kBackward});
   }
 
   template <direction SearchDir, typename Fn>
@@ -142,9 +138,12 @@ struct car {
 
         auto const is_u_turn = way_pos == n.way_ && way_dir == opposite(n.dir_);
         auto const dist = w.way_node_dist_[way][std::min(from, to)];
-        fn(node{target_node, w.get_way_pos(target_node, way), way_dir},
-           way_cost(target_way_prop, way_dir, dist) +
-               node_cost(target_node_prop) + (is_u_turn ? kUturnPenalty : 0U));
+        auto const target =
+            node{target_node, w.get_way_pos(target_node, way), way_dir};
+        auto const cost = way_cost(target_way_prop, way_dir, dist) +
+                          node_cost(target_node_prop) +
+                          (is_u_turn ? kUturnPenalty : 0U);
+        fn(target, cost, dist, way, from, to);
       };
 
       if (i != 0U) {

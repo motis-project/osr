@@ -38,7 +38,6 @@ struct dijkstra {
   }
 
   void add_start(label const l) {
-    assert(l.get_node().get_node() != node_idx_t::invalid());
     if (cost_[l.get_node().get_key()].update(l.get_node(), l.cost(),
                                              node::invalid())) {
       push(l);
@@ -62,7 +61,9 @@ struct dijkstra {
 
       auto const curr = l.get_node();
       Profile::template adjacent<SearchDir>(
-          w, curr, [&](node const neighbor, std::uint32_t const cost) {
+          w, curr,
+          [&](node const neighbor, std::uint32_t const cost, distance_t,
+              way_idx_t, std::uint16_t, std::uint16_t) {
             auto const total = l.cost() + cost;
             if (total < max &&
                 cost_[neighbor.get_key()].update(

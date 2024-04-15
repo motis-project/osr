@@ -1,6 +1,7 @@
 #include "boost/json.hpp"
 
 #include "fmt/ranges.h"
+#include "fmt/std.h"
 
 #include "utl/pairwise.h"
 #include "utl/pipes/transform.h"
@@ -89,7 +90,15 @@ struct geojson_writer {
           {"ways", fmt::format("{}", w_.node_ways_[n] |
                                          std::views::transform([&](auto&& w) {
                                            return w_.way_osm_idx_[w];
-                                         }))}};
+                                         }))},
+          {"restrictions",
+           fmt::format("{}",
+                       w_.node_restrictions_[n] |
+                           std::views::transform([&](restriction const r) {
+                             return std::pair{
+                                 w_.way_osm_idx_[w_.node_ways_[n][r.from_]],
+                                 w_.way_osm_idx_[w_.node_ways_[n][r.to_]]};
+                           }))}};
       features_.emplace_back(boost::json::value{
           {"type", "Feature"},
           {"properties", properties},
