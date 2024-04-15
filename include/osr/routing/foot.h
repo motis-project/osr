@@ -14,19 +14,22 @@ struct foot {
       return {.n_ = node_idx_t::invalid(), .lvl_{level_t::invalid()}};
     }
     constexpr node_idx_t get_node() const noexcept { return n_; }
+    constexpr node get_key() const noexcept { return *this; }
 
     node_idx_t n_;
     level_t lvl_;
   };
 
+  using key = node;
+
   struct entry {
-    constexpr std::optional<node> pred() const noexcept {
+    constexpr std::optional<node> pred(node) const noexcept {
       return pred_ == node_idx_t::invalid()
                  ? std::nullopt
                  : std::optional{node{pred_, pred_lvl_}};
     }
-    constexpr cost_t cost() const noexcept { return cost_; }
-    constexpr bool update(cost_t const c, node const pred) noexcept {
+    constexpr cost_t cost(node) const noexcept { return cost_; }
+    constexpr bool update(node, cost_t const c, node const pred) noexcept {
       if (c < cost_) {
         cost_ = c;
         pred_ = pred.n_;

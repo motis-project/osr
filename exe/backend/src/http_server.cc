@@ -105,7 +105,7 @@ struct http_server::impl {
     auto const from = parse_location(q.at("start"));
     auto const to = parse_location(q.at("destination"));
     auto const max_it = q.find("max");
-    auto const max = max_it == q.end() ? 1800 : max_it->value().as_int64();
+    auto const max = max_it == q.end() ? 3600 : max_it->value().as_int64();
 
     auto p = std::optional<path>{};
     switch (profile) {
@@ -121,7 +121,7 @@ struct http_server::impl {
         p = route(w_, l_, get_dijkstra<car>(), from, to, max,
                   direction::kForward);
         break;
-      default: throw utl::fail("no implemented");
+      default: throw utl::fail("not implemented");
     }
 
     auto const response = json::serialize(
@@ -187,7 +187,7 @@ struct http_server::impl {
       }
     });
 
-    auto const s = get_dijkstra<foot>();
+    auto const s = get_dijkstra<car>();
     cb(json_response(req, gj.finish(s)));
   }
 

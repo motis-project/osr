@@ -156,10 +156,10 @@ path reconstruct(ways const& w,
        .way_ = way_idx_t::invalid()}};
   auto dist = 0.0;
   while (true) {
-    auto const& e = d.cost_.at(n);
-    auto const pred = e.pred();
+    auto const& e = d.cost_.at(n.get_key());
+    auto const pred = e.pred(n);
     if (pred.has_value()) {
-      auto const expected_dist = e.cost() - d.get_cost(*pred);
+      auto const expected_dist = e.cost(n) - d.get_cost(*pred);
       dist += add_path<Profile>(w, n, *pred, expected_dist, segments);
     } else {
       break;

@@ -31,7 +31,7 @@ public:
 
   fs::path data_dir_{"osr"};
   unsigned n_queries_{50};
-  unsigned max_dist_{1800U};
+  unsigned max_dist_{1200};
   unsigned threads_{std::thread::hardware_concurrency()};
 };
 

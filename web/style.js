@@ -685,6 +685,7 @@ export const style = (map, level) => {
                     "text-color": "#111111"
                 }
             },
+            /*
             {
                 id: 'hills',
                 type: 'hillshade',
@@ -728,11 +729,14 @@ export const style = (map, level) => {
                     'text-font': ['Noto Sans Display Regular']
                 }
             },
+            */
         ],
+        /*
         terrain: {
             source: 'hillshadeSource',
             exaggeration: 1
         }
+        */
     });
 
     if (!map.hasImage("shield")) {

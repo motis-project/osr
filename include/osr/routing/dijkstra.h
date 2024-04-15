@@ -1,7 +1,5 @@
 #pragma once
 
-#include "hash_table8.hpp"
-
 #include "osr/routing/dial.h"
 #include "osr/types.h"
 #include "osr/ways.h"
@@ -23,6 +21,7 @@ constexpr std::string_view to_str(direction const d) {
 
 template <typename Profile>
 struct dijkstra {
+  using key = typename Profile::key;
   using label = typename Profile::label;
   using node = typename Profile::node;
   using entry = typename Profile::entry;
@@ -40,14 +39,15 @@ struct dijkstra {
 
   void add_start(label const l) {
     assert(l.get_node().get_node() != node_idx_t::invalid());
-    if (cost_[l.get_node()].update(l.cost(), node::invalid())) {
+    if (cost_[l.get_node().get_key()].update(l.get_node(), l.cost(),
+                                             node::invalid())) {
       push(l);
     }
   }
 
   cost_t get_cost(node const n) const {
-    auto const it = cost_.find(n);
-    return it != end(cost_) ? it->second.cost() : kInfeasible;
+    auto const it = cost_.find(n.get_key());
+    return it != end(cost_) ? it->second.cost(n) : kInfeasible;
   }
 
   void push(label const& l) { pq_.push(l); }
@@ -65,8 +65,8 @@ struct dijkstra {
           w, curr, [&](node const neighbor, std::uint32_t const cost) {
             auto const total = l.cost() + cost;
             if (total < max &&
-                cost_[neighbor].update(static_cast<cost_t>(total), curr)) {
-              assert(neighbor.get_node() != node_idx_t::invalid());
+                cost_[neighbor.get_key()].update(
+                    neighbor, static_cast<cost_t>(total), curr)) {
               pq_.push(label{neighbor, static_cast<cost_t>(total)});
             }
           });
@@ -79,8 +79,7 @@ struct dijkstra {
   }
 
   dial<label, get_bucket> pq_{get_bucket{}};
-  ankerl::unordered_dense::map<node, entry, hash> cost_;
-  //  emhash8::HashMap<node, entry, hash> cost_;
+  ankerl::unordered_dense::map<key, entry, hash> cost_;
 };
 
 }  // namespace osr

@@ -15,17 +15,20 @@ struct bike {
     }
 
     constexpr node_idx_t get_node() const noexcept { return n_; }
+    constexpr node get_key() const noexcept { return *this; }
 
     node_idx_t n_;
   };
 
+  using key = node;
+
   struct entry {
-    constexpr std::optional<node> pred() const noexcept {
+    constexpr std::optional<node> pred(node) const noexcept {
       return pred_ == node_idx_t::invalid() ? std::nullopt
                                             : std::optional{node{pred_}};
     }
-    constexpr cost_t cost() const noexcept { return cost_; }
-    constexpr bool update(cost_t const c, node const pred) noexcept {
+    constexpr cost_t cost(node) const noexcept { return cost_; }
+    constexpr bool update(node, cost_t const c, node const pred) noexcept {
       if (c < cost_) {
         cost_ = c;
         pred_ = pred.n_;
@@ -35,7 +38,6 @@ struct bike {
     }
 
     node_idx_t pred_{node_idx_t::invalid()};
-    level_t pred_lvl_;
     cost_t cost_{kInfeasible};
   };
 
