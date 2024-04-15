@@ -9,13 +9,11 @@
 #include "utl/power_set_intersection.h"
 #include "utl/to_vec.h"
 
-#include "osr/dijkstra.h"
-#include "osr/infinite.h"
 #include "osr/lookup.h"
-#include "osr/reverse.h"
-#include "osr/route.h"
+#include "osr/routing/dijkstra.h"
 #include "osr/types.h"
-#include "osr/weight.h"
+#include "osr/util/infinite.h"
+#include "osr/util/reverse.h"
 
 namespace osr {
 

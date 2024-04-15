@@ -13,9 +13,9 @@
 #include "utl/timer.h"
 
 #include "osr/lookup.h"
-#include "osr/route.h"
+#include "osr/routing/car.h"
+#include "osr/routing/route.h"
 #include "osr/ways.h"
-#include "osr/weight.h"
 
 namespace fs = std::filesystem;
 using namespace osr;
@@ -30,8 +30,8 @@ public:
   }
 
   fs::path data_dir_{"osr"};
-  unsigned n_queries_{100};
-  unsigned max_dist_{7200U};
+  unsigned n_queries_{50};
+  unsigned max_dist_{1800U};
   unsigned threads_{std::thread::hardware_concurrency()};
 };
 
@@ -63,15 +63,16 @@ int main(int argc, char const* argv[]) {
   auto i = std::atomic_size_t{0U};
   for (auto& t : threads) {
     t = std::thread([&]() {
-      auto s = dijkstra_state{};
+      auto d = dijkstra<car>{};
       auto h = cista::BASE_HASH;
       auto n = 0U;
       while (i.fetch_add(1U) < opt.n_queries_) {
         auto const start =
             node_idx_t{cista::hash_combine(h, ++n, i.load()) % w.n_nodes()};
-        s.reset(opt.max_dist_);
-        s.add_start(start, 0U);
-        dijkstra(w, s, opt.max_dist_, car{});
+        d.reset(opt.max_dist_);
+        d.add_start(car::label{car::node{start, 0, direction::kForward}, 0U});
+        d.add_start(car::label{car::node{start, 0, direction::kBackward}, 0U});
+        d.run(w, opt.max_dist_, direction::kForward);
       }
     });
   }

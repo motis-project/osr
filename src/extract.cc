@@ -1,4 +1,4 @@
-#include "osr/extract.h"
+#include "osr/extract/extract.h"
 
 #include "fmt/core.h"
 #include "fmt/std.h"
@@ -19,7 +19,7 @@
 #include "tiles/osm/tmp_file.h"
 #include "tiles/util_parallel.h"
 
-#include "osr/profiles.h"
+#include "osr/extract/tags.h"
 #include "osr/ways.h"
 #include "utl/enumerate.h"
 

@@ -5,7 +5,6 @@
 #include "utl/helpers/algorithm.h"
 #include "utl/pairwise.h"
 
-#include "dijkstra.h"
 #include "rtree.h"
 
 namespace osr {

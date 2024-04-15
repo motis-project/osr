@@ -1,30 +1,12 @@
 #pragma once
 
-#include <variant>
+#include "hash_table8.hpp"
 
-#include "fmt/core.h"
-
-#include "utl/helpers/algorithm.h"
-
-#include "osr/dial.h"
+#include "osr/routing/dial.h"
 #include "osr/types.h"
 #include "osr/ways.h"
 
 namespace osr {
-
-using cost_t = std::uint16_t;
-
-constexpr auto const kInfeasible = std::numeric_limits<cost_t>::max();
-
-enum class direction : std::uint8_t {
-  kForward,
-  kBackward,
-};
-
-constexpr direction opposite(direction const dir) {
-  return dir == direction::kForward ? direction::kBackward
-                                    : direction::kForward;
-}
 
 template <direction Dir>
 constexpr direction flip(direction const dir) {
@@ -98,6 +80,7 @@ struct dijkstra {
 
   dial<label, get_bucket> pq_{get_bucket{}};
   ankerl::unordered_dense::map<node, entry, hash> cost_;
+  //  emhash8::HashMap<node, entry, hash> cost_;
 };
 
 }  // namespace osr

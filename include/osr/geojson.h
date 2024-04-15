@@ -6,7 +6,6 @@
 #include "utl/pipes/transform.h"
 #include "utl/pipes/vec.h"
 
-#include "osr/dijkstra.h"
 #include "osr/ways.h"
 
 namespace osr {
@@ -75,8 +74,8 @@ struct geojson_writer {
     nodes_.insert(begin(nodes), end(nodes));
   }
 
-  template <typename Profile>
-  std::string finish(dijkstra<Profile> const& s) {
+  template <typename Dijkstra>
+  std::string finish(Dijkstra const& s) {
     for (auto const n : nodes_) {
       auto const p = w_.node_properties_[n];
       auto properties = boost::json::object{

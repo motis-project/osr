@@ -6,7 +6,7 @@
 #include "fmt/ranges.h"
 
 #include "osr/dijkstra.h"
-#include "osr/extract.h"
+#include "osr/extract/extract.h"
 #include "osr/lookup.h"
 #include "osr/route.h"
 #include "osr/ways.h"

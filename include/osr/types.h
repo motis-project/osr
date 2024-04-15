@@ -78,4 +78,18 @@ using distance_t = std::uint16_t;
 
 using way_pos_t = std::uint8_t;
 
+using cost_t = std::uint16_t;
+
+constexpr auto const kInfeasible = std::numeric_limits<cost_t>::max();
+
+enum class direction : std::uint8_t {
+  kForward,
+  kBackward,
+};
+
+constexpr direction opposite(direction const dir) {
+  return dir == direction::kForward ? direction::kBackward
+                                    : direction::kForward;
+}
+
 }  // namespace osr

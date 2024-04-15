@@ -242,7 +242,7 @@
     let currentLevel = 0;
     const levelsDom = document.getElementById('levels');
     const setLevels = async (levels) => {
-        if (levels.length === 0) {
+        if (levels.length === 0 && currentLevel !== 0) {
             currentLevel = 0;
             graph = false;
             style(map, 0);

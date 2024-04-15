@@ -19,8 +19,10 @@
 
 #include "osr/geojson.h"
 #include "osr/lookup.h"
-#include "osr/route.h"
-#include "osr/weight.h"
+#include "osr/routing/bike.h"
+#include "osr/routing/car.h"
+#include "osr/routing/foot.h"
+#include "osr/routing/route.h"
 
 using namespace net;
 using net::web_server;
@@ -103,12 +105,20 @@ struct http_server::impl {
     auto const from = parse_location(q.at("start"));
     auto const to = parse_location(q.at("destination"));
     auto const max_it = q.find("max");
-    auto const max = max_it == q.end() ? 3600 : max_it->value().as_int64();
+    auto const max = max_it == q.end() ? 1800 : max_it->value().as_int64();
 
     auto p = std::optional<path>{};
     switch (profile) {
       case search_profile::kFoot:
         p = route(w_, l_, get_dijkstra<foot>(), from, to, max,
+                  direction::kForward);
+        break;
+      case search_profile::kBike:
+        p = route(w_, l_, get_dijkstra<bike>(), from, to, max,
+                  direction::kForward);
+        break;
+      case search_profile::kCar:
+        p = route(w_, l_, get_dijkstra<car>(), from, to, max,
                   direction::kForward);
         break;
       default: throw utl::fail("no implemented");

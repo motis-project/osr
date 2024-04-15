@@ -18,9 +18,9 @@
 #include "utl/verify.h"
 #include "utl/zip.h"
 
-#include "osr/multi_counter.h"
 #include "osr/point.h"
 #include "osr/types.h"
+#include "osr/util/multi_counter.h"
 
 namespace osr {
 
