@@ -86,7 +86,8 @@ connecting_way find_connecting_way(ways const& w,
                                  w.way_nodes_[a_way].size() - 2U;
         auto const is_neighbor = std::abs(a_idx - b_idx) == 1;
         auto const distance = static_cast<cost_t>(
-            w.way_node_dist_[a_way][is_loop ? std::max(a_idx, b_idx)
+            w.way_node_dist_[a_way][is_loop ? (std::max(a_idx, b_idx) %
+                                               w.way_node_dist_[a_way].size())
                                             : std::min(a_idx, b_idx)]);
         auto const dist =
             Profile::way_cost(w.way_properties_[a_way],

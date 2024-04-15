@@ -103,7 +103,7 @@ struct http_server::impl {
     auto const from = parse_location(q.at("start"));
     auto const to = parse_location(q.at("destination"));
     auto const max_it = q.find("max");
-    auto const max = max_it == q.end() ? 200 : max_it->value().as_int64();
+    auto const max = max_it == q.end() ? 3600 : max_it->value().as_int64();
 
     auto p = std::optional<path>{};
     switch (profile) {
