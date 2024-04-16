@@ -9,18 +9,31 @@
 #include <filesystem>
 #include <ranges>
 
+#include "fmt/ranges.h"
+#include "fmt/std.h"
+
 #include "osmium/osm/way.hpp"
 
+#include "utl/enumerate.h"
+#include "utl/equal_ranges_linear.h"
+#include "utl/helpers/algorithm.h"
 #include "utl/progress_tracker.h"
 #include "utl/timer.h"
 #include "utl/verify.h"
 #include "utl/zip.h"
 
-#include "osr/multi_counter.h"
 #include "osr/point.h"
 #include "osr/types.h"
+#include "osr/util/multi_counter.h"
 
 namespace osr {
+
+#define OSR_DEBUG_DIJKSTRA
+#ifdef OSR_DEBUG_DIJKSTRA
+#define trace(...) fmt::println(std::cerr, __VA_ARGS__)
+#else
+#define trace(...)
+#endif
 
 enum speed_limit : std::uint8_t {
   kmh_10,
@@ -47,6 +60,17 @@ constexpr auto const kLevelBits = cista::constexpr_trailing_zeros(
 
 static_assert(kLevelBits == 5U);
 
+struct resolved_restriction {
+  enum class type { kNo, kOnly } type_;
+  way_idx_t from_, to_;
+  node_idx_t via_;
+};
+
+struct restriction {
+  CISTA_FRIEND_COMPARABLE(restriction)
+  std::uint8_t from_, to_;
+};
+
 enum node_type : std::uint8_t {
   kEntry,
   kEntrance,
@@ -70,47 +94,77 @@ constexpr std::uint16_t to_meters_per_second(speed_limit const l) {
 }
 
 struct way_properties {
-  bool is_accessible() const {
+  constexpr bool is_accessible() const {
     return is_car_accessible() || is_bike_accessible() || is_foot_accessible();
   }
-  bool is_car_accessible() const { return is_car_accessible_; }
-  bool is_bike_accessible() const { return is_bike_accessible_; }
-  bool is_foot_accessible() const { return is_foot_accessible_; }
-  bool is_oneway_car() const { return is_oneway_car_; }
-  bool is_oneway_bike() const { return is_oneway_bike_; }
-  bool is_elevator() const { return is_elevator_; }
-  std::uint16_t max_speed_m_per_s() const {
+  constexpr bool is_car_accessible() const { return is_car_accessible_; }
+  constexpr bool is_bike_accessible() const { return is_bike_accessible_; }
+  constexpr bool is_foot_accessible() const { return is_foot_accessible_; }
+  constexpr bool is_oneway_car() const { return is_oneway_car_; }
+  constexpr bool is_oneway_bike() const { return is_oneway_bike_; }
+  constexpr bool is_elevator() const { return is_elevator_; }
+  constexpr bool is_steps() const { return is_steps_; }
+  constexpr std::uint16_t max_speed_m_per_s() const {
     return to_meters_per_second(static_cast<speed_limit>(speed_limit_));
   }
-  std::uint16_t max_speed_km_per_h() const {
+  constexpr std::uint16_t max_speed_km_per_h() const {
     return to_kmh(static_cast<speed_limit>(speed_limit_));
   }
-  level_t get_level() const { return level_t{level_}; }
+  constexpr level_t get_level() const { return level_t{level_}; }
+  constexpr level_t get_to_level() const { return level_t{to_level_}; }
+
+  constexpr bool can_use_steps(level_t const a, level_t const b) const {
+    return is_steps_ && std::min(a, b) == get_level() &&
+           std::max(a, b) == get_to_level();
+  }
 
   std::uint8_t is_foot_accessible_ : 1;
   std::uint8_t is_bike_accessible_ : 1;
   std::uint8_t is_car_accessible_ : 1;
   std::uint8_t is_oneway_car_ : 1;
   std::uint8_t is_oneway_bike_ : 1;
+  std::uint8_t is_elevator_ : 1;
+  std::uint8_t is_steps_ : 1;
+
   std::uint8_t speed_limit_ : 3;
 
   std::uint8_t level_ : 5;
-  std::uint8_t is_elevator_ : 1;
+
+  std::uint8_t to_level_ : 5;
 };
 
-static_assert(sizeof(way_properties) == 2);
+static_assert(sizeof(way_properties) == 3);
 
 struct node_properties {
-  bool is_car_accessible() const { return is_car_accessible_; }
-  bool is_bike_accessible() const { return is_bike_accessible_; }
-  bool is_walk_accessible() const { return is_foot_accessible_; }
+  constexpr bool is_car_accessible() const { return is_car_accessible_; }
+  constexpr bool is_bike_accessible() const { return is_bike_accessible_; }
+  constexpr bool is_walk_accessible() const { return is_foot_accessible_; }
+  constexpr bool is_elevator() const { return is_elevator_; }
+  constexpr bool is_entrance() const { return is_entrance_; }
+
+  constexpr level_t get_from_level() const { return level_t{from_level_}; }
+  constexpr level_t get_to_level() const { return level_t{to_level_}; }
+
+  constexpr bool can_use_elevator(level_t const from, level_t const to) const {
+    return is_elevator_ && is_in_range(from) && is_in_range(to);
+  }
+
+  constexpr bool is_in_range(level_t const l) const {
+    return get_from_level() <= l && l <= get_to_level();
+  }
+
+  std::uint8_t from_level_ : 5;
 
   std::uint8_t is_foot_accessible_ : 1;
   std::uint8_t is_bike_accessible_ : 1;
   std::uint8_t is_car_accessible_ : 1;
   std::uint8_t is_elevator_ : 1;
   std::uint8_t is_entrance_ : 1;
+
+  std::uint8_t to_level_ : 5;
 };
+
+static_assert(sizeof(node_properties) == 2);
 
 struct ways {
   ways(std::filesystem::path p, cista::mmap::protection const mode)
@@ -136,7 +190,11 @@ struct ways {
             cista::paged<mm_vec<std::uint16_t>>{
                 mm_vec<std::uint16_t>{mm("node_in_way_idx_data.bin")}},
             mm_vec<cista::page<std::uint64_t>>{
-                mm("node_in_way_idx_index.bin")}} {}
+                mm("node_in_way_idx_index.bin")}},
+        node_is_restricted_{mm_vec<std::uint64_t>{mm("node_restricted.bin")}},
+        node_restrictions_{
+            mm_vec<restriction>{mm("node_restrictions_data.bin")},
+            mm_vec<std::uint32_t>{mm("node_restrictions_index.bin")}} {}
 
   void lock() const {
     auto const timer = utl::scoped_timer{"lock"};
@@ -161,6 +219,46 @@ struct ways {
     mlock(node_in_way_idx_.idx_.mmap_.data(), node_ways_.idx_.mmap_.size());
   }
 
+  way_pos_t get_way_pos(node_idx_t const node, way_idx_t const way) const {
+    auto const ways = node_ways_[node];
+    for (auto i = way_pos_t{0U}; i != ways.size(); ++i) {
+      if (ways[i] == way) {
+        return i;
+      }
+    }
+    trace("node {} not found in way {}", node_to_osm_[node], way_osm_idx_[way]);
+    return 0U;
+  }
+
+  void add_restriction(std::vector<resolved_restriction>& rs) {
+    using it_t = std::vector<resolved_restriction>::iterator;
+    utl::sort(rs, [](auto&& a, auto&& b) { return a.via_ < b.via_; });
+    utl::equal_ranges_linear(
+        begin(rs), end(rs), [](auto&& a, auto&& b) { return a.via_ == b.via_; },
+        [&](it_t const& lb, it_t const& ub) {
+          auto const range = std::span{lb, ub};
+          node_restrictions_.resize(to_idx(range.front().via_) + 1U);
+          node_is_restricted_.set(range.front().via_, true);
+
+          for (auto const& x : range) {
+            if (x.type_ == resolved_restriction::type::kNo) {
+              node_restrictions_[x.via_].push_back(restriction{
+                  get_way_pos(x.via_, x.from_), get_way_pos(x.via_, x.to_)});
+            } else /* kOnly */ {
+              for (auto const [i, from] : utl::enumerate(node_ways_[x.via_])) {
+                for (auto const [j, to] : utl::enumerate(node_ways_[x.via_])) {
+                  if (x.from_ == from && x.to_ != to) {
+                    node_restrictions_[x.via_].push_back(restriction{
+                        static_cast<way_pos_t>(i), static_cast<way_pos_t>(j)});
+                  }
+                }
+              }
+            }
+          }
+        });
+    node_restrictions_.resize(node_to_osm_.size());
+  }
+
   void connect_ways() {
     auto pt = utl::get_active_progress_tracker_or_activate("osr");
 
@@ -178,6 +276,7 @@ struct ways {
       });
       node_ways_.resize(to_idx(node_idx));
       node_in_way_idx_.resize(to_idx(node_idx));
+      node_is_restricted_.resize(to_idx(node_idx));
     }
 
     // Build edges.
@@ -224,6 +323,14 @@ struct ways {
     }
   }
 
+  std::optional<way_idx_t> find_way(osm_way_idx_t const i) {
+    auto const it = std::lower_bound(begin(way_osm_idx_), end(way_osm_idx_), i);
+    return it != end(way_osm_idx_) && *it == i
+               ? std::optional{way_idx_t{
+                     std::distance(begin(way_osm_idx_), it)}}
+               : std::nullopt;
+  }
+
   std::optional<node_idx_t> find_node_idx(osm_node_idx_t const i) const {
     auto const it = std::lower_bound(begin(node_to_osm_), end(node_to_osm_), i,
                                      [](auto&& a, auto&& b) { return a < b; });
@@ -257,6 +364,20 @@ struct ways {
                     osm_idx, way, way_osm_idx_[way]);
   }
 
+  template <direction SearchDir>
+  bool is_restricted(node_idx_t const n,
+                     std::uint8_t const from,
+                     std::uint8_t const to) const {
+    if (!node_is_restricted_[n]) {
+      return false;
+    }
+    auto const r = node_restrictions_[n];
+    auto const needle = SearchDir == direction::kForward
+                            ? restriction{from, to}
+                            : restriction{to, from};
+    return utl::find(r, needle) != end(r);
+  }
+
   cista::mmap mm(char const* file) {
     return cista::mmap{(p_ / file).generic_string().c_str(), mode_};
   }
@@ -277,6 +398,8 @@ struct ways {
   mm_paged_vecvec<node_idx_t, way_idx_t> node_ways_;
   mm_paged_vecvec<node_idx_t, std::uint16_t> node_in_way_idx_;
   multi_counter node_way_counter_;
+  mm_bitvec<node_idx_t> node_is_restricted_;
+  mm_vecvec<node_idx_t, restriction> node_restrictions_;
 };
 
 }  // namespace osr

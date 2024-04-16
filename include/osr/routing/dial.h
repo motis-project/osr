@@ -27,18 +27,14 @@ struct dial {
     ++size_;
   }
 
-  T const& top() {
+  T pop() {
     assert(!empty());
     current_bucket_ = get_next_bucket();
     assert(!buckets_[current_bucket_].empty());
-    return buckets_[current_bucket_].back();
-  }
-
-  void pop() {
-    assert(!empty());
-    current_bucket_ = get_next_bucket();
+    auto item = buckets_[current_bucket_].back();
     buckets_[current_bucket_].pop_back();
     --size_;
+    return item;
   }
 
   std::size_t size() const { return size_; }

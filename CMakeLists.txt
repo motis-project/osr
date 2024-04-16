@@ -77,6 +77,7 @@ if ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "Clang")
             -Wno-reserved-macro-identifier
             -Wno-documentation-unknown-command
             -Wno-duplicate-enum
+            -Wno-ctad-maybe-unsupported
             -Werror)
 elseif ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "AppleClang")
     set(osr-compile-options -Wall -Wextra -Werror)

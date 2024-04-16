@@ -30,6 +30,9 @@ using mm_vec_map = cista::basic_mmap_vec<V, K>;
 template <typename T>
 using mm_vec = cista::basic_mmap_vec<T, std::uint64_t>;
 
+template <typename K>
+using mm_bitvec = cista::basic_bitvec<mm_vec<std::uint64_t>, K>;
+
 template <typename K, typename V, typename SizeType = cista::base_t<K>>
 using mm_vecvec = cista::basic_vecvec<K, mm_vec<V>, mm_vec<SizeType>>;
 
@@ -72,5 +75,29 @@ using node_idx_t = cista::strong<std::uint32_t, struct node_idx_>;
 using level_t = cista::strong<std::uint8_t, struct level_>;
 
 using distance_t = std::uint16_t;
+
+using way_pos_t = std::uint8_t;
+
+using cost_t = std::uint16_t;
+
+constexpr auto const kInfeasible = std::numeric_limits<cost_t>::max();
+
+enum class direction : std::uint8_t {
+  kForward,
+  kBackward,
+};
+
+constexpr direction opposite(direction const dir) {
+  return dir == direction::kForward ? direction::kBackward
+                                    : direction::kForward;
+}
+
+constexpr std::string_view to_str(direction const d) {
+  switch (d) {
+    case direction::kForward: return "forward";
+    case direction::kBackward: return "backward";
+  }
+  std::unreachable();
+}
 
 }  // namespace osr

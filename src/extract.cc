@@ -1,4 +1,6 @@
-#include "osr/extract.h"
+#include "osr/extract/extract.h"
+
+#include "boost/thread/tss.hpp"
 
 #include "fmt/core.h"
 #include "fmt/std.h"
@@ -19,8 +21,9 @@
 #include "tiles/osm/tmp_file.h"
 #include "tiles/util_parallel.h"
 
-#include "osr/profiles.h"
+#include "osr/extract/tags.h"
 #include "osr/ways.h"
+#include "utl/enumerate.h"
 
 namespace osm = osmium;
 namespace osm_io = osmium::io;
@@ -32,6 +35,17 @@ namespace fs = std::filesystem;
 using namespace std::string_view_literals;
 
 namespace osr {
+
+struct osm_restriction {
+  bool valid() const {
+    return from_ != osm_way_idx_t::invalid() &&
+           to_ != osm_way_idx_t::invalid() && via_ != osm_node_idx_t::invalid();
+  }
+
+  osm_way_idx_t from_{osm_way_idx_t::invalid()};
+  osm_way_idx_t to_{osm_way_idx_t::invalid()};
+  osm_node_idx_t via_{osm_node_idx_t::invalid()};
+};
 
 bool is_number(std::string_view s) {
   return utl::all_of(s, [](char const c) { return std::isdigit(c); });
@@ -87,21 +101,25 @@ way_properties get_way_properties(tags const& t) {
       .is_car_accessible_ = is_accessible<car_profile>(t, osm_obj_type::kWay),
       .is_oneway_car_ = t.oneway_,
       .is_oneway_bike_ = t.oneway_ && !t.not_oneway_bike_,
+      .is_elevator_ = t.is_elevator_,
+      .is_steps_ = (t.highway_ == "steps"sv),
       .speed_limit_ = get_speed_limit(t),
       .level_ = to_idx(t.level_),
-      .is_elevator_ = t.is_elevator_};
+      .to_level_ = to_idx(t.level_to_)};
 }
 
 node_properties get_node_properties(osm::Node const& n) {
   auto const t = tags{n};
   return {
+      .from_level_ = to_idx(t.level_),
       .is_foot_accessible_ =
           is_accessible<foot_profile>(t, osm_obj_type::kNode),
       .is_bike_accessible_ =
           is_accessible<bike_profile>(t, osm_obj_type::kNode),
       .is_car_accessible_ = is_accessible<car_profile>(t, osm_obj_type::kNode),
       .is_elevator_ = t.is_elevator_,
-      .is_entrance_ = t.is_entrance_};
+      .is_entrance_ = t.is_entrance_,
+      .to_level_ = to_idx(t.level_to_)};
 }
 
 struct way_handler : public osm::handler::Handler {
@@ -135,7 +153,7 @@ struct way_handler : public osm::handler::Handler {
     };
 
     auto l = std::scoped_lock<std::mutex>{mutex_};
-    w_.way_osm_idx_.push_back(osm_way_idx_t{w.id()});
+    w_.way_osm_idx_.push_back(osm_way_idx_t{w.positive_id()});
     w_.way_polylines_.emplace_back(w.nodes() |
                                    std::views::transform(get_point));
     w_.way_osm_nodes_.emplace_back(w.nodes() |
@@ -149,7 +167,17 @@ struct way_handler : public osm::handler::Handler {
 };
 
 struct node_handler : public osm::handler::Handler {
-  node_handler(ways& w) : w_{w} { w_.node_properties_.resize(w_.n_nodes()); }
+  struct cache {
+    void clear() {
+      from_.clear();
+      to_.clear();
+    }
+    std::vector<way_idx_t> from_, to_;
+  };
+
+  node_handler(ways& w, std::vector<resolved_restriction>& r) : r_{r}, w_{w} {
+    w_.node_properties_.resize(w_.n_nodes());
+  }
 
   void node(osm::Node const& n) {
     if (auto const node_idx = w_.find_node_idx(osm_node_idx_t{n.id()});
@@ -157,6 +185,78 @@ struct node_handler : public osm::handler::Handler {
       w_.node_properties_[*node_idx] = get_node_properties(n);
     }
   }
+
+  void relation(osm::Relation const& r) {
+    static auto c = boost::thread_specific_ptr<cache>{};
+    if (c.get() == nullptr) {
+      c.reset(new cache{});
+    }
+    c->clear();
+
+    auto const type = r.tags()["type"];
+    if (type == nullptr || type != "restriction"sv) {
+      return;
+    }
+
+    auto const restriction_ptr = r.tags()["restriction"];
+    if (restriction_ptr == nullptr) {
+      return;
+    }
+
+    auto const restriction_sv = std::string_view{restriction_ptr};
+    auto restriction_type = resolved_restriction::type::kNo;
+    if (restriction_sv.starts_with("no")) {
+      restriction_type = resolved_restriction::type::kNo;
+    } else if (restriction_sv.starts_with("only")) {
+      restriction_type = resolved_restriction::type::kOnly;
+    } else {
+      return;
+    }
+
+    auto via = node_idx_t::invalid();
+    for (auto const& m : r.members()) {
+      switch (cista::hash(std::string_view{m.role()})) {
+        case cista::hash("to"): {
+          auto const to = w_.find_way(osm_way_idx_t{m.positive_ref()});
+          if (to.has_value()) {
+            c->to_.emplace_back(*to);
+          }
+          break;
+        }
+
+        case cista::hash("from"): {
+          auto const from = w_.find_way(osm_way_idx_t{m.positive_ref()});
+          if (from.has_value()) {
+            c->from_.emplace_back(*from);
+          }
+          break;
+        }
+
+        case cista::hash("via"):
+          if (m.type() == osmium::item_type::node) {
+            auto const v = w_.find_node_idx(osm_node_idx_t{m.positive_ref()});
+            if (v.has_value()) {
+              via = *v;
+            }
+          }
+          break;
+      }
+    }
+
+    if (via == node_idx_t::invalid() || c->from_.empty() || c->to_.empty()) {
+      return;
+    }
+
+    auto const l = std::scoped_lock{r_mutex_};
+    for (auto const& from : c->from_) {
+      for (auto const& to : c->to_) {
+        r_.emplace_back(resolved_restriction{restriction_type, from, to, via});
+      }
+    }
+  }
+
+  std::vector<resolved_restriction>& r_;
+  std::mutex r_mutex_;
 
   ways& w_;
 };
@@ -264,6 +364,7 @@ void extract(fs::path const& in, fs::path const& out) {
     auto workers = std::vector<std::future<void>>{};
     workers.reserve(thread_count / 2U);
     auto h = way_handler{w, rel_ways};
+    auto queue = tiles::in_order_queue<osm_mem::Buffer>{};
     for (auto i = 0U; i < thread_count / 2U; ++i) {
       workers.emplace_back(pool.submit([&] {
         try {
@@ -275,7 +376,9 @@ void extract(fs::path const& in, fs::path const& out) {
 
             auto& [idx, buf] = *opt;
             tiles::update_locations(node_idx, buf);
-            osm::apply(buf, h);
+
+            queue.process_in_order(idx, std::move(buf),
+                                   [&](auto buf2) { osm::apply(buf2, h); });
           }
         } catch (std::exception const& e) {
           fmt::print(std::clog, "EXCEPTION CAUGHT: {} {}\n",
@@ -304,6 +407,7 @@ void extract(fs::path const& in, fs::path const& out) {
 
   w.connect_ways();
 
+  auto r = std::vector<resolved_restriction>{};
   {
     pt->status("Load OSM / Node Properties")
         .in_high(file_size)
@@ -314,13 +418,14 @@ void extract(fs::path const& in, fs::path const& out) {
     auto pool =
         osmium::thread::Pool{static_cast<int>(thread_count), thread_count * 8U};
 
-    auto reader = osm_io::Reader{input_file, pool, osm_eb::node,
-                                 osmium::io::read_meta::no};
+    auto reader =
+        osm_io::Reader{input_file, pool, osm_eb::node | osm_eb::relation,
+                       osmium::io::read_meta::no};
     auto seq_reader = tiles::sequential_until_finish<osm_mem::Buffer>{[&] {
       pt->update(reader.offset());
       return reader.read();
     }};
-    auto h = node_handler{w};
+    auto h = node_handler{w, r};
     auto has_exception = std::atomic_bool{false};
     auto workers = std::vector<std::future<void>>{};
     workers.reserve(thread_count / 2U);
@@ -360,6 +465,8 @@ void extract(fs::path const& in, fs::path const& out) {
 
     reader.close();
   }
+
+  w.add_restriction(r);
 }
 
 }  // namespace osr

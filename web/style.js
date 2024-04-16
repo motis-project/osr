@@ -67,8 +67,6 @@ const building = "#ded7d3";
 const building_outline = "#cfc8c4";
 
 export const style = (map, level) => {
-    console.log('level', level);
-
     const matchLevel = (expression) => {
         return ["all",
                     ["any",
@@ -79,6 +77,15 @@ export const style = (map, level) => {
             ];
     }
 
+    const demSource = new mlcontour.DemSource({
+        url: 'https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png',
+        encoding: 'terrarium',
+        maxzoom: 14,
+        // offload contour line computation to a web worker
+        worker: true
+    });
+    demSource.setupMaplibre(maplibregl);
+
     map.setStyle({
         "version": 8,
         "sources": {
@@ -86,6 +93,47 @@ export const style = (map, level) => {
                 "type": "vector",
                 "tiles": ["/{z}/{x}/{y}.mvt"],
                 "maxzoom": 20
+            },
+            "hillshadeSource": {
+                type: "raster-dem",
+                encoding: "terrarium",
+                tiles: [
+                    "https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png"
+                ],
+                tileSize: 256,
+                minzoom: 0,
+                maxzoom: 14
+            },
+            "terrainSource": {
+                type: "raster-dem",
+                encoding: "terrarium",
+                tiles: [
+                    "https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png"
+                ],
+                tileSize: 256,
+                minzoom: 0,
+                maxzoom: 14
+            },
+            "contourSourceFeet": {
+                "type": 'vector',
+                "tiles": [
+                    demSource.contourProtocolUrl({
+                        // meters to feet
+                        "overzoom": 1,
+                        "thresholds": {
+                            // zoom: [minor, major]
+                            11: [200, 1000],
+                            12: [100, 500],
+                            13: [100, 500],
+                            14: [50, 200],
+                            15: [20, 100]
+                        },
+                        "elevationKey": 'ele',
+                        "levelKey": 'level',
+                        "contourLayer": 'contours'
+                    })
+                ],
+                "maxzoom": 15
             }
         },
         "glyphs": "/glyphs/{fontstack}/{range}.pbf",
@@ -636,8 +684,59 @@ export const style = (map, level) => {
                     "text-halo-color": "white",
                     "text-color": "#111111"
                 }
-            }
-        ]
+            },
+            /*
+            {
+                id: 'hills',
+                type: 'hillshade',
+                source: 'hillshadeSource',
+                layout: {visibility: 'visible'},
+                paint: {'hillshade-shadow-color': '#473B24'}
+            },
+            {
+                id: 'contours',
+                type: 'line',
+                source: 'contourSourceFeet',
+                'source-layer': 'contours',
+                "filter": [">=", "ele", 200],
+                paint: {
+                    'line-opacity': 0.5,
+                    'line-width': ['match', ['get', 'level'], 1, 1, 0.5]
+                }
+            },
+            {
+                id: 'contour-text',
+                type: 'symbol',
+                source: 'contourSourceFeet',
+                'source-layer': 'contours',
+                filter: [
+                    'all',
+                    [">=", "ele", 200],
+                    ['>', 'level', 0]
+                ],
+                paint: {
+                    'text-halo-color': 'white',
+                    'text-halo-width': 1
+                },
+                layout: {
+                    'symbol-placement': 'line',
+                    'text-size': 12,
+                    'text-field': [
+                        'concat',
+                        ['number-format', ['get', 'ele'], {}],
+                        'm'
+                    ],
+                    'text-font': ['Noto Sans Display Regular']
+                }
+            },
+            */
+        ],
+        /*
+        terrain: {
+            source: 'hillshadeSource',
+            exaggeration: 1
+        }
+        */
     });
 
     if (!map.hasImage("shield")) {

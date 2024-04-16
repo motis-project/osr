@@ -1,10 +1,12 @@
 #include "boost/json.hpp"
 
+#include "fmt/ranges.h"
+#include "fmt/std.h"
+
 #include "utl/pairwise.h"
 #include "utl/pipes/transform.h"
 #include "utl/pipes/vec.h"
 
-#include "osr/dijkstra.h"
 #include "osr/ways.h"
 
 namespace osr {
@@ -73,23 +75,45 @@ struct geojson_writer {
     nodes_.insert(begin(nodes), end(nodes));
   }
 
-  std::string finish(dijkstra_state const* s) {
+  template <typename Dijkstra>
+  std::string finish(Dijkstra const& s) {
     for (auto const n : nodes_) {
       auto const p = w_.node_properties_[n];
-      auto const e = s == nullptr ? std::nullopt : s->get(n);
+
+      auto ss = std::stringstream{};
+      Dijkstra::profile_t::resolve_all(w_, n, [&](auto const n) {
+        auto const cost = s.get_cost(n);
+        if (cost != kInfeasible) {
+          ss << "{";
+          n.print(ss, w_);
+          ss << ", " << cost << "}\n";
+        }
+      });
+
+      auto properties = boost::json::object{
+          {"osm_node_id", to_idx(w_.node_to_osm_[n])},
+          {"car", p.is_car_accessible()},
+          {"bike", p.is_bike_accessible()},
+          {"foot", p.is_walk_accessible()},
+          {"is_restricted", w_.node_is_restricted_[n]},
+          {"is_entrance", static_cast<bool>(p.is_entrance_)},
+          {"is_elevator", static_cast<bool>(p.is_elevator_)},
+          {"ways", fmt::format("{}", w_.node_ways_[n] |
+                                         std::views::transform([&](auto&& w) {
+                                           return w_.way_osm_idx_[w];
+                                         }))},
+          {"restrictions",
+           fmt::format("{}",
+                       w_.node_restrictions_[n] |
+                           std::views::transform([&](restriction const r) {
+                             return std::pair{
+                                 w_.way_osm_idx_[w_.node_ways_[n][r.from_]],
+                                 w_.way_osm_idx_[w_.node_ways_[n][r.to_]]};
+                           }))},
+          {"labels", ss.str()}};
       features_.emplace_back(boost::json::value{
           {"type", "Feature"},
-          {"properties",
-           {{"osm_node_id", to_idx(w_.node_to_osm_[n])},
-            {"car", p.is_car_accessible()},
-            {"bike", p.is_bike_accessible()},
-            {"foot", p.is_walk_accessible()},
-            {"pred", to_idx(e && e->pred_ != node_idx_t::invalid()
-                                ? w_.node_to_osm_[e->pred_]
-                                : osm_node_idx_t{0U})},
-            {"dist", e ? e->dist_ : -1},
-            {"is_entrance", static_cast<bool>(p.is_entrance_)},
-            {"is_elevator", static_cast<bool>(p.is_elevator_)}}},
+          {"properties", properties},
           {"geometry",
            {{"type", "Point"},
             {"coordinates", to_array(w_.get_node_pos(n))}}}});

@@ -7,7 +7,7 @@
 
 #include "utl/progress_tracker.h"
 
-#include "osr/extract.h"
+#include "osr/extract/extract.h"
 
 using namespace osr;
 using namespace boost::program_options;
