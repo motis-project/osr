@@ -154,8 +154,6 @@ struct car {
 
   template <direction SearchDir, typename Fn>
   static void adjacent(ways const& w, node const n, Fn&& fn) {
-    auto const from_node_prop = w.node_properties_[n.n_];
-
     auto way_pos = way_pos_t{0U};
     for (auto const [way, i] :
          utl::zip_unchecked(w.node_ways_[n.n_], w.node_in_way_idx_[n.n_])) {
