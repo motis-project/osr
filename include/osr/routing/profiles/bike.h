@@ -17,6 +17,10 @@ struct bike {
     constexpr node_idx_t get_node() const noexcept { return n_; }
     constexpr node get_key() const noexcept { return *this; }
 
+    std::ostream& print(std::ostream& out, ways const& w) const {
+      return out << w.node_to_osm_[n_];
+    }
+
     node_idx_t n_;
   };
 
@@ -64,8 +68,12 @@ struct bike {
   static void resolve(ways const& w,
                       way_idx_t const way,
                       node_idx_t const n,
-                      level_t const lvl,
                       Fn&& f) {
+    f(node{n});
+  }
+
+  template <typename Fn>
+  static void resolve_all(ways const& w, node_idx_t const n, Fn&& f) {
     f(node{n});
   }
 
@@ -89,8 +97,9 @@ struct bike {
         }
 
         auto const dist = w.way_node_dist_[way][std::min(from, to)];
-        fn(node{target_node}, way_cost(target_way_prop, way_dir, dist) +
-                                  node_cost(target_node_prop));
+        auto const cost = way_cost(target_way_prop, way_dir, dist) +
+                          node_cost(target_node_prop);
+        fn(node{target_node}, cost, dist, way, from, to);
       };
 
       if (i != 0U) {

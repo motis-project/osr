@@ -9,6 +9,9 @@
 #include <filesystem>
 #include <ranges>
 
+#include "fmt/ranges.h"
+#include "fmt/std.h"
+
 #include "osmium/osm/way.hpp"
 
 #include "utl/enumerate.h"
@@ -361,25 +364,18 @@ struct ways {
                     osm_idx, way, way_osm_idx_[way]);
   }
 
+  template <direction SearchDir>
   bool is_restricted(node_idx_t const n,
                      std::uint8_t const from,
                      std::uint8_t const to) const {
     if (!node_is_restricted_[n]) {
       return false;
     }
-
-    auto const from_prop = way_properties_[node_ways_[n][from]];
-    auto const to_prop = way_properties_[node_ways_[n][to]];
-    auto const node_prop = node_properties_[n];
-    auto const level_change = !node_prop.is_elevator_ &&
-                              !(to_prop.is_elevator_ || to_prop.is_steps_) &&
-                              from_prop.get_level() != to_prop.get_level();
-    if (level_change) {
-      return true;
-    }
-
     auto const r = node_restrictions_[n];
-    return utl::find(r, restriction{from, to}) != end(r);
+    auto const needle = SearchDir == direction::kForward
+                            ? restriction{from, to}
+                            : restriction{to, from};
+    return utl::find(r, needle) != end(r);
   }
 
   cista::mmap mm(char const* file) {

@@ -189,13 +189,9 @@ best_candidate(ways const& w,
 
     for (auto const x : {&dest.left_, &dest.right_}) {
       if (x->valid() && x->cost_ < max) {
-        fmt::println("way={}, node={}, cost={}", w.way_osm_idx_[dest.way_],
-                     w.node_to_osm_[x->node_], x->cost_);
-        Profile::resolve(w, dest.way_, x->node_, [&](auto&& node) {
+        Profile::resolve_all(w, x->node_, [&](auto&& node) {
+          // TODO check if node is reachable from {dest.way_, x->node_}
           auto const target_cost = d.get_cost(node);
-          fmt::println("option: {} (target_cost={}, dest_cost={}) for {}",
-                       target_cost, x->cost_, target_cost + x->cost_,
-                       w.node_to_osm_[node.get_node()]);
           if (target_cost == kInfeasible) {
             return;
           }

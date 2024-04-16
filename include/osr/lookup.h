@@ -128,27 +128,24 @@ struct lookup {
     auto const polyline = ways_.way_polylines_[wc.way_];
     auto const osm_nodes = ways_.way_osm_nodes_[wc.way_];
 
-    fmt::println("way={}, start={}", ways_.way_osm_idx_[wc.way_], c.cost_);
-    till_the_end(
-        wc.segment_idx_ + (dir == direction::kForward ? 1U : 0U),
-        utl::zip(polyline, osm_nodes), dir, [&](auto&& x) {
-          auto const& [pos, osm_node_idx] = x;
+    till_the_end(wc.segment_idx_ + (dir == direction::kForward ? 1U : 0U),
+                 utl::zip(polyline, osm_nodes), dir, [&](auto&& x) {
+                   auto const& [pos, osm_node_idx] = x;
 
-          auto const segment_dist = geo::distance(c.path_.back(), pos);
-          c.dist_to_node_ += segment_dist;
-          c.cost_ += Profile::way_cost(way_prop, edge_dir, segment_dist);
-          fmt::println("  +{}",
-                       Profile::way_cost(way_prop, edge_dir, segment_dist));
-          c.path_.push_back(pos);
+                   auto const segment_dist = geo::distance(c.path_.back(), pos);
+                   c.dist_to_node_ += segment_dist;
+                   c.cost_ +=
+                       Profile::way_cost(way_prop, edge_dir, segment_dist);
+                   c.path_.push_back(pos);
 
-          auto const way_node = ways_.find_node_idx(osm_node_idx);
-          if (way_node.has_value()) {
-            c.node_ = *way_node;
-            return cflow::kBreak;
-          }
+                   auto const way_node = ways_.find_node_idx(osm_node_idx);
+                   if (way_node.has_value()) {
+                     c.node_ = *way_node;
+                     return cflow::kBreak;
+                   }
 
-          return cflow::kContinue;
-        });
+                   return cflow::kContinue;
+                 });
 
     if (reverse) {
       std::reverse(begin(c.path_), end(c.path_));

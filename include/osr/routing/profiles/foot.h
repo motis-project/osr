@@ -16,6 +16,11 @@ struct foot {
     constexpr node_idx_t get_node() const noexcept { return n_; }
     constexpr node get_key() const noexcept { return *this; }
 
+    std::ostream& print(std::ostream& out, ways const& w) const {
+      return out << "(node=" << w.node_to_osm_[n_]
+                 << ", level=" << to_float(lvl_) << ")";
+    }
+
     node_idx_t n_;
     level_t lvl_;
   };
@@ -73,6 +78,18 @@ struct foot {
     f(node{n, w.way_properties_[way].get_level()});
   }
 
+  template <typename Fn>
+  static void resolve_all(ways const& w, node_idx_t const n, Fn&& f) {
+    auto const ways = w.node_ways_[n];
+    auto levels = hash_set<level_t>{};
+    for (auto i = way_pos_t{0U}; i != ways.size(); ++i) {
+      auto const lvl = w.way_properties_[w.node_ways_[n][i]].get_level();
+      if (levels.emplace(lvl).second) {
+        f(node{n, lvl});
+      }
+    }
+  }
+
   template <direction SearchDir, typename Fn>
   static void adjacent(ways const& w, node const n, Fn&& fn) {
     auto const from_node_prop = w.node_properties_[n.n_];
@@ -102,9 +119,10 @@ struct foot {
         }
 
         auto const dist = w.way_node_dist_[way][std::min(from, to)];
-        fn(node{target_node, target_way_prop.get_level()},
-           way_cost(target_way_prop, way_dir, dist) +
-               node_cost(target_node_prop));
+        auto const cost = way_cost(target_way_prop, way_dir, dist) +
+                          node_cost(target_node_prop);
+        fn(node{target_node, target_way_prop.get_level()}, cost, dist, way,
+           from, to);
       };
 
       if (i != 0U) {

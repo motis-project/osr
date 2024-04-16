@@ -153,7 +153,7 @@ struct way_handler : public osm::handler::Handler {
     };
 
     auto l = std::scoped_lock<std::mutex>{mutex_};
-    w_.way_osm_idx_.push_back(osm_way_idx_t{w.id()});
+    w_.way_osm_idx_.push_back(osm_way_idx_t{w.positive_id()});
     w_.way_polylines_.emplace_back(w.nodes() |
                                    std::views::transform(get_point));
     w_.way_osm_nodes_.emplace_back(w.nodes() |
@@ -364,6 +364,7 @@ void extract(fs::path const& in, fs::path const& out) {
     auto workers = std::vector<std::future<void>>{};
     workers.reserve(thread_count / 2U);
     auto h = way_handler{w, rel_ways};
+    auto queue = tiles::in_order_queue<osm_mem::Buffer>{};
     for (auto i = 0U; i < thread_count / 2U; ++i) {
       workers.emplace_back(pool.submit([&] {
         try {
@@ -375,7 +376,9 @@ void extract(fs::path const& in, fs::path const& out) {
 
             auto& [idx, buf] = *opt;
             tiles::update_locations(node_idx, buf);
-            osm::apply(buf, h);
+
+            queue.process_in_order(idx, std::move(buf),
+                                   [&](auto buf2) { osm::apply(buf2, h); });
           }
         } catch (std::exception const& e) {
           fmt::print(std::clog, "EXCEPTION CAUGHT: {} {}\n",

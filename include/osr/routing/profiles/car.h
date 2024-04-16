@@ -25,6 +25,11 @@ struct car {
     constexpr node_idx_t get_node() const noexcept { return n_; }
     constexpr node_idx_t get_key() const noexcept { return n_; }
 
+    std::ostream& print(std::ostream& out, ways const& w) const {
+      return out << "(node=" << w.node_to_osm_[n_] << ", dir=" << to_str(dir_)
+                 << ", way=" << w.way_osm_idx_[w.node_ways_[n_][way_]] << ")";
+    }
+
     node_idx_t n_;
     way_pos_t way_;
     direction dir_;
@@ -35,6 +40,23 @@ struct car {
     static constexpr auto const kN = kMaxWays * 2U /* FWD+BWD */;
 
     entry() { utl::fill(cost_, kInfeasible); }
+
+    std::string all_entries_at(ways const& w,
+                               node_idx_t const n) const noexcept {
+      auto ss = std::stringstream{};
+      ss << "[";
+      for (auto const& [i, cost] : utl::enumerate(cost_)) {
+        if (cost == kInfeasible) {
+          continue;
+        }
+        auto const x = get_node(n, i);
+        ss << "(dir=" << to_str(x.dir_)
+           << ", way=" << w.way_osm_idx_[w.node_ways_[n][x.way_]]
+           << ", cost=" << cost << ")";
+      }
+      ss << "]";
+      return ss.str();
+    }
 
     constexpr std::optional<node> pred(node const n) const noexcept {
       auto const idx = get_index(n);
@@ -60,6 +82,12 @@ struct car {
         return true;
       }
       return false;
+    }
+
+    static constexpr node get_node(node_idx_t const n,
+                                   std::size_t const index) {
+      return node{n, static_cast<way_pos_t>(index % kMaxWays),
+                  to_dir((index / kMaxWays) == 0U)};
     }
 
     static constexpr std::size_t get_index(node const n) {
@@ -106,8 +134,22 @@ struct car {
                       way_idx_t const way,
                       node_idx_t const n,
                       Fn&& f) {
-    f(node{n, w.get_way_pos(n, way), direction::kForward});
-    f(node{n, w.get_way_pos(n, way), direction::kBackward});
+    auto const ways = w.node_ways_[n];
+    for (auto i = way_pos_t{0U}; i != ways.size(); ++i) {
+      if (ways[i] == way) {
+        f(node{n, i, direction::kForward});
+        f(node{n, i, direction::kBackward});
+      }
+    }
+  }
+
+  template <typename Fn>
+  static void resolve_all(ways const& w, node_idx_t const n, Fn&& f) {
+    auto const ways = w.node_ways_[n];
+    for (auto i = way_pos_t{0U}; i != ways.size(); ++i) {
+      f(node{n, i, direction::kForward});
+      f(node{n, i, direction::kBackward});
+    }
   }
 
   template <direction SearchDir, typename Fn>
@@ -130,9 +172,7 @@ struct car {
           return;
         }
 
-        auto const restricted = w.node_is_restricted_[n.n_] &&
-                                w.is_restricted(n.n_, n.way_, way_pos);
-        if (restricted) {
+        if (w.is_restricted<SearchDir>(n.n_, n.way_, way_pos)) {
           return;
         }
 

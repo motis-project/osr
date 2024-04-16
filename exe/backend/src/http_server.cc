@@ -19,9 +19,9 @@
 
 #include "osr/geojson.h"
 #include "osr/lookup.h"
-#include "osr/routing/bike.h"
-#include "osr/routing/car.h"
-#include "osr/routing/foot.h"
+#include "osr/routing/profiles/bike.h"
+#include "osr/routing/profiles/car.h"
+#include "osr/routing/profiles/foot.h"
 #include "osr/routing/route.h"
 
 using namespace net;
@@ -109,14 +109,14 @@ struct http_server::impl {
 
     auto p = std::optional<path>{};
     switch (profile) {
-        //      case search_profile::kFoot:
-        //        p = route(w_, l_, get_dijkstra<foot>(), from, to, max,
-        //                  direction::kForward);
-        //        break;
-        //      case search_profile::kBike:
-        //        p = route(w_, l_, get_dijkstra<bike>(), from, to, max,
-        //                  direction::kForward);
-        //        break;
+      case search_profile::kFoot:
+        p = route(w_, l_, get_dijkstra<foot>(), from, to, max,
+                  direction::kForward);
+        break;
+      case search_profile::kBike:
+        p = route(w_, l_, get_dijkstra<bike>(), from, to, max,
+                  direction::kForward);
+        break;
       case search_profile::kCar:
         p = route(w_, l_, get_dijkstra<car>(), from, to, max,
                   direction::kForward);

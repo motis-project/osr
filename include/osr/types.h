@@ -92,4 +92,12 @@ constexpr direction opposite(direction const dir) {
                                     : direction::kForward;
 }
 
+constexpr std::string_view to_str(direction const d) {
+  switch (d) {
+    case direction::kForward: return "forward";
+    case direction::kBackward: return "backward";
+  }
+  std::unreachable();
+}
+
 }  // namespace osr

@@ -79,6 +79,17 @@ struct geojson_writer {
   std::string finish(Dijkstra const& s) {
     for (auto const n : nodes_) {
       auto const p = w_.node_properties_[n];
+
+      auto ss = std::stringstream{};
+      Dijkstra::profile_t::resolve_all(w_, n, [&](auto const n) {
+        auto const cost = s.get_cost(n);
+        if (cost != kInfeasible) {
+          ss << "{";
+          n.print(ss, w_);
+          ss << ", " << cost << "}\n";
+        }
+      });
+
       auto properties = boost::json::object{
           {"osm_node_id", to_idx(w_.node_to_osm_[n])},
           {"car", p.is_car_accessible()},
@@ -98,7 +109,8 @@ struct geojson_writer {
                              return std::pair{
                                  w_.way_osm_idx_[w_.node_ways_[n][r.from_]],
                                  w_.way_osm_idx_[w_.node_ways_[n][r.to_]]};
-                           }))}};
+                           }))},
+          {"labels", ss.str()}};
       features_.emplace_back(boost::json::value{
           {"type", "Feature"},
           {"properties", properties},

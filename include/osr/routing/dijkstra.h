@@ -11,16 +11,9 @@ constexpr direction flip(direction const dir) {
   return Dir == direction::kForward ? dir : opposite(dir);
 }
 
-constexpr std::string_view to_str(direction const d) {
-  switch (d) {
-    case direction::kForward: return "forward";
-    case direction::kBackward: return "backward";
-  }
-  std::unreachable();
-}
-
 template <typename Profile>
 struct dijkstra {
+  using profile_t = Profile;
   using key = typename Profile::key;
   using label = typename Profile::label;
   using node = typename Profile::node;
