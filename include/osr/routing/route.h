@@ -134,7 +134,6 @@ double add_path(ways const& w,
       }
     }
   }
-  std::reverse(begin(segment.polyline_), end(segment.polyline_));
   return distance;
 }
 
@@ -261,11 +260,10 @@ std::vector<std::optional<path>> route(ways const& w,
                                        location const& from,
                                        std::vector<location> const& to,
                                        cost_t const max,
-                                       direction const dir,
-                                       Profile&& profile) {
-  auto const from_match = l.match(from, false, profile);
+                                       direction const dir) {
+  auto const from_match = l.match<Profile>(from, false);
   auto const to_match =
-      utl::to_vec(to, [&](auto&& x) { return l.match(x, true, profile); });
+      utl::to_vec(to, [&](auto&& x) { return l.match<Profile>(x, true); });
 
   auto result = std::vector<std::optional<path>>{};
   result.resize(to.size());
@@ -276,11 +274,12 @@ std::vector<std::optional<path>> route(ways const& w,
 
   d.reset(max);
   for (auto const& start : from_match) {
-    if (start.left_.valid()) {
-      d.add_start(w, start.way_, start.left_.node_, start.left_.cost_);
-    }
-    if (start.right_.valid()) {
-      d.add_start(w, start.way_, start.right_.node_, start.right_.cost_);
+    for (auto const* nc : {&start.left_, &start.right_}) {
+      if (nc->valid() && nc->cost_ < max) {
+        Profile::resolve(w, start.way_, nc->node_, [&](auto const node) {
+          d.add_start({node, nc->cost_});
+        });
+      }
     }
 
     d.run(w, max, dir);
@@ -290,9 +289,9 @@ std::vector<std::optional<path>> route(ways const& w,
       if (r.has_value()) {
         ++found;
       } else {
-        auto const [_, _1, _2, cost] = best_candidate(w, m, d, max);
-        if (cost != kInfeasible) {
-          r = std::make_optional(path{.cost_ = cost});
+        auto const c = best_candidate(w, d, m, max);
+        if (c.has_value()) {
+          r = std::make_optional(path{.cost_ = std::get<3>(*c)});
           ++found;
         }
       }

@@ -65,22 +65,17 @@ struct bike {
   };
 
   template <typename Fn>
-  static void resolve(ways const& w,
-                      way_idx_t const way,
-                      node_idx_t const n,
-                      Fn&& f) {
+  static void resolve(ways const&, way_idx_t, node_idx_t const n, Fn&& f) {
     f(node{n});
   }
 
   template <typename Fn>
-  static void resolve_all(ways const& w, node_idx_t const n, Fn&& f) {
+  static void resolve_all(ways const&, node_idx_t const n, Fn&& f) {
     f(node{n});
   }
 
   template <direction SearchDir, typename Fn>
   static void adjacent(ways const& w, node const n, Fn&& fn) {
-    auto const from_node_prop = w.node_properties_[n.n_];
-
     for (auto const [way, i] :
          utl::zip_unchecked(w.node_ways_[n.n_], w.node_in_way_idx_[n.n_])) {
       auto const expand = [&](direction const way_dir, std::uint16_t const from,
