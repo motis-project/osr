@@ -22,6 +22,7 @@
 #include "osr/routing/profiles/bike.h"
 #include "osr/routing/profiles/car.h"
 #include "osr/routing/profiles/foot.h"
+#include "osr/routing/profiles/wheelchair.h"
 #include "osr/routing/route.h"
 
 using namespace net;
@@ -111,6 +112,10 @@ struct http_server::impl {
     switch (profile) {
       case search_profile::kFoot:
         p = route(w_, l_, get_dijkstra<foot>(), from, to, max,
+                  direction::kForward);
+        break;
+      case search_profile::kWheelchair:
+        p = route(w_, l_, get_dijkstra<wheelchair>(), from, to, max,
                   direction::kForward);
         break;
       case search_profile::kBike:

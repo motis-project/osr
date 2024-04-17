@@ -19,6 +19,7 @@ namespace osr {
 
 enum class search_profile : std::uint8_t {
   kFoot,
+  kWheelchair,
   kBike,
   kCar,
 };
@@ -42,6 +43,7 @@ struct path {
 search_profile to_profile(std::string_view s) {
   switch (cista::hash(s)) {
     case cista::hash("foot"): return search_profile::kFoot;
+    case cista::hash("wheelchair"): return search_profile::kWheelchair;
     case cista::hash("bike"): return search_profile::kBike;
     case cista::hash("car"): return search_profile::kCar;
   }
@@ -50,7 +52,8 @@ search_profile to_profile(std::string_view s) {
 
 std::string_view to_str(search_profile const p) {
   switch (p) {
-    case search_profile::kFoot: return "pedestrian";
+    case search_profile::kFoot: return "foot";
+    case search_profile::kWheelchair: return "wheelchair";
     case search_profile::kCar: return "car";
     case search_profile::kBike: return "bike";
   }
