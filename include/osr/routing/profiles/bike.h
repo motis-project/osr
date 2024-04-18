@@ -70,8 +70,15 @@ struct bike {
   }
 
   template <typename Fn>
-  static void resolve_all(ways const&, node_idx_t const n, Fn&& f) {
+  static void resolve_all(ways const&, node_idx_t const n, level_t, Fn&& f) {
     f(node{n});
+  }
+
+  static bool is_reachable(ways const& w,
+                           node const n,
+                           way_idx_t const way,
+                           direction const way_dir) {
+    return true;
   }
 
   template <direction SearchDir, typename Fn>

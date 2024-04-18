@@ -4,7 +4,7 @@
 
 namespace osr {
 
-struct foot {
+struct wheelchair {
   static constexpr auto const kMaxMatchDistance = 100U;
 
   struct node {
@@ -79,15 +79,55 @@ struct foot {
   }
 
   template <typename Fn>
-  static void resolve_all(ways const& w, node_idx_t const n, level_t, Fn&& f) {
+  static void resolve_all(ways const& w,
+                          node_idx_t const n,
+                          level_t const lvl,
+                          Fn&& f) {
     auto const ways = w.node_ways_[n];
     auto levels = hash_set<level_t>{};
     for (auto i = way_pos_t{0U}; i != ways.size(); ++i) {
-      auto const lvl = w.way_properties_[w.node_ways_[n][i]].get_level();
-      if (levels.emplace(lvl).second) {
-        f(node{n, lvl});
+      auto const way = w.node_ways_[n][i];
+      auto const way_prop = w.way_properties_[way];
+      if (way_prop.is_elevator() &&
+          (lvl == level_t::invalid() || way_prop.can_use_elevator(lvl))) {
+        if (levels.emplace(lvl).second) {
+          f(node{n, lvl});
+        }
+        //        fmt::println("creating elevator start for {}",
+        //        w.way_osm_idx_[way]); for (auto l = way_prop.get_level(); l <=
+        //        way_prop.get_to_level(); ++l) {
+        //          if (levels.emplace(l).second) {
+        //            f(node{n, l});
+        //          }
+        //        }
+      } else {
+        auto const lvl = way_prop.get_level();
+        if (levels.emplace(lvl).second) {
+          f(node{n, lvl});
+        }
       }
     }
+  }
+
+  static bool is_reachable(ways const& w,
+                           node const n,
+                           way_idx_t const way,
+                           direction const way_dir) {
+    auto const from_node_prop = w.node_properties_[n.n_];
+
+    auto const target_way_prop = w.way_properties_[way];
+    if (way_cost(target_way_prop, way_dir, 0U) == kInfeasible) {
+      return false;
+    }
+
+    auto const target_lvl = target_way_prop.get_level();
+    auto const level_ok = n.lvl_ == target_lvl ||
+                          (from_node_prop.can_use_elevator(n.lvl_, target_lvl));
+    if (!level_ok) {
+      return false;
+    }
+
+    return true;
   }
 
   template <direction SearchDir, typename Fn>
@@ -105,7 +145,8 @@ struct foot {
         }
 
         auto const target_way_prop = w.way_properties_[way];
-        if (way_cost(target_way_prop, way_dir, 0U) == kInfeasible) {
+        if (target_way_prop.is_steps_ ||
+            way_cost(target_way_prop, way_dir, 0U) == kInfeasible) {
           return;
         }
 
@@ -116,8 +157,9 @@ struct foot {
                        to_float(target_way_prop.get_to_level()));
           auto const cost = way_cost(target_way_prop, way_dir, 0U) +
                             node_cost(target_node_prop);
+          auto const dist = w.way_node_dist_[way][std::min(from, to)];
           for (auto l = target_way_prop.get_level();
-               l != target_way_prop.get_to_level(); ++l) {
+               l <= target_way_prop.get_to_level(); ++l) {
             if (n.lvl_ != l) {
               fn(node{target_node, l}, cost, 0U, way, from, to);
             }
@@ -133,21 +175,16 @@ struct foot {
         auto const target_lvl = target_way_prop.get_level();
         auto const level_ok =
             n.lvl_ == target_lvl || target_node_prop.is_entrance() ||
-            from_node_prop.can_use_elevator(n.lvl_, target_lvl) ||
-            target_way_prop.can_use_steps(n.lvl_, target_lvl);
+            (from_node_prop.can_use_elevator(n.lvl_, target_lvl));
         if (!level_ok) {
           return;
         }
 
-        auto const next_level = target_way_prop.is_steps()
-                                    ? (n.lvl_ == target_way_prop.get_level()
-                                           ? target_way_prop.get_to_level()
-                                           : target_way_prop.get_level())
-                                    : target_lvl;
         auto const dist = w.way_node_dist_[way][std::min(from, to)];
         auto const cost = way_cost(target_way_prop, way_dir, dist) +
                           node_cost(target_node_prop);
-        fn(node{target_node, next_level}, cost, dist, way, from, to);
+        fn(node{target_node, target_way_prop.get_level()}, cost, dist, way,
+           from, to);
       };
 
       if (i != 0U) {
@@ -159,35 +196,11 @@ struct foot {
     }
   }
 
-  static bool is_reachable(ways const& w,
-                           node const n,
-                           way_idx_t const way,
-                           direction const way_dir) {
-    auto const from_node_prop = w.node_properties_[n.n_];
-
-    auto const target_way_prop = w.way_properties_[way];
-    if (way_cost(target_way_prop, way_dir, 0U) == kInfeasible) {
-      return false;
-    }
-
-    auto const target_lvl = target_way_prop.get_level();
-    auto const level_ok =
-        n.lvl_ == target_lvl ||
-        (from_node_prop.can_use_elevator(n.lvl_, target_lvl)) ||
-        (target_way_prop.can_use_steps(n.lvl_, target_lvl));
-    if (!level_ok) {
-      return false;
-    }
-
-    return true;
-  }
-
   static constexpr cost_t way_cost(way_properties const e,
                                    direction,
                                    std::uint16_t const dist) {
     if (e.is_foot_accessible()) {
-      return e.is_elevator_ ? 90U
-                            : static_cast<cost_t>(std::round(dist / 1.2F));
+      return static_cast<cost_t>(std::round(dist / 1.2F));
     } else {
       return kInfeasible;
     }

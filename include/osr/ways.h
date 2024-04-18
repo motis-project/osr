@@ -114,8 +114,16 @@ struct way_properties {
   constexpr level_t get_to_level() const { return level_t{to_level_}; }
 
   constexpr bool can_use_steps(level_t const a, level_t const b) const {
-    return is_steps_ && std::min(a, b) == get_level() &&
-           std::max(a, b) == get_to_level();
+    return is_steps_ && get_level() <= std::min(a, b) &&
+           get_to_level() >= std::max(a, b);
+  }
+
+  constexpr bool can_use_elevator(level_t const from) const {
+    return is_elevator_ && is_in_range(from);
+  }
+
+  constexpr bool is_in_range(level_t const l) const {
+    return get_level() <= l && l <= get_to_level();
   }
 
   std::uint8_t is_foot_accessible_ : 1;
@@ -129,7 +137,6 @@ struct way_properties {
   std::uint8_t speed_limit_ : 3;
 
   std::uint8_t level_ : 5;
-
   std::uint8_t to_level_ : 5;
 };
 

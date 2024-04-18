@@ -17,6 +17,8 @@ struct location {
 struct node_candidate {
   bool valid() const { return node_ != node_idx_t::invalid(); }
 
+  level_t lvl_{level_t::invalid()};
+  direction way_dir_{direction::kForward};
   node_idx_t node_{node_idx_t::invalid()};
   double dist_to_node_{0.0};
   cost_t cost_{0U};
@@ -96,13 +98,14 @@ struct lookup {
       auto const p = ways_.way_properties_[way];
       auto d = distance_to_way(query.pos_, ways_.way_polylines_[way]);
       if (d.dist_to_way_ < Profile::kMaxMatchDistance &&
-          (query.lvl_ == level_t::invalid() || p.get_level() == query.lvl_)) {
+          (query.lvl_ == level_t::invalid() ||
+           (p.get_level() == query.lvl_ || p.can_use_elevator(query.lvl_)))) {
         auto& wc = way_candidates.emplace_back(std::move(d));
         wc.way_ = way;
-        wc.left_ =
-            find_next_node<Profile>(wc, query, direction::kBackward, reverse);
-        wc.right_ =
-            find_next_node<Profile>(wc, query, direction::kForward, reverse);
+        wc.left_ = find_next_node<Profile>(wc, query, direction::kBackward,
+                                           query.lvl_, reverse);
+        wc.right_ = find_next_node<Profile>(wc, query, direction::kForward,
+                                            query.lvl_, reverse);
       }
     });
     utl::sort(way_candidates);
@@ -113,6 +116,7 @@ struct lookup {
   node_candidate find_next_node(way_candidate const& wc,
                                 location const& query,
                                 direction const dir,
+                                level_t const lvl,
                                 bool const reverse) const {
     auto const way_prop = ways_.way_properties_[wc.way_];
     auto const edge_dir = reverse ? opposite(dir) : dir;
@@ -122,9 +126,12 @@ struct lookup {
     }
 
     auto const off_road_length = geo::distance(query.pos_, wc.best_);
-    auto c = node_candidate{.dist_to_node_ = off_road_length,
-                            .cost_ = Profile::way_cost(way_prop, edge_dir, 0U),
-                            .path_ = {query.pos_, wc.best_}};
+    auto c = node_candidate{
+        .lvl_ = lvl == level_t::invalid() ? way_prop.get_to_level() : lvl,
+        .way_dir_ = dir,
+        .dist_to_node_ = off_road_length,
+        .cost_ = Profile::way_cost(way_prop, edge_dir, 0U),
+        .path_ = {query.pos_, wc.best_}};
     auto const polyline = ways_.way_polylines_[wc.way_];
     auto const osm_nodes = ways_.way_osm_nodes_[wc.way_];
 

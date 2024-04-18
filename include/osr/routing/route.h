@@ -147,10 +147,9 @@ path reconstruct(ways const& w,
                  cost_t const cost,
                  direction const dir) {
   auto n = dest_node;
-  auto segments = std::vector<path::segment>{
-      {.polyline_ = dest.path_,
-       .level_ = w.way_properties_[dest_way].get_level(),
-       .way_ = way_idx_t::invalid()}};
+  auto segments = std::vector<path::segment>{{.polyline_ = dest.path_,
+                                              .level_ = dest.lvl_,
+                                              .way_ = way_idx_t::invalid()}};
   auto dist = 0.0;
   while (true) {
     auto const& e = d.cost_.at(n.get_key());
@@ -167,7 +166,7 @@ path reconstruct(ways const& w,
   auto const& start_node =
       n.get_node() == start.left_.node_ ? start.left_ : start.right_;
   segments.push_back({.polyline_ = start_node.path_,
-                      .level_ = w.way_properties_[start.way_].get_level(),
+                      .level_ = start_node.lvl_,
                       .way_ = way_idx_t::invalid()});
   std::reverse(begin(segments), end(segments));
   return {.cost_ = cost,
@@ -182,6 +181,7 @@ std::optional<std::tuple<node_candidate const*,
                          cost_t>>
 best_candidate(ways const& w,
                dijkstra<Profile>& d,
+               level_t const lvl,
                match_t const& m,
                cost_t const max) {
   for (auto const& dest : m) {
@@ -191,12 +191,19 @@ best_candidate(ways const& w,
 
     for (auto const x : {&dest.left_, &dest.right_}) {
       if (x->valid() && x->cost_ < max) {
-        Profile::resolve_all(w, x->node_, [&](auto&& node) {
-          // TODO check if node is reachable from {dest.way_, x->node_}
+        Profile::resolve_all(w, x->node_, lvl, [&](auto&& node) {
+          if (!Profile::is_reachable(w, node, dest.way_, x->way_dir_)) {
+            return;
+          }
+
           auto const target_cost = d.get_cost(node);
           if (target_cost == kInfeasible) {
             return;
           }
+
+          std::cout << "target node: ";
+          node.print(std::cout, w);
+          std::cout << "\n";
 
           auto const total_cost = target_cost + x->cost_;
           if (total_cost < max && total_cost < best_dist) {
@@ -243,7 +250,7 @@ std::optional<path> route(ways const& w,
 
     d.run(w, max, dir);
 
-    auto const c = best_candidate(w, d, to_match, max);
+    auto const c = best_candidate(w, d, to.lvl_, to_match, max);
     if (c.has_value()) {
       auto const [nc, wc, node, cost] = *c;
       return reconstruct<Profile>(w, d, start, *nc, wc->way_, node, cost, dir);

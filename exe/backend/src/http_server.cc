@@ -192,8 +192,7 @@ struct http_server::impl {
       }
     });
 
-    auto const s = get_dijkstra<car>();
-    cb(json_response(req, gj.finish(s)));
+    cb(json_response(req, gj.finish(get_dijkstra<wheelchair>())));
   }
 
   void handle_static(web_server::http_req_t&& req,

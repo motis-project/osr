@@ -104,8 +104,8 @@ way_properties get_way_properties(tags const& t) {
       .is_elevator_ = t.is_elevator_,
       .is_steps_ = (t.highway_ == "steps"sv),
       .speed_limit_ = get_speed_limit(t),
-      .level_ = to_idx(t.level_),
-      .to_level_ = to_idx(t.level_to_)};
+      .level_ = std::min(to_idx(t.level_), to_idx(t.get_to_level())),
+      .to_level_ = std::max(to_idx(t.level_), to_idx(t.get_to_level()))};
 }
 
 node_properties get_node_properties(osm::Node const& n) {
@@ -119,7 +119,7 @@ node_properties get_node_properties(osm::Node const& n) {
       .is_car_accessible_ = is_accessible<car_profile>(t, osm_obj_type::kNode),
       .is_elevator_ = t.is_elevator_,
       .is_entrance_ = t.is_entrance_,
-      .to_level_ = to_idx(t.level_to_)};
+      .to_level_ = to_idx(t.get_to_level())};
 }
 
 struct way_handler : public osm::handler::Handler {
@@ -130,9 +130,10 @@ struct way_handler : public osm::handler::Handler {
     auto const osm_way_idx = osm_way_idx_t{w.positive_id()};
     auto const it = rel_ways_.find(osm_way_idx);
     auto const t = tags{w};
-    if ((it == end(rel_ways_) && t.highway_.empty() && !t.is_platform_) ||
-        (t.highway_.empty() && !t.is_platform_ && it != end(rel_ways_) &&
-         t.landuse_)) {
+    if (!t.is_elevator_ &&  // elevators tagged as building would be landuse
+        ((it == end(rel_ways_) && t.highway_.empty() && !t.is_platform_) ||
+         (t.highway_.empty() && !t.is_platform_ && it != end(rel_ways_) &&
+          t.landuse_))) {
       return;
     }
 

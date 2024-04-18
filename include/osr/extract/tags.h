@@ -41,14 +41,17 @@ struct tags {
           break;
         case cista::hash("level"): {
           auto s = utl::cstr{t.value()};
-          auto from_lvl = 0.0F, to_lvl = 0.0F;
-          utl::parse_arg(s, from_lvl);
+          {
+            auto from_lvl = 0.0F;
+            utl::parse_arg(s, from_lvl);
+            level_ = to_level(std::clamp(from_lvl, kMinLevel, kMaxLevel));
+          }
           if (s) {
+            auto to_lvl = 0.0F;
             ++s;
             utl::parse_arg(s, to_lvl);
+            level_to_ = to_level(std::clamp(to_lvl, kMinLevel, kMaxLevel));
           }
-          level_ = to_level(std::clamp(from_lvl, kMinLevel, kMaxLevel));
-          level_to_ = to_level(std::clamp(to_lvl, kMinLevel, kMaxLevel));
           break;
         }
         case cista::hash("entrance"): is_entrance_ = true; break;
@@ -78,12 +81,12 @@ struct tags {
             case cista::hash("forestry"):
             case cista::hash("emergency"):
             case cista::hash("psv"):
-            case cista::hash("customers"):
             case cista::hash("private"): [[fallthrough]];
             case cista::hash("delivery"): access_ = override::kBlacklist; break;
 
             case cista::hash("designated"):
             case cista::hash("dismount"):
+            case cista::hash("customers"):
             case cista::hash("permissive"): [[fallthrough]];
             case cista::hash("yes"): access_ = override::kWhitelist; break;
           }
@@ -91,6 +94,10 @@ struct tags {
         case cista::hash("max_speed"): max_speed_ = t.value(); break;
       }
     }
+  }
+
+  level_t get_to_level() const {
+    return level_to_.has_value() ? *level_to_ : level_;
   }
 
   // https://wiki.openstreetmap.org/wiki/Key:oneway
@@ -147,7 +154,7 @@ struct tags {
 
   // https://wiki.openstreetmap.org/wiki/Key:level
   level_t level_{to_level(0.0F)};
-  level_t level_to_{to_level(0.0F)};  // for elevators
+  std::optional<level_t> level_to_{std::nullopt};  // for elevators
 };
 
 template <typename T>
@@ -189,6 +196,9 @@ struct foot_profile {
 
   static bool default_access(tags const& t, osm_obj_type const type) {
     if (type == osm_obj_type::kWay) {
+      if (t.is_elevator_) {
+        return true;
+      }
       switch (cista::hash(t.highway_)) {
         case cista::hash("primary"):
         case cista::hash("primary_link"):
