@@ -65,7 +65,8 @@ struct bike {
   };
 
   template <typename Fn>
-  static void resolve(ways const&, way_idx_t, node_idx_t const n, Fn&& f) {
+  static void resolve(
+      ways const&, way_idx_t, node_idx_t const n, level_t, Fn&& f) {
     f(node{n});
   }
 

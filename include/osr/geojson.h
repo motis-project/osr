@@ -7,6 +7,7 @@
 #include "utl/pipes/transform.h"
 #include "utl/pipes/vec.h"
 
+#include "osr/routing/profiles/foot.h"
 #include "osr/ways.h"
 
 namespace osr {
@@ -52,8 +53,8 @@ struct geojson_writer {
             {"oneway_car", p.is_oneway_car()},
             {"oneway_bike", p.is_oneway_bike()},
             {"max_speed", p.max_speed_km_per_h()},
-            {"level", to_float(level_t{p.level_})},
-            {"to_level", to_float(level_t{p.to_level_})},
+            {"level", to_float(level_t{p.from_level()})},
+            {"to_level", to_float(level_t{p.to_level()})},
             {"is_elevator", p.is_elevator()},
             {"is_steps", p.is_steps()}}},
           {"geometry", to_line_string(std::initializer_list<geo::latlng>{
@@ -72,8 +73,8 @@ struct geojson_writer {
                              {"oneway_car", p.is_oneway_car()},
                              {"oneway_bike", p.is_oneway_bike()},
                              {"max_speed", p.max_speed_km_per_h()},
-                             {"level", to_float(level_t{p.level_})},
-                             {"to_level", to_float(level_t{p.to_level_})},
+                             {"from_level", to_float(level_t{p.from_level()})},
+                             {"to_level", to_float(level_t{p.to_level()})},
                              {"is_elevator", p.is_elevator()},
                              {"is_steps", p.is_steps()}}},
                            {"geometry", to_line_string(w_.way_polylines_[i])}});
@@ -97,6 +98,10 @@ struct geojson_writer {
                                          }
                                        });
 
+      auto levels = std::stringstream{};
+      foot<true>::for_each_elevator_level(
+          w_, n, [&](auto&& l) { levels << to_float(level_t{l}) << " "; });
+
       auto properties = boost::json::object{
           {"osm_node_id", to_idx(w_.node_to_osm_[n])},
           {"internal_id", to_idx(n)},
@@ -104,10 +109,10 @@ struct geojson_writer {
           {"bike", p.is_bike_accessible()},
           {"foot", p.is_walk_accessible()},
           {"is_restricted", w_.node_is_restricted_[n]},
-          {"is_entrance", static_cast<bool>(p.is_entrance_)},
-          {"is_elevator", static_cast<bool>(p.is_elevator_)},
-          {"level", to_float(p.get_from_level())},
-          {"to_level", to_float(p.get_to_level())},
+          {"is_entrance", p.is_entrance()},
+          {"is_elevator", p.is_elevator()},
+          {"multi_level", p.is_multi_level()},
+          {"levels", levels.str()},
           {"ways", fmt::format("{}", w_.node_ways_[n] |
                                          std::views::transform([&](auto&& w) {
                                            return w_.way_osm_idx_[w];
@@ -119,8 +124,12 @@ struct geojson_writer {
                              return std::pair{
                                  w_.way_osm_idx_[w_.node_ways_[n][r.from_]],
                                  w_.way_osm_idx_[w_.node_ways_[n][r.to_]]};
-                           }))},
-          {"labels", ss.str()}};
+                           }))}};
+      if (!ss.str().empty()) {
+        properties.emplace("label", ss.str());
+      } else {
+        properties.emplace("label", "unreachable");
+      }
       features_.emplace_back(boost::json::value{
           {"type", "Feature"},
           {"properties", properties},

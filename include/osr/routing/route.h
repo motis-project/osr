@@ -31,7 +31,8 @@ std::string_view to_str(search_profile const p);
 struct path {
   struct segment {
     std::vector<geo::latlng> polyline_;
-    level_t level_;
+    level_t from_level_;
+    level_t to_level_;
     way_idx_t way_;
   };
 
@@ -118,7 +119,8 @@ double add_path(ways const& w,
   auto active = false;
   auto& segment = path.emplace_back();
   segment.way_ = way;
-  segment.level_ = w.way_properties_[way].get_level();
+  segment.from_level_ = w.way_properties_[way].from_level();
+  segment.to_level_ = w.way_properties_[way].to_level();
   for (auto const [osm_idx, coord] :
        infinite(reverse(utl::zip(w.way_osm_nodes_[way], w.way_polylines_[way]),
                         (from_idx > to_idx) ^ is_loop),
@@ -148,7 +150,8 @@ path reconstruct(ways const& w,
                  direction const dir) {
   auto n = dest_node;
   auto segments = std::vector<path::segment>{{.polyline_ = dest.path_,
-                                              .level_ = dest.lvl_,
+                                              .from_level_ = dest.lvl_,
+                                              .to_level_ = dest.lvl_,
                                               .way_ = way_idx_t::invalid()}};
   auto dist = 0.0;
   while (true) {
@@ -166,7 +169,8 @@ path reconstruct(ways const& w,
   auto const& start_node =
       n.get_node() == start.left_.node_ ? start.left_ : start.right_;
   segments.push_back({.polyline_ = start_node.path_,
-                      .level_ = start_node.lvl_,
+                      .from_level_ = start_node.lvl_,
+                      .to_level_ = start_node.lvl_,
                       .way_ = way_idx_t::invalid()});
   std::reverse(begin(segments), end(segments));
   return {.cost_ = cost,
@@ -201,9 +205,9 @@ best_candidate(ways const& w,
             return;
           }
 
-          std::cout << "target node: ";
-          node.print(std::cout, w);
-          std::cout << "\n";
+          if (x->cost_ * 5U > target_cost) {
+            return;
+          }
 
           auto const total_cost = target_cost + x->cost_;
           if (total_cost < max && total_cost < best_dist) {
@@ -242,9 +246,9 @@ std::optional<path> route(ways const& w,
   for (auto const& start : from_match) {
     for (auto const* nc : {&start.left_, &start.right_}) {
       if (nc->valid() && nc->cost_ < max) {
-        Profile::resolve(w, start.way_, nc->node_, [&](auto const node) {
-          d.add_start({node, nc->cost_});
-        });
+        Profile::resolve(
+            w, start.way_, nc->node_, from.lvl_,
+            [&](auto const node) { d.add_start({node, nc->cost_}); });
       }
     }
 

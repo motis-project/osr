@@ -28,37 +28,12 @@
 
 namespace osr {
 
-#define OSR_DEBUG_DIJKSTRA
-#ifdef OSR_DEBUG_DIJKSTRA
+#define OSR_DEBUG
+#ifdef OSR_DEBUG
 #define trace(...) fmt::println(std::cerr, __VA_ARGS__)
 #else
 #define trace(...)
 #endif
-
-enum speed_limit : std::uint8_t {
-  kmh_10,
-  kmh_30,
-  kmh_50,
-  kmh_70,
-  kmh_100,
-  kmh_120,
-};
-
-constexpr auto const kMinLevel = -4.0F;
-constexpr auto const kMaxLevel = 4.0F;
-
-constexpr level_t to_level(float const f) {
-  return level_t{static_cast<std::uint8_t>((f - kMinLevel) / 0.25F)};
-}
-
-constexpr float to_float(level_t const l) {
-  return kMinLevel + (to_idx(l) / 4.0F);
-}
-
-constexpr auto const kLevelBits = cista::constexpr_trailing_zeros(
-    cista::next_power_of_two(to_idx(to_level(kMaxLevel))));
-
-static_assert(kLevelBits == 5U);
 
 struct resolved_restriction {
   enum class type { kNo, kOnly } type_;
@@ -67,31 +42,9 @@ struct resolved_restriction {
 };
 
 struct restriction {
-  CISTA_FRIEND_COMPARABLE(restriction)
-  std::uint8_t from_, to_;
+  friend bool operator==(restriction, restriction) = default;
+  way_pos_t from_, to_;
 };
-
-enum node_type : std::uint8_t {
-  kEntry,
-  kEntrance,
-  kElevator,
-};
-
-constexpr std::uint16_t to_kmh(speed_limit const l) {
-  switch (l) {
-    case speed_limit::kmh_10: return 10U;
-    case speed_limit::kmh_30: return 30U;
-    case speed_limit::kmh_50: return 50U;
-    case speed_limit::kmh_70: return 70U;
-    case speed_limit::kmh_100: return 100U;
-    case speed_limit::kmh_120: return 120U;
-  }
-  std::unreachable();
-}
-
-constexpr std::uint16_t to_meters_per_second(speed_limit const l) {
-  return to_kmh(l) / 3.6;
-}
 
 struct way_properties {
   constexpr bool is_accessible() const {
@@ -110,21 +63,8 @@ struct way_properties {
   constexpr std::uint16_t max_speed_km_per_h() const {
     return to_kmh(static_cast<speed_limit>(speed_limit_));
   }
-  constexpr level_t get_level() const { return level_t{level_}; }
-  constexpr level_t get_to_level() const { return level_t{to_level_}; }
-
-  constexpr bool can_use_steps(level_t const a, level_t const b) const {
-    return is_steps_ && get_level() <= std::min(a, b) &&
-           get_to_level() >= std::max(a, b);
-  }
-
-  constexpr bool can_use_elevator(level_t const from) const {
-    return is_elevator_ && is_in_range(from);
-  }
-
-  constexpr bool is_in_range(level_t const l) const {
-    return get_level() <= l && l <= get_to_level();
-  }
+  constexpr level_t from_level() const { return level_t{from_level_}; }
+  constexpr level_t to_level() const { return level_t{to_level_}; }
 
   std::uint8_t is_foot_accessible_ : 1;
   std::uint8_t is_bike_accessible_ : 1;
@@ -136,7 +76,7 @@ struct way_properties {
 
   std::uint8_t speed_limit_ : 3;
 
-  std::uint8_t level_ : 5;
+  std::uint8_t from_level_ : 5;
   std::uint8_t to_level_ : 5;
 };
 
@@ -147,18 +87,11 @@ struct node_properties {
   constexpr bool is_bike_accessible() const { return is_bike_accessible_; }
   constexpr bool is_walk_accessible() const { return is_foot_accessible_; }
   constexpr bool is_elevator() const { return is_elevator_; }
+  constexpr bool is_multi_level() const { return is_multi_level_; }
   constexpr bool is_entrance() const { return is_entrance_; }
 
-  constexpr level_t get_from_level() const { return level_t{from_level_}; }
-  constexpr level_t get_to_level() const { return level_t{to_level_}; }
-
-  constexpr bool can_use_elevator(level_t const from, level_t const to) const {
-    return is_elevator_ && is_in_range(from) && is_in_range(to);
-  }
-
-  constexpr bool is_in_range(level_t const l) const {
-    return get_from_level() <= l && l <= get_to_level();
-  }
+  constexpr level_t from_level() const { return level_t{from_level_}; }
+  constexpr level_t to_level() const { return level_t{to_level_}; }
 
   std::uint8_t from_level_ : 5;
 
@@ -167,6 +100,7 @@ struct node_properties {
   std::uint8_t is_car_accessible_ : 1;
   std::uint8_t is_elevator_ : 1;
   std::uint8_t is_entrance_ : 1;
+  std::uint8_t is_multi_level_ : 1;
 
   std::uint8_t to_level_ : 5;
 };
@@ -201,7 +135,8 @@ struct ways {
         node_is_restricted_{mm_vec<std::uint64_t>{mm("node_restricted.bin")}},
         node_restrictions_{
             mm_vec<restriction>{mm("node_restrictions_data.bin")},
-            mm_vec<std::uint32_t>{mm("node_restrictions_index.bin")}} {}
+            mm_vec<std::uint32_t>{mm("node_restrictions_index.bin")}},
+        multi_level_elevators_{mm("multi_level_elevators.bin")} {}
 
   void lock() const {
     auto const timer = utl::scoped_timer{"lock"};
@@ -344,8 +279,8 @@ struct ways {
     if (it == end(node_to_osm_) || *it != i) {
       return std::nullopt;
     }
-    return std::make_optional(node_idx_t{static_cast<node_idx_t::value_t>(
-        std::distance(begin(node_to_osm_), it))});
+    return {node_idx_t{static_cast<node_idx_t::value_t>(
+        std::distance(begin(node_to_osm_), it))}};
   }
 
   node_idx_t get_node_idx(osm_node_idx_t const i) const {
@@ -407,6 +342,7 @@ struct ways {
   multi_counter node_way_counter_;
   mm_bitvec<node_idx_t> node_is_restricted_;
   mm_vecvec<node_idx_t, restriction> node_restrictions_;
+  mm_vec<pair<node_idx_t, level_bits_t>> multi_level_elevators_;
 };
 
 }  // namespace osr

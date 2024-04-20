@@ -97,9 +97,7 @@ struct lookup {
     find(query.pos_, [&](way_idx_t const way) {
       auto const p = ways_.way_properties_[way];
       auto d = distance_to_way(query.pos_, ways_.way_polylines_[way]);
-      if (d.dist_to_way_ < Profile::kMaxMatchDistance &&
-          (query.lvl_ == level_t::invalid() ||
-           (p.get_level() == query.lvl_ || p.can_use_elevator(query.lvl_)))) {
+      if (d.dist_to_way_ < Profile::kMaxMatchDistance) {
         auto& wc = way_candidates.emplace_back(std::move(d));
         wc.way_ = way;
         wc.left_ = find_next_node<Profile>(wc, query, direction::kBackward,
@@ -127,10 +125,10 @@ struct lookup {
 
     auto const off_road_length = geo::distance(query.pos_, wc.best_);
     auto c = node_candidate{
-        .lvl_ = lvl == level_t::invalid() ? way_prop.get_to_level() : lvl,
+        .lvl_ = lvl,
         .way_dir_ = dir,
         .dist_to_node_ = off_road_length,
-        .cost_ = Profile::way_cost(way_prop, edge_dir, 0U),
+        .cost_ = Profile::way_cost(way_prop, edge_dir, off_road_length),
         .path_ = {query.pos_, wc.best_}};
     auto const polyline = ways_.way_polylines_[wc.way_];
     auto const osm_nodes = ways_.way_osm_nodes_[wc.way_];

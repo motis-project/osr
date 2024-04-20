@@ -5,7 +5,6 @@
 #include "osmium/osm/object.hpp"
 
 #include "osr/types.h"
-#include "osr/ways.h"
 
 namespace osr {
 
@@ -41,16 +40,14 @@ struct tags {
           break;
         case cista::hash("level"): {
           auto s = utl::cstr{t.value()};
-          {
-            auto from_lvl = 0.0F;
-            utl::parse_arg(s, from_lvl);
-            level_ = to_level(std::clamp(from_lvl, kMinLevel, kMaxLevel));
-          }
-          if (s) {
-            auto to_lvl = 0.0F;
-            ++s;
-            utl::parse_arg(s, to_lvl);
-            level_to_ = to_level(std::clamp(to_lvl, kMinLevel, kMaxLevel));
+          while (s) {
+            auto l = 0.0F;
+            utl::parse_arg(s, l);
+            auto const lvl = to_level(std::clamp(l, kMinLevel, kMaxLevel));
+            level_bits_ |= (1U << to_idx(lvl));
+            if (s) {
+              ++s;
+            }
           }
           break;
         }
@@ -94,10 +91,6 @@ struct tags {
         case cista::hash("max_speed"): max_speed_ = t.value(); break;
       }
     }
-  }
-
-  level_t get_to_level() const {
-    return level_to_.has_value() ? *level_to_ : level_;
   }
 
   // https://wiki.openstreetmap.org/wiki/Key:oneway
@@ -153,8 +146,7 @@ struct tags {
   bool is_entrance_{false};
 
   // https://wiki.openstreetmap.org/wiki/Key:level
-  level_t level_{to_level(0.0F)};
-  std::optional<level_t> level_to_{std::nullopt};  // for elevators
+  level_bits_t level_bits_{0U};
 };
 
 template <typename T>
