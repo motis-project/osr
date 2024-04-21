@@ -53,6 +53,7 @@ struct way_properties {
   constexpr bool is_car_accessible() const { return is_car_accessible_; }
   constexpr bool is_bike_accessible() const { return is_bike_accessible_; }
   constexpr bool is_foot_accessible() const { return is_foot_accessible_; }
+  constexpr bool is_destination() const { return is_destination_; }
   constexpr bool is_oneway_car() const { return is_oneway_car_; }
   constexpr bool is_oneway_bike() const { return is_oneway_bike_; }
   constexpr bool is_elevator() const { return is_elevator_; }
@@ -69,6 +70,7 @@ struct way_properties {
   std::uint8_t is_foot_accessible_ : 1;
   std::uint8_t is_bike_accessible_ : 1;
   std::uint8_t is_car_accessible_ : 1;
+  std::uint8_t is_destination_ : 1;
   std::uint8_t is_oneway_car_ : 1;
   std::uint8_t is_oneway_bike_ : 1;
   std::uint8_t is_elevator_ : 1;
@@ -318,6 +320,15 @@ struct ways {
                             ? restriction{from, to}
                             : restriction{to, from};
     return utl::find(r, needle) != end(r);
+  }
+
+  bool is_restricted(node_idx_t const n,
+                     std::uint8_t const from,
+                     std::uint8_t const to,
+                     direction const search_dir) const {
+    return search_dir == direction::kForward
+               ? is_restricted<direction::kForward>(n, from, to)
+               : is_restricted<direction::kBackward>(n, from, to);
   }
 
   cista::mmap mm(char const* file) {

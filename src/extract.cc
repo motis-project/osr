@@ -48,12 +48,12 @@ struct osm_restriction {
 };
 
 bool is_number(std::string_view s) {
-  return utl::all_of(s, [](char const c) { return std::isdigit(c); });
+  return !s.empty() &&
+         utl::all_of(s, [](char const c) { return std::isdigit(c); });
 }
 
 speed_limit get_speed_limit(tags const& t) {
-  if (!t.max_speed_.empty() &&
-      is_number(t.max_speed_) /* TODO: support units (kmh/mph) */) {
+  if (is_number(t.max_speed_) /* TODO: support units (kmh/mph) */) {
     return get_speed_limit(utl::parse<unsigned>(t.max_speed_));
   } else {
     switch (cista::hash(t.highway_)) {
@@ -84,6 +84,7 @@ way_properties get_way_properties(tags const& t) {
       .is_foot_accessible_ = is_accessible<foot_profile>(t, osm_obj_type::kWay),
       .is_bike_accessible_ = is_accessible<bike_profile>(t, osm_obj_type::kWay),
       .is_car_accessible_ = is_accessible<car_profile>(t, osm_obj_type::kWay),
+      .is_destination_ = t.is_destination_,
       .is_oneway_car_ = t.oneway_,
       .is_oneway_bike_ = t.oneway_ && !t.not_oneway_bike_,
       .is_elevator_ = t.is_elevator_,

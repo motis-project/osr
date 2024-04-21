@@ -187,40 +187,57 @@ best_candidate(ways const& w,
                dijkstra<Profile>& d,
                level_t const lvl,
                match_t const& m,
-               cost_t const max) {
+               cost_t const max,
+               direction const search_dir,
+               way_idx_t const start_way) {
+  auto const get_best = [&](way_candidate const& dest,
+                            node_candidate const* x) {
+    auto best_node = typename Profile::node{};
+    auto best_cost = std::numeric_limits<cost_t>::max();
+    Profile::resolve_all(w, x->node_, lvl, [&](auto&& node) {
+      if (!Profile::is_reachable(w, node, dest.way_, opposite(x->way_dir_),
+                                 opposite(search_dir))) {
+        return;
+      }
+
+      auto const target_cost = d.get_cost(node);
+      if (target_cost == kInfeasible) {
+        return;
+      }
+
+      auto const total_cost = target_cost + x->cost_;
+      if (total_cost < max && total_cost < best_cost) {
+        best_node = node;
+        best_cost = static_cast<cost_t>(total_cost);
+      }
+    });
+    return std::pair{best_node, best_cost};
+  };
+
   for (auto const& dest : m) {
     auto best_node = typename Profile::node{};
-    auto best_dist = std::numeric_limits<cost_t>::max();
+    auto best_cost = std::numeric_limits<cost_t>::max();
     auto best = static_cast<node_candidate const*>(nullptr);
 
     for (auto const x : {&dest.left_, &dest.right_}) {
       if (x->valid() && x->cost_ < max) {
-        Profile::resolve_all(w, x->node_, lvl, [&](auto&& node) {
-          if (!Profile::is_reachable(w, node, dest.way_, x->way_dir_)) {
-            return;
-          }
-
-          auto const target_cost = d.get_cost(node);
-          if (target_cost == kInfeasible) {
-            return;
-          }
-
-          if (x->cost_ * 5U > target_cost) {
-            return;
-          }
-
-          auto const total_cost = target_cost + x->cost_;
-          if (total_cost < max && total_cost < best_dist) {
-            best = x;
-            best_node = node;
-            best_dist = static_cast<cost_t>(total_cost);
-          }
-        });
+        auto const [x_node, x_cost] = get_best(dest, x);
+        if (x_cost < x->offroad_cost_ * 2U) {
+          continue;
+        }
+        if (x_cost < max && x_cost < best_cost) {
+          best = x;
+          best_node = x_node;
+          best_cost = static_cast<cost_t>(x_cost);
+        }
       }
     }
 
     if (best != nullptr) {
-      return std::tuple{best, &dest, best_node, best_dist};
+      std::cout << "BEST: ";
+      best_node.print(std::cout, w);
+      std::cout << " => cost=" << best_cost << "\n";
+      return std::tuple{best, &dest, best_node, best_cost};
     }
   }
   return std::nullopt;
@@ -233,7 +250,7 @@ std::optional<path> route(ways const& w,
                           location const& from,
                           location const& to,
                           cost_t const max,
-                          direction const dir) {
+                          direction const search_dir) {
   auto const from_match = l.match<Profile>(from, false);
   auto const to_match = l.match<Profile>(to, true);
 
@@ -252,12 +269,18 @@ std::optional<path> route(ways const& w,
       }
     }
 
-    d.run(w, max, dir);
+    if (d.pq_.empty()) {
+      continue;
+    }
 
-    auto const c = best_candidate(w, d, to.lvl_, to_match, max);
+    d.run(w, max, search_dir);
+
+    auto const c =
+        best_candidate(w, d, to.lvl_, to_match, max, search_dir, start.way_);
     if (c.has_value()) {
       auto const [nc, wc, node, cost] = *c;
-      return reconstruct<Profile>(w, d, start, *nc, wc->way_, node, cost, dir);
+      return reconstruct<Profile>(w, d, start, *nc, wc->way_, node, cost,
+                                  search_dir);
     }
   }
 

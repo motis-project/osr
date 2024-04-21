@@ -6,7 +6,8 @@ namespace osr {
 
 template <bool IsWheelchair>
 struct foot {
-  static constexpr auto const kMaxMatchDistance = 20U;
+  static constexpr auto const kMaxMatchDistance = 10U;
+  static constexpr auto const kOffroadPenalty = 3U;
 
   struct node {
     friend bool operator==(node, node) = default;
@@ -155,11 +156,15 @@ struct foot {
   static bool is_reachable(ways const& w,
                            node const n,
                            way_idx_t const way,
-                           direction const way_dir) {
+                           direction const way_dir,
+                           direction const search_dir) {
     auto const from_node_prop = w.node_properties_[n.n_];
 
     auto const target_way_prop = w.way_properties_[way];
-    if (way_cost(target_way_prop, way_dir, 0U) == kInfeasible) {
+    if (way_cost(
+            target_way_prop,
+            search_dir == direction::kForward ? way_dir : opposite(way_dir),
+            0U) == kInfeasible) {
       return false;
     }
 

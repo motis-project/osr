@@ -50,6 +50,7 @@ struct geojson_writer {
             {"car", p.is_car_accessible()},
             {"bike", p.is_bike_accessible()},
             {"foot", p.is_foot_accessible()},
+            {"is_destination", p.is_destination()},
             {"oneway_car", p.is_oneway_car()},
             {"oneway_bike", p.is_oneway_bike()},
             {"max_speed", p.max_speed_km_per_h()},
@@ -70,6 +71,7 @@ struct geojson_writer {
                              {"car", p.is_car_accessible()},
                              {"bike", p.is_bike_accessible()},
                              {"foot", p.is_foot_accessible()},
+                             {"is_destination", p.is_destination()},
                              {"oneway_car", p.is_oneway_car()},
                              {"oneway_bike", p.is_oneway_bike()},
                              {"max_speed", p.max_speed_km_per_h()},
@@ -124,12 +126,8 @@ struct geojson_writer {
                              return std::pair{
                                  w_.way_osm_idx_[w_.node_ways_[n][r.from_]],
                                  w_.way_osm_idx_[w_.node_ways_[n][r.to_]]};
-                           }))}};
-      if (!ss.str().empty()) {
-        properties.emplace("label", ss.str());
-      } else {
-        properties.emplace("label", "unreachable");
-      }
+                           }))},
+          {"label", ss.str().empty() ? "unreachable" : ss.str()}};
       features_.emplace_back(boost::json::value{
           {"type", "Feature"},
           {"properties", properties},

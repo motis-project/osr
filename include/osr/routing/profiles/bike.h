@@ -6,6 +6,7 @@ namespace osr {
 
 struct bike {
   static constexpr auto const kMaxMatchDistance = 100U;
+  static constexpr auto const kOffroadPenalty = 1U;
 
   struct node {
     friend bool operator==(node, node) = default;
@@ -75,10 +76,7 @@ struct bike {
     f(node{n});
   }
 
-  static bool is_reachable(ways const& w,
-                           node const n,
-                           way_idx_t const way,
-                           direction const way_dir) {
+  static bool is_reachable(ways const&, node, way_idx_t, direction, direction) {
     return true;
   }
 
