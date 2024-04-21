@@ -82,7 +82,7 @@ struct foot {
     if (lvl == level_t::invalid() ||
         (p.from_level() == lvl || p.to_level() == lvl ||
          can_use_elevator(w, n, lvl))) {
-      f(node{n, lvl});
+      f(node{n, lvl == level_t::invalid() ? p.from_level() : lvl});
     }
   }
 
@@ -96,9 +96,16 @@ struct foot {
     for (auto i = way_pos_t{0U}; i != ways.size(); ++i) {
       // TODO what's with stairs? need to resolve to from_level or to_level?
       auto const p = w.way_properties_[w.node_ways_[n][i]];
-      if ((p.from_level() == lvl || p.to_level() == lvl ||
-           can_use_elevator(w, n, lvl)) &&
-          levels.emplace(lvl).second) {
+      if (lvl == level_t::invalid()) {
+        if (levels.emplace(p.from_level()).second) {
+          f(node{n, p.from_level()});
+        }
+        if (levels.emplace(p.to_level()).second) {
+          f(node{n, p.to_level()});
+        }
+      } else if ((p.from_level() == lvl || p.to_level() == lvl ||
+                  can_use_elevator(w, n, lvl)) &&
+                 levels.emplace(lvl).second) {
         f(node{n, lvl});
       }
     }
@@ -106,8 +113,6 @@ struct foot {
 
   template <direction SearchDir, typename Fn>
   static void adjacent(ways const& w, node const n, Fn&& fn) {
-    auto const from_node_prop = w.node_properties_[n.n_];
-
     for (auto const [way, i] :
          utl::zip_unchecked(w.node_ways_[n.n_], w.node_in_way_idx_[n.n_])) {
       auto const expand = [&](direction const way_dir, std::uint16_t const from,
@@ -158,8 +163,6 @@ struct foot {
                            way_idx_t const way,
                            direction const way_dir,
                            direction const search_dir) {
-    auto const from_node_prop = w.node_properties_[n.n_];
-
     auto const target_way_prop = w.way_properties_[way];
     if (way_cost(
             target_way_prop,

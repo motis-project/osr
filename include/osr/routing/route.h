@@ -144,7 +144,6 @@ path reconstruct(ways const& w,
                  dijkstra<Profile> const& d,
                  way_candidate const& start,
                  node_candidate const& dest,
-                 way_idx_t const dest_way,
                  typename Profile::node const dest_node,
                  cost_t const cost,
                  direction const dir) {
@@ -188,8 +187,7 @@ best_candidate(ways const& w,
                level_t const lvl,
                match_t const& m,
                cost_t const max,
-               direction const search_dir,
-               way_idx_t const start_way) {
+               direction const search_dir) {
   auto const get_best = [&](way_candidate const& dest,
                             node_candidate const* x) {
     auto best_node = typename Profile::node{};
@@ -272,12 +270,10 @@ std::optional<path> route(ways const& w,
 
     d.run(w, max, search_dir);
 
-    auto const c =
-        best_candidate(w, d, to.lvl_, to_match, max, search_dir, start.way_);
+    auto const c = best_candidate(w, d, to.lvl_, to_match, max, search_dir);
     if (c.has_value()) {
       auto const [nc, wc, node, cost] = *c;
-      return reconstruct<Profile>(w, d, start, *nc, wc->way_, node, cost,
-                                  search_dir);
+      return reconstruct<Profile>(w, d, start, *nc, node, cost, search_dir);
     }
   }
 
@@ -307,20 +303,20 @@ std::vector<std::optional<path>> route(ways const& w,
   for (auto const& start : from_match) {
     for (auto const* nc : {&start.left_, &start.right_}) {
       if (nc->valid() && nc->cost_ < max) {
-        Profile::resolve(w, start.way_, nc->node_, [&](auto const node) {
-          d.add_start({node, nc->cost_});
-        });
+        Profile::resolve(
+            w, start.way_, nc->node_, from.lvl_,
+            [&](auto const node) { d.add_start({node, nc->cost_}); });
       }
     }
 
     d.run(w, max, dir);
 
     auto found = 0U;
-    for (auto const [m, r] : utl::zip(to_match, result)) {
+    for (auto const [m, t, r] : utl::zip(to_match, to, result)) {
       if (r.has_value()) {
         ++found;
       } else {
-        auto const c = best_candidate(w, d, m, max);
+        auto const c = best_candidate(w, d, t.lvl_, m, max, dir);
         if (c.has_value()) {
           r = std::make_optional(path{.cost_ = std::get<3>(*c)});
           ++found;

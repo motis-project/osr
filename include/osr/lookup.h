@@ -96,7 +96,6 @@ struct lookup {
   match_t match(location const& query, bool const reverse) const {
     auto way_candidates = std::vector<way_candidate>{};
     find(query.pos_, [&](way_idx_t const way) {
-      auto const p = ways_.way_properties_[way];
       auto d = distance_to_way(query.pos_, ways_.way_polylines_[way]);
       if (d.dist_to_way_ < Profile::kMaxMatchDistance) {
         auto& wc = way_candidates.emplace_back(std::move(d));
