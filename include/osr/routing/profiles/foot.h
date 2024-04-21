@@ -255,7 +255,7 @@ struct foot {
     auto const it = std::lower_bound(
         begin(w.multi_level_elevators_), end(w.multi_level_elevators_), n,
         [](auto&& x, auto&& y) { return x.first < y; });
-    assert(it != end(multi_level_elevators_) && it->first == n);
+    assert(it != end(w.multi_level_elevators_) && it->first == n);
     return it->second;
   }
 
