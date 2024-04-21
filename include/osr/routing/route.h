@@ -234,9 +234,6 @@ best_candidate(ways const& w,
     }
 
     if (best != nullptr) {
-      std::cout << "BEST: ";
-      best_node.print(std::cout, w);
-      std::cout << " => cost=" << best_cost << "\n";
       return std::tuple{best, &dest, best_node, best_cost};
     }
   }

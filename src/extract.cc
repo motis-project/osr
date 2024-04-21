@@ -297,7 +297,7 @@ struct mark_inaccessible_handler : public osm::handler::Handler {
         is_accessible<car_profile>(t, osm_obj_type::kNode) &&
         is_accessible<bike_profile>(t, osm_obj_type::kNode) &&
         is_accessible<foot_profile>(t, osm_obj_type::kNode);
-    if (!accessible) {
+    if (!accessible || t.is_elevator_) {
       w_.node_way_counter_.increment(n.positive_id());
     }
   }
