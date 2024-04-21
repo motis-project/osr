@@ -31,7 +31,8 @@ std::string_view to_str(search_profile const p);
 struct path {
   struct segment {
     std::vector<geo::latlng> polyline_;
-    level_t level_;
+    level_t from_level_;
+    level_t to_level_;
     way_idx_t way_;
   };
 
@@ -118,7 +119,8 @@ double add_path(ways const& w,
   auto active = false;
   auto& segment = path.emplace_back();
   segment.way_ = way;
-  segment.level_ = w.way_properties_[way].get_level();
+  segment.from_level_ = w.way_properties_[way].from_level();
+  segment.to_level_ = w.way_properties_[way].to_level();
   for (auto const [osm_idx, coord] :
        infinite(reverse(utl::zip(w.way_osm_nodes_[way], w.way_polylines_[way]),
                         (from_idx > to_idx) ^ is_loop),
@@ -147,10 +149,10 @@ path reconstruct(ways const& w,
                  cost_t const cost,
                  direction const dir) {
   auto n = dest_node;
-  auto segments = std::vector<path::segment>{
-      {.polyline_ = dest.path_,
-       .level_ = w.way_properties_[dest_way].get_level(),
-       .way_ = way_idx_t::invalid()}};
+  auto segments = std::vector<path::segment>{{.polyline_ = dest.path_,
+                                              .from_level_ = dest.lvl_,
+                                              .to_level_ = dest.lvl_,
+                                              .way_ = way_idx_t::invalid()}};
   auto dist = 0.0;
   while (true) {
     auto const& e = d.cost_.at(n.get_key());
@@ -167,7 +169,8 @@ path reconstruct(ways const& w,
   auto const& start_node =
       n.get_node() == start.left_.node_ ? start.left_ : start.right_;
   segments.push_back({.polyline_ = start_node.path_,
-                      .level_ = w.way_properties_[start.way_].get_level(),
+                      .from_level_ = start_node.lvl_,
+                      .to_level_ = start_node.lvl_,
                       .way_ = way_idx_t::invalid()});
   std::reverse(begin(segments), end(segments));
   return {.cost_ = cost,
@@ -182,34 +185,56 @@ std::optional<std::tuple<node_candidate const*,
                          cost_t>>
 best_candidate(ways const& w,
                dijkstra<Profile>& d,
+               level_t const lvl,
                match_t const& m,
-               cost_t const max) {
+               cost_t const max,
+               direction const search_dir,
+               way_idx_t const start_way) {
+  auto const get_best = [&](way_candidate const& dest,
+                            node_candidate const* x) {
+    auto best_node = typename Profile::node{};
+    auto best_cost = std::numeric_limits<cost_t>::max();
+    Profile::resolve_all(w, x->node_, lvl, [&](auto&& node) {
+      if (!Profile::is_reachable(w, node, dest.way_, opposite(x->way_dir_),
+                                 opposite(search_dir))) {
+        return;
+      }
+
+      auto const target_cost = d.get_cost(node);
+      if (target_cost == kInfeasible) {
+        return;
+      }
+
+      auto const total_cost = target_cost + x->cost_;
+      if (total_cost < max && total_cost < best_cost) {
+        best_node = node;
+        best_cost = static_cast<cost_t>(total_cost);
+      }
+    });
+    return std::pair{best_node, best_cost};
+  };
+
   for (auto const& dest : m) {
     auto best_node = typename Profile::node{};
-    auto best_dist = std::numeric_limits<cost_t>::max();
+    auto best_cost = std::numeric_limits<cost_t>::max();
     auto best = static_cast<node_candidate const*>(nullptr);
 
     for (auto const x : {&dest.left_, &dest.right_}) {
       if (x->valid() && x->cost_ < max) {
-        Profile::resolve_all(w, x->node_, [&](auto&& node) {
-          // TODO check if node is reachable from {dest.way_, x->node_}
-          auto const target_cost = d.get_cost(node);
-          if (target_cost == kInfeasible) {
-            return;
-          }
-
-          auto const total_cost = target_cost + x->cost_;
-          if (total_cost < max && total_cost < best_dist) {
-            best = x;
-            best_node = node;
-            best_dist = static_cast<cost_t>(total_cost);
-          }
-        });
+        auto const [x_node, x_cost] = get_best(dest, x);
+        if (x_cost < x->offroad_cost_ * 2U) {
+          continue;
+        }
+        if (x_cost < max && x_cost < best_cost) {
+          best = x;
+          best_node = x_node;
+          best_cost = static_cast<cost_t>(x_cost);
+        }
       }
     }
 
     if (best != nullptr) {
-      return std::tuple{best, &dest, best_node, best_dist};
+      return std::tuple{best, &dest, best_node, best_cost};
     }
   }
   return std::nullopt;
@@ -222,7 +247,7 @@ std::optional<path> route(ways const& w,
                           location const& from,
                           location const& to,
                           cost_t const max,
-                          direction const dir) {
+                          direction const search_dir) {
   auto const from_match = l.match<Profile>(from, false);
   auto const to_match = l.match<Profile>(to, true);
 
@@ -235,18 +260,24 @@ std::optional<path> route(ways const& w,
   for (auto const& start : from_match) {
     for (auto const* nc : {&start.left_, &start.right_}) {
       if (nc->valid() && nc->cost_ < max) {
-        Profile::resolve(w, start.way_, nc->node_, [&](auto const node) {
-          d.add_start({node, nc->cost_});
-        });
+        Profile::resolve(
+            w, start.way_, nc->node_, from.lvl_,
+            [&](auto const node) { d.add_start({node, nc->cost_}); });
       }
     }
 
-    d.run(w, max, dir);
+    if (d.pq_.empty()) {
+      continue;
+    }
 
-    auto const c = best_candidate(w, d, to_match, max);
+    d.run(w, max, search_dir);
+
+    auto const c =
+        best_candidate(w, d, to.lvl_, to_match, max, search_dir, start.way_);
     if (c.has_value()) {
       auto const [nc, wc, node, cost] = *c;
-      return reconstruct<Profile>(w, d, start, *nc, wc->way_, node, cost, dir);
+      return reconstruct<Profile>(w, d, start, *nc, wc->way_, node, cost,
+                                  search_dir);
     }
   }
 

@@ -5,7 +5,6 @@
 #include "osmium/osm/object.hpp"
 
 #include "osr/types.h"
-#include "osr/ways.h"
 
 namespace osr {
 
@@ -30,7 +29,10 @@ struct tags {
         case cista::hash("oneway:bicycle"):
           not_oneway_bike_ = t.value() == "no"sv;
           break;
-        case cista::hash("motor_vehicle"): motor_vehicle_ = t.value(); break;
+        case cista::hash("motor_vehicle"):
+          motor_vehicle_ = t.value();
+          is_destination_ |= motor_vehicle_ == "destination";
+          break;
         case cista::hash("foot"): foot_ = t.value(); break;
         case cista::hash("bicycle"): bicycle_ = t.value(); break;
         case cista::hash("highway"):
@@ -41,20 +43,24 @@ struct tags {
           break;
         case cista::hash("level"): {
           auto s = utl::cstr{t.value()};
-          auto from_lvl = 0.0F, to_lvl = 0.0F;
-          utl::parse_arg(s, from_lvl);
-          if (s) {
-            ++s;
-            utl::parse_arg(s, to_lvl);
+          while (s) {
+            auto l = 0.0F;
+            utl::parse_arg(s, l);
+            auto const lvl = to_level(std::clamp(l, kMinLevel, kMaxLevel));
+            level_bits_ |= (1U << to_idx(lvl));
+            if (s) {
+              ++s;
+            }
           }
-          level_ = to_level(std::clamp(from_lvl, kMinLevel, kMaxLevel));
-          level_to_ = to_level(std::clamp(to_lvl, kMinLevel, kMaxLevel));
           break;
         }
         case cista::hash("entrance"): is_entrance_ = true; break;
         case cista::hash("sidewalk"): sidewalk_ = t.value(); break;
         case cista::hash("cycleway"): cycleway_ = t.value(); break;
-        case cista::hash("motorcar"): motorcar_ = t.value(); break;
+        case cista::hash("motorcar"):
+          motorcar_ = t.value();
+          is_destination_ |= motorcar_ == "destination";
+          break;
         case cista::hash("barrier"): barrier_ = t.value(); break;
         case cista::hash("public_transport"):
           is_platform_ |=
@@ -64,9 +70,11 @@ struct tags {
           switch (cista::hash(std::string_view{t.value()})) {
             case cista::hash("private"):
             case cista::hash("delivery"):
-            case cista::hash("destination"): [[fallthrough]];
             case cista::hash("no"): vehicle_ = override::kBlacklist; break;
 
+            case cista::hash("destination"):
+              is_destination_ = true;
+              [[fallthrough]];
             case cista::hash("permissive"): [[fallthrough]];
             case cista::hash("yes"): vehicle_ = override::kWhitelist; break;
           }
@@ -78,17 +86,17 @@ struct tags {
             case cista::hash("forestry"):
             case cista::hash("emergency"):
             case cista::hash("psv"):
-            case cista::hash("customers"):
             case cista::hash("private"): [[fallthrough]];
             case cista::hash("delivery"): access_ = override::kBlacklist; break;
 
             case cista::hash("designated"):
             case cista::hash("dismount"):
+            case cista::hash("customers"):
             case cista::hash("permissive"): [[fallthrough]];
             case cista::hash("yes"): access_ = override::kWhitelist; break;
           }
           break;
-        case cista::hash("max_speed"): max_speed_ = t.value(); break;
+        case cista::hash("maxspeed"): max_speed_ = t.value(); break;
       }
     }
   }
@@ -128,6 +136,7 @@ struct tags {
   std::string_view max_speed_;
 
   // https://wiki.openstreetmap.org/wiki/Key:vehicle
+  bool is_destination_{false};
   override vehicle_{override::kNone};
 
   // https://wiki.openstreetmap.org/wiki/Key:access
@@ -146,8 +155,7 @@ struct tags {
   bool is_entrance_{false};
 
   // https://wiki.openstreetmap.org/wiki/Key:level
-  level_t level_{to_level(0.0F)};
-  level_t level_to_{to_level(0.0F)};  // for elevators
+  level_bits_t level_bits_{0U};
 };
 
 template <typename T>
@@ -167,9 +175,8 @@ struct foot_profile {
 
     switch (cista::hash(t.foot_)) {
       case cista::hash("no"):
-      case cista::hash("private"):
-      case cista::hash("use_sidepath"): [[fallthrough]];
-      case cista::hash("destination"): return override::kBlacklist;
+      case cista::hash("private"): [[fallthrough]];
+      case cista::hash("use_sidepath"): return override::kBlacklist;
 
       case cista::hash("yes"):
       case cista::hash("permissive"): [[fallthrough]];
@@ -189,6 +196,9 @@ struct foot_profile {
 
   static bool default_access(tags const& t, osm_obj_type const type) {
     if (type == osm_obj_type::kWay) {
+      if (t.is_elevator_) {
+        return true;
+      }
       switch (cista::hash(t.highway_)) {
         case cista::hash("primary"):
         case cista::hash("primary_link"):
@@ -228,9 +238,8 @@ struct bike_profile {
     switch (cista::hash(t.bicycle_)) {
       case cista::hash("no"):
       case cista::hash("private"):
-      case cista::hash("optional_sidepath"):
-      case cista::hash("use_sidepath"): [[fallthrough]];
-      case cista::hash("destination"): return override::kBlacklist;
+      case cista::hash("optional_sidepath"): [[fallthrough]];
+      case cista::hash("use_sidepath"): return override::kBlacklist;
 
       case cista::hash("yes"):
       case cista::hash("permissive"): [[fallthrough]];
@@ -300,8 +309,7 @@ struct car_profile {
         case cista::hash("agricultural;forestry"):
         case cista::hash("permit"):
         case cista::hash("customers"):
-        case cista::hash("delivery"):
-        case cista::hash("destination"): [[fallthrough]];
+        case cista::hash("delivery"): [[fallthrough]];
         case cista::hash("no"): return override::kBlacklist;
 
         case cista::hash("designated"):

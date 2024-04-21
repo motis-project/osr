@@ -22,7 +22,6 @@
 #include "osr/routing/profiles/bike.h"
 #include "osr/routing/profiles/car.h"
 #include "osr/routing/profiles/foot.h"
-#include "osr/routing/profiles/wheelchair.h"
 #include "osr/routing/route.h"
 
 using namespace net;
@@ -111,11 +110,11 @@ struct http_server::impl {
     auto p = std::optional<path>{};
     switch (profile) {
       case search_profile::kFoot:
-        p = route(w_, l_, get_dijkstra<foot>(), from, to, max,
+        p = route(w_, l_, get_dijkstra<foot<false>>(), from, to, max,
                   direction::kForward);
         break;
       case search_profile::kWheelchair:
-        p = route(w_, l_, get_dijkstra<wheelchair>(), from, to, max,
+        p = route(w_, l_, get_dijkstra<foot<true>>(), from, to, max,
                   direction::kForward);
         break;
       case search_profile::kBike:
@@ -140,7 +139,7 @@ struct http_server::impl {
                                return json::value{
                                    {"type", "Feature"},
                                    {"properties",
-                                    {{"level", to_float(s.level_)},
+                                    {{"level", to_float(s.from_level_)},
                                      {"way",
                                       s.way_ == way_idx_t::invalid()
                                           ? 0U
@@ -162,7 +161,11 @@ struct http_server::impl {
         {waypoints[3].as_double(), waypoints[2].as_double()});
     auto levels = hash_set<level_t>{};
     l_.find(min, max, [&](way_idx_t const x) {
-      levels.emplace(w_.way_properties_[x].get_level());
+      auto const p = w_.way_properties_[x];
+      levels.emplace(p.from_level());
+      if (p.from_level() != p.to_level()) {
+        levels.emplace(p.to_level());
+      }
     });
     auto levels_sorted =
         utl::to_vec(levels, [](level_t const l) { return to_float(l); });
@@ -186,14 +189,34 @@ struct http_server::impl {
 
     auto gj = geojson_writer{.w_ = w_};
     l_.find(min, max, [&](way_idx_t const w) {
-      if (level == level_t::invalid() ||
-          w_.way_properties_[w].get_level() == level) {
+      if (level == level_t::invalid()) {
         gj.write_way(w);
+        return;
+      }
+
+      auto const way_prop = w_.way_properties_[w];
+      if (way_prop.is_elevator()) {
+        auto const n = w_.way_nodes_[w][0];
+        auto const np = w_.node_properties_[n];
+        if (np.is_multi_level()) {
+          auto has_level = false;
+          for_each_set_bit(
+              foot<true>::get_elevator_multi_levels(w_, n),
+              [&](auto&& bit) { has_level |= (level == level_t{bit}); });
+          if (has_level) {
+            gj.write_way(w);
+            return;
+          }
+        }
+      }
+
+      if (way_prop.from_level() == level || way_prop.to_level() == level) {
+        gj.write_way(w);
+        return;
       }
     });
 
-    auto const s = get_dijkstra<car>();
-    cb(json_response(req, gj.finish(s)));
+    cb(json_response(req, gj.finish(get_dijkstra<foot<true>>())));
   }
 
   void handle_static(web_server::http_req_t&& req,

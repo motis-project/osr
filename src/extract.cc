@@ -12,6 +12,7 @@
 #include "osmium/io/pbf_input.hpp"
 #include "osmium/io/xml_input.hpp"
 
+#include "utl/enumerate.h"
 #include "utl/helpers/algorithm.h"
 #include "utl/parser/arg_parser.h"
 #include "utl/progress_tracker.h"
@@ -23,7 +24,6 @@
 
 #include "osr/extract/tags.h"
 #include "osr/ways.h"
-#include "utl/enumerate.h"
 
 namespace osm = osmium;
 namespace osm_io = osmium::io;
@@ -48,28 +48,12 @@ struct osm_restriction {
 };
 
 bool is_number(std::string_view s) {
-  return utl::all_of(s, [](char const c) { return std::isdigit(c); });
-}
-
-constexpr speed_limit get_speed_limit(unsigned const x) {
-  if (x >= 120U) {
-    return speed_limit::kmh_120;
-  } else if (x >= 100) {
-    return speed_limit::kmh_100;
-  } else if (x >= 70) {
-    return speed_limit::kmh_70;
-  } else if (x >= 50) {
-    return speed_limit::kmh_50;
-  } else if (x >= 30) {
-    return speed_limit::kmh_30;
-  } else {
-    return speed_limit::kmh_10;
-  }
+  return !s.empty() &&
+         utl::all_of(s, [](char const c) { return std::isdigit(c); });
 }
 
 speed_limit get_speed_limit(tags const& t) {
-  if (!t.max_speed_.empty() &&
-      is_number(t.max_speed_) /* TODO: support units (kmh/mph) */) {
+  if (is_number(t.max_speed_) /* TODO: support units (kmh/mph) */) {
     return get_speed_limit(utl::parse<unsigned>(t.max_speed_));
   } else {
     switch (cista::hash(t.highway_)) {
@@ -95,44 +79,64 @@ speed_limit get_speed_limit(tags const& t) {
 }
 
 way_properties get_way_properties(tags const& t) {
+  auto const [from, to, _] = get_levels(t.level_bits_);
   return {
       .is_foot_accessible_ = is_accessible<foot_profile>(t, osm_obj_type::kWay),
       .is_bike_accessible_ = is_accessible<bike_profile>(t, osm_obj_type::kWay),
       .is_car_accessible_ = is_accessible<car_profile>(t, osm_obj_type::kWay),
+      .is_destination_ = t.is_destination_,
       .is_oneway_car_ = t.oneway_,
       .is_oneway_bike_ = t.oneway_ && !t.not_oneway_bike_,
       .is_elevator_ = t.is_elevator_,
       .is_steps_ = (t.highway_ == "steps"sv),
       .speed_limit_ = get_speed_limit(t),
-      .level_ = to_idx(t.level_),
-      .to_level_ = to_idx(t.level_to_)};
+      .from_level_ = to_idx(from),
+      .to_level_ = to_idx(to)};
 }
 
-node_properties get_node_properties(osm::Node const& n) {
+std::pair<node_properties, level_bits_t> get_node_properties(
+    osm::Node const& n) {
   auto const t = tags{n};
-  return {
-      .from_level_ = to_idx(t.level_),
-      .is_foot_accessible_ =
-          is_accessible<foot_profile>(t, osm_obj_type::kNode),
-      .is_bike_accessible_ =
-          is_accessible<bike_profile>(t, osm_obj_type::kNode),
-      .is_car_accessible_ = is_accessible<car_profile>(t, osm_obj_type::kNode),
-      .is_elevator_ = t.is_elevator_,
-      .is_entrance_ = t.is_entrance_,
-      .to_level_ = to_idx(t.level_to_)};
+  auto const [from, to, is_multi] = get_levels(t.level_bits_);
+  return {{
+              .from_level_ = to_idx(from),
+              .is_foot_accessible_ =
+                  is_accessible<foot_profile>(t, osm_obj_type::kNode),
+              .is_bike_accessible_ =
+                  is_accessible<bike_profile>(t, osm_obj_type::kNode),
+              .is_car_accessible_ =
+                  is_accessible<car_profile>(t, osm_obj_type::kNode),
+              .is_elevator_ = t.is_elevator_,
+              .is_entrance_ = t.is_entrance_,
+              .is_multi_level_ = is_multi,
+              .to_level_ = to_idx(to),
+          },
+          t.level_bits_};
 }
 
 struct way_handler : public osm::handler::Handler {
-  way_handler(ways& w, hash_map<osm_way_idx_t, way_properties>& rel_ways)
-      : w_{w}, rel_ways_{rel_ways} {}
+  way_handler(ways& w,
+              hash_map<osm_way_idx_t, way_properties>& rel_ways,
+              hash_map<osm_node_idx_t, level_bits_t>& elevator_nodes)
+      : w_{w}, rel_ways_{rel_ways}, elevator_nodes_{elevator_nodes} {}
 
   void way(osm::Way const& w) {
     auto const osm_way_idx = osm_way_idx_t{w.positive_id()};
     auto const it = rel_ways_.find(osm_way_idx);
     auto const t = tags{w};
-    if ((it == end(rel_ways_) && t.highway_.empty() && !t.is_platform_) ||
-        (t.highway_.empty() && !t.is_platform_ && it != end(rel_ways_) &&
-         t.landuse_)) {
+
+    if (t.is_elevator_) {
+      if (w.nodes().front() != w.nodes().back()) {
+        return;  // way elevators have to be loops
+      }
+      auto const first_node = osm_node_idx_t{w.nodes().front().positive_ref()};
+      elevator_nodes_.emplace(first_node, t.level_bits_);
+    }
+
+    if (!t.is_elevator_ &&  // elevators tagged as building would be landuse
+        ((it == end(rel_ways_) && t.highway_.empty() && !t.is_platform_) ||
+         (t.highway_.empty() && !t.is_platform_ && it != end(rel_ways_) &&
+          t.landuse_))) {
       return;
     }
 
@@ -164,6 +168,7 @@ struct way_handler : public osm::handler::Handler {
   std::mutex mutex_;
   ways& w_;
   hash_map<osm_way_idx_t, way_properties>& rel_ways_;
+  hash_map<osm_node_idx_t, level_bits_t>& elevator_nodes_;
 };
 
 struct node_handler : public osm::handler::Handler {
@@ -175,14 +180,34 @@ struct node_handler : public osm::handler::Handler {
     std::vector<way_idx_t> from_, to_;
   };
 
-  node_handler(ways& w, std::vector<resolved_restriction>& r) : r_{r}, w_{w} {
+  node_handler(ways& w,
+               std::vector<resolved_restriction>& r,
+               hash_map<osm_node_idx_t, level_bits_t> const& elevator_nodes)
+      : r_{r}, w_{w}, elevator_nodes_{elevator_nodes} {
     w_.node_properties_.resize(w_.n_nodes());
   }
 
   void node(osm::Node const& n) {
-    if (auto const node_idx = w_.find_node_idx(osm_node_idx_t{n.id()});
+    auto const osm_node_idx = osm_node_idx_t{n.id()};
+    if (auto const node_idx = w_.find_node_idx(osm_node_idx);
         node_idx.has_value()) {
-      w_.node_properties_[*node_idx] = get_node_properties(n);
+      auto const [p, level_bits] = get_node_properties(n);
+      w_.node_properties_[*node_idx] = p;
+
+      if (p.is_elevator() && p.is_multi_level()) {
+        w_.multi_level_elevators_.emplace_back(*node_idx, level_bits);
+      } else if (auto const it = elevator_nodes_.find(osm_node_idx);
+                 it != end(elevator_nodes_)) {
+        auto const [from, to, is_multi] = get_levels(it->second);
+        auto& x = w_.node_properties_[*node_idx];
+        x.is_elevator_ = true;
+        x.from_level_ = to_idx(from);
+        x.to_level_ = to_idx(to);
+        x.is_multi_level_ = is_multi;
+        if (is_multi) {
+          w_.multi_level_elevators_.emplace_back(*node_idx, it->second);
+        }
+      }
     }
   }
 
@@ -259,6 +284,8 @@ struct node_handler : public osm::handler::Handler {
   std::mutex r_mutex_;
 
   ways& w_;
+
+  hash_map<osm_node_idx_t, level_bits_t> const& elevator_nodes_;
 };
 
 struct mark_inaccessible_handler : public osm::handler::Handler {
@@ -270,7 +297,7 @@ struct mark_inaccessible_handler : public osm::handler::Handler {
         is_accessible<car_profile>(t, osm_obj_type::kNode) &&
         is_accessible<bike_profile>(t, osm_obj_type::kNode) &&
         is_accessible<foot_profile>(t, osm_obj_type::kNode);
-    if (!accessible) {
+    if (!accessible || t.is_elevator_) {
       w_.node_way_counter_.increment(n.positive_id());
     }
   }
@@ -345,6 +372,7 @@ void extract(fs::path const& in, fs::path const& out) {
     node_idx_builder.finish();
   }
 
+  auto elevator_nodes = hash_map<osm_node_idx_t, level_bits_t>{};
   {  // Extract streets, places, and areas.
     pt->status("Load OSM / Ways").in_high(file_size).out_bounds(20, 50);
 
@@ -363,7 +391,7 @@ void extract(fs::path const& in, fs::path const& out) {
     auto has_exception = std::atomic_bool{false};
     auto workers = std::vector<std::future<void>>{};
     workers.reserve(thread_count / 2U);
-    auto h = way_handler{w, rel_ways};
+    auto h = way_handler{w, rel_ways, elevator_nodes};
     auto queue = tiles::in_order_queue<osm_mem::Buffer>{};
     for (auto i = 0U; i < thread_count / 2U; ++i) {
       workers.emplace_back(pool.submit([&] {
@@ -425,7 +453,7 @@ void extract(fs::path const& in, fs::path const& out) {
       pt->update(reader.offset());
       return reader.read();
     }};
-    auto h = node_handler{w, r};
+    auto h = node_handler{w, r, elevator_nodes};
     auto has_exception = std::atomic_bool{false};
     auto workers = std::vector<std::future<void>>{};
     workers.reserve(thread_count / 2U);

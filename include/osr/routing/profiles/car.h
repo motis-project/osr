@@ -11,6 +11,7 @@ namespace osr {
 struct car {
   static constexpr auto const kMaxMatchDistance = 200U;
   static constexpr auto const kUturnPenalty = cost_t{120U};
+  static constexpr auto const kOffroadPenalty = 1U;
 
   using key = node_idx_t;
 
@@ -130,10 +131,8 @@ struct car {
   };
 
   template <typename Fn>
-  static void resolve(ways const& w,
-                      way_idx_t const way,
-                      node_idx_t const n,
-                      Fn&& f) {
+  static void resolve(
+      ways const& w, way_idx_t const way, node_idx_t const n, level_t, Fn&& f) {
     auto const ways = w.node_ways_[n];
     for (auto i = way_pos_t{0U}; i != ways.size(); ++i) {
       if (ways[i] == way) {
@@ -144,7 +143,7 @@ struct car {
   }
 
   template <typename Fn>
-  static void resolve_all(ways const& w, node_idx_t const n, Fn&& f) {
+  static void resolve_all(ways const& w, node_idx_t const n, level_t, Fn&& f) {
     auto const ways = w.node_ways_[n];
     for (auto i = way_pos_t{0U}; i != ways.size(); ++i) {
       f(node{n, i, direction::kForward});
@@ -195,12 +194,30 @@ struct car {
     }
   }
 
+  static bool is_reachable(ways const& w,
+                           node const n,
+                           way_idx_t const way,
+                           direction const way_dir,
+                           direction const search_dir) {
+    auto const target_way_prop = w.way_properties_[way];
+    if (way_cost(target_way_prop, way_dir, 0U) == kInfeasible) {
+      return false;
+    }
+
+    if (w.is_restricted(n.n_, n.way_, w.get_way_pos(n.n_, way), search_dir)) {
+      return false;
+    }
+
+    return true;
+  }
+
   static constexpr cost_t way_cost(way_properties const& e,
                                    direction const dir,
                                    std::uint16_t const dist) {
     if (e.is_car_accessible() &&
         (dir == direction::kForward || !e.is_oneway_car())) {
-      return (dist / e.max_speed_m_per_s());
+      return (dist / e.max_speed_m_per_s()) * (e.is_destination() ? 5U : 1U) +
+             (e.is_destination() ? 120U : 0U);
     } else {
       return kInfeasible;
     }

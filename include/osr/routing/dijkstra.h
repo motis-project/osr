@@ -33,7 +33,7 @@ struct dijkstra {
   void add_start(label const l) {
     if (cost_[l.get_node().get_key()].update(l.get_node(), l.cost(),
                                              node::invalid())) {
-      push(l);
+      pq_.push(l);
     }
   }
 
@@ -41,8 +41,6 @@ struct dijkstra {
     auto const it = cost_.find(n.get_key());
     return it != end(cost_) ? it->second.cost(n) : kInfeasible;
   }
-
-  void push(label const& l) { pq_.push(l); }
 
   template <direction SearchDir>
   void run(ways const& w, cost_t const max) {
