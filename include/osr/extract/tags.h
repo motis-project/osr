@@ -54,6 +54,7 @@ struct tags {
           }
           break;
         }
+        case cista::hash("name"): name_ = t.value(); break;
         case cista::hash("entrance"): is_entrance_ = true; break;
         case cista::hash("sidewalk"): sidewalk_ = t.value(); break;
         case cista::hash("cycleway"): cycleway_ = t.value(); break;
@@ -134,6 +135,9 @@ struct tags {
 
   // https://wiki.openstreetmap.org/wiki/Key:maxspeed
   std::string_view max_speed_;
+
+  // https://wiki.openstreetmap.org/wiki/Key:name
+  std::string_view name_;
 
   // https://wiki.openstreetmap.org/wiki/Key:vehicle
   bool is_destination_{false};
