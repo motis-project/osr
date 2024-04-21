@@ -130,6 +130,7 @@ struct way_handler : public osm::handler::Handler {
         return;  // way elevators have to be loops
       }
       auto const first_node = osm_node_idx_t{w.nodes().front().positive_ref()};
+      auto const l = std::scoped_lock{elevator_nodes_mutex_};
       elevator_nodes_.emplace(first_node, t.level_bits_);
     }
 
@@ -168,6 +169,8 @@ struct way_handler : public osm::handler::Handler {
   std::mutex mutex_;
   ways& w_;
   hash_map<osm_way_idx_t, way_properties>& rel_ways_;
+
+  std::mutex elevator_nodes_mutex_;
   hash_map<osm_node_idx_t, level_bits_t>& elevator_nodes_;
 };
 
@@ -195,6 +198,7 @@ struct node_handler : public osm::handler::Handler {
       w_.node_properties_[*node_idx] = p;
 
       if (p.is_elevator() && p.is_multi_level()) {
+        auto const l = std::scoped_lock{multi_level_elevators_mutex_};
         w_.multi_level_elevators_.emplace_back(*node_idx, level_bits);
       } else if (auto const it = elevator_nodes_.find(osm_node_idx);
                  it != end(elevator_nodes_)) {
@@ -205,6 +209,7 @@ struct node_handler : public osm::handler::Handler {
         x.to_level_ = to_idx(to);
         x.is_multi_level_ = is_multi;
         if (is_multi) {
+          auto const l = std::scoped_lock{multi_level_elevators_mutex_};
           w_.multi_level_elevators_.emplace_back(*node_idx, it->second);
         }
       }
@@ -279,6 +284,8 @@ struct node_handler : public osm::handler::Handler {
       }
     }
   }
+
+  std::mutex multi_level_elevators_mutex_;
 
   std::vector<resolved_restriction>& r_;
   std::mutex r_mutex_;
