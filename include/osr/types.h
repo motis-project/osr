@@ -99,6 +99,10 @@ constexpr direction flip(direction const dir) {
   return Dir == direction::kForward ? dir : opposite(dir);
 }
 
+constexpr direction flip(direction const search_dir, direction const dir) {
+  return search_dir == direction::kForward ? dir : opposite(dir);
+}
+
 constexpr std::string_view to_str(direction const d) {
   switch (d) {
     case direction::kForward: return "forward";

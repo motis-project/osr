@@ -199,7 +199,8 @@ best_candidate(ways const& w,
     auto best_node = typename Profile::node{};
     auto best_cost = std::numeric_limits<cost_t>::max();
     Profile::resolve_all(w, x->node_, lvl, [&](auto&& node) {
-      if (!Profile::is_reachable(w, node, dest.way_, opposite(x->way_dir_),
+      if (!Profile::is_reachable(w, node, dest.way_,
+                                 flip(opposite(dir), x->way_dir_),
                                  opposite(dir))) {
         return;
       }
@@ -249,8 +250,8 @@ std::optional<path> route(ways const& w,
                           location const& to,
                           cost_t const max,
                           direction const dir) {
-  auto const from_match = l.match<Profile>(from, false);
-  auto const to_match = l.match<Profile>(to, true);
+  auto const from_match = l.match<Profile>(from, false, dir);
+  auto const to_match = l.match<Profile>(to, true, dir);
 
   if (from_match.empty() || to_match.empty()) {
     return std::nullopt;
@@ -261,6 +262,7 @@ std::optional<path> route(ways const& w,
   for (auto const& start : from_match) {
     for (auto const* nc : {&start.left_, &start.right_}) {
       if (nc->valid() && nc->cost_ < max) {
+
         Profile::resolve(
             w, start.way_, nc->node_, from.lvl_,
             [&](auto const node) { d.add_start({node, nc->cost_}); });
