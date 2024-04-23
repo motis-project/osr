@@ -79,7 +79,7 @@
             background: #bdffb1;
         }
 
-        #profile {
+        #profile, #direction {
             position: absolute;
             top: 5px;
             right: 5px;
@@ -87,6 +87,10 @@
             box-shadow: 0 1px 2px rgba(0, 0, 0, .1);
             text-align: center;
             text-decoration: none;
+        }
+
+        #direction {
+            top: 48px;
         }
 
         .context {
@@ -103,6 +107,10 @@
     <option value="bike">bike</option>
     <option value="car">car</option>
 </select>
+<select id="direction" onchange="selectDirection(event)">
+    <option value="forward" selected>forward</option>
+    <option value="backward">backward</option>
+</select>
 <div id="map"></div>
 <script type="module">
     import {style} from "./style.js";
@@ -113,7 +121,8 @@
         start, destination,
         start_level: 0.0,
         destination_level: 0.0,
-        profile: document.getElementById('profile').value
+        profile: document.getElementById('profile').value,
+        direction: document.getElementById('direction').value
     };
 
     const updateRoute = async () => {
@@ -202,7 +211,8 @@
                     lng: query.destination[0],
                     level: query.destination_level
                 },
-                profile: query.profile
+                profile: query.profile,
+                direction: query.direction
             })
         });
         return await response.json();
@@ -422,6 +432,11 @@
         query.profile = e.target.value;
         map.getSource('path').setData(await getRoute());
     };
+
+    window.selectDirection = async (e) => {
+        query.direction = e.target.value;
+        map.getSource('path').setData(await getRoute());
+    }
 
     map.on('moveend', async () => {
         if (graphActive) {

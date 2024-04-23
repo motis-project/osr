@@ -102,6 +102,11 @@ struct http_server::impl {
         to_profile(profile_it == q.end() || !profile_it->value().is_string()
                        ? to_str(search_profile::kFoot)
                        : profile_it->value().as_string());
+    auto const direction_it = q.find("direction");
+    auto const direction = to_direction(
+        direction_it == q.end() || !direction_it->value().is_string()
+            ? to_str(direction::kForward)
+            : direction_it->value().as_string());
     auto const from = parse_location(q.at("start"));
     auto const to = parse_location(q.at("destination"));
     auto const max_it = q.find("max");
@@ -111,19 +116,16 @@ struct http_server::impl {
     switch (profile) {
       case search_profile::kFoot:
         p = route(w_, l_, get_dijkstra<foot<false>>(), from, to, max,
-                  direction::kForward);
+                  direction);
         break;
       case search_profile::kWheelchair:
-        p = route(w_, l_, get_dijkstra<foot<true>>(), from, to, max,
-                  direction::kForward);
+        p = route(w_, l_, get_dijkstra<foot<true>>(), from, to, max, direction);
         break;
       case search_profile::kBike:
-        p = route(w_, l_, get_dijkstra<bike>(), from, to, max,
-                  direction::kForward);
+        p = route(w_, l_, get_dijkstra<bike>(), from, to, max, direction);
         break;
       case search_profile::kCar:
-        p = route(w_, l_, get_dijkstra<car>(), from, to, max,
-                  direction::kForward);
+        p = route(w_, l_, get_dijkstra<car>(), from, to, max, direction);
         break;
       default: throw utl::fail("not implemented");
     }

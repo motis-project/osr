@@ -11,7 +11,6 @@ namespace osr {
 struct car {
   static constexpr auto const kMaxMatchDistance = 200U;
   static constexpr auto const kUturnPenalty = cost_t{120U};
-  static constexpr auto const kOffroadPenalty = 1U;
 
   using key = node_idx_t;
 
@@ -41,23 +40,6 @@ struct car {
     static constexpr auto const kN = kMaxWays * 2U /* FWD+BWD */;
 
     entry() { utl::fill(cost_, kInfeasible); }
-
-    std::string all_entries_at(ways const& w,
-                               node_idx_t const n) const noexcept {
-      auto ss = std::stringstream{};
-      ss << "[";
-      for (auto const& [i, cost] : utl::enumerate(cost_)) {
-        if (cost == kInfeasible) {
-          continue;
-        }
-        auto const x = get_node(n, i);
-        ss << "(dir=" << to_str(x.dir_)
-           << ", way=" << w.way_osm_idx_[w.node_ways_[n][x.way_]]
-           << ", cost=" << cost << ")";
-      }
-      ss << "]";
-      return ss.str();
-    }
 
     constexpr std::optional<node> pred(node const n) const noexcept {
       auto const idx = get_index(n);

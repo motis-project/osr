@@ -93,7 +93,9 @@ struct lookup {
   ~lookup() { rtree_free(rtree_); }
 
   template <typename Profile>
-  match_t match(location const& query, bool const reverse) const {
+  match_t match(location const& query,
+                bool const reverse,
+                direction const search_dir) const {
     auto way_candidates = std::vector<way_candidate>{};
     find(query.pos_, [&](way_idx_t const way) {
       auto d = distance_to_way(query.pos_, ways_.way_polylines_[way]);
@@ -101,9 +103,9 @@ struct lookup {
         auto& wc = way_candidates.emplace_back(std::move(d));
         wc.way_ = way;
         wc.left_ = find_next_node<Profile>(wc, query, direction::kBackward,
-                                           query.lvl_, reverse);
+                                           query.lvl_, reverse, search_dir);
         wc.right_ = find_next_node<Profile>(wc, query, direction::kForward,
-                                            query.lvl_, reverse);
+                                            query.lvl_, reverse, search_dir);
       }
     });
     utl::sort(way_candidates);
@@ -115,16 +117,18 @@ struct lookup {
                                 location const& query,
                                 direction const dir,
                                 level_t const lvl,
-                                bool const reverse) const {
+                                bool const reverse,
+                                direction const search_dir) const {
     auto const way_prop = ways_.way_properties_[wc.way_];
     auto const edge_dir = reverse ? opposite(dir) : dir;
-    auto const way_cost = Profile::way_cost(way_prop, edge_dir, 0U);
+    auto const way_cost =
+        Profile::way_cost(way_prop, flip(search_dir, edge_dir), 0U);
     if (way_cost == kInfeasible) {
       return node_candidate{};
     }
 
-    auto const offroad_cost =
-        Profile::way_cost(way_prop, edge_dir, wc.dist_to_way_);
+    auto const offroad_cost = Profile::way_cost(
+        way_prop, flip(search_dir, edge_dir), wc.dist_to_way_);
     auto c = node_candidate{.lvl_ = lvl,
                             .way_dir_ = dir,
                             .dist_to_node_ = wc.dist_to_way_,
@@ -140,8 +144,8 @@ struct lookup {
 
                    auto const segment_dist = geo::distance(c.path_.back(), pos);
                    c.dist_to_node_ += segment_dist;
-                   c.cost_ +=
-                       Profile::way_cost(way_prop, edge_dir, segment_dist);
+                   c.cost_ += Profile::way_cost(
+                       way_prop, flip(search_dir, edge_dir), segment_dist);
                    c.path_.push_back(pos);
 
                    auto const way_node = ways_.find_node_idx(osm_node_idx);

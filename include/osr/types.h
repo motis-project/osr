@@ -94,10 +94,27 @@ constexpr direction opposite(direction const dir) {
                                     : direction::kForward;
 }
 
+template <direction Dir>
+constexpr direction flip(direction const dir) {
+  return Dir == direction::kForward ? dir : opposite(dir);
+}
+
+constexpr direction flip(direction const search_dir, direction const dir) {
+  return search_dir == direction::kForward ? dir : opposite(dir);
+}
+
 constexpr std::string_view to_str(direction const d) {
   switch (d) {
     case direction::kForward: return "forward";
     case direction::kBackward: return "backward";
+  }
+  std::unreachable();
+}
+
+constexpr direction to_direction(std::string_view s) {
+  switch (cista::hash(s)) {
+    case cista::hash("forward"): return direction::kForward;
+    case cista::hash("backward"): return direction::kBackward;
   }
   std::unreachable();
 }

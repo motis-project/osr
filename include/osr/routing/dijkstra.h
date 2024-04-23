@@ -6,11 +6,6 @@
 
 namespace osr {
 
-template <direction Dir>
-constexpr direction flip(direction const dir) {
-  return Dir == direction::kForward ? dir : opposite(dir);
-}
-
 template <typename Profile>
 struct dijkstra {
   using profile_t = Profile;
