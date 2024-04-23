@@ -226,7 +226,7 @@ void extract(fs::path const& in, fs::path const& out) {
       tiles::hybrid_node_idx{node_idx_file.fileno(), node_dat_file.fileno()};
 
   auto rel_ways = hash_map<osm_way_idx_t, way_properties>{};
-  auto w = ways{std::move(out), cista::mmap::protection::WRITE};
+  auto w = ways{out, cista::mmap::protection::WRITE};
   w.node_way_counter_.reserve(12000000000);
   {  // Collect node coordinates.
     pt->status("Load OSM / Coordinates").in_high(file_size).out_bounds(0, 20);
