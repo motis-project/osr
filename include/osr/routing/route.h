@@ -121,6 +121,7 @@ double add_path(ways const& w,
   segment.way_ = way;
   segment.from_level_ = w.way_properties_[way].from_level();
   segment.to_level_ = w.way_properties_[way].to_level();
+
   for (auto const [osm_idx, coord] :
        infinite(reverse(utl::zip(w.way_osm_nodes_[way], w.way_polylines_[way]),
                         (from_idx > to_idx) ^ is_loop),
@@ -130,6 +131,11 @@ double add_path(ways const& w,
       active = true;
     }
     if (active) {
+      if (w.node_to_osm_[w.way_nodes_[way][from_idx]] == osm_idx) {
+        // Again "from" node, then it's shorter to start from here.
+        segment.polyline_.clear();
+      }
+
       segment.polyline_.emplace_back(coord);
       if (w.node_to_osm_[w.way_nodes_[way][to_idx]] == osm_idx) {
         break;
@@ -187,14 +193,14 @@ best_candidate(ways const& w,
                level_t const lvl,
                match_t const& m,
                cost_t const max,
-               direction const search_dir) {
+               direction const dir) {
   auto const get_best = [&](way_candidate const& dest,
                             node_candidate const* x) {
     auto best_node = typename Profile::node{};
     auto best_cost = std::numeric_limits<cost_t>::max();
     Profile::resolve_all(w, x->node_, lvl, [&](auto&& node) {
       if (!Profile::is_reachable(w, node, dest.way_, opposite(x->way_dir_),
-                                 opposite(search_dir))) {
+                                 opposite(dir))) {
         return;
       }
 
@@ -220,9 +226,6 @@ best_candidate(ways const& w,
     for (auto const x : {&dest.left_, &dest.right_}) {
       if (x->valid() && x->cost_ < max) {
         auto const [x_node, x_cost] = get_best(dest, x);
-        if (x_cost < x->offroad_cost_ * 2U) {
-          continue;
-        }
         if (x_cost < max && x_cost < best_cost) {
           best = x;
           best_node = x_node;
@@ -245,7 +248,7 @@ std::optional<path> route(ways const& w,
                           location const& from,
                           location const& to,
                           cost_t const max,
-                          direction const search_dir) {
+                          direction const dir) {
   auto const from_match = l.match<Profile>(from, false);
   auto const to_match = l.match<Profile>(to, true);
 
@@ -268,12 +271,12 @@ std::optional<path> route(ways const& w,
       continue;
     }
 
-    d.run(w, max, search_dir);
+    d.run(w, max, dir);
 
-    auto const c = best_candidate(w, d, to.lvl_, to_match, max, search_dir);
+    auto const c = best_candidate(w, d, to.lvl_, to_match, max, dir);
     if (c.has_value()) {
       auto const [nc, wc, node, cost] = *c;
-      return reconstruct<Profile>(w, d, start, *nc, node, cost, search_dir);
+      return reconstruct<Profile>(w, d, start, *nc, node, cost, dir);
     }
   }
 
