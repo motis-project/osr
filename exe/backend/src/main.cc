@@ -14,6 +14,7 @@
 
 #include "osr/backend/http_server.h"
 #include "osr/lookup.h"
+#include "osr/platforms.h"
 #include "osr/ways.h"
 
 namespace fs = std::filesystem;
@@ -80,11 +81,23 @@ int main(int argc, char const* argv[]) {
     w.lock();
   }
 
+  auto const platforms_check_path = opt.data_dir_ / "node_is_platform.bin";
+  if (!fs::exists(platforms_check_path)) {
+    std::cout << platforms_check_path << " does not exist\n";
+  }
+  auto const pl = (!fs::exists(platforms_check_path))
+                      ? std::unique_ptr<platforms>{}
+                      : std::make_unique<platforms>(
+                            opt.data_dir_, cista::mmap::protection::READ);
+  if (pl != nullptr) {
+    pl->build_rtree(w);
+  }
+
   auto const l = lookup{w};
 
   auto ioc = boost::asio::io_context{};
   auto pool = boost::asio::io_context{};
-  auto server = http_server{ioc, pool, w, l, opt.static_file_path_};
+  auto server = http_server{ioc, pool, w, pl.get(), l, opt.static_file_path_};
 
   auto work_guard = boost::asio::make_work_guard(pool);
   auto threads = std::vector<std::thread>(std::max(1U, opt.threads_));

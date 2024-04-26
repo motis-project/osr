@@ -172,10 +172,10 @@ struct lookup {
 
   template <typename Fn>
   void find(geo::latlng const& a, geo::latlng const& b, Fn&& fn) const {
-    auto const min = std::array<double, 2U>{std::min(a.lng_, b.lng_),
-                                            std::min(a.lat_, b.lat_)};
-    auto const max = std::array<double, 2U>{std::max(a.lng_, b.lng_),
-                                            std::max(a.lat_, b.lat_)};
+    auto const min =
+        std::array{std::min(a.lng_, b.lng_), std::min(a.lat_, b.lat_)};
+    auto const max =
+        std::array{std::max(a.lng_, b.lng_), std::max(a.lat_, b.lat_)};
     rtree_search(
         rtree_, min.data(), max.data(),
         [](double const* /* min */, double const* /* max */, void const* item,
@@ -195,9 +195,9 @@ struct lookup {
     }
 
     auto const min_corner =
-        std::array<double, 2U>{b.bottom_left().lon(), b.bottom_left().lat()};
+        std::array{b.bottom_left().lon(), b.bottom_left().lat()};
     auto const max_corner =
-        std::array<double, 2U>{b.top_right().lon(), b.top_right().lat()};
+        std::array{b.top_right().lon(), b.top_right().lat()};
 
     rtree_insert(
         rtree_, min_corner.data(), max_corner.data(),

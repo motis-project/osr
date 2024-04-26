@@ -80,6 +80,8 @@ struct way_properties {
 
   std::uint8_t from_level_ : 5;
   std::uint8_t to_level_ : 5;
+
+  std::uint8_t is_platform_ : 1;  // only used during extract
 };
 
 static_assert(sizeof(way_properties) == 3);

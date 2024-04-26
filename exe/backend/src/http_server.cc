@@ -72,9 +72,15 @@ struct http_server::impl {
   impl(boost::asio::io_context& ios,
        boost::asio::io_context& thread_pool,
        ways const& g,
+       platforms const* pl,
        lookup const& l,
        std::string const& static_file_path)
-      : ioc_{ios}, thread_pool_{thread_pool}, w_{g}, l_{l}, server_{ioc_} {
+      : ioc_{ios},
+        thread_pool_{thread_pool},
+        w_{g},
+        pl_{pl},
+        l_{l},
+        server_{ioc_} {
     try {
       if (!static_file_path.empty() && fs::is_directory(static_file_path)) {
         static_file_path_ = fs::canonical(static_file_path).string();
@@ -189,7 +195,7 @@ struct http_server::impl {
     auto const max = point::from_latlng(
         {waypoints[3].as_double(), waypoints[2].as_double()});
 
-    auto gj = geojson_writer{.w_ = w_};
+    auto gj = geojson_writer{.w_ = w_, .platforms_ = pl_};
     l_.find(min, max, [&](way_idx_t const w) {
       if (level == level_t::invalid()) {
         gj.write_way(w);
@@ -215,6 +221,30 @@ struct http_server::impl {
       if (way_prop.from_level() == level || way_prop.to_level() == level) {
         gj.write_way(w);
         return;
+      }
+    });
+
+    cb(json_response(req, gj.finish(get_dijkstra<foot<true>>())));
+  }
+
+  void handle_platforms(web_server::http_req_t const& req,
+                        web_server::http_res_cb_t const& cb) {
+    utl::verify(pl_ != nullptr, "no platforms");
+
+    auto const query = boost::json::parse(req.body()).as_object();
+    auto const level = query.contains("level")
+                           ? to_level(query.at("level").to_number<float>())
+                           : level_t::invalid();
+    auto const waypoints = query.at("waypoints").as_array();
+    auto const min = point::from_latlng(
+        {waypoints[1].as_double(), waypoints[0].as_double()});
+    auto const max = point::from_latlng(
+        {waypoints[3].as_double(), waypoints[2].as_double()});
+
+    auto gj = geojson_writer{.w_ = w_, .platforms_ = pl_};
+    pl_->find(min, max, [&](platform_idx_t const i) {
+      if (level == level_t::invalid() || pl_->get_level(w_, i) == level) {
+        gj.write_platform(i);
       }
     });
 
@@ -256,6 +286,13 @@ struct http_server::impl {
               [this](web_server::http_req_t const& req1,
                      web_server::http_res_cb_t const& cb1) {
                 handle_graph(req1, cb1);
+              },
+              req, cb);
+        } else if (target.starts_with("/api/platforms")) {
+          return run_parallel(
+              [this](web_server::http_req_t const& req1,
+                     web_server::http_res_cb_t const& cb1) {
+                handle_platforms(req1, cb1);
               },
               req, cb);
         } else {
@@ -325,6 +362,7 @@ private:
   boost::asio::io_context& ioc_;
   boost::asio::io_context& thread_pool_;
   ways const& w_;
+  platforms const* pl_;
   lookup const& l_;
   web_server server_;
   bool serve_static_files_{false};
@@ -334,9 +372,10 @@ private:
 http_server::http_server(boost::asio::io_context& ioc,
                          boost::asio::io_context& thread_pool,
                          ways const& w,
+                         platforms const* p,
                          lookup const& l,
                          std::string const& static_file_path)
-    : impl_(new impl(ioc, thread_pool, w, l, static_file_path)) {}
+    : impl_(new impl(ioc, thread_pool, w, p, l, static_file_path)) {}
 
 http_server::~http_server() = default;
 

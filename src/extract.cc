@@ -23,6 +23,7 @@
 #include "tiles/util_parallel.h"
 
 #include "osr/extract/tags.h"
+#include "osr/platforms.h"
 #include "osr/ways.h"
 
 namespace osm = osmium;
@@ -81,8 +82,15 @@ speed_limit get_speed_limit(tags const& t) {
   }
 }
 
+struct rel_way {
+  way_properties p_;
+  platform_idx_t pl_{platform_idx_t::invalid()};
+};
+
+using rel_ways_t = hash_map<osm_way_idx_t, rel_way>;
+
 way_properties get_way_properties(tags const& t) {
-  auto const [from, to, _] = get_levels(t.level_bits_);
+  auto const [from, to, _] = get_levels(t.has_level_, t.level_bits_);
   return {
       .is_foot_accessible_ = is_accessible<foot_profile>(t, osm_obj_type::kWay),
       .is_bike_accessible_ = is_accessible<bike_profile>(t, osm_obj_type::kWay),
@@ -94,13 +102,12 @@ way_properties get_way_properties(tags const& t) {
       .is_steps_ = (t.highway_ == "steps"sv),
       .speed_limit_ = get_speed_limit(t),
       .from_level_ = to_idx(from),
-      .to_level_ = to_idx(to)};
+      .to_level_ = to_idx(to),
+      .is_platform_ = t.is_platform_};
 }
 
-std::pair<node_properties, level_bits_t> get_node_properties(
-    osm::Node const& n) {
-  auto const t = tags{n};
-  auto const [from, to, is_multi] = get_levels(t.level_bits_);
+std::pair<node_properties, level_bits_t> get_node_properties(tags const& t) {
+  auto const [from, to, is_multi] = get_levels(t.has_level_, t.level_bits_);
   return {{
               .from_level_ = to_idx(from),
               .is_foot_accessible_ =
@@ -119,14 +126,18 @@ std::pair<node_properties, level_bits_t> get_node_properties(
 
 struct way_handler : public osm::handler::Handler {
   way_handler(ways& w,
-              hash_map<osm_way_idx_t, way_properties>& rel_ways,
+              platforms* platforms,
+              rel_ways_t const& rel_ways,
               hash_map<osm_node_idx_t, level_bits_t>& elevator_nodes)
-      : w_{w}, rel_ways_{rel_ways}, elevator_nodes_{elevator_nodes} {}
+      : w_{w},
+        platforms_{platforms},
+        rel_ways_{rel_ways},
+        elevator_nodes_{elevator_nodes} {}
 
   void way(osm::Way const& w) {
     auto const osm_way_idx = osm_way_idx_t{w.positive_id()};
     auto const it = rel_ways_.find(osm_way_idx);
-    auto const t = tags{w};
+    auto t = tags{w};
 
     if (t.is_elevator_) {
       if (w.nodes().front() != w.nodes().back()) {
@@ -144,11 +155,15 @@ struct way_handler : public osm::handler::Handler {
       return;
     }
 
-    auto const p = (t.is_platform_ || !t.highway_.empty())
-                       ? get_way_properties(t)
-                       : it->second;
+    auto p = (t.is_platform_ || !t.highway_.empty()) ? get_way_properties(t)
+                                                     : it->second.p_;
     if (!p.is_accessible()) {
       return;
+    }
+
+    if (!t.has_level_ && it != end(rel_ways_)) {
+      p.from_level_ = it->second.p_.from_level_;
+      p.to_level_ = it->second.p_.to_level_;
     }
 
     auto const get_point = [](osmium::NodeRef const& n) {
@@ -160,7 +175,18 @@ struct way_handler : public osm::handler::Handler {
       return osm_node_idx_t{n.positive_ref()};
     };
 
-    auto l = std::scoped_lock<std::mutex>{mutex_};
+    auto l = std::scoped_lock{mutex_};
+    auto const way_idx = way_idx_t{w_.way_osm_idx_.size()};
+
+    if (platforms_ != nullptr &&
+        (t.is_platform_ || p.is_platform_ ||
+         (it != end(rel_ways_) && it->second.p_.is_platform_))) {
+      platforms_->way(way_idx, w);
+      if (it != end(rel_ways_) && it->second.pl_ != platform_idx_t::invalid()) {
+        platforms_->platform_ref_[it->second.pl_].push_back(to_value(way_idx));
+      }
+    }
+
     w_.way_osm_idx_.push_back(osm_way_idx_t{w.positive_id()});
     w_.way_polylines_.emplace_back(w.nodes() |
                                    std::views::transform(get_point));
@@ -171,7 +197,8 @@ struct way_handler : public osm::handler::Handler {
 
   std::mutex mutex_;
   ways& w_;
-  hash_map<osm_way_idx_t, way_properties>& rel_ways_;
+  platforms* platforms_{nullptr};
+  rel_ways_t const& rel_ways_;
 
   std::mutex elevator_nodes_mutex_;
   hash_map<osm_node_idx_t, level_bits_t>& elevator_nodes_;
@@ -187,9 +214,10 @@ struct node_handler : public osm::handler::Handler {
   };
 
   node_handler(ways& w,
+               platforms* platforms,
                std::vector<resolved_restriction>& r,
                hash_map<osm_node_idx_t, level_bits_t> const& elevator_nodes)
-      : r_{r}, w_{w}, elevator_nodes_{elevator_nodes} {
+      : platforms_{platforms}, r_{r}, w_{w}, elevator_nodes_{elevator_nodes} {
     w_.node_properties_.resize(w_.n_nodes());
   }
 
@@ -197,15 +225,21 @@ struct node_handler : public osm::handler::Handler {
     auto const osm_node_idx = osm_node_idx_t{n.id()};
     if (auto const node_idx = w_.find_node_idx(osm_node_idx);
         node_idx.has_value()) {
-      auto const [p, level_bits] = get_node_properties(n);
+      auto const t = tags{n};
+      auto const [p, level_bits] = get_node_properties(t);
       w_.node_properties_[*node_idx] = p;
+
+      if (platforms_ != nullptr && t.is_platform_) {
+        auto const l = std::lock_guard{platforms_mutex_};
+        platforms_->node(*node_idx, n);
+      }
 
       if (p.is_elevator() && p.is_multi_level()) {
         auto const l = std::scoped_lock{multi_level_elevators_mutex_};
         w_.multi_level_elevators_.emplace_back(*node_idx, level_bits);
       } else if (auto const it = elevator_nodes_.find(osm_node_idx);
                  it != end(elevator_nodes_)) {
-        auto const [from, to, is_multi] = get_levels(it->second);
+        auto const [from, to, is_multi] = get_levels(true, it->second);
         auto& x = w_.node_properties_[*node_idx];
         x.is_elevator_ = true;
         x.from_level_ = to_idx(from);
@@ -288,6 +322,9 @@ struct node_handler : public osm::handler::Handler {
     }
   }
 
+  std::mutex platforms_mutex_;
+  platforms* platforms_;
+
   std::mutex multi_level_elevators_mutex_;
 
   std::vector<resolved_restriction>& r_;
@@ -307,7 +344,7 @@ struct mark_inaccessible_handler : public osm::handler::Handler {
         is_accessible<car_profile>(t, osm_obj_type::kNode) &&
         is_accessible<bike_profile>(t, osm_obj_type::kNode) &&
         is_accessible<foot_profile>(t, osm_obj_type::kNode);
-    if (!accessible || t.is_elevator_) {
+    if (!accessible || t.is_elevator_ || t.is_platform_) {
       w_.node_way_counter_.increment(n.positive_id());
     }
   }
@@ -316,8 +353,8 @@ struct mark_inaccessible_handler : public osm::handler::Handler {
 };
 
 struct rel_ways_handler : public osm::handler::Handler {
-  rel_ways_handler(hash_map<osm_way_idx_t, way_properties>& rel_ways)
-      : rel_ways_{rel_ways} {}
+  rel_ways_handler(platforms* pl, rel_ways_t& rel_ways)
+      : pl_{pl}, rel_ways_{rel_ways} {}
 
   void relation(osm::Relation const& r) {
     auto const p = get_way_properties(tags{r});
@@ -325,17 +362,25 @@ struct rel_ways_handler : public osm::handler::Handler {
       return;
     }
 
+    auto const platform = p.is_platform_ && pl_ != nullptr
+                              ? pl_->relation(r)
+                              : platform_idx_t::invalid();
+
     for (auto const& m : r.members()) {
       if (m.type() == osm::item_type::way) {
-        rel_ways_.emplace(osm_way_idx_t{m.positive_ref()}, p);
+        rel_ways_.emplace(osm_way_idx_t{m.positive_ref()},
+                          rel_way{p, platform});
       }
     }
   }
 
-  hash_map<osm_way_idx_t, way_properties>& rel_ways_;
+  platforms* pl_;
+  rel_ways_t& rel_ways_;
 };
 
-void extract(fs::path const& in, fs::path const& out) {
+void extract(bool const with_platforms,
+             fs::path const& in,
+             fs::path const& out) {
   auto ec = std::error_code{};
   fs::remove_all(out, ec);
   if (!fs::is_directory(out)) {
@@ -362,8 +407,13 @@ void extract(fs::path const& in, fs::path const& out) {
   auto node_idx =
       tiles::hybrid_node_idx{node_idx_file.fileno(), node_dat_file.fileno()};
 
-  auto rel_ways = hash_map<osm_way_idx_t, way_properties>{};
+  auto rel_ways = rel_ways_t{};
   auto w = ways{out, cista::mmap::protection::WRITE};
+  auto pl = std::unique_ptr<platforms>{};
+  if (with_platforms) {
+    pl = std::make_unique<platforms>(out, cista::mmap::protection::WRITE);
+  }
+
   w.node_way_counter_.reserve(12000000000);
   {  // Collect node coordinates.
     pt->status("Load OSM / Coordinates").in_high(file_size).out_bounds(0, 20);
@@ -371,7 +421,7 @@ void extract(fs::path const& in, fs::path const& out) {
     auto node_idx_builder = tiles::hybrid_node_idx_builder{node_idx};
 
     auto inaccessilbe_handler = mark_inaccessible_handler{w};
-    auto rel_ways_h = rel_ways_handler{rel_ways};
+    auto rel_ways_h = rel_ways_handler{pl.get(), rel_ways};
     auto reader = osm_io::Reader{input_file, osm_eb::node | osm_eb::relation,
                                  osmium::io::read_meta::no};
     while (auto buffer = reader.read()) {
@@ -401,7 +451,7 @@ void extract(fs::path const& in, fs::path const& out) {
     auto has_exception = std::atomic_bool{false};
     auto workers = std::vector<std::future<void>>{};
     workers.reserve(thread_count / 2U);
-    auto h = way_handler{w, rel_ways, elevator_nodes};
+    auto h = way_handler{w, pl.get(), rel_ways, elevator_nodes};
     auto queue = tiles::in_order_queue<osm_mem::Buffer>{};
     for (auto i = 0U; i < thread_count / 2U; ++i) {
       workers.emplace_back(pool.submit([&] {
@@ -463,7 +513,7 @@ void extract(fs::path const& in, fs::path const& out) {
       pt->update(reader.offset());
       return reader.read();
     }};
-    auto h = node_handler{w, r, elevator_nodes};
+    auto h = node_handler{w, pl.get(), r, elevator_nodes};
     auto has_exception = std::atomic_bool{false};
     auto workers = std::vector<std::future<void>>{};
     workers.reserve(thread_count / 2U);

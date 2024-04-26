@@ -7,6 +7,7 @@
 
 #include "cista/containers/bitvec.h"
 #include "cista/containers/mmap_vec.h"
+#include "cista/containers/nvec.h"
 #include "cista/containers/paged.h"
 #include "cista/containers/paged_vecvec.h"
 #include "cista/containers/vector.h"
@@ -35,6 +36,10 @@ using mm_bitvec = cista::basic_bitvec<mm_vec<std::uint64_t>, K>;
 
 template <typename K, typename V, typename SizeType = cista::base_t<K>>
 using mm_vecvec = cista::basic_vecvec<K, mm_vec<V>, mm_vec<SizeType>>;
+
+template <typename K, typename V, std::size_t N>
+using mm_nvec =
+    cista::basic_nvec<K, mm_vec<V>, mm_vec<std::uint64_t>, N, std::uint64_t>;
 
 template <typename Key, typename T>
 struct mmap_paged_vecvec_helper {
@@ -123,7 +128,7 @@ constexpr direction to_direction(std::string_view s) {
 using level_t = cista::strong<std::uint8_t, struct level_>;
 
 constexpr auto const kMinLevel = -4.0F;
-constexpr auto const kMaxLevel = 4.0F;
+constexpr auto const kMaxLevel = 3.75F;
 
 constexpr level_t to_level(float const f) {
   return level_t{static_cast<std::uint8_t>((f - kMinLevel) / 0.25F)};
@@ -152,8 +157,8 @@ constexpr void for_each_set_bit(level_bits_t const levels, Fn&& f) {
 }
 
 constexpr std::tuple<level_t, level_t, bool> get_levels(
-    level_bits_t const levels) noexcept {
-  if (levels == 0U) {
+    bool const has_level, level_bits_t const levels) noexcept {
+  if (!has_level) {
     return {level_t{to_level(0.F)}, level_t{to_level(0.F)}, false};
   }
   auto from = level_t::invalid(), to = level_t::invalid();
