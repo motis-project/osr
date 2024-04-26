@@ -9,28 +9,37 @@ goal is to make it possible to import data on affordable low-end machines. This 
 structures and [memory mapped](https://en.wikipedia.org/wiki/Memory-mapped_file) files. A planet import should not need
 more than 10GB of RAM. More RAM (and a fast SSD) will speed up the import. The reverse geocoding to map geo coordinates to the routing graph is currently required to be in memory. This is around 25 GB of memory for the whole planet during production use. In the future, a memory mapped version of the r-tree should be implemented and evaluated.
 
-Directory with all created files after extract:
+Directory with all created files after extract (all files can be memory mapped but it helps to lock routing data into memory):
 
 ```bash
-$ ll -h osr-planet/
-total 115G
- 17G node_in_way_idx_data.bin
-6,1G node_in_way_idx_index.bin
-260M node_properties.bin
-2,1G node_to_osm.bin
- 33G node_ways_data.bin
-6,1G node_ways_index.bin
-4,1G osm_to_mode.bin
-717M way_node_dist_data.bin
-1,6G way_node_dist_index.bin
-2,2G way_nodes_data.bin
-1,6G way_nodes_index.bin
-1,6G way_osm_idx.bin
+# routing data 38.55G
+# recommended to lock to memory
+ 22K multi_level_elevators.bin
+8,5G node_in_way_idx_data.bin
+6,4G node_in_way_idx_index.bin
+542M node_properties.bin
+ 34M node_restricted.bin
+4,7M node_restrictions_data.bin
+1,1G node_restrictions_index.bin
+8,5G node_ways_data.bin
+6,4G node_ways_index.bin
+748M way_node_dist_data.bin
+1,7G way_node_dist_index.bin
+2,3G way_nodes_data.bin
+1,7G way_nodes_index.bin
+625M way_properties.bin
+
+# way osm nodes
  19G way_osm_nodes_data.bin
-1,6G way_osm_nodes_index.bin
+1,7G way_osm_nodes_index.bin
+
+# way geometry
  19G way_polylines_data.bin
-1,6G way_polylines_index.bin
-200M way_properties.bin
+1,7G way_polylines_index.bin
+
+# mapping to osm ids
+2,2G node_to_osm.bin
+1,7G way_osm_idx.bin
 ```
 
 ## Multi-Level Indoor Routing
