@@ -122,17 +122,17 @@ struct ways {
         way_osm_nodes_{mm_vec<osm_node_idx_t>{mm("way_osm_nodes_data.bin")},
                        mm_vec<std::uint64_t>{mm("way_osm_nodes_index.bin")}},
         way_nodes_{mm_vec<node_idx_t>{mm("way_nodes_data.bin")},
-                   mm_vec<std::uint64_t>{mm("way_nodes_index.bin")}},
+                   mm_vec<std::uint32_t>{mm("way_nodes_index.bin")}},
         way_node_dist_{mm_vec<std::uint16_t>{mm("way_node_dist_data.bin")},
-                       mm_vec<std::uint64_t>{mm("way_node_dist_index.bin")}},
-        node_ways_{
-            cista::paged<mm_vec<way_idx_t>>{
-                mm_vec<way_idx_t>{mm("node_ways_data.bin")}},
-            mm_vec<cista::page<std::uint64_t>>{mm("node_ways_index.bin")}},
+                       mm_vec<std::uint32_t>{mm("way_node_dist_index.bin")}},
+        node_ways_{cista::paged<mm_vec32<way_idx_t>>{
+                       mm_vec32<way_idx_t>{mm("node_ways_data.bin")}},
+                   mm_vec<cista::page<std::uint32_t, std::uint16_t>>{
+                       mm("node_ways_index.bin")}},
         node_in_way_idx_{
-            cista::paged<mm_vec<std::uint16_t>>{
-                mm_vec<std::uint16_t>{mm("node_in_way_idx_data.bin")}},
-            mm_vec<cista::page<std::uint64_t>>{
+            cista::paged<mm_vec32<std::uint16_t>>{
+                mm_vec32<std::uint16_t>{mm("node_in_way_idx_data.bin")}},
+            mm_vec<cista::page<std::uint32_t, std::uint16_t>>{
                 mm("node_in_way_idx_index.bin")}},
         node_is_restricted_{mm_vec<std::uint64_t>{mm("node_restricted.bin")}},
         node_restrictions_{
@@ -346,8 +346,8 @@ struct ways {
   mm_vec_map<way_idx_t, way_properties> way_properties_;
   mm_vecvec<way_idx_t, point, std::uint64_t> way_polylines_;
   mm_vecvec<way_idx_t, osm_node_idx_t, std::uint64_t> way_osm_nodes_;
-  mm_vecvec<way_idx_t, node_idx_t, std::uint64_t> way_nodes_;
-  mm_vecvec<way_idx_t, std::uint16_t, std::uint64_t> way_node_dist_;
+  mm_vecvec<way_idx_t, node_idx_t, std::uint32_t> way_nodes_;
+  mm_vecvec<way_idx_t, std::uint16_t, std::uint32_t> way_node_dist_;
   mm_paged_vecvec<node_idx_t, way_idx_t> node_ways_;
   mm_paged_vecvec<node_idx_t, std::uint16_t> node_in_way_idx_;
   multi_counter node_way_counter_;
