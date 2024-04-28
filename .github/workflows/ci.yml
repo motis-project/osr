@@ -106,8 +106,7 @@ jobs:
         if: matrix.config.mode == 'Release'
         run: |
           mkdir dist
-          mv client dist
-          mv profile dist
+          mv web dist
           mv .\build\osr-extract.exe dist
           mv .\build\osr-backend.exe dist
           cd dist
@@ -294,8 +293,7 @@ jobs:
         if: matrix.config.artifact
         run: |
           mkdir osr
-          mv client osr/client
-          mv profile osr/profile
+          mv web osr/web
           mv build/osr-extract osr/osr-extract
           mv build/osr-backend osr/osr-backend
           tar cjf osr-${{ matrix.config.artifact }}.tar.bz2 osr
