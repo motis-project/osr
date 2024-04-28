@@ -12,34 +12,34 @@ more than 10GB of RAM. More RAM (and a fast SSD) will speed up the import. The r
 Directory with all created files after extract (all files can be memory mapped but it helps to lock routing data into memory):
 
 ```bash
-# routing data 38.55G
+# routing data 12.7G
 # recommended to lock to memory
  22K multi_level_elevators.bin
-8,5G node_in_way_idx_data.bin
-6,4G node_in_way_idx_index.bin
+1,2G node_in_way_idx_data.bin
+1,1G node_in_way_idx_index.bin
 542M node_properties.bin
  34M node_restricted.bin
 4,7M node_restrictions_data.bin
 1,1G node_restrictions_index.bin
-8,5G node_ways_data.bin
-6,4G node_ways_index.bin
+2,3G node_ways_data.bin
+1,1G node_ways_index.bin
 748M way_node_dist_data.bin
-1,7G way_node_dist_index.bin
+833M way_node_dist_index.bin
 2,3G way_nodes_data.bin
-1,7G way_nodes_index.bin
+833M way_nodes_index.bin
 625M way_properties.bin
-
-# way osm nodes
- 19G way_osm_nodes_data.bin
-1,7G way_osm_nodes_index.bin
-
-# way geometry
- 19G way_polylines_data.bin
-1,7G way_polylines_index.bin
 
 # mapping to osm ids
 2,2G node_to_osm.bin
 1,7G way_osm_idx.bin
+
+# way osm nodes (only memory mapped)
+ 19G way_osm_nodes_data.bin
+1,7G way_osm_nodes_index.bin
+
+# way geometry (only memory mapped)
+ 19G way_polylines_data.bin
+1,7G way_polylines_index.bin
 ```
 
 ## Multi-Level Indoor Routing
