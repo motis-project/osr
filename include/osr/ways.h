@@ -125,15 +125,11 @@ struct ways {
                    mm_vec<std::uint32_t>{mm("way_nodes_index.bin")}},
         way_node_dist_{mm_vec<std::uint16_t>{mm("way_node_dist_data.bin")},
                        mm_vec<std::uint32_t>{mm("way_node_dist_index.bin")}},
-        node_ways_{cista::paged<mm_vec32<way_idx_t>>{
-                       mm_vec32<way_idx_t>{mm("node_ways_data.bin")}},
-                   mm_vec<cista::page<std::uint32_t, std::uint16_t>>{
-                       mm("node_ways_index.bin")}},
+        node_ways_{mm_vec<way_idx_t>{mm("node_ways_data.bin")},
+                   mm_vec<std::uint32_t>{mm("node_ways_index.bin")}},
         node_in_way_idx_{
-            cista::paged<mm_vec32<std::uint16_t>>{
-                mm_vec32<std::uint16_t>{mm("node_in_way_idx_data.bin")}},
-            mm_vec<cista::page<std::uint32_t, std::uint16_t>>{
-                mm("node_in_way_idx_index.bin")}},
+            mm_vec<std::uint16_t>{mm("node_in_way_idx_data.bin")},
+            mm_vec<std::uint32_t>{mm("node_in_way_idx_index.bin")}},
         node_is_restricted_{mm_vec<std::uint64_t>{mm("node_restricted.bin")}},
         node_restrictions_{
             mm_vec<restriction>{mm("node_restrictions_data.bin")},
@@ -154,13 +150,14 @@ struct ways {
     mlock(way_node_dist_.bucket_starts_.mmap_.data(),
           way_node_dist_.bucket_starts_.mmap_.size());
 
-    mlock(node_ways_.paged_.data_.mmap_.data(),
-          node_ways_.paged_.data_.mmap_.size());
-    mlock(node_ways_.idx_.mmap_.data(), node_ways_.idx_.mmap_.size());
+    mlock(node_ways_.data_.mmap_.data(), node_ways_.data_.mmap_.size());
+    mlock(node_ways_.bucket_starts_.mmap_.data(),
+          node_ways_.bucket_starts_.mmap_.size());
 
-    mlock(node_in_way_idx_.paged_.data_.mmap_.data(),
-          node_in_way_idx_.paged_.data_.mmap_.size());
-    mlock(node_in_way_idx_.idx_.mmap_.data(), node_ways_.idx_.mmap_.size());
+    mlock(node_in_way_idx_.data_.mmap_.data(),
+          node_in_way_idx_.data_.mmap_.size());
+    mlock(node_in_way_idx_.bucket_starts_.mmap_.data(),
+          node_ways_.bucket_starts_.mmap_.size());
   }
 
   way_pos_t get_way_pos(node_idx_t const node, way_idx_t const way) const {
@@ -218,53 +215,78 @@ struct ways {
         ++node_idx;
         pt->update(b_idx);
       });
-      node_ways_.resize(to_idx(node_idx));
-      node_in_way_idx_.resize(to_idx(node_idx));
       node_is_restricted_.resize(to_idx(node_idx));
     }
 
     // Build edges.
-    pt->status("Connect ways")
-        .in_high(way_osm_nodes_.size())
-        .out_bounds(60, 90);
-    for (auto const [osm_way_idx, osm_nodes, polyline] :
-         utl::zip(way_osm_idx_, way_osm_nodes_, way_polylines_)) {
-      auto pred_pos = std::make_optional<point>();
-      auto from = node_idx_t::invalid();
-      auto distance = 0.0;
-      auto i = std::uint16_t{0U};
-      auto way_idx = way_idx_t{way_nodes_.size()};
-      auto dists = way_node_dist_.add_back_sized(0U);
-      auto nodes = way_nodes_.add_back_sized(0U);
-      for (auto const [osm_node_idx, pos] : utl::zip(osm_nodes, polyline)) {
-        if (pred_pos.has_value()) {
-          distance += geo::distance(pos, *pred_pos);
-        }
-
-        if (node_way_counter_.is_multi(to_idx(osm_node_idx))) {
-          auto const to = get_node_idx(osm_node_idx);
-          node_ways_[to].push_back(way_idx);
-          node_in_way_idx_[to].push_back(i);
-          nodes.push_back(to);
-
-          if (from != node_idx_t::invalid()) {
-            dists.push_back(static_cast<std::uint16_t>(std::round(distance)));
+    {
+      pt->status("Connect ways")
+          .in_high(way_osm_nodes_.size())
+          .out_bounds(60, 90);
+      auto node_ways = mm_paged_vecvec<node_idx_t, way_idx_t>{
+          cista::paged<mm_vec32<way_idx_t>>{
+              mm_vec32<way_idx_t>{mm("tmp_node_ways_data.bin")}},
+          mm_vec<cista::page<std::uint32_t, std::uint16_t>>{
+              mm("tmp_node_ways_index.bin")}};
+      auto node_in_way_idx = mm_paged_vecvec<node_idx_t, std::uint16_t>{
+          cista::paged<mm_vec32<std::uint16_t>>{
+              mm_vec32<std::uint16_t>{mm("tmp_node_in_way_idx_data.bin")}},
+          mm_vec<cista::page<std::uint32_t, std::uint16_t>>{
+              mm("tmp_node_in_way_idx_index.bin")}};
+      node_ways.resize(node_to_osm_.size());
+      node_in_way_idx.resize(node_to_osm_.size());
+      for (auto const [osm_way_idx, osm_nodes, polyline] :
+           utl::zip(way_osm_idx_, way_osm_nodes_, way_polylines_)) {
+        auto pred_pos = std::make_optional<point>();
+        auto from = node_idx_t::invalid();
+        auto distance = 0.0;
+        auto i = std::uint16_t{0U};
+        auto way_idx = way_idx_t{way_nodes_.size()};
+        auto dists = way_node_dist_.add_back_sized(0U);
+        auto nodes = way_nodes_.add_back_sized(0U);
+        for (auto const [osm_node_idx, pos] : utl::zip(osm_nodes, polyline)) {
+          if (pred_pos.has_value()) {
+            distance += geo::distance(pos, *pred_pos);
           }
 
-          distance = 0.0;
-          from = to;
+          if (node_way_counter_.is_multi(to_idx(osm_node_idx))) {
+            auto const to = get_node_idx(osm_node_idx);
+            node_ways[to].push_back(way_idx);
+            node_in_way_idx[to].push_back(i);
+            nodes.push_back(to);
 
-          if (i == std::numeric_limits<std::uint16_t>::max()) {
-            fmt::println("error: way with {} nodes", osm_way_idx);
+            if (from != node_idx_t::invalid()) {
+              dists.push_back(static_cast<std::uint16_t>(std::round(distance)));
+            }
+
+            distance = 0.0;
+            from = to;
+
+            if (i == std::numeric_limits<std::uint16_t>::max()) {
+              fmt::println("error: way with {} nodes", osm_way_idx);
+            }
+
+            ++i;
           }
 
-          ++i;
+          pred_pos = pos;
         }
-
-        pred_pos = pos;
+        pt->increment();
       }
-      pt->increment();
+
+      for (auto const& x : node_ways) {
+        node_ways_.emplace_back(x);
+      }
+      for (auto const& x : node_in_way_idx) {
+        node_in_way_idx_.emplace_back(x);
+      }
     }
+
+    auto e = std::error_code{};
+    std::filesystem::remove("tmp_node_ways_data.bin", e);
+    std::filesystem::remove("tmp_node_ways_index.bin", e);
+    std::filesystem::remove("tmp_node_in_way_idx_data.bin", e);
+    std::filesystem::remove("tmp_node_in_way_idx_index.bin", e);
   }
 
   std::optional<way_idx_t> find_way(osm_way_idx_t const i) {
@@ -346,10 +368,10 @@ struct ways {
   mm_vec_map<way_idx_t, way_properties> way_properties_;
   mm_vecvec<way_idx_t, point, std::uint64_t> way_polylines_;
   mm_vecvec<way_idx_t, osm_node_idx_t, std::uint64_t> way_osm_nodes_;
-  mm_vecvec<way_idx_t, node_idx_t, std::uint32_t> way_nodes_;
-  mm_vecvec<way_idx_t, std::uint16_t, std::uint32_t> way_node_dist_;
-  mm_paged_vecvec<node_idx_t, way_idx_t> node_ways_;
-  mm_paged_vecvec<node_idx_t, std::uint16_t> node_in_way_idx_;
+  mm_vecvec<way_idx_t, node_idx_t> way_nodes_;
+  mm_vecvec<way_idx_t, std::uint16_t> way_node_dist_;
+  mm_vecvec<node_idx_t, way_idx_t> node_ways_;
+  mm_vecvec<node_idx_t, std::uint16_t> node_in_way_idx_;
   multi_counter node_way_counter_;
   mm_bitvec<node_idx_t> node_is_restricted_;
   mm_vecvec<node_idx_t, restriction> node_restrictions_;
