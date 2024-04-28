@@ -83,38 +83,37 @@ speed_limit get_speed_limit(tags const& t) {
 
 way_properties get_way_properties(tags const& t) {
   auto const [from, to, _] = get_levels(t.level_bits_);
-  return {
-      .is_foot_accessible_ = is_accessible<foot_profile>(t, osm_obj_type::kWay),
-      .is_bike_accessible_ = is_accessible<bike_profile>(t, osm_obj_type::kWay),
-      .is_car_accessible_ = is_accessible<car_profile>(t, osm_obj_type::kWay),
-      .is_destination_ = t.is_destination_,
-      .is_oneway_car_ = t.oneway_,
-      .is_oneway_bike_ = t.oneway_ && !t.not_oneway_bike_,
-      .is_elevator_ = t.is_elevator_,
-      .is_steps_ = (t.highway_ == "steps"sv),
-      .speed_limit_ = get_speed_limit(t),
-      .from_level_ = to_idx(from),
-      .to_level_ = to_idx(to)};
+  auto p = way_properties{};
+  std::memset(&p, 0, sizeof(way_properties));
+  p.is_foot_accessible_ = is_accessible<foot_profile>(t, osm_obj_type::kWay);
+  p.is_bike_accessible_ = is_accessible<bike_profile>(t, osm_obj_type::kWay);
+  p.is_car_accessible_ = is_accessible<car_profile>(t, osm_obj_type::kWay);
+  p.is_destination_ = t.is_destination_;
+  p.is_oneway_car_ = t.oneway_;
+  p.is_oneway_bike_ = t.oneway_ && !t.not_oneway_bike_;
+  p.is_elevator_ = t.is_elevator_;
+  p.is_steps_ = (t.highway_ == "steps"sv);
+  p.speed_limit_ = get_speed_limit(t);
+  p.from_level_ = to_idx(from);
+  p.to_level_ = to_idx(to);
+  return p;
 }
 
 std::pair<node_properties, level_bits_t> get_node_properties(
     osm::Node const& n) {
   auto const t = tags{n};
   auto const [from, to, is_multi] = get_levels(t.level_bits_);
-  return {{
-              .from_level_ = to_idx(from),
-              .is_foot_accessible_ =
-                  is_accessible<foot_profile>(t, osm_obj_type::kNode),
-              .is_bike_accessible_ =
-                  is_accessible<bike_profile>(t, osm_obj_type::kNode),
-              .is_car_accessible_ =
-                  is_accessible<car_profile>(t, osm_obj_type::kNode),
-              .is_elevator_ = t.is_elevator_,
-              .is_entrance_ = t.is_entrance_,
-              .is_multi_level_ = is_multi,
-              .to_level_ = to_idx(to),
-          },
-          t.level_bits_};
+  auto p = node_properties{};
+  std::memset(&p, 0, sizeof(node_properties));
+  p.from_level_ = to_idx(from);
+  p.is_foot_accessible_ = is_accessible<foot_profile>(t, osm_obj_type::kNode);
+  p.is_bike_accessible_ = is_accessible<bike_profile>(t, osm_obj_type::kNode);
+  p.is_car_accessible_ = is_accessible<car_profile>(t, osm_obj_type::kNode);
+  p.is_elevator_ = t.is_elevator_;
+  p.is_entrance_ = t.is_entrance_;
+  p.is_multi_level_ = is_multi;
+  p.to_level_ = to_idx(to);
+  return {p, t.level_bits_};
 }
 
 struct way_handler : public osm::handler::Handler {
