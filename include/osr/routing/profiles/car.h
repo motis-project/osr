@@ -140,6 +140,7 @@ struct car {
          utl::zip_unchecked(w.node_ways_[n.n_], w.node_in_way_idx_[n.n_])) {
       auto const expand = [&](direction const way_dir, std::uint16_t const from,
                               std::uint16_t const to) {
+        // NOLINTNEXTLINE(clang-analyzer-core.CallAndMessage)
         auto const target_node = w.way_nodes_[way][to];
         auto const target_node_prop = w.node_properties_[target_node];
         if (node_cost(target_node_prop) == kInfeasible) {
