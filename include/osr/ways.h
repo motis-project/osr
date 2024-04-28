@@ -283,10 +283,10 @@ struct ways {
     }
 
     auto e = std::error_code{};
-    std::filesystem::remove("tmp_node_ways_data.bin", e);
-    std::filesystem::remove("tmp_node_ways_index.bin", e);
-    std::filesystem::remove("tmp_node_in_way_idx_data.bin", e);
-    std::filesystem::remove("tmp_node_in_way_idx_index.bin", e);
+    std::filesystem::remove(p_ / "tmp_node_ways_data.bin", e);
+    std::filesystem::remove(p_ / "tmp_node_ways_index.bin", e);
+    std::filesystem::remove(p_ / "tmp_node_in_way_idx_data.bin", e);
+    std::filesystem::remove(p_ / "tmp_node_in_way_idx_index.bin", e);
   }
 
   std::optional<way_idx_t> find_way(osm_way_idx_t const i) {
