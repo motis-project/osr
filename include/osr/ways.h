@@ -67,14 +67,14 @@ struct way_properties {
   constexpr level_t from_level() const { return level_t{from_level_}; }
   constexpr level_t to_level() const { return level_t{to_level_}; }
 
-  std::uint8_t is_foot_accessible_ : 1;
-  std::uint8_t is_bike_accessible_ : 1;
-  std::uint8_t is_car_accessible_ : 1;
-  std::uint8_t is_destination_ : 1;
-  std::uint8_t is_oneway_car_ : 1;
-  std::uint8_t is_oneway_bike_ : 1;
-  std::uint8_t is_elevator_ : 1;
-  std::uint8_t is_steps_ : 1;
+  bool is_foot_accessible_ : 1;
+  bool is_bike_accessible_ : 1;
+  bool is_car_accessible_ : 1;
+  bool is_destination_ : 1;
+  bool is_oneway_car_ : 1;
+  bool is_oneway_bike_ : 1;
+  bool is_elevator_ : 1;
+  bool is_steps_ : 1;
 
   std::uint8_t speed_limit_ : 3;
 
@@ -97,12 +97,12 @@ struct node_properties {
 
   std::uint8_t from_level_ : 5;
 
-  std::uint8_t is_foot_accessible_ : 1;
-  std::uint8_t is_bike_accessible_ : 1;
-  std::uint8_t is_car_accessible_ : 1;
-  std::uint8_t is_elevator_ : 1;
-  std::uint8_t is_entrance_ : 1;
-  std::uint8_t is_multi_level_ : 1;
+  bool is_foot_accessible_ : 1;
+  bool is_bike_accessible_ : 1;
+  bool is_car_accessible_ : 1;
+  bool is_elevator_ : 1;
+  bool is_entrance_ : 1;
+  bool is_multi_level_ : 1;
 
   std::uint8_t to_level_ : 5;
 };

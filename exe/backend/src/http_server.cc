@@ -54,7 +54,7 @@ web_server::string_res_t json_response(
 }
 
 location parse_location(json::value const& v) {
-  auto const obj = v.as_object();
+  auto const& obj = v.as_object();
   return {obj.at("lat").as_double(), obj.at("lng").as_double(),
           obj.contains("level") ? to_level(obj.at("level").to_number<float>())
                                 : level_t::invalid()};

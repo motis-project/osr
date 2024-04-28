@@ -298,7 +298,7 @@ struct node_handler : public osm::handler::Handler {
 };
 
 struct mark_inaccessible_handler : public osm::handler::Handler {
-  mark_inaccessible_handler(ways& w) : w_{w} {}
+  explicit mark_inaccessible_handler(ways& w) : w_{w} {}
 
   void node(osm::Node const& n) {
     auto const t = tags{n};
@@ -315,7 +315,7 @@ struct mark_inaccessible_handler : public osm::handler::Handler {
 };
 
 struct rel_ways_handler : public osm::handler::Handler {
-  rel_ways_handler(hash_map<osm_way_idx_t, way_properties>& rel_ways)
+  explicit rel_ways_handler(hash_map<osm_way_idx_t, way_properties>& rel_ways)
       : rel_ways_{rel_ways} {}
 
   void relation(osm::Relation const& r) {
