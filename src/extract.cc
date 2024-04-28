@@ -1,3 +1,5 @@
+#pragma warning(suppress : 4996)
+
 #include "osr/extract/extract.h"
 
 #include "boost/thread/tss.hpp"
