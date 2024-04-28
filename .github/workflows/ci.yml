@@ -192,7 +192,7 @@ jobs:
 
       # ==== TESTS ====
       - name: Run Tests
-        run: ${{ matrix.config.emulator }} build/osr-test
+        run: ./build/osr-test
 
       # ==== DISTRIBUTION ====
       - name: Create Distribution
