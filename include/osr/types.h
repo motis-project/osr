@@ -31,9 +31,6 @@ template <typename T>
 using mm_vec = cista::basic_mmap_vec<T, std::uint64_t>;
 
 template <typename T>
-using mm_vec = cista::basic_mmap_vec<T, std::uint64_t>;
-
-template <typename T>
 using mm_vec32 = cista::basic_mmap_vec<T, std::uint32_t>;
 
 template <typename K>
@@ -51,9 +48,6 @@ struct mmap_paged_vecvec_helper {
 
 template <typename Key, typename T>
 using mm_paged_vecvec = mmap_paged_vecvec_helper<Key, T>::type;
-
-template <typename T>
-using vector = cista::basic_vector<T, cista::raw::ptr, false, std::uint64_t>;
 
 using bitvec64 = cista::basic_bitvec<
     cista::basic_vector<std::uint64_t, cista::raw::ptr, false, std::uint64_t>>;
