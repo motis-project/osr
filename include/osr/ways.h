@@ -274,10 +274,10 @@ struct ways {
         pt->increment();
       }
 
-      for (auto const& x : node_ways) {
+      for (auto const x : node_ways) {
         node_ways_.emplace_back(x);
       }
-      for (auto const& x : node_in_way_idx) {
+      for (auto const x : node_in_way_idx) {
         node_in_way_idx_.emplace_back(x);
       }
     }
