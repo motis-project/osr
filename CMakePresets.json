@@ -89,8 +89,7 @@
       "generator": "Ninja",
       "binaryDir": "${sourceDir}/build/debug",
       "cacheVariables": {
-        "CMAKE_BUILD_TYPE": "Debug",
-        "CMAKE_EXE_LINKER_FLAGS": "-B/opt/mold"
+        "CMAKE_BUILD_TYPE": "Debug"
       },
       "environment": {
         "PATH": "/opt:/opt/cmake-3.26.3-linux-x86_64/bin:/opt/buildcache/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
