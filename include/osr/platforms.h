@@ -48,10 +48,10 @@ struct platforms {
         mode_{mode},
         node_is_platform_{mm_vec<std::uint64_t>{mm("node_is_platform.bin")}},
         way_is_platform_{mm_vec<std::uint64_t>{mm("way_is_platform.bin")}},
-        platform_ref_{
-            cista::paged<mm_vec<ref_value_t>>{
-                mm_vec<ref_value_t>{mm("platform_ref_data.bin")}},
-            mm_vec<cista::page<std::uint64_t>>{mm("platform_ref_index.bin")}},
+        platform_ref_{cista::paged<mm_vec32<ref_value_t>>{
+                          mm_vec32<ref_value_t>{mm("platform_ref_data.bin")}},
+                      mm_vec<cista::page<std::uint32_t, std::uint16_t>>{
+                          mm("platform_ref_index.bin")}},
         platform_names_{{mm_vec<std::uint64_t>{mm("platform_names_idx_0.bin")},
                          mm_vec<std::uint64_t>{mm("platform_names_idx_1.bin")}},
                         mm_vec<char>{mm("platform_names_data.bin")}} {}

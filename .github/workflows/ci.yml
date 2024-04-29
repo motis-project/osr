@@ -1,0 +1,321 @@
+name: Linux+MacOS Build
+
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+    branches: [ master ]
+  release:
+    types:
+      - published
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  formatting:
+    runs-on: ubuntu-latest
+    container: ghcr.io/motis-project/docker-cpp-build
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Format files
+        run: |
+          find base libs modules test \
+            -type f -a \( -name "*.cc" -o -name "*.h" -o -name ".cuh" -o -name ".cu" \) \
+            -print0 | xargs -0 clang-format-16 -i
+
+      - name: Check for differences
+        run: |
+          git config --global --add safe.directory `pwd`
+          git status --porcelain
+          git status --porcelain | xargs -I {} -0 test -z \"{}\"
+
+  msvc:
+    permissions: write-all
+    runs-on: windows-latest
+
+    strategy:
+      fail-fast: false
+      matrix:
+        config:
+          - mode: Debug
+          - mode: Release
+
+    env:
+      CXX: cl.exe
+      CC: cl.exe
+      BUILDCACHE_COMPRESS: true
+      BUILDCACHE_DIRECT_MODE: true
+      BUILDCACHE_ACCURACY: SLOPPY # not suitable for coverage/debugging
+      BUILDCACHE_DIR: ${{ github.workspace }}/.buildcache
+      BUILDCACHE_LUA_PATH: ${{ github.workspace }}/tools
+      CLICOLOR_FORCE: 1
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install ninja
+        run: choco install ninja
+
+      - name: Restore buildcache Cache
+        uses: actions/cache/restore@v4
+        id: restore-buildcache
+        with:
+          path: ${{ github.workspace }}/.buildcache
+          key: buildcache-wnds-${{ matrix.config.mode }}-${{ hashFiles('.pkg') }}-${{ hashFiles('**/*.h') }}-${{ hashFiles('**/*.cc') }}
+          restore-keys: |
+            buildcache-wnds-${{ matrix.config.mode }}-${{ hashFiles('.pkg') }}-${{ hashFiles('**/*.h') }}
+            buildcache-wnds-${{ matrix.config.mode }}-${{ hashFiles('.pkg') }}-
+            buildcache-wnds-${{ matrix.config.mode }}-
+
+      - name: Dependencies Cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ github.workspace }}/deps
+          key: deps-${{ hashFiles('.pkg') }}
+          restore-keys: deps-
+
+      - uses: ilammy/msvc-dev-cmd@v1
+
+      - name: Build
+        run: |
+          cmake `
+            -GNinja -S . -B build `
+            -DCMAKE_BUILD_TYPE=${{ matrix.config.mode }}
+          .\build\buildcache\bin\buildcache.exe -z
+          cmake --build build --target osr-extract osr-backend osr-benchmark osr-test
+          $CompilerExitCode = $LastExitCode
+          .\build\buildcache\bin\buildcache.exe -s
+          exit $CompilerExitCode
+
+      # ==== TESTS ====
+      - name: Run Tests
+        run: .\build\osr-test.exe
+
+      # ==== SAVE CACHE ====
+      - name: Save buildcache Cache
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ github.workspace }}/.buildcache
+          key: ${{ steps.restore-buildcache.outputs.cache-primary-key }}
+
+      # ==== DISTRIBUTION ====
+      - name: Create Distribution
+        if: matrix.config.mode == 'Release'
+        run: |
+          mkdir dist
+          mv web dist
+          mv .\build\osr-extract.exe dist
+          mv .\build\osr-backend.exe dist
+          cd dist
+          7z a osr-windows.zip *
+          mv osr-windows.zip ..
+
+      - name: Upload Distribution
+        if: matrix.config.mode == 'Release'
+        uses: actions/upload-artifact@v4
+        with:
+          name: osr-windows
+          path: dist
+
+      # ==== RELEASE ====
+      - name: Upload Release
+        if: github.event.action == 'published' && matrix.config.mode == 'Release'
+        uses: actions/upload-release-asset@v1.0.2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ github.event.release.upload_url }}
+          asset_path: ./osr-windows.zip
+          asset_name: osr-windows.zip
+          asset_content_type: application/zip
+
+  macos:
+    permissions: write-all
+    runs-on: ${{ matrix.config.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        config:
+          - preset: macos-x86_64
+            os: macos-13
+          - preset: macos-arm64
+            os: macos-14
+    env:
+      BUILDCACHE_COMPRESS: true
+      BUILDCACHE_DIRECT_MODE: true
+      BUILDCACHE_ACCURACY: SLOPPY
+      BUILDCACHE_LUA_PATH: ${{ github.workspace }}/tools
+      BUILDCACHE_DIR: ${{ github.workspace }}/.buildcache
+      BUILDCACHE_MAX_CACHE_SIZE: 1073741824
+      BUILDCACHE_DEBUG: 0
+      UBSAN_OPTIONS: halt_on_error=1:abort_on_error=1
+      ASAN_OPTIONS: alloc_dealloc_mismatch=0
+      CLICOLOR_FORCE: 1
+    steps:
+      - uses: actions/checkout@v4
+
+      # ==== RESTORE CACHE ====
+      - name: Restore buildcache Cache
+        uses: actions/cache/restore@v4
+        id: restore-buildcache
+        with:
+          path: ${{ github.workspace }}/.buildcache
+          key: buildcache-${{ matrix.config.preset }}-${{ hashFiles('.pkg') }}-${{ hashFiles('**/*.h') }}-${{ hashFiles('**/*.cc') }}
+          restore-keys: |
+            buildcache-${{ matrix.config.preset }}-${{ hashFiles('.pkg') }}-${{ hashFiles('**/*.h') }}-
+            buildcache-${{ matrix.config.preset }}-${{ hashFiles('.pkg') }}-
+            buildcache-${{ matrix.config.preset }}-
+
+      - name: Restore Dependencies Cache
+        uses: actions/cache/restore@v4
+        id: restore-deps-cache
+        with:
+          path: ${{ github.workspace }}/deps
+          enableCrossOsArchive: true
+          key: deps-${{ hashFiles('.pkg') }}
+          restore-keys: |
+            deps-
+
+      - name: Install Ninja
+        run: brew install ninja
+
+      # ==== BUILD ====
+      - name: CMake
+        run: |
+          git config --global --add safe.directory `pwd`
+          cmake -G Ninja -S . -B build --preset=${{ matrix.config.preset }}
+
+      - name: Build
+        run: cmake --build build --target osr-extract osr-backend osr-benchmark osr-test
+
+      # ==== TESTS ====
+      - name: Run Tests
+        run: ./build/osr-test
+
+      # ==== DISTRIBUTION ====
+      - name: Create Distribution
+        run: |
+          mkdir osr
+          mv build/osr-extract osr/osr-extract
+          mv build/osr-backend osr/osr-backend
+          tar cjf osr-${{ matrix.config.preset }}.tar.bz2 osr
+
+      - name: Upload Distribution
+        uses: actions/upload-artifact@v4
+        with:
+          name: osr-${{ matrix.config.preset }}
+          path: osr-${{ matrix.config.preset }}.tar.bz2
+
+      # ==== RELEASE ====
+      - name: Upload Release
+        if: github.event.action == 'published'
+        uses: actions/upload-release-asset@v1.0.2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ github.event.release.upload_url }}
+          asset_path: ./osr-${{ matrix.config.preset }}.tar.bz2
+          asset_name: osr-${{ matrix.config.preset }}.tar.bz2
+          asset_content_type: application/x-tar
+
+      # ==== SAVE CACHE ====
+      - name: Save buildcache Cache
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ github.workspace }}/.buildcache
+          key: ${{ steps.restore-buildcache.outputs.cache-primary-key }}
+
+      - name: Save Dependencies Cache
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ github.workspace }}/deps
+          key: ${{ steps.restore-deps-cache.outputs.cache-primary-key }}
+          enableCrossOsArchive: true
+
+  linux:
+    permissions: write-all
+    runs-on: [ self-hosted, linux, x64, "${{ matrix.config.preset }}" ]
+    container:
+      image: ghcr.io/motis-project/docker-cpp-build
+      volumes:
+        - ${{ github.event.repository.name }}-${{ matrix.config.preset }}-deps:/deps
+        - ${{ github.event.repository.name }}-${{ matrix.config.preset }}-buildcache:/buildcache
+    strategy:
+      fail-fast: false
+      matrix:
+        config:
+          - preset: linux-amd64-release
+            artifact: linux-amd64
+          - preset: linux-arm64-release
+            artifact: linux-arm64
+            emulator: qemu-aarch64-static
+          - preset: clang-tidy
+          - preset: linux-sanitizer
+          - preset: linux-debug
+            emulator: valgrind --leak-check=full --error-exitcode=1
+    env:
+      BUILDCACHE_DIR: /buildcache
+      BUILDCACHE_COMPRESS: true
+      BUILDCACHE_ACCURACY: SLOPPY
+      BUILDCACHE_DIRECT_MODE: true
+      BUILDCACHE_MAX_CACHE_SIZE: 2147483648
+      BUILDCACHE_LUA_PATH: ${{ github.workspace }}/tools
+      UBSAN_OPTIONS: halt_on_error=1:abort_on_error=1
+      ASAN_OPTIONS: alloc_dealloc_mismatch=0
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Get deps
+        run: ln -s /deps deps
+
+      - name: CMake
+        run: |
+          git config --global --add safe.directory `pwd`
+          cmake -G Ninja -S . -B build --preset=${{ matrix.config.preset }}
+
+      # ==== BUILD ====
+      - name: Build
+        run: |
+          buildcache -z
+          cmake --build build --target osr-extract osr-backend osr-benchmark osr-test
+          buildcache -s
+
+      # ==== TESTS ====
+      - name: Run Tests
+        if: ${{ !matrix.config.skiptests }}
+        run: ${{ matrix.config.emulator }} build/osr-test
+
+      # ==== DISTRIBUTION ====
+      - name: Create Distribution
+        if: matrix.config.artifact
+        run: |
+          mkdir osr
+          mv web osr/web
+          mv build/osr-extract osr/osr-extract
+          mv build/osr-backend osr/osr-backend
+          tar cjf osr-${{ matrix.config.artifact }}.tar.bz2 osr
+
+      - name: Upload Distribution
+        if: matrix.config.artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: osr-${{ matrix.config.artifact }}
+          path: osr-${{ matrix.config.artifact }}.tar.bz2
+
+      # ==== RELEASE ====
+      - name: Upload Release
+        if: github.event.action == 'published' && matrix.config.artifact
+        uses: actions/upload-release-asset@v1.0.2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ github.event.release.upload_url }}
+          asset_path: ./osr-${{ matrix.config.artifact }}.tar.bz2
+          asset_name: osr-${{ matrix.config.artifact }}.tar.bz2
+          asset_content_type: application/x-tar

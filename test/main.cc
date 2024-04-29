@@ -23,7 +23,7 @@ int main(int argc, char** argv) {
     std::cout << "executing tests in " << fs::current_path() << std::endl;
   } catch (std::exception const& e) {
     std::cout << "could not change directory to " << OSR_TEST_EXECUTION_DIR
-              << "\n";
+              << ": " << e.what() << "\n";
     return 1;
   }
 

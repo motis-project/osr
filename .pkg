@@ -1,3 +1,7 @@
+[boost]
+  url=git@github.com:motis-project/boost.git
+  branch=master
+  commit=60cae66449fa3c9599b2b7d3d5d44c65301ed3a3
 [osmium]
   url=git@github.com:motis-project/libosmium.git
   branch=master
@@ -13,7 +17,7 @@
 [cista]
   url=git@github.com:felixguendling/cista.git
   branch=master
-  commit=bbf4bb51d973f89ed6d4d3a4ba563f50d01ff55d
+  commit=ebd5eb5cc7f82c414d3e060a3937d497189a103f
 [googletest]
   url=git@github.com:motis-project/googletest.git
   branch=master
@@ -33,7 +37,7 @@
 [tiles]
   url=git@github.com:motis-project/tiles.git
   branch=master
-  commit=1b99290ba3ff16144afcdb04f6ca4e593d361c70
+  commit=64f297ea0f782d04c89e82c6d478a1dd453e5f70
 [mimalloc]
   url=git@github.com:motis-project/mimalloc.git
   branch=master
@@ -57,7 +61,7 @@
 [expat]
   url=git@github.com:motis-project/expat.git
   branch=master
-  commit=b8c26c40f1900899b95c795705e0252fc0c1350c
+  commit=20b3b3e7dde39ee18c27c238b8d1246019ecb147
 [net]
   url=git@github.com:motis-project/net.git
   branch=master

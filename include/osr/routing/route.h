@@ -293,9 +293,9 @@ std::vector<std::optional<path>> route(ways const& w,
                                        std::vector<location> const& to,
                                        cost_t const max,
                                        direction const dir) {
-  auto const from_match = l.match<Profile>(from, false);
+  auto const from_match = l.match<Profile>(from, false, dir);
   auto const to_match =
-      utl::to_vec(to, [&](auto&& x) { return l.match<Profile>(x, true); });
+      utl::to_vec(to, [&](auto&& x) { return l.match<Profile>(x, true, dir); });
 
   auto result = std::vector<std::optional<path>>{};
   result.resize(to.size());

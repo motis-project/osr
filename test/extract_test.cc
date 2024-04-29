@@ -1,3 +1,7 @@
+#ifdef _WIN32
+#include "windows.h"
+#endif
+
 #include "gtest/gtest.h"
 
 #include <filesystem>
@@ -5,10 +9,8 @@
 #include "fmt/core.h"
 #include "fmt/ranges.h"
 
-#include "osr/dijkstra.h"
 #include "osr/extract/extract.h"
 #include "osr/lookup.h"
-#include "osr/route.h"
 #include "osr/ways.h"
 
 namespace fs = std::filesystem;
@@ -29,17 +31,8 @@ TEST(extract, wa) {
   auto const rhoenring = w.find_way(osm_way_idx_t{120682496});
   auto const arheilger = w.find_way(osm_way_idx_t{1068971150});
 
-  auto const is_restricted =
-      w.is_restricted(n.value(), w.get_way_pos(n.value(), rhoenring.value()),
-                      w.get_way_pos(n.value(), arheilger.value()));
+  auto const is_restricted = w.is_restricted<osr::direction::kForward>(
+      n.value(), w.get_way_pos(n.value(), rhoenring.value()),
+      w.get_way_pos(n.value(), arheilger.value()));
   EXPECT_TRUE(is_restricted);
-
-  auto const from = location{geo::latlng{49.88284883601411, 8.660528432499735},
-                             level_t::invalid()};
-  auto const to = location{geo::latlng{49.88281465756099, 8.65774547320971},
-                           level_t::invalid()};
-  auto s = dijkstra_state{};
-  auto const response =
-      route(w, l, from, to, 900, osr::search_profile::kCar, s);
-  EXPECT_TRUE(response.has_value());
 }

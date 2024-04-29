@@ -14,8 +14,8 @@ using namespace boost::program_options;
 namespace fs = std::filesystem;
 
 struct config : public conf::configuration {
-  config(std::filesystem::path in, std::filesystem::path const& out)
-      : configuration{"Options"}, in_{std::move(in)}, out_{out} {
+  config(std::filesystem::path in, std::filesystem::path out)
+      : configuration{"Options"}, in_{std::move(in)}, out_{std::move(out)} {
     param(in_, "in,i", "OpenStreetMap .osm.pbf input path");
     param(out_, "out,o", "output directory");
     param(with_platforms_, "with_platforms,p", "extract platform info");

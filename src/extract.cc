@@ -28,9 +28,7 @@
 
 namespace osm = osmium;
 namespace osm_io = osmium::io;
-namespace osm_rel = osmium::relations;
 namespace osm_eb = osmium::osm_entity_bits;
-namespace osm_area = osmium::area;
 namespace osm_mem = osmium::memory;
 namespace fs = std::filesystem;
 using namespace std::string_view_literals;
@@ -71,7 +69,7 @@ speed_limit get_speed_limit(tags const& t) {
       case cista::hash("tertiary"):
         return t.name_.empty() ? get_speed_limit(70) : get_speed_limit(40);
       case cista::hash("tertiary_link"): return get_speed_limit(20);
-      case cista::hash("unclassified"): return get_speed_limit(25);
+      case cista::hash("unclassified"): [[fallthrough]];
       case cista::hash("residential"): return get_speed_limit(25);
       case cista::hash("living_street"): return get_speed_limit(10);
       case cista::hash("service"): return get_speed_limit(15);
@@ -91,37 +89,36 @@ using rel_ways_t = hash_map<osm_way_idx_t, rel_way>;
 
 way_properties get_way_properties(tags const& t) {
   auto const [from, to, _] = get_levels(t.has_level_, t.level_bits_);
-  return {
-      .is_foot_accessible_ = is_accessible<foot_profile>(t, osm_obj_type::kWay),
-      .is_bike_accessible_ = is_accessible<bike_profile>(t, osm_obj_type::kWay),
-      .is_car_accessible_ = is_accessible<car_profile>(t, osm_obj_type::kWay),
-      .is_destination_ = t.is_destination_,
-      .is_oneway_car_ = t.oneway_,
-      .is_oneway_bike_ = t.oneway_ && !t.not_oneway_bike_,
-      .is_elevator_ = t.is_elevator_,
-      .is_steps_ = (t.highway_ == "steps"sv),
-      .speed_limit_ = get_speed_limit(t),
-      .from_level_ = to_idx(from),
-      .to_level_ = to_idx(to),
-      .is_platform_ = t.is_platform_};
+  auto p = way_properties{};
+  std::memset(&p, 0, sizeof(way_properties));
+  p.is_foot_accessible_ = is_accessible<foot_profile>(t, osm_obj_type::kWay);
+  p.is_bike_accessible_ = is_accessible<bike_profile>(t, osm_obj_type::kWay);
+  p.is_car_accessible_ = is_accessible<car_profile>(t, osm_obj_type::kWay);
+  p.is_destination_ = t.is_destination_;
+  p.is_oneway_car_ = t.oneway_;
+  p.is_oneway_bike_ = t.oneway_ && !t.not_oneway_bike_;
+  p.is_elevator_ = t.is_elevator_;
+  p.is_steps_ = (t.highway_ == "steps"sv);
+  p.speed_limit_ = get_speed_limit(t);
+  p.from_level_ = to_idx(from);
+  p.to_level_ = to_idx(to);
+  p.is_platform_ = t.is_platform_;
+  return p;
 }
 
 std::pair<node_properties, level_bits_t> get_node_properties(tags const& t) {
   auto const [from, to, is_multi] = get_levels(t.has_level_, t.level_bits_);
-  return {{
-              .from_level_ = to_idx(from),
-              .is_foot_accessible_ =
-                  is_accessible<foot_profile>(t, osm_obj_type::kNode),
-              .is_bike_accessible_ =
-                  is_accessible<bike_profile>(t, osm_obj_type::kNode),
-              .is_car_accessible_ =
-                  is_accessible<car_profile>(t, osm_obj_type::kNode),
-              .is_elevator_ = t.is_elevator_,
-              .is_entrance_ = t.is_entrance_,
-              .is_multi_level_ = is_multi,
-              .to_level_ = to_idx(to),
-          },
-          t.level_bits_};
+  auto p = node_properties{};
+  std::memset(&p, 0, sizeof(node_properties));
+  p.from_level_ = to_idx(from);
+  p.is_foot_accessible_ = is_accessible<foot_profile>(t, osm_obj_type::kNode);
+  p.is_bike_accessible_ = is_accessible<bike_profile>(t, osm_obj_type::kNode);
+  p.is_car_accessible_ = is_accessible<car_profile>(t, osm_obj_type::kNode);
+  p.is_elevator_ = t.is_elevator_;
+  p.is_entrance_ = t.is_entrance_;
+  p.is_multi_level_ = is_multi;
+  p.to_level_ = to_idx(to);
+  return {p, t.level_bits_};
 }
 
 struct way_handler : public osm::handler::Handler {
@@ -197,7 +194,7 @@ struct way_handler : public osm::handler::Handler {
 
   std::mutex mutex_;
   ways& w_;
-  platforms* platforms_{nullptr};
+  platforms* platforms_;
   rel_ways_t const& rel_ways_;
 
   std::mutex elevator_nodes_mutex_;
@@ -336,7 +333,7 @@ struct node_handler : public osm::handler::Handler {
 };
 
 struct mark_inaccessible_handler : public osm::handler::Handler {
-  mark_inaccessible_handler(ways& w) : w_{w} {}
+  explicit mark_inaccessible_handler(ways& w) : w_{w} {}
 
   void node(osm::Node const& n) {
     auto const t = tags{n};
@@ -353,7 +350,7 @@ struct mark_inaccessible_handler : public osm::handler::Handler {
 };
 
 struct rel_ways_handler : public osm::handler::Handler {
-  rel_ways_handler(platforms* pl, rel_ways_t& rel_ways)
+  explicit rel_ways_handler(platforms* pl, rel_ways_t& rel_ways)
       : pl_{pl}, rel_ways_{rel_ways} {}
 
   void relation(osm::Relation const& r) {
@@ -420,13 +417,13 @@ void extract(bool const with_platforms,
 
     auto node_idx_builder = tiles::hybrid_node_idx_builder{node_idx};
 
-    auto inaccessilbe_handler = mark_inaccessible_handler{w};
+    auto inaccessible_handler = mark_inaccessible_handler{w};
     auto rel_ways_h = rel_ways_handler{pl.get(), rel_ways};
     auto reader = osm_io::Reader{input_file, osm_eb::node | osm_eb::relation,
                                  osmium::io::read_meta::no};
     while (auto buffer = reader.read()) {
       pt->update(reader.offset());
-      osm::apply(buffer, node_idx_builder, inaccessilbe_handler, rel_ways_h);
+      osm::apply(buffer, node_idx_builder, inaccessible_handler, rel_ways_h);
     }
     reader.close();
     node_idx_builder.finish();
