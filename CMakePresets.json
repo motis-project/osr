@@ -14,8 +14,7 @@
       "cacheVariables": {
         "CMAKE_OSX_ARCHITECTURES": "x86_64",
         "CMAKE_CXX_FLAGS": "-stdlib=libc++",
-        "CMAKE_BUILD_TYPE": "Release",
-        "OSR_MIMALLOC": "ON"
+        "CMAKE_BUILD_TYPE": "Release"
       }
     },
     {
@@ -29,8 +28,7 @@
         "BOOST_CONTEXT_ARCHITECTURE": "arm64",
         "BOOST_CONTEXT_ABI": "aapcs",
         "ENABLE_ASM": "OFF",
-        "CMAKE_BUILD_TYPE": "Release",
-        "OSR_MIMALLOC": "ON"
+        "CMAKE_BUILD_TYPE": "Release"
       }
     },
     {
