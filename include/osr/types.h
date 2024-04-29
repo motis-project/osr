@@ -207,7 +207,7 @@ constexpr std::uint16_t to_kmh(speed_limit const l) {
 }
 
 constexpr std::uint16_t to_meters_per_second(speed_limit const l) {
-  return to_kmh(l) / 3.6;
+  return static_cast<std::uint16_t>(to_kmh(l) / 3.6);
 }
 
 }  // namespace osr

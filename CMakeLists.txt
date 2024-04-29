@@ -16,6 +16,9 @@ if (MSVC)
     string(REPLACE "/Zi" "${OSR_MSVC_DEBUG_FLAGS}" CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG}")
     string(REPLACE "/Zi" "${OSR_MSVC_DEBUG_FLAGS}" CMAKE_C_FLAGS_RELWITHDEBINFO "${CMAKE_C_FLAGS_RELWITHDEBINFO}")
     string(REPLACE "/Zi" "${OSR_MSVC_DEBUG_FLAGS}" CMAKE_CXX_FLAGS_RELWITHDEBINFO "${CMAKE_CXX_FLAGS_RELWITHDEBINFO}")
+
+    add_definitions(-D_CRT_SECURE_NO_WARNINGS=1)
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /wd4996")  # ignore deprecated fileno in tiles
 endif ()
 
 if (NOT DEFINED CMAKE_MSVC_RUNTIME_LIBRARY)
@@ -78,9 +81,10 @@ if ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "Clang")
             -Wno-documentation-unknown-command
             -Wno-duplicate-enum
             -Wno-ctad-maybe-unsupported
+            -Wno-unknown-pragmas
             -Werror)
 elseif ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "AppleClang")
-    set(osr-compile-options -Wall -Wextra -Werror)
+    set(osr-compile-options -Wall -Wextra -Werror -Wno-unknown-pragmas)
 elseif (MSVC)
     set(osr-compile-options /WX)
 else ()
