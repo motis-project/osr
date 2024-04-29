@@ -33,6 +33,7 @@ jobs:
           git status --porcelain | xargs -I {} -0 test -z \"{}\"
 
   msvc:
+    permissions: write-all
     runs-on: windows-latest
 
     strategy:
@@ -133,6 +134,7 @@ jobs:
           asset_content_type: application/zip
 
   macos:
+    permissions: write-all
     runs-on: ${{ matrix.config.os }}
     strategy:
       fail-fast: false
@@ -237,6 +239,7 @@ jobs:
           enableCrossOsArchive: true
 
   linux:
+    permissions: write-all
     runs-on: [ self-hosted, linux, x64, "${{ matrix.config.preset }}" ]
     container:
       image: ghcr.io/motis-project/docker-cpp-build
