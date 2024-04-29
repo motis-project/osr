@@ -192,7 +192,9 @@ jobs:
 
       # ==== TESTS ====
       - name: Run Tests
-        run: ./build/osr-test
+        run: |
+          echo -e 'bt\nquit' > lldb.batch
+          lldb --batch -K lldb.batch -o run -f ./build/osr-test
 
       # ==== DISTRIBUTION ====
       - name: Create Distribution
