@@ -127,8 +127,9 @@ struct lookup {
       return node_candidate{};
     }
 
-    auto const offroad_cost = Profile::way_cost(
-        way_prop, flip(search_dir, edge_dir), wc.dist_to_way_);
+    auto const offroad_cost =
+        Profile::way_cost(way_prop, flip(search_dir, edge_dir),
+                          static_cast<distance_t>(wc.dist_to_way_));
     auto c = node_candidate{.lvl_ = lvl,
                             .way_dir_ = dir,
                             .dist_to_node_ = wc.dist_to_way_,
@@ -144,8 +145,9 @@ struct lookup {
 
                    auto const segment_dist = geo::distance(c.path_.back(), pos);
                    c.dist_to_node_ += segment_dist;
-                   c.cost_ += Profile::way_cost(
-                       way_prop, flip(search_dir, edge_dir), segment_dist);
+                   c.cost_ +=
+                       Profile::way_cost(way_prop, flip(search_dir, edge_dir),
+                                         static_cast<distance_t>(segment_dist));
                    c.path_.push_back(pos);
 
                    auto const way_node = ways_.find_node_idx(osm_node_idx);

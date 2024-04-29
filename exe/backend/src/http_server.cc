@@ -11,6 +11,7 @@
 #include "fmt/core.h"
 
 #include "utl/enumerate.h"
+#include "utl/pipes.h"
 #include "utl/to_vec.h"
 
 #include "net/web_server/responses.h"
@@ -110,7 +111,8 @@ struct http_server::impl {
     auto const from = parse_location(q.at("start"));
     auto const to = parse_location(q.at("destination"));
     auto const max_it = q.find("max");
-    auto const max = max_it == q.end() ? 3600 : max_it->value().as_int64();
+    auto const max = static_cast<cost_t>(
+        max_it == q.end() ? 3600 : max_it->value().as_int64());
 
     auto p = std::optional<path>{};
     switch (profile) {
