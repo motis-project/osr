@@ -52,8 +52,6 @@ Directory with all created files after extract (all files can be memory mapped b
 
 ## Usage
 
-The PPR debug UI can be used for testing: https://github.com/motis-project/ppr/tree/master/ui/web
-
 ```bash
 # --in     | -i     input file
 # --out    | -o     output directory (will be deleted + created)
@@ -61,7 +59,7 @@ The PPR debug UI can be used for testing: https://github.com/motis-project/ppr/t
 
 # --data   | -d     the output from osr-extract
 # --static | -s     static HTML/JS/CSS assets to serve
-./osr-backend -d osr-planet -s /path/to/ppr/ui
+./osr-backend -d osr-planet -s web
 ```
 
 ## Data Model
