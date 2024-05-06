@@ -179,9 +179,10 @@ struct way_handler : public osm::handler::Handler {
         (t.is_platform_ || p.is_platform_ ||
          (it != end(rel_ways_) && it->second.p_.is_platform_))) {
       platforms_->way(way_idx, w);
-      if (it != end(rel_ways_) && it->second.pl_ != platform_idx_t::invalid()) {
-        platforms_->platform_ref_[it->second.pl_].push_back(to_value(way_idx));
-      }
+    }
+
+    if (it != end(rel_ways_) && it->second.pl_ != platform_idx_t::invalid()) {
+      platforms_->platform_ref_[it->second.pl_].push_back(to_value(way_idx));
     }
 
     w_.way_osm_idx_.push_back(osm_way_idx_t{w.positive_id()});

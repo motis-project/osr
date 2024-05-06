@@ -65,30 +65,45 @@ struct platforms {
   platform_idx_t way(way_idx_t const w, osmium::Way const& x) {
     assert(w != way_idx_t::invalid());
     assert(to_idx(w) < kNodeMarker);
+    auto const p = add_names(x);
+    if (p == platform_idx_t::invalid()) {
+      return platform_idx_t::invalid();
+    }
     way_is_platform_.resize(std::max(
         way_is_platform_.size(), static_cast<std::uint64_t>(to_idx(w) + 1U)));
     way_is_platform_.set(w, true);
     platform_ref_.emplace_back(std::initializer_list<ref_value_t>{to_value(w)});
-    return add_names(x);
+    return p;
   }
 
   platform_idx_t node(node_idx_t const n, osmium::Node const& x) {
     assert(n != node_idx_t::invalid());
     assert(to_idx(n) < kNodeMarker);
+    auto const p = add_names(x);
+
+    if (p == platform_idx_t::invalid()) {
+      return platform_idx_t::invalid();
+    }
+
     node_is_platform_.resize(std::max(
         node_is_platform_.size(), static_cast<std::uint64_t>(to_idx(n) + 1U)));
     node_is_platform_.set(n, true);
     platform_ref_.emplace_back(std::initializer_list<ref_value_t>{to_value(n)});
-    return add_names(x);
+    return p;
   }
 
   platform_idx_t relation(osmium::Relation const& r) {
+    auto const p = add_names(r);
+
+    if (p == platform_idx_t::invalid()) {
+      return platform_idx_t::invalid();
+    }
+
     platform_ref_.emplace_back_empty();
-    return add_names(r);
+    return p;
   }
 
   platform_idx_t add_names(osmium::OSMObject const& x) {
-    auto const idx = platform_idx_t{platform_names_.size()};
     strings_.clear();
     for (auto const& t : x.tags()) {
       switch (cista::hash(std::string_view{t.key()})) {
@@ -102,6 +117,12 @@ struct platforms {
         case cista::hash("description"): strings_.emplace_back(t.value());
       }
     }
+
+    if (strings_.empty()) {
+      return platform_idx_t::invalid();
+    }
+
+    auto const idx = platform_idx_t{platform_names_.size()};
     platform_names_.emplace_back(strings_);
     return idx;
   }
