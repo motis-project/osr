@@ -11,6 +11,7 @@
 
 #include "osr/types.h"
 #include "osr/ways.h"
+#include "utl/parser/cstr.h"
 
 namespace osr {
 
@@ -114,7 +115,10 @@ struct platforms {
         case cista::hash("local_ref"):
         case cista::hash("name"):
         case cista::hash("alt_name"): [[fallthrough]];
-        case cista::hash("description"): strings_.emplace_back(t.value());
+        case cista::hash("description"):
+          utl::for_each_token(t.value(), ';', [&](auto const s) {
+            strings_.emplace_back(s.view());
+          });
       }
     }
 

@@ -34,6 +34,14 @@ inline boost::json::value to_point(point const& p) {
   return {{"type", "Point"}, {"coordinates", to_array(p)}};
 }
 
+inline std::string platform_names(platforms const& pl, platform_idx_t const i) {
+  auto names = std::stringstream{};
+  for (auto j = 0U; j != pl.platform_names_[i].size(); ++j) {
+    names << pl.platform_names_.at(i, j).view() << "\n";
+  }
+  return names.str();
+}
+
 struct geojson_writer {
   void write_platform(platform_idx_t const i) {
     for (auto const r : platforms_->platform_ref_[i]) {
@@ -44,17 +52,13 @@ struct geojson_writer {
                 return to_line_string(w_.way_polylines_[x]);
               }},
           to_ref(r));
-      auto names = std::stringstream{};
-      for (auto j = 0U; j != platforms_->platform_names_[i].size(); ++j) {
-        names << platforms_->platform_names_.at(i, j).view() << "\n";
-      }
       features_.emplace_back(boost::json::value{
           {"type", "Feature"},
           {"properties",
            {{"type", is_way(r) ? "way" : "node"},
             {"platform_idx", to_idx(i)},
             {"level", to_float(platforms_->get_level(w_, i))},
-            {"names", names.str()}}},
+            {"names", platform_names(*platforms_, i)}}},
           {"geometry", geometry}});
     }
   }
@@ -114,14 +118,14 @@ struct geojson_writer {
   }
 
   template <typename Dijkstra>
-  std::string finish(Dijkstra const& s) {
+  std::string finish(Dijkstra const* s) {
     for (auto const n : nodes_) {
       auto const p = w_.node_properties_[n];
 
       auto ss = std::stringstream{};
       Dijkstra::profile_t::resolve_all(w_, n, level_t::invalid(),
                                        [&](auto const n) {
-                                         auto const cost = s.get_cost(n);
+                                         auto const cost = s->get_cost(n);
                                          if (cost != kInfeasible) {
                                            ss << "{";
                                            n.print(ss, w_);
@@ -165,6 +169,10 @@ struct geojson_writer {
             {"coordinates", to_array(w_.get_node_pos(n))}}}});
     }
 
+    return finish();
+  }
+
+  std::string finish() {
     return boost::json::serialize(boost::json::value{
         {"type", "FeatureCollection"}, {"features", features_}});
   }
