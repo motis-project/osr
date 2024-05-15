@@ -31,8 +31,8 @@ TEST(extract, wa) {
   auto const rhoenring = w.find_way(osm_way_idx_t{120682496});
   auto const arheilger = w.find_way(osm_way_idx_t{1068971150});
 
-  auto const is_restricted = w.is_restricted<osr::direction::kForward>(
-      n.value(), w.get_way_pos(n.value(), rhoenring.value()),
-      w.get_way_pos(n.value(), arheilger.value()));
+  auto const is_restricted = w.r_->is_restricted<osr::direction::kForward>(
+      n.value(), w.r_->get_way_pos(n.value(), rhoenring.value()),
+      w.r_->get_way_pos(n.value(), arheilger.value()));
   EXPECT_TRUE(is_restricted);
 }
