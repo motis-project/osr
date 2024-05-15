@@ -73,7 +73,7 @@ struct foot {
   };
 
   template <typename Fn>
-  static void resolve(ways const& w,
+  static void resolve(ways::routing const& w,
                       way_idx_t const way,
                       node_idx_t const n,
                       level_t const lvl,
@@ -87,7 +87,7 @@ struct foot {
   }
 
   template <typename Fn>
-  static void resolve_all(ways const& w,
+  static void resolve_all(ways::routing const& w,
                           node_idx_t const n,
                           level_t const lvl,
                           Fn&& f) {
@@ -112,7 +112,7 @@ struct foot {
   }
 
   template <direction SearchDir, typename Fn>
-  static void adjacent(ways const& w, node const n, Fn&& fn) {
+  static void adjacent(ways::routing const& w, node const n, Fn&& fn) {
     for (auto const [way, i] :
          utl::zip_unchecked(w.node_ways_[n.n_], w.node_in_way_idx_[n.n_])) {
       auto const expand = [&](direction const way_dir, std::uint16_t const from,
@@ -158,7 +158,7 @@ struct foot {
     }
   }
 
-  static bool is_reachable(ways const& w,
+  static bool is_reachable(ways::routing const& w,
                            node const n,
                            way_idx_t const way,
                            direction const way_dir,
@@ -178,7 +178,7 @@ struct foot {
     return true;
   }
 
-  static std::optional<level_t> get_target_level(ways const& w,
+  static std::optional<level_t> get_target_level(ways::routing const& w,
                                                  node_idx_t const from_node,
                                                  level_t const from_level,
                                                  way_idx_t const to_way) {
@@ -208,7 +208,7 @@ struct foot {
     }
   }
 
-  static bool can_use_elevator(ways const& w,
+  static bool can_use_elevator(ways::routing const& w,
                                way_idx_t const way,
                                level_t const a,
                                level_t const b = level_t::invalid()) {
@@ -217,7 +217,7 @@ struct foot {
   }
 
   template <typename Fn>
-  static void for_each_elevator_level(ways const& w,
+  static void for_each_elevator_level(ways::routing const& w,
                                       node_idx_t const n,
                                       Fn&& f) {
     auto const p = w.node_properties_[n];
@@ -230,7 +230,7 @@ struct foot {
     }
   }
 
-  static bool can_use_elevator(ways const& w,
+  static bool can_use_elevator(ways::routing const& w,
                                node_idx_t const n,
                                level_t const a,
                                level_t const b = level_t::invalid()) {
@@ -250,7 +250,7 @@ struct foot {
     }
   }
 
-  static level_bits_t get_elevator_multi_levels(ways const& w,
+  static level_bits_t get_elevator_multi_levels(ways::routing const& w,
                                                 node_idx_t const n) {
     auto const it = std::lower_bound(
         begin(w.multi_level_elevators_), end(w.multi_level_elevators_), n,

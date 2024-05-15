@@ -163,7 +163,7 @@ struct way_handler : public osm::handler::Handler {
                                    std::views::transform(get_point));
     w_.way_osm_nodes_.emplace_back(w.nodes() |
                                    std::views::transform(get_node_id));
-    w_.way_properties_.emplace_back(p);
+    w_.r_->way_properties_.emplace_back(p);
   }
 
   std::mutex mutex_;
@@ -187,7 +187,7 @@ struct node_handler : public osm::handler::Handler {
                std::vector<resolved_restriction>& r,
                hash_map<osm_node_idx_t, level_bits_t> const& elevator_nodes)
       : r_{r}, w_{w}, elevator_nodes_{elevator_nodes} {
-    w_.node_properties_.resize(w_.n_nodes());
+    w_.r_->node_properties_.resize(w_.n_nodes());
   }
 
   void node(osm::Node const& n) {
@@ -195,22 +195,22 @@ struct node_handler : public osm::handler::Handler {
     if (auto const node_idx = w_.find_node_idx(osm_node_idx);
         node_idx.has_value()) {
       auto const [p, level_bits] = get_node_properties(n);
-      w_.node_properties_[*node_idx] = p;
+      w_.r_->node_properties_[*node_idx] = p;
 
       if (p.is_elevator() && p.is_multi_level()) {
         auto const l = std::scoped_lock{multi_level_elevators_mutex_};
-        w_.multi_level_elevators_.emplace_back(*node_idx, level_bits);
+        w_.r_->multi_level_elevators_.emplace_back(*node_idx, level_bits);
       } else if (auto const it = elevator_nodes_.find(osm_node_idx);
                  it != end(elevator_nodes_)) {
         auto const [from, to, is_multi] = get_levels(it->second);
-        auto& x = w_.node_properties_[*node_idx];
+        auto& x = w_.r_->node_properties_[*node_idx];
         x.is_elevator_ = true;
         x.from_level_ = to_idx(from);
         x.to_level_ = to_idx(to);
         x.is_multi_level_ = is_multi;
         if (is_multi) {
           auto const l = std::scoped_lock{multi_level_elevators_mutex_};
-          w_.multi_level_elevators_.emplace_back(*node_idx, it->second);
+          w_.r_->multi_level_elevators_.emplace_back(*node_idx, it->second);
         }
       }
     }
@@ -502,6 +502,8 @@ void extract(fs::path const& in, fs::path const& out) {
   }
 
   w.add_restriction(r);
+
+  w.r_->write(out);
 }
 
 }  // namespace osr

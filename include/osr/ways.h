@@ -14,6 +14,8 @@
 
 #include "osmium/osm/way.hpp"
 
+#include "cista/memory_holder.h"
+
 #include "utl/enumerate.h"
 #include "utl/equal_ranges_linear.h"
 #include "utl/helpers/algorithm.h"
@@ -67,6 +69,18 @@ struct way_properties {
   constexpr level_t from_level() const { return level_t{from_level_}; }
   constexpr level_t to_level() const { return level_t{to_level_}; }
 
+  template <std::size_t NMaxTypes>
+  friend constexpr auto static_type_hash(
+      way_properties const*, cista::hash_data<NMaxTypes> h) noexcept {
+    return h.combine(cista::hash("way_properties v1"));
+  }
+
+  template <typename Ctx>
+  friend void serialize(Ctx&, way_properties const*, cista::offset_t) {}
+
+  template <typename Ctx>
+  friend void deserialize(Ctx const&, way_properties*) {}
+
   bool is_foot_accessible_ : 1;
   bool is_bike_accessible_ : 1;
   bool is_car_accessible_ : 1;
@@ -95,6 +109,18 @@ struct node_properties {
   constexpr level_t from_level() const { return level_t{from_level_}; }
   constexpr level_t to_level() const { return level_t{to_level_}; }
 
+  template <std::size_t NMaxTypes>
+  friend constexpr auto static_type_hash(
+      node_properties const*, cista::hash_data<NMaxTypes> h) noexcept {
+    return h.combine(cista::hash("node_properties v1"));
+  }
+
+  template <typename Ctx>
+  friend void serialize(Ctx&, node_properties const*, cista::offset_t) {}
+
+  template <typename Ctx>
+  friend void deserialize(Ctx const&, node_properties*) {}
+
   std::uint8_t from_level_ : 5;
 
   bool is_foot_accessible_ : 1;
@@ -113,63 +139,15 @@ struct ways {
   ways(std::filesystem::path p, cista::mmap::protection const mode)
       : p_{std::move(p)},
         mode_{mode},
+        r_{mode == cista::mmap::protection::READ
+               ? routing::read(p_ / "routing.bin")
+               : cista::wrapped<routing>{cista::raw::make_unique<routing>()}},
         node_to_osm_{mm("node_to_osm.bin")},
-        node_properties_{mm("node_properties.bin")},
         way_osm_idx_{mm("way_osm_idx.bin")},
-        way_properties_{mm("way_properties.bin")},
         way_polylines_{mm_vec<point>{mm("way_polylines_data.bin")},
                        mm_vec<std::uint64_t>{mm("way_polylines_index.bin")}},
         way_osm_nodes_{mm_vec<osm_node_idx_t>{mm("way_osm_nodes_data.bin")},
-                       mm_vec<std::uint64_t>{mm("way_osm_nodes_index.bin")}},
-        way_nodes_{mm_vec<node_idx_t>{mm("way_nodes_data.bin")},
-                   mm_vec<std::uint32_t>{mm("way_nodes_index.bin")}},
-        way_node_dist_{mm_vec<std::uint16_t>{mm("way_node_dist_data.bin")},
-                       mm_vec<std::uint32_t>{mm("way_node_dist_index.bin")}},
-        node_ways_{mm_vec<way_idx_t>{mm("node_ways_data.bin")},
-                   mm_vec<std::uint32_t>{mm("node_ways_index.bin")}},
-        node_in_way_idx_{
-            mm_vec<std::uint16_t>{mm("node_in_way_idx_data.bin")},
-            mm_vec<std::uint32_t>{mm("node_in_way_idx_index.bin")}},
-        node_is_restricted_{mm_vec<std::uint64_t>{mm("node_restricted.bin")}},
-        node_restrictions_{
-            mm_vec<restriction>{mm("node_restrictions_data.bin")},
-            mm_vec<std::uint32_t>{mm("node_restrictions_index.bin")}},
-        multi_level_elevators_{mm("multi_level_elevators.bin")} {}
-
-  void lock() const {
-    auto const timer = utl::scoped_timer{"lock"};
-
-    mlock(node_properties_.mmap_.data(), node_properties_.mmap_.size());
-    mlock(way_properties_.mmap_.data(), way_properties_.mmap_.size());
-
-    mlock(way_nodes_.data_.mmap_.data(), way_nodes_.data_.mmap_.size());
-    mlock(way_nodes_.bucket_starts_.mmap_.data(),
-          way_nodes_.bucket_starts_.mmap_.size());
-
-    mlock(way_node_dist_.data_.mmap_.data(), way_node_dist_.data_.mmap_.size());
-    mlock(way_node_dist_.bucket_starts_.mmap_.data(),
-          way_node_dist_.bucket_starts_.mmap_.size());
-
-    mlock(node_ways_.data_.mmap_.data(), node_ways_.data_.mmap_.size());
-    mlock(node_ways_.bucket_starts_.mmap_.data(),
-          node_ways_.bucket_starts_.mmap_.size());
-
-    mlock(node_in_way_idx_.data_.mmap_.data(),
-          node_in_way_idx_.data_.mmap_.size());
-    mlock(node_in_way_idx_.bucket_starts_.mmap_.data(),
-          node_ways_.bucket_starts_.mmap_.size());
-  }
-
-  way_pos_t get_way_pos(node_idx_t const node, way_idx_t const way) const {
-    auto const ways = node_ways_[node];
-    for (auto i = way_pos_t{0U}; i != ways.size(); ++i) {
-      if (ways[i] == way) {
-        return i;
-      }
-    }
-    trace("node {} not found in way {}", node_to_osm_[node], way_osm_idx_[way]);
-    return 0U;
-  }
+                       mm_vec<std::uint64_t>{mm("way_osm_nodes_index.bin")}} {}
 
   void add_restriction(std::vector<resolved_restriction>& rs) {
     using it_t = std::vector<resolved_restriction>::iterator;
@@ -178,18 +156,21 @@ struct ways {
         begin(rs), end(rs), [](auto&& a, auto&& b) { return a.via_ == b.via_; },
         [&](it_t const& lb, it_t const& ub) {
           auto const range = std::span{lb, ub};
-          node_restrictions_.resize(to_idx(range.front().via_) + 1U);
-          node_is_restricted_.set(range.front().via_, true);
+          r_->node_restrictions_.resize(to_idx(range.front().via_) + 1U);
+          r_->node_is_restricted_.set(range.front().via_, true);
 
           for (auto const& x : range) {
             if (x.type_ == resolved_restriction::type::kNo) {
-              node_restrictions_[x.via_].push_back(restriction{
-                  get_way_pos(x.via_, x.from_), get_way_pos(x.via_, x.to_)});
+              r_->node_restrictions_[x.via_].push_back(
+                  restriction{r_->get_way_pos(x.via_, x.from_),
+                              r_->get_way_pos(x.via_, x.to_)});
             } else /* kOnly */ {
-              for (auto const [i, from] : utl::enumerate(node_ways_[x.via_])) {
-                for (auto const [j, to] : utl::enumerate(node_ways_[x.via_])) {
+              for (auto const [i, from] :
+                   utl::enumerate(r_->node_ways_[x.via_])) {
+                for (auto const [j, to] :
+                     utl::enumerate(r_->node_ways_[x.via_])) {
                   if (x.from_ == from && x.to_ != to) {
-                    node_restrictions_[x.via_].push_back(restriction{
+                    r_->node_restrictions_[x.via_].push_back(restriction{
                         static_cast<way_pos_t>(i), static_cast<way_pos_t>(j)});
                   }
                 }
@@ -197,7 +178,7 @@ struct ways {
             }
           }
         });
-    node_restrictions_.resize(node_to_osm_.size());
+    r_->node_restrictions_.resize(node_to_osm_.size());
   }
 
   void connect_ways() {
@@ -215,7 +196,7 @@ struct ways {
         ++node_idx;
         pt->update(b_idx);
       });
-      node_is_restricted_.resize(to_idx(node_idx));
+      r_->node_is_restricted_.resize(to_idx(node_idx));
     }
 
     // Build edges.
@@ -241,9 +222,9 @@ struct ways {
         auto from = node_idx_t::invalid();
         auto distance = 0.0;
         auto i = std::uint16_t{0U};
-        auto way_idx = way_idx_t{way_nodes_.size()};
-        auto dists = way_node_dist_.add_back_sized(0U);
-        auto nodes = way_nodes_.add_back_sized(0U);
+        auto way_idx = way_idx_t{r_->way_nodes_.size()};
+        auto dists = r_->way_node_dist_.add_back_sized(0U);
+        auto nodes = r_->way_nodes_.add_back_sized(0U);
         for (auto const [osm_node_idx, pos] : utl::zip(osm_nodes, polyline)) {
           if (pred_pos.has_value()) {
             distance += geo::distance(pos, *pred_pos);
@@ -275,10 +256,10 @@ struct ways {
       }
 
       for (auto const x : node_ways) {
-        node_ways_.emplace_back(x);
+        r_->node_ways_.emplace_back(x);
       }
       for (auto const x : node_in_way_idx) {
-        node_in_way_idx_.emplace_back(x);
+        r_->node_in_way_idx_.emplace_back(x);
       }
     }
 
@@ -313,13 +294,9 @@ struct ways {
     return *j;
   }
 
-  bool is_loop(way_idx_t const w) const {
-    return way_nodes_[w].back() == way_nodes_[w].front();
-  }
-
   point get_node_pos(node_idx_t const i) const {
     auto const osm_idx = node_to_osm_[i];
-    auto const way = node_ways_[i][0];
+    auto const way = r_->node_ways_[i][0];
     for (auto const [o, p] :
          utl::zip(way_osm_nodes_[way], way_polylines_[way])) {
       if (o == osm_idx) {
@@ -328,29 +305,6 @@ struct ways {
     }
     throw utl::fail("unable to find node {} [osm={}] in way {} [osm]", i,
                     osm_idx, way, way_osm_idx_[way]);
-  }
-
-  template <direction SearchDir>
-  bool is_restricted(node_idx_t const n,
-                     std::uint8_t const from,
-                     std::uint8_t const to) const {
-    if (!node_is_restricted_[n]) {
-      return false;
-    }
-    auto const r = node_restrictions_[n];
-    auto const needle = SearchDir == direction::kForward
-                            ? restriction{from, to}
-                            : restriction{to, from};
-    return utl::find(r, needle) != end(r);
-  }
-
-  bool is_restricted(node_idx_t const n,
-                     std::uint8_t const from,
-                     std::uint8_t const to,
-                     direction const search_dir) const {
-    return search_dir == direction::kForward
-               ? is_restricted<direction::kForward>(n, from, to)
-               : is_restricted<direction::kBackward>(n, from, to);
   }
 
   cista::mmap mm(char const* file) {
@@ -362,20 +316,84 @@ struct ways {
 
   std::filesystem::path p_;
   cista::mmap::protection mode_;
+
+  struct routing {
+    static constexpr auto const kMode =
+        cista::mode::WITH_INTEGRITY | cista::mode::WITH_STATIC_VERSION;
+
+    way_pos_t get_way_pos(node_idx_t const node, way_idx_t const way) const {
+      auto const ways = node_ways_[node];
+      for (auto i = way_pos_t{0U}; i != ways.size(); ++i) {
+        if (ways[i] == way) {
+          return i;
+        }
+      }
+      return 0U;
+    }
+
+    template <direction SearchDir>
+    bool is_restricted(node_idx_t const n,
+                       std::uint8_t const from,
+                       std::uint8_t const to) const {
+      if (!node_is_restricted_[n]) {
+        return false;
+      }
+      auto const r = node_restrictions_[n];
+      auto const needle = SearchDir == direction::kForward
+                              ? restriction{from, to}
+                              : restriction{to, from};
+      return utl::find(r, needle) != end(r);
+    }
+
+    bool is_restricted(node_idx_t const n,
+                       std::uint8_t const from,
+                       std::uint8_t const to,
+                       direction const search_dir) const {
+      return search_dir == direction::kForward
+                 ? is_restricted<direction::kForward>(n, from, to)
+                 : is_restricted<direction::kBackward>(n, from, to);
+    }
+
+    bool is_loop(way_idx_t const w) const {
+      return way_nodes_[w].back() == way_nodes_[w].front();
+    }
+
+    static cista::wrapped<routing> read(std::filesystem::path const& p) {
+      auto mem = cista::file{p.c_str(), "r"}.content();
+      auto const ptr = cista::deserialize<routing, kMode>(mem);
+      return {std::move(mem), ptr};
+    }
+
+    void write(std::filesystem::path const& p) {
+      auto mmap = cista::mmap{(p / "routing.bin").string().c_str(),
+                              cista::mmap::protection::WRITE};
+      auto writer = cista::buf<cista::mmap>(std::move(mmap));
+      cista::serialize<kMode>(writer, *this);
+    }
+
+    vec_map<node_idx_t, node_properties> node_properties_;
+    vec_map<way_idx_t, way_properties> way_properties_;
+
+    vecvec<way_idx_t, node_idx_t> way_nodes_;
+    vecvec<way_idx_t, std::uint16_t> way_node_dist_;
+
+    vecvec<node_idx_t, way_idx_t> node_ways_;
+    vecvec<node_idx_t, std::uint16_t> node_in_way_idx_;
+
+    bitvec<node_idx_t> node_is_restricted_;
+    vecvec<node_idx_t, restriction> node_restrictions_;
+
+    vec<pair<node_idx_t, level_bits_t>> multi_level_elevators_;
+  };
+
+  cista::wrapped<routing> r_;
+
   mm_vec_map<node_idx_t, osm_node_idx_t> node_to_osm_;
-  mm_vec_map<node_idx_t, node_properties> node_properties_;
   mm_vec_map<way_idx_t, osm_way_idx_t> way_osm_idx_;
-  mm_vec_map<way_idx_t, way_properties> way_properties_;
   mm_vecvec<way_idx_t, point, std::uint64_t> way_polylines_;
   mm_vecvec<way_idx_t, osm_node_idx_t, std::uint64_t> way_osm_nodes_;
-  mm_vecvec<way_idx_t, node_idx_t> way_nodes_;
-  mm_vecvec<way_idx_t, std::uint16_t> way_node_dist_;
-  mm_vecvec<node_idx_t, way_idx_t> node_ways_;
-  mm_vecvec<node_idx_t, std::uint16_t> node_in_way_idx_;
+
   multi_counter node_way_counter_;
-  mm_bitvec<node_idx_t> node_is_restricted_;
-  mm_vecvec<node_idx_t, restriction> node_restrictions_;
-  mm_vec<pair<node_idx_t, level_bits_t>> multi_level_elevators_;
 };
 
 }  // namespace osr

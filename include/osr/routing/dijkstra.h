@@ -38,7 +38,7 @@ struct dijkstra {
   }
 
   template <direction SearchDir>
-  void run(ways const& w, cost_t const max) {
+  void run(ways::routing const& r, cost_t const max) {
     while (!pq_.empty()) {
       auto l = pq_.pop();
       if (get_cost(l.get_node()) < l.cost()) {
@@ -47,7 +47,7 @@ struct dijkstra {
 
       auto const curr = l.get_node();
       Profile::template adjacent<SearchDir>(
-          w, curr,
+          r, curr,
           [&](node const neighbor, std::uint32_t const cost, distance_t,
               way_idx_t, std::uint16_t, std::uint16_t) {
             auto const total = l.cost() + cost;
@@ -60,9 +60,9 @@ struct dijkstra {
     }
   }
 
-  void run(ways const& w, cost_t const max, direction const dir) {
-    dir == direction::kForward ? run<direction::kForward>(w, max)
-                               : run<direction::kBackward>(w, max);
+  void run(ways::routing const& r, cost_t const max, direction const dir) {
+    dir == direction::kForward ? run<direction::kForward>(r, max)
+                               : run<direction::kBackward>(r, max);
   }
 
   dial<label, get_bucket> pq_{get_bucket{}};

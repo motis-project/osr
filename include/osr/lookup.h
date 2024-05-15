@@ -119,7 +119,7 @@ struct lookup {
                                 level_t const lvl,
                                 bool const reverse,
                                 direction const search_dir) const {
-    auto const way_prop = ways_.way_properties_[wc.way_];
+    auto const way_prop = ways_.r_->way_properties_[wc.way_];
     auto const edge_dir = reverse ? opposite(dir) : dir;
     auto const way_cost =
         Profile::way_cost(way_prop, flip(search_dir, edge_dir), 0U);

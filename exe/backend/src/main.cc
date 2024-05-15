@@ -76,10 +76,6 @@ int main(int argc, char const* argv[]) {
   }
 
   auto const w = ways{opt.data_dir_, cista::mmap::protection::READ};
-  if (opt.lock_) {
-    w.lock();
-  }
-
   auto const l = lookup{w};
 
   auto ioc = boost::asio::io_context{};

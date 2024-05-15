@@ -165,7 +165,7 @@ struct http_server::impl {
         {waypoints[3].as_double(), waypoints[2].as_double()});
     auto levels = hash_set<level_t>{};
     l_.find(min, max, [&](way_idx_t const x) {
-      auto const p = w_.way_properties_[x];
+      auto const p = w_.r_->way_properties_[x];
       levels.emplace(p.from_level());
       if (p.from_level() != p.to_level()) {
         levels.emplace(p.to_level());
@@ -198,14 +198,14 @@ struct http_server::impl {
         return;
       }
 
-      auto const way_prop = w_.way_properties_[w];
+      auto const way_prop = w_.r_->way_properties_[w];
       if (way_prop.is_elevator()) {
-        auto const n = w_.way_nodes_[w][0];
-        auto const np = w_.node_properties_[n];
+        auto const n = w_.r_->way_nodes_[w][0];
+        auto const np = w_.r_->node_properties_[n];
         if (np.is_multi_level()) {
           auto has_level = false;
           for_each_set_bit(
-              foot<true>::get_elevator_multi_levels(w_, n),
+              foot<true>::get_elevator_multi_levels(*w_.r_, n),
               [&](auto&& bit) { has_level |= (level == level_t{bit}); });
           if (has_level) {
             gj.write_way(w);
