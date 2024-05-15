@@ -223,16 +223,16 @@ struct http_server::impl {
     cb(json_response(req, gj.finish(get_dijkstra<foot<true>>())));
   }
 
-  void handle_static(web_server::http_req_t&& req,
-                     web_server::http_res_cb_t&& cb) {
+  void handle_static(web_server::http_req_t const& req,
+                     web_server::http_res_cb_t const& cb) {
     if (!serve_static_files_ ||
         !net::serve_static_file(static_file_path_, req, cb)) {
       return cb(net::not_found_response(req));
     }
   }
 
-  void handle_request(web_server::http_req_t&& req,
-                      web_server::http_res_cb_t&& cb) {
+  void handle_request(web_server::http_req_t const& req,
+                      web_server::http_res_cb_t const& cb) {
     std::cout << "[" << req.method_string() << "] " << req.target() << '\n';
     switch (req.method()) {
       case http::verb::options: return cb(json_response(req, {}));
