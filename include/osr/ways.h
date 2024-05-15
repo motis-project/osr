@@ -359,7 +359,7 @@ struct ways {
     }
 
     static cista::wrapped<routing> read(std::filesystem::path const& p) {
-      auto mem = cista::file{p.c_str(), "r"}.content();
+      auto mem = cista::file{p.generic_string().c_str(), "r"}.content();
       auto const ptr = cista::deserialize<routing, kMode>(mem);
       return {std::move(mem), ptr};
     }
