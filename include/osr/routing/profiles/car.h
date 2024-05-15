@@ -27,7 +27,8 @@ struct car {
 
     std::ostream& print(std::ostream& out, ways const& w) const {
       return out << "(node=" << w.node_to_osm_[n_] << ", dir=" << to_str(dir_)
-                 << ", way=" << w.way_osm_idx_[w.node_ways_[n_][way_]] << ")";
+                 << ", way=" << w.way_osm_idx_[w.r_->node_ways_[n_][way_]]
+                 << ")";
     }
 
     node_idx_t n_;
@@ -113,8 +114,11 @@ struct car {
   };
 
   template <typename Fn>
-  static void resolve(
-      ways const& w, way_idx_t const way, node_idx_t const n, level_t, Fn&& f) {
+  static void resolve(ways::routing const& w,
+                      way_idx_t const way,
+                      node_idx_t const n,
+                      level_t,
+                      Fn&& f) {
     auto const ways = w.node_ways_[n];
     for (auto i = way_pos_t{0U}; i != ways.size(); ++i) {
       if (ways[i] == way) {
@@ -125,7 +129,10 @@ struct car {
   }
 
   template <typename Fn>
-  static void resolve_all(ways const& w, node_idx_t const n, level_t, Fn&& f) {
+  static void resolve_all(ways::routing const& w,
+                          node_idx_t const n,
+                          level_t,
+                          Fn&& f) {
     auto const ways = w.node_ways_[n];
     for (auto i = way_pos_t{0U}; i != ways.size(); ++i) {
       f(node{n, i, direction::kForward});
@@ -134,7 +141,7 @@ struct car {
   }
 
   template <direction SearchDir, typename Fn>
-  static void adjacent(ways const& w, node const n, Fn&& fn) {
+  static void adjacent(ways::routing const& w, node const n, Fn&& fn) {
     auto way_pos = way_pos_t{0U};
     for (auto const [way, i] :
          utl::zip_unchecked(w.node_ways_[n.n_], w.node_in_way_idx_[n.n_])) {
@@ -177,7 +184,7 @@ struct car {
     }
   }
 
-  static bool is_reachable(ways const& w,
+  static bool is_reachable(ways::routing const& w,
                            node const n,
                            way_idx_t const way,
                            direction const way_dir,

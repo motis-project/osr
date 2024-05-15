@@ -165,7 +165,7 @@ struct http_server::impl {
         {waypoints[3].as_double(), waypoints[2].as_double()});
     auto levels = hash_set<level_t>{};
     l_.find(min, max, [&](way_idx_t const x) {
-      auto const p = w_.way_properties_[x];
+      auto const p = w_.r_->way_properties_[x];
       levels.emplace(p.from_level());
       if (p.from_level() != p.to_level()) {
         levels.emplace(p.to_level());
@@ -198,14 +198,14 @@ struct http_server::impl {
         return;
       }
 
-      auto const way_prop = w_.way_properties_[w];
+      auto const way_prop = w_.r_->way_properties_[w];
       if (way_prop.is_elevator()) {
-        auto const n = w_.way_nodes_[w][0];
-        auto const np = w_.node_properties_[n];
+        auto const n = w_.r_->way_nodes_[w][0];
+        auto const np = w_.r_->node_properties_[n];
         if (np.is_multi_level()) {
           auto has_level = false;
           for_each_set_bit(
-              foot<true>::get_elevator_multi_levels(w_, n),
+              foot<true>::get_elevator_multi_levels(*w_.r_, n),
               [&](auto&& bit) { has_level |= (level == level_t{bit}); });
           if (has_level) {
             gj.write_way(w);
@@ -223,8 +223,8 @@ struct http_server::impl {
     cb(json_response(req, gj.finish(get_dijkstra<foot<true>>())));
   }
 
-  void handle_static(web_server::http_req_t&& req,
-                     web_server::http_res_cb_t&& cb) {
+  void handle_static(web_server::http_req_t const& req,
+                     web_server::http_res_cb_t const& cb) {
     if (!serve_static_files_ ||
         !net::serve_static_file(static_file_path_, req, cb)) {
       return cb(net::not_found_response(req));
@@ -233,8 +233,7 @@ struct http_server::impl {
 
   void handle_request(web_server::http_req_t&& req,
                       web_server::http_res_cb_t&& cb) {
-    std::cout << "[" << req.method_string() << "] " << req.target()
-              << std::endl;
+    std::cout << "[" << req.method_string() << "] " << req.target() << '\n';
     switch (req.method()) {
       case http::verb::options: return cb(json_response(req, {}));
       case http::verb::post: {
@@ -281,17 +280,18 @@ struct http_server::impl {
                     web_server::http_res_cb_t const& cb) {
     boost::asio::post(thread_pool_, [req, cb, handler, this]() {
       try {
-        handler(req, [req, cb, this](web_server::http_res_t&& res) {
-          boost::asio::post(ioc_, [cb, req, res{std::move(res)}]() mutable {
-            try {
-              cb(std::move(res));
-            } catch (std::exception const& e) {
-              return cb(json_response(
-                  req, fmt::format(R"({{"error": "{}"}})", e.what()),
-                  http::status::internal_server_error));
-            }
-          });
-        });
+        std::forward<Fn&>(handler)(
+            req, [req, cb, this](web_server::http_res_t&& res) {
+              boost::asio::post(ioc_, [cb, req, res{std::move(res)}]() mutable {
+                try {
+                  cb(std::move(res));
+                } catch (std::exception const& e) {
+                  return cb(json_response(
+                      req, fmt::format(R"({{"error": "{}"}})", e.what()),
+                      http::status::internal_server_error));
+                }
+              });
+            });
       } catch (std::exception const& e) {
         return cb(json_response(req,
                                 fmt::format(R"({{"error": "{}"}})", e.what()),
@@ -301,8 +301,9 @@ struct http_server::impl {
   }
 
   void listen(std::string const& host, std::string const& port) {
-    server_.on_http_request([this](web_server::http_req_t req,
-                                   web_server::http_res_cb_t cb, bool /*ssl*/) {
+    server_.on_http_request([this](web_server::http_req_t&& req,
+                                   web_server::http_res_cb_t&& cb,
+                                   bool /*ssl*/) {
       return handle_request(std::move(req), std::move(cb));
     });
 
@@ -314,9 +315,9 @@ struct http_server::impl {
     }
 
     std::cout << "Listening on http://" << host << ":" << port
-              << "/ and https://" << host << ":" << port << "/" << std::endl;
+              << "/ and https://" << host << ":" << port << "/" << '\n';
     if (host == "0.0.0.0") {
-      std::cout << "Local link: http://127.0.0.1:" << port << "/" << std::endl;
+      std::cout << "Local link: http://127.0.0.1:" << port << "/" << '\n';
     }
     server_.run();
   }

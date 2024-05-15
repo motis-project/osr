@@ -70,19 +70,20 @@ struct connecting_way {
 
 template <direction SearchDir, typename Profile>
 connecting_way find_connecting_way(ways const& w,
+                                   ways::routing const& r,
                                    typename Profile::node const to,
                                    typename Profile::node const from,
                                    cost_t const expected_cost) {
   auto conn = std::optional<connecting_way>{};
   Profile::template adjacent<SearchDir>(
-      w, from,
+      r, from,
       [&](typename Profile::node const target, cost_t const cost,
           distance_t const dist, way_idx_t const way, std::uint16_t const a_idx,
           std::uint16_t const b_idx) {
         if (target == to && cost == expected_cost) {
-          auto const is_loop = w.is_loop(way) &&
+          auto const is_loop = r.is_loop(way) &&
                                static_cast<unsigned>(std::abs(a_idx - b_idx)) ==
-                                   w.way_nodes_[way].size() - 2U;
+                                   r.way_nodes_[way].size() - 2U;
           conn = {way, a_idx, b_idx, is_loop, dist};
         }
       });
@@ -98,16 +99,17 @@ connecting_way find_connecting_way(ways const& w,
                                    cost_t const expected_cost,
                                    direction const dir) {
   if (dir == direction::kForward) {
-    return find_connecting_way<direction::kForward, Profile>(w, from, to,
+    return find_connecting_way<direction::kForward, Profile>(w, *w.r_, from, to,
                                                              expected_cost);
   } else {
-    return find_connecting_way<direction::kBackward, Profile>(w, from, to,
-                                                              expected_cost);
+    return find_connecting_way<direction::kBackward, Profile>(
+        w, *w.r_, from, to, expected_cost);
   }
 }
 
 template <typename Profile>
 double add_path(ways const& w,
+                ways::routing const& r,
                 typename Profile::node const from,
                 typename Profile::node const to,
                 cost_t const expected_cost,
@@ -119,25 +121,25 @@ double add_path(ways const& w,
   auto active = false;
   auto& segment = path.emplace_back();
   segment.way_ = way;
-  segment.from_level_ = w.way_properties_[way].from_level();
-  segment.to_level_ = w.way_properties_[way].to_level();
+  segment.from_level_ = r.way_properties_[way].from_level();
+  segment.to_level_ = r.way_properties_[way].to_level();
 
   for (auto const [osm_idx, coord] :
        infinite(reverse(utl::zip(w.way_osm_nodes_[way], w.way_polylines_[way]),
                         (from_idx > to_idx) ^ is_loop),
                 is_loop)) {
     utl::verify(j++ != 2 * w.way_polylines_[way].size() + 1U, "infinite loop");
-    if (!active && w.node_to_osm_[w.way_nodes_[way][from_idx]] == osm_idx) {
+    if (!active && w.node_to_osm_[r.way_nodes_[way][from_idx]] == osm_idx) {
       active = true;
     }
     if (active) {
-      if (w.node_to_osm_[w.way_nodes_[way][from_idx]] == osm_idx) {
+      if (w.node_to_osm_[r.way_nodes_[way][from_idx]] == osm_idx) {
         // Again "from" node, then it's shorter to start from here.
         segment.polyline_.clear();
       }
 
       segment.polyline_.emplace_back(coord);
-      if (w.node_to_osm_[w.way_nodes_[way][to_idx]] == osm_idx) {
+      if (w.node_to_osm_[r.way_nodes_[way][to_idx]] == osm_idx) {
         break;
       }
     }
@@ -164,7 +166,8 @@ path reconstruct(ways const& w,
     auto const pred = e.pred(n);
     if (pred.has_value()) {
       auto const expected_dist = e.cost(n) - d.get_cost(*pred);
-      dist += add_path<Profile>(w, n, *pred, expected_dist, segments, dir);
+      dist +=
+          add_path<Profile>(w, *w.r_, n, *pred, expected_dist, segments, dir);
     } else {
       break;
     }
@@ -198,8 +201,8 @@ best_candidate(ways const& w,
                             node_candidate const* x) {
     auto best_node = typename Profile::node{};
     auto best_cost = std::numeric_limits<cost_t>::max();
-    Profile::resolve_all(w, x->node_, lvl, [&](auto&& node) {
-      if (!Profile::is_reachable(w, node, dest.way_,
+    Profile::resolve_all(*w.r_, x->node_, lvl, [&](auto&& node) {
+      if (!Profile::is_reachable(*w.r_, node, dest.way_,
                                  flip(opposite(dir), x->way_dir_),
                                  opposite(dir))) {
         return;
@@ -262,9 +265,8 @@ std::optional<path> route(ways const& w,
   for (auto const& start : from_match) {
     for (auto const* nc : {&start.left_, &start.right_}) {
       if (nc->valid() && nc->cost_ < max) {
-
         Profile::resolve(
-            w, start.way_, nc->node_, from.lvl_,
+            *w.r_, start.way_, nc->node_, from.lvl_,
             [&](auto const node) { d.add_start({node, nc->cost_}); });
       }
     }
@@ -273,7 +275,7 @@ std::optional<path> route(ways const& w,
       continue;
     }
 
-    d.run(w, max, dir);
+    d.run(*w.r_, max, dir);
 
     auto const c = best_candidate(w, d, to.lvl_, to_match, max, dir);
     if (c.has_value()) {
@@ -309,12 +311,12 @@ std::vector<std::optional<path>> route(ways const& w,
     for (auto const* nc : {&start.left_, &start.right_}) {
       if (nc->valid() && nc->cost_ < max) {
         Profile::resolve(
-            w, start.way_, nc->node_, from.lvl_,
+            *w.r_, start.way_, nc->node_, from.lvl_,
             [&](auto const node) { d.add_start({node, nc->cost_}); });
       }
     }
 
-    d.run(w, max, dir);
+    d.run(*w.r_, max, dir);
 
     auto found = 0U;
     for (auto const [m, t, r] : utl::zip(to_match, to, result)) {
