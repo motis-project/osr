@@ -233,8 +233,7 @@ struct http_server::impl {
 
   void handle_request(web_server::http_req_t&& req,
                       web_server::http_res_cb_t&& cb) {
-    std::cout << "[" << req.method_string() << "] " << req.target()
-              << std::endl;
+    std::cout << "[" << req.method_string() << "] " << req.target() << '\n';
     switch (req.method()) {
       case http::verb::options: return cb(json_response(req, {}));
       case http::verb::post: {
@@ -314,9 +313,9 @@ struct http_server::impl {
     }
 
     std::cout << "Listening on http://" << host << ":" << port
-              << "/ and https://" << host << ":" << port << "/" << std::endl;
+              << "/ and https://" << host << ":" << port << "/" << '\n';
     if (host == "0.0.0.0") {
-      std::cout << "Local link: http://127.0.0.1:" << port << "/" << std::endl;
+      std::cout << "Local link: http://127.0.0.1:" << port << "/" << '\n';
     }
     server_.run();
   }
