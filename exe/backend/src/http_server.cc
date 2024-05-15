@@ -280,17 +280,18 @@ struct http_server::impl {
                     web_server::http_res_cb_t const& cb) {
     boost::asio::post(thread_pool_, [req, cb, handler, this]() {
       try {
-        handler(req, [req, cb, this](web_server::http_res_t&& res) {
-          boost::asio::post(ioc_, [cb, req, res{std::move(res)}]() mutable {
-            try {
-              cb(std::move(res));
-            } catch (std::exception const& e) {
-              return cb(json_response(
-                  req, fmt::format(R"({{"error": "{}"}})", e.what()),
-                  http::status::internal_server_error));
-            }
-          });
-        });
+        std::forward<Fn&>(handler)(
+            req, [req, cb, this](web_server::http_res_t&& res) {
+              boost::asio::post(ioc_, [cb, req, res{std::move(res)}]() mutable {
+                try {
+                  cb(std::move(res));
+                } catch (std::exception const& e) {
+                  return cb(json_response(
+                      req, fmt::format(R"({{"error": "{}"}})", e.what()),
+                      http::status::internal_server_error));
+                }
+              });
+            });
       } catch (std::exception const& e) {
         return cb(json_response(req,
                                 fmt::format(R"({{"error": "{}"}})", e.what()),
