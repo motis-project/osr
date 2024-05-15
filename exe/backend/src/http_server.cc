@@ -1,5 +1,7 @@
 #include "osr/backend/http_server.h"
 
+#include <utility>
+
 #include "boost/algorithm/string.hpp"
 #include "boost/asio/post.hpp"
 #include "boost/beast/version.hpp"
@@ -278,10 +280,10 @@ struct http_server::impl {
   void run_parallel(Fn&& handler,
                     web_server::http_req_t const& req,
                     web_server::http_res_cb_t const& cb) {
-    boost::asio::post(thread_pool_, [req, cb, handler, this]() {
-      try {
-        std::forward<Fn&>(handler)(
-            req, [req, cb, this](web_server::http_res_t&& res) {
+    boost::asio::post(
+        thread_pool_, [req, cb, handler = std::forward<Fn>(handler), this]() {
+          try {
+            handler(req, [req, cb, this](web_server::http_res_t&& res) {
               boost::asio::post(ioc_, [cb, req, res{std::move(res)}]() mutable {
                 try {
                   cb(std::move(res));
@@ -292,12 +294,12 @@ struct http_server::impl {
                 }
               });
             });
-      } catch (std::exception const& e) {
-        return cb(json_response(req,
-                                fmt::format(R"({{"error": "{}"}})", e.what()),
-                                http::status::internal_server_error));
-      }
-    });
+          } catch (std::exception const& e) {
+            return cb(json_response(
+                req, fmt::format(R"({{"error": "{}"}})", e.what()),
+                http::status::internal_server_error));
+          }
+        });
   }
 
   void listen(std::string const& host, std::string const& port) {
