@@ -231,8 +231,8 @@ struct http_server::impl {
     }
   }
 
-  void handle_request(web_server::http_req_t const& req,
-                      web_server::http_res_cb_t const& cb) {
+  void handle_request(web_server::http_req_t&& req,
+                      web_server::http_res_cb_t&& cb) {
     std::cout << "[" << req.method_string() << "] " << req.target() << '\n';
     switch (req.method()) {
       case http::verb::options: return cb(json_response(req, {}));
@@ -300,8 +300,9 @@ struct http_server::impl {
   }
 
   void listen(std::string const& host, std::string const& port) {
-    server_.on_http_request([this](web_server::http_req_t req,
-                                   web_server::http_res_cb_t cb, bool /*ssl*/) {
+    server_.on_http_request([this](web_server::http_req_t&& req,
+                                   web_server::http_res_cb_t&& cb,
+                                   bool /*ssl*/) {
       return handle_request(std::move(req), std::move(cb));
     });
 
