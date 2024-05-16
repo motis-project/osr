@@ -2,3 +2,4 @@
 /*build*
 /deps
 /.pkg.mutex
+/.clang-tidy

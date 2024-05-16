@@ -233,8 +233,8 @@ struct http_server::impl {
     }
   }
 
-  void handle_request(web_server::http_req_t&& req,
-                      web_server::http_res_cb_t&& cb) {
+  void handle_request(web_server::http_req_t const& req,
+                      web_server::http_res_cb_t const& cb) {
     std::cout << "[" << req.method_string() << "] " << req.target() << '\n';
     switch (req.method()) {
       case http::verb::options: return cb(json_response(req, {}));
@@ -267,8 +267,7 @@ struct http_server::impl {
         }
       }
       case http::verb::get:
-      case http::verb::head:
-        return handle_static(std::move(req), std::move(cb));
+      case http::verb::head: return handle_static(req, cb);
       default:
         return cb(json_response(req,
                                 R"({"error": "HTTP method not supported"})",
@@ -303,11 +302,10 @@ struct http_server::impl {
   }
 
   void listen(std::string const& host, std::string const& port) {
-    server_.on_http_request([this](web_server::http_req_t&& req,
-                                   web_server::http_res_cb_t&& cb,
-                                   bool /*ssl*/) {
-      return handle_request(std::move(req), std::move(cb));
-    });
+    server_.on_http_request(
+        [this](web_server::http_req_t const& req,
+               web_server::http_res_cb_t const& cb,
+               bool /*ssl*/) { return handle_request(req, cb); });
 
     boost::system::error_code ec;
     server_.init(host, port, ec);
