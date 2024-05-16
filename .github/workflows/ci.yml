@@ -323,6 +323,10 @@ jobs:
   docker:
     runs-on: ubuntu-22.04
     needs: linux
+    permissions:
+      packages: write
+      contents: read
+      attestations: write
     steps:
       - uses: actions/checkout@v4
 
