@@ -276,13 +276,14 @@ struct http_server::impl {
   }
 
   template <typename Fn>
-  void run_parallel(Fn&& handler,
-                    web_server::http_req_t const& req,
-                    web_server::http_res_cb_t const& cb) {
+  void run_parallel(
+      Fn&& handler,  // NOLINT(cppcoreguidelines-missing-std-forward)
+      web_server::http_req_t const& req,
+      web_server::http_res_cb_t const& cb) {
     boost::asio::post(
-        thread_pool_, [req, cb, handler = std::forward<Fn>(handler), this]() {
+        thread_pool_, [req, cb, h = std::forward<Fn>(handler), this]() {
           try {
-            handler(req, [req, cb, this](web_server::http_res_t&& res) {
+            h(req, [req, cb, this](web_server::http_res_t&& res) {
               boost::asio::post(ioc_, [cb, req, res{std::move(res)}]() mutable {
                 try {
                   cb(std::move(res));
