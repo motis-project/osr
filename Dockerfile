@@ -10,7 +10,8 @@ if [ ! -d '/data/osr' ]; then\n\
 fi\n\
 /osr/osr-backend -d /data/osr -s /osr/web\n\
 " > /run.sh && \
-    chmod +x /run.sh
+    chmod +x /run.sh && \
+    mkdir /data && chown osr:osr /data
 EXPOSE 8080
 VOLUME ["/data"]
 WORKDIR /osr
