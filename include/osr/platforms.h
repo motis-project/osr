@@ -134,8 +134,8 @@ struct platforms {
   level_t get_level(ways const& w, platform_idx_t const i) const {
     return std::visit(
         utl::overloaded{
-            [&](way_idx_t x) { return w.way_properties_[x].from_level(); },
-            [&](node_idx_t x) { return w.node_properties_[x].from_level(); }},
+            [&](way_idx_t x) { return w.r_->way_properties_[x].from_level(); },
+            [&](node_idx_t x) { return w.r_->node_properties_[x].from_level(); }},
         to_ref(platform_ref_[i][0]));
   }
 

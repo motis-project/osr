@@ -224,7 +224,7 @@ struct node_handler : public osm::handler::Handler {
     if (auto const node_idx = w_.find_node_idx(osm_node_idx);
         node_idx.has_value()) {
       auto const t = tags{n};
-      auto const [p, level_bits] = get_node_properties(n);
+      auto const [p, level_bits] = get_node_properties(t);
       w_.r_->node_properties_[*node_idx] = p;
 
       if (platforms_ != nullptr && t.is_platform_) {
