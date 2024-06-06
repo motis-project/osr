@@ -67,21 +67,25 @@ struct bike {
 
   template <typename Fn>
   static void resolve(
-      ways const&, way_idx_t, node_idx_t const n, level_t, Fn&& f) {
+      ways::routing const&, way_idx_t, node_idx_t const n, level_t, Fn&& f) {
     f(node{n});
   }
 
   template <typename Fn>
-  static void resolve_all(ways const&, node_idx_t const n, level_t, Fn&& f) {
+  static void resolve_all(ways::routing const&,
+                          node_idx_t const n,
+                          level_t,
+                          Fn&& f) {
     f(node{n});
   }
 
-  static bool is_reachable(ways const&, node, way_idx_t, direction, direction) {
+  static bool is_reachable(
+      ways::routing const&, node, way_idx_t, direction, direction) {
     return true;
   }
 
   template <direction SearchDir, typename Fn>
-  static void adjacent(ways const& w, node const n, Fn&& fn) {
+  static void adjacent(ways::routing const& w, node const n, Fn&& fn) {
     for (auto const [way, i] :
          utl::zip_unchecked(w.node_ways_[n.n_], w.node_in_way_idx_[n.n_])) {
       auto const expand = [&](direction const way_dir, std::uint16_t const from,
@@ -115,7 +119,7 @@ struct bike {
   static constexpr cost_t way_cost(way_properties const e,
                                    direction,
                                    std::uint16_t const dist) {
-    if (e.is_foot_accessible()) {
+    if (e.is_bike_accessible()) {
       return static_cast<cost_t>(std::round(dist / 1.2F));
     } else {
       return kInfeasible;
@@ -123,7 +127,7 @@ struct bike {
   }
 
   static constexpr cost_t node_cost(node_properties const n) {
-    return (n.is_walk_accessible() ? (n.is_elevator_ ? 90U : 0U) : kInfeasible);
+    return n.is_bike_accessible() ? 0U : kInfeasible;
   }
 };
 

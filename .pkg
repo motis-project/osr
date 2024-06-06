@@ -9,7 +9,7 @@
 [conf]
   url=git@github.com:motis-project/conf.git
   branch=master
-  commit=a32d491bd54800310a53ccba13f4ee9f6736ff3e
+  commit=f9bf4bd83bf55a2170725707e526cbacc45dcc66
 [geo]
   url=git@github.com:motis-project/geo.git
   branch=master

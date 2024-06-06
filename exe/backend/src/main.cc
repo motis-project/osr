@@ -77,9 +77,6 @@ int main(int argc, char const* argv[]) {
   }
 
   auto const w = ways{opt.data_dir_, cista::mmap::protection::READ};
-  if (opt.lock_) {
-    w.lock();
-  }
 
   auto const platforms_check_path = opt.data_dir_ / "node_is_platform.bin";
   if (!fs::exists(platforms_check_path)) {

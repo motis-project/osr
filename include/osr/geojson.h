@@ -64,12 +64,12 @@ struct geojson_writer {
   }
 
   void write_way(way_idx_t const i) {
-    auto const nodes = w_.way_nodes_[i];
+    auto const nodes = w_.r_->way_nodes_[i];
     auto const way_nodes = utl::nwise<2>(nodes);
-    auto const dists = w_.way_node_dist_[i];
+    auto const dists = w_.r_->way_node_dist_[i];
     auto way_nodes_it = std::begin(way_nodes);
     auto dist_it = std::begin(dists);
-    auto const p = w_.way_properties_[i];
+    auto const p = w_.r_->way_properties_[i];
     for (; dist_it != end(dists); ++way_nodes_it, ++dist_it) {
       auto const& [from, to] = *way_nodes_it;
       auto const dist = *dist_it;
@@ -120,10 +120,10 @@ struct geojson_writer {
   template <typename Dijkstra>
   std::string finish(Dijkstra const* s) {
     for (auto const n : nodes_) {
-      auto const p = w_.node_properties_[n];
+      auto const p = w_.r_->node_properties_[n];
 
       auto ss = std::stringstream{};
-      Dijkstra::profile_t::resolve_all(w_, n, level_t::invalid(),
+      Dijkstra::profile_t::resolve_all(*w_.r_, n, level_t::invalid(),
                                        [&](auto const n) {
                                          auto const cost = s->get_cost(n);
                                          if (cost != kInfeasible) {
@@ -135,7 +135,7 @@ struct geojson_writer {
 
       auto levels = std::stringstream{};
       foot<true>::for_each_elevator_level(
-          w_, n, [&](auto&& l) { levels << to_float(level_t{l}) << " "; });
+          *w_.r_, n, [&](auto&& l) { levels << to_float(level_t{l}) << " "; });
 
       auto properties = boost::json::object{
           {"osm_node_id", to_idx(w_.node_to_osm_[n])},
@@ -143,22 +143,22 @@ struct geojson_writer {
           {"car", p.is_car_accessible()},
           {"bike", p.is_bike_accessible()},
           {"foot", p.is_walk_accessible()},
-          {"is_restricted", w_.node_is_restricted_[n]},
+          {"is_restricted", w_.r_->node_is_restricted_[n]},
           {"is_entrance", p.is_entrance()},
           {"is_elevator", p.is_elevator()},
           {"multi_level", p.is_multi_level()},
           {"levels", levels.str()},
-          {"ways", fmt::format("{}", w_.node_ways_[n] |
+          {"ways", fmt::format("{}", w_.r_->node_ways_[n] |
                                          std::views::transform([&](auto&& w) {
                                            return w_.way_osm_idx_[w];
                                          }))},
           {"restrictions",
            fmt::format("{}",
-                       w_.node_restrictions_[n] |
+                       w_.r_->node_restrictions_[n] |
                            std::views::transform([&](restriction const r) {
                              return std::pair{
-                                 w_.way_osm_idx_[w_.node_ways_[n][r.from_]],
-                                 w_.way_osm_idx_[w_.node_ways_[n][r.to_]]};
+                                 w_.way_osm_idx_[w_.r_->node_ways_[n][r.from_]],
+                                 w_.way_osm_idx_[w_.r_->node_ways_[n][r.to_]]};
                            }))},
           {"label", ss.str().empty() ? "unreachable" : ss.str()}};
       features_.emplace_back(boost::json::value{

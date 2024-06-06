@@ -19,11 +19,14 @@ namespace osr {
 template <typename K, typename V, typename SizeType = cista::base_t<K>>
 using vecvec = cista::raw::vecvec<K, V, SizeType>;
 
-template <typename K, typename V>
-using vector_map = cista::basic_vector<V, cista::raw::ptr, false, K>;
-
 template <typename T>
-using vector = cista::basic_vector<T, cista::raw::ptr, false, std::uint64_t>;
+using vec = cista::raw::vector<T>;
+
+template <typename K, typename V>
+using vec_map = cista::raw::vector_map<K, V>;
+
+template <typename K>
+using bitvec = cista::basic_bitvec<vec<std::uint64_t>, K>;
 
 template <typename K, typename V>
 using mm_vec_map = cista::basic_mmap_vec<V, K>;
@@ -33,9 +36,6 @@ using mm_vec = cista::basic_mmap_vec<T, std::uint64_t>;
 
 template <typename T>
 using mm_vec32 = cista::basic_mmap_vec<T, std::uint32_t>;
-
-template <typename K>
-using mm_bitvec = cista::basic_bitvec<mm_vec<std::uint64_t>, K>;
 
 template <typename K, typename V, typename SizeType = cista::base_t<K>>
 using mm_vecvec = cista::basic_vecvec<K, mm_vec<V>, mm_vec<SizeType>>;
