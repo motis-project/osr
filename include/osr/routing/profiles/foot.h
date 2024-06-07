@@ -264,7 +264,8 @@ struct foot {
                                    std::uint16_t const dist) {
     if ((e.is_foot_accessible() || e.is_bike_accessible()) &&
         (!IsWheelchair || !e.is_steps())) {
-      return static_cast<cost_t>(std::round(dist / 1.2F));
+      return static_cast<cost_t>(
+          std::round(dist / (IsWheelchair ? 0.8 : 1.1F)));
     } else {
       return kInfeasible;
     }
