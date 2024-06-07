@@ -215,7 +215,7 @@ struct node_handler : public osm::handler::Handler {
                platforms* platforms,
                std::vector<resolved_restriction>& r,
                hash_map<osm_node_idx_t, level_bits_t> const& elevator_nodes)
-      :  platforms_{platforms}, r_{r}, w_{w}, elevator_nodes_{elevator_nodes} {
+      : platforms_{platforms}, r_{r}, w_{w}, elevator_nodes_{elevator_nodes} {
     w_.r_->node_properties_.resize(w_.n_nodes());
   }
 
@@ -334,7 +334,8 @@ struct node_handler : public osm::handler::Handler {
 };
 
 struct mark_inaccessible_handler : public osm::handler::Handler {
-  explicit mark_inaccessible_handler(ways& w) : w_{w} {}
+  explicit mark_inaccessible_handler(bool track_platforms, ways& w)
+      : track_platforms_{track_platforms}, w_{w} {}
 
   void node(osm::Node const& n) {
     auto const t = tags{n};
@@ -345,8 +346,14 @@ struct mark_inaccessible_handler : public osm::handler::Handler {
     if (!accessible || t.is_elevator_ || t.is_platform_) {
       w_.node_way_counter_.increment(n.positive_id());
     }
+
+    if (track_platforms_ && t.is_platform_) {
+      // Wnsure nodes are created even if they are not part of a routable way.
+      w_.node_way_counter_.increment(n.positive_id());
+    }
   }
 
+  bool track_platforms_;
   ways& w_;
 };
 
@@ -418,7 +425,7 @@ void extract(bool const with_platforms,
 
     auto node_idx_builder = tiles::hybrid_node_idx_builder{node_idx};
 
-    auto inaccessible_handler = mark_inaccessible_handler{w};
+    auto inaccessible_handler = mark_inaccessible_handler{pl != nullptr, w};
     auto rel_ways_h = rel_ways_handler{pl.get(), rel_ways};
     auto reader = osm_io::Reader{input_file, osm_eb::node | osm_eb::relation,
                                  osmium::io::read_meta::no};
@@ -555,6 +562,8 @@ void extract(bool const with_platforms,
   w.add_restriction(r);
 
   utl::sort(w.r_->multi_level_elevators_);
+  utl::sort(pl->node_pos_,
+            [](auto&& a, auto&& b) { return a.first < b.first; });
 
   w.r_->write(out);
 }

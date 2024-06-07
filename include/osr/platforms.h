@@ -47,6 +47,7 @@ struct platforms {
   platforms(std::filesystem::path p, cista::mmap::protection const mode)
       : p_{std::move(p)},
         mode_{mode},
+        node_pos_{mm("node_pos.bin")},
         node_is_platform_{mm_vec<std::uint64_t>{mm("node_is_platform.bin")}},
         way_is_platform_{mm_vec<std::uint64_t>{mm("way_is_platform.bin")}},
         platform_ref_{cista::paged<mm_vec32<ref_value_t>>{
@@ -86,6 +87,7 @@ struct platforms {
       return platform_idx_t::invalid();
     }
 
+    node_pos_.emplace_back(n, point::from_location(x.location()));
     node_is_platform_.resize(std::max(
         node_is_platform_.size(), static_cast<std::uint64_t>(to_idx(n) + 1U)));
     node_is_platform_.set(n, true);
@@ -135,7 +137,9 @@ struct platforms {
     return std::visit(
         utl::overloaded{
             [&](way_idx_t x) { return w.r_->way_properties_[x].from_level(); },
-            [&](node_idx_t x) { return w.r_->node_properties_[x].from_level(); }},
+            [&](node_idx_t x) {
+              return w.r_->node_properties_[x].from_level();
+            }},
         to_ref(platform_ref_[i][0]));
   }
 
@@ -163,6 +167,14 @@ struct platforms {
         &fn);
   }
 
+  point get_node_pos(node_idx_t const i) const {
+    auto const it =
+        std::lower_bound(begin(node_pos_), end(node_pos_), i,
+                         [](auto&& a, auto&& b) { return a.first < b; });
+    utl::verify(it != end(node_pos_) || it->first == i, "node pos not found");
+    return it->second;
+  }
+
   void build_rtree(ways const& w) {
     assert(rtree_ == nullptr);
 
@@ -175,7 +187,7 @@ struct platforms {
         std::visit(
             utl::overloaded{
                 [&](node_idx_t const x) {
-                  auto const pos = w.get_node_pos(x).as_latlng();
+                  auto const pos = get_node_pos(x).as_latlng();
                   auto const min_corner = std::array{pos.lng(), pos.lat()};
                   rtree_insert(rtree_, min_corner.data(), nullptr,
                                reinterpret_cast<void*>(
@@ -209,6 +221,7 @@ struct platforms {
 
   std::filesystem::path p_;
   cista::mmap::protection mode_;
+  mm_vec<pair<node_idx_t, point>> node_pos_;
   mm_bitvec<node_idx_t> node_is_platform_;
   mm_bitvec<way_idx_t> way_is_platform_;
   mm_paged_vecvec<platform_idx_t, ref_value_t> platform_ref_;

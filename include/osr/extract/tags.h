@@ -40,6 +40,9 @@ struct tags {
           if (highway_ == "elevator") {
             is_elevator_ = true;
           }
+          if (highway_ == "bus_stop") {
+            is_platform_ = true;
+          }
           break;
         case cista::hash("level"): {
           has_level_ = true;
