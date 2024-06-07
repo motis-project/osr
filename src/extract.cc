@@ -503,6 +503,8 @@ void extract(fs::path const& in, fs::path const& out) {
 
   w.add_restriction(r);
 
+  utl::sort(w.r_->multi_level_elevators_);
+
   w.r_->write(out);
 }
 

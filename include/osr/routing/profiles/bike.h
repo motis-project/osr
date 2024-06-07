@@ -119,7 +119,7 @@ struct bike {
   static constexpr cost_t way_cost(way_properties const e,
                                    direction,
                                    std::uint16_t const dist) {
-    if (e.is_foot_accessible()) {
+    if (e.is_bike_accessible()) {
       return static_cast<cost_t>(std::round(dist / 1.2F));
     } else {
       return kInfeasible;
@@ -127,7 +127,7 @@ struct bike {
   }
 
   static constexpr cost_t node_cost(node_properties const n) {
-    return (n.is_walk_accessible() ? (n.is_elevator_ ? 90U : 0U) : kInfeasible);
+    return n.is_bike_accessible() ? 0U : kInfeasible;
   }
 };
 

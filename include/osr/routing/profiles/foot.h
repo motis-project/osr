@@ -262,7 +262,8 @@ struct foot {
   static constexpr cost_t way_cost(way_properties const e,
                                    direction,
                                    std::uint16_t const dist) {
-    if (e.is_foot_accessible() && (!IsWheelchair || !e.is_steps())) {
+    if ((e.is_foot_accessible() || e.is_bike_accessible()) &&
+        (!IsWheelchair || !e.is_steps())) {
       return static_cast<cost_t>(std::round(dist / 1.2F));
     } else {
       return kInfeasible;
