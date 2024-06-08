@@ -30,6 +30,11 @@ boost::json::value to_line_string(Collection const& line) {
   return {{"type", "LineString"}, {"coordinates", x}};
 }
 
+template <typename T>
+boost::json::value to_line_string(std::initializer_list<T>&& line) {
+  return to_line_string(line);
+}
+
 inline boost::json::value to_point(point const& p) {
   return {{"type", "Point"}, {"coordinates", to_array(p)}};
 }

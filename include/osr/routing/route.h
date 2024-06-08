@@ -24,9 +24,25 @@ enum class search_profile : std::uint8_t {
   kCar,
 };
 
-search_profile to_profile(std::string_view s);
+inline search_profile to_profile(std::string_view s) {
+  switch (cista::hash(s)) {
+    case cista::hash("foot"): return search_profile::kFoot;
+    case cista::hash("wheelchair"): return search_profile::kWheelchair;
+    case cista::hash("bike"): return search_profile::kBike;
+    case cista::hash("car"): return search_profile::kCar;
+  }
+  throw utl::fail("{} is not a valid profile", s);
+}
 
-std::string_view to_str(search_profile const p);
+inline std::string_view to_str(search_profile const p) {
+  switch (p) {
+    case search_profile::kFoot: return "foot";
+    case search_profile::kWheelchair: return "wheelchair";
+    case search_profile::kCar: return "car";
+    case search_profile::kBike: return "bike";
+  }
+  throw utl::fail("{} is not a valid profile", static_cast<std::uint8_t>(p));
+}
 
 struct path {
   struct segment {
@@ -40,26 +56,6 @@ struct path {
   double dist_{0.0};
   std::vector<segment> segments_{};
 };
-
-search_profile to_profile(std::string_view s) {
-  switch (cista::hash(s)) {
-    case cista::hash("foot"): return search_profile::kFoot;
-    case cista::hash("wheelchair"): return search_profile::kWheelchair;
-    case cista::hash("bike"): return search_profile::kBike;
-    case cista::hash("car"): return search_profile::kCar;
-  }
-  throw utl::fail("{} is not a valid profile", s);
-}
-
-std::string_view to_str(search_profile const p) {
-  switch (p) {
-    case search_profile::kFoot: return "foot";
-    case search_profile::kWheelchair: return "wheelchair";
-    case search_profile::kCar: return "car";
-    case search_profile::kBike: return "bike";
-  }
-  throw utl::fail("{} is not a valid profile", static_cast<std::uint8_t>(p));
-}
 
 struct connecting_way {
   way_idx_t way_;

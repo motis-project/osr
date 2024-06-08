@@ -190,6 +190,19 @@ struct lookup {
         &fn);
   }
 
+  hash_set<node_idx_t> find_elevators(geo::latlng const& a,
+                                      geo::latlng const& b) {
+    auto elevators = hash_set<node_idx_t>{};
+    find(a, b, [&](way_idx_t const way) {
+      for (auto const n : ways_.r_->way_nodes_[way]) {
+        if (ways_.r_->node_properties_[n].is_elevator()) {
+          elevators.emplace(n);
+        }
+      }
+    });
+    return elevators;
+  }
+
   void insert(way_idx_t const way) {
     auto b = osmium::Box{};
     for (auto const& c : ways_.way_polylines_[way]) {
