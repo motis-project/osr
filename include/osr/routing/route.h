@@ -297,14 +297,15 @@ std::optional<path> route(ways const& w,
 }
 
 template <typename Profile>
-std::vector<std::optional<path>> route(ways const& w,
-                                       lookup const& l,
-                                       dijkstra<Profile>& d,
-                                       location const& from,
-                                       std::vector<location> const& to,
-                                       cost_t const max,
-                                       bitvec<node_idx_t> const* blocked,
-                                       direction const dir) {
+std::vector<std::optional<path>> route(
+    ways const& w,
+    lookup const& l,
+    dijkstra<Profile>& d,
+    location const& from,
+    std::vector<location> const& to,
+    cost_t const max,
+    direction const dir,
+    bitvec<node_idx_t> const* blocked = nullptr) {
   auto const from_match = l.match<Profile>(from, false, dir);
   auto const to_match =
       utl::to_vec(to, [&](auto&& x) { return l.match<Profile>(x, true, dir); });
@@ -326,7 +327,7 @@ std::vector<std::optional<path>> route(ways const& w,
       }
     }
 
-    d.run(*w.r_, max, dir, blocked);
+    d.run(*w.r_, max, blocked, dir);
 
     auto found = 0U;
     for (auto const [m, t, r] : utl::zip(to_match, to, result)) {
