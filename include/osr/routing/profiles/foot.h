@@ -111,13 +111,22 @@ struct foot {
     }
   }
 
-  template <direction SearchDir, typename Fn>
-  static void adjacent(ways::routing const& w, node const n, Fn&& fn) {
+  template <direction SearchDir, bool WithBlocked, typename Fn>
+  static void adjacent(ways::routing const& w,
+                       node const n,
+                       bitvec<node_idx_t> const* blocked,
+                       Fn&& fn) {
     for (auto const [way, i] :
          utl::zip_unchecked(w.node_ways_[n.n_], w.node_in_way_idx_[n.n_])) {
       auto const expand = [&](direction const way_dir, std::uint16_t const from,
                               std::uint16_t const to) {
         auto const target_node = w.way_nodes_[way][to];
+        if constexpr (WithBlocked) {
+          if (blocked->test(target_node)) {
+            return;
+          }
+        }
+
         auto const target_node_prop = w.node_properties_[target_node];
         if (node_cost(target_node_prop) == kInfeasible) {
           return;
