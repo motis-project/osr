@@ -56,6 +56,7 @@ std::vector<std::optional<path>> route(
     std::vector<location> const& to,
     cost_t max,
     direction,
+    double max_match_distance,
     bitvec<node_idx_t> const* blocked = nullptr);
 
 std::optional<path> route(ways const&,
@@ -65,6 +66,7 @@ std::optional<path> route(ways const&,
                           location const& to,
                           cost_t max,
                           direction,
+                          double max_match_distance,
                           bitvec<node_idx_t> const* blocked = nullptr);
 
 }  // namespace osr

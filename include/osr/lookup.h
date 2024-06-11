@@ -95,17 +95,21 @@ struct lookup {
   template <typename Profile>
   match_t match(location const& query,
                 bool const reverse,
-                direction const search_dir) const {
+                direction const search_dir,
+                double const max_match_distance,
+                bitvec<node_idx_t> const* blocked) const {
     auto way_candidates = std::vector<way_candidate>{};
     find(query.pos_, [&](way_idx_t const way) {
       auto d = distance_to_way(query.pos_, ways_.way_polylines_[way]);
-      if (d.dist_to_way_ < Profile::kMaxMatchDistance) {
+      if (d.dist_to_way_ < max_match_distance) {
         auto& wc = way_candidates.emplace_back(std::move(d));
         wc.way_ = way;
-        wc.left_ = find_next_node<Profile>(wc, query, direction::kBackward,
-                                           query.lvl_, reverse, search_dir);
-        wc.right_ = find_next_node<Profile>(wc, query, direction::kForward,
-                                            query.lvl_, reverse, search_dir);
+        wc.left_ =
+            find_next_node<Profile>(wc, query, direction::kBackward, query.lvl_,
+                                    reverse, search_dir, blocked);
+        wc.right_ =
+            find_next_node<Profile>(wc, query, direction::kForward, query.lvl_,
+                                    reverse, search_dir, blocked);
       }
     });
     utl::sort(way_candidates);
@@ -118,7 +122,8 @@ struct lookup {
                                 direction const dir,
                                 level_t const lvl,
                                 bool const reverse,
-                                direction const search_dir) const {
+                                direction const search_dir,
+                                bitvec<node_idx_t> const* blocked) const {
     auto const way_prop = ways_.r_->way_properties_[wc.way_];
     auto const edge_dir = reverse ? opposite(dir) : dir;
     auto const way_cost =
@@ -151,7 +156,8 @@ struct lookup {
                    c.path_.push_back(pos);
 
                    auto const way_node = ways_.find_node_idx(osm_node_idx);
-                   if (way_node.has_value()) {
+                   if (way_node.has_value() &&
+                       (blocked == nullptr || !blocked->test(*way_node))) {
                      c.node_ = *way_node;
                      return cflow::kBreak;
                    }
