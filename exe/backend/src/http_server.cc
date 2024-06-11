@@ -121,24 +121,7 @@ struct http_server::impl {
     auto const max_it = q.find("max");
     auto const max = static_cast<cost_t>(
         max_it == q.end() ? 3600 : max_it->value().as_int64());
-
-    auto p = std::optional<path>{};
-    switch (profile) {
-      case search_profile::kFoot:
-        p = route(w_, l_, get_dijkstra<foot<false>>(), from, to, max, dir);
-        break;
-      case search_profile::kWheelchair:
-        p = route(w_, l_, get_dijkstra<foot<true>>(), from, to, max, dir);
-        break;
-      case search_profile::kBike:
-        p = route(w_, l_, get_dijkstra<bike>(), from, to, max, dir);
-        break;
-      case search_profile::kCar:
-        p = route(w_, l_, get_dijkstra<car>(), from, to, max, dir);
-        break;
-      default: throw utl::fail("not implemented");
-    }
-
+    auto const p = route(w_, l_, profile, from, to, max, dir);
     auto const response = json::serialize(
         p.has_value()
             ? boost::json::

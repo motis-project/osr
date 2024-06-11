@@ -112,7 +112,8 @@ struct bike {
         auto const dist = w.way_node_dist_[way][std::min(from, to)];
         auto const cost = way_cost(target_way_prop, way_dir, dist) +
                           node_cost(target_node_prop);
-        fn(node{target_node}, cost, dist, way, from, to);
+        fn(node{target_node}, static_cast<std::uint32_t>(cost), dist, way, from,
+           to);
       };
 
       if (i != 0U) {
