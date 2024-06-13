@@ -197,7 +197,7 @@ struct lookup {
   }
 
   hash_set<node_idx_t> find_elevators(geo::latlng const& a,
-                                      geo::latlng const& b) {
+                                      geo::latlng const& b) const {
     auto elevators = hash_set<node_idx_t>{};
     find(a, b, [&](way_idx_t const way) {
       for (auto const n : ways_.r_->way_nodes_[way]) {

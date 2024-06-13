@@ -48,6 +48,9 @@ struct connecting_way {
   std::uint16_t distance_;
 };
 
+template <typename Profile>
+dijkstra<Profile>& get_dijkstra();
+
 std::vector<std::optional<path>> route(
     ways const&,
     lookup const&,

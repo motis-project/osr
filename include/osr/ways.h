@@ -305,7 +305,7 @@ struct ways {
         return p;
       }
     }
-    throw utl::fail("unable to find node {} [osm={}] in way {} [osm]", i,
+    throw utl::fail("unable to find node {} [osm={}] in way {} [osm={}]", i,
                     osm_idx, way, way_osm_idx_[way]);
   }
 

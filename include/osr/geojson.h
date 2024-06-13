@@ -51,11 +51,12 @@ struct geojson_writer {
   void write_platform(platform_idx_t const i) {
     for (auto const r : platforms_->platform_ref_[i]) {
       auto const geometry = std::visit(
-          utl::overloaded{
-              [&](node_idx_t x) { return to_point(w_.get_node_pos(x)); },
-              [&](way_idx_t x) {
-                return to_line_string(w_.way_polylines_[x]);
-              }},
+          utl::overloaded{[&](node_idx_t x) {
+                            return to_point(platforms_->get_node_pos(x));
+                          },
+                          [&](way_idx_t x) {
+                            return to_line_string(w_.way_polylines_[x]);
+                          }},
           to_ref(r));
       features_.emplace_back(boost::json::value{
           {"type", "Feature"},
@@ -123,7 +124,7 @@ struct geojson_writer {
   }
 
   template <typename Dijkstra>
-  std::string finish(Dijkstra const* s) {
+  void finish(Dijkstra const* s) {
     for (auto const n : nodes_) {
       auto const p = w_.r_->node_properties_[n];
 
@@ -173,13 +174,16 @@ struct geojson_writer {
            {{"type", "Point"},
             {"coordinates", to_array(w_.get_node_pos(n))}}}});
     }
-
-    return finish();
   }
 
-  std::string finish() {
+  std::string string() {
     return boost::json::serialize(boost::json::value{
         {"type", "FeatureCollection"}, {"features", features_}});
+  }
+
+  boost::json::value json() {
+    return boost::json::value{{"type", "FeatureCollection"},
+                              {"features", features_}};
   }
 
   ways const& w_;
