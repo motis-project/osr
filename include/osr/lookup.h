@@ -2,6 +2,7 @@
 
 #include "osr/ways.h"
 
+#include "utl/cflow.h"
 #include "utl/helpers/algorithm.h"
 #include "utl/pairwise.h"
 
@@ -38,8 +39,6 @@ struct way_candidate {
   node_candidate left_{}, right_{};
 };
 
-enum class cflow { kContinue, kBreak };
-
 template <typename T, typename Collection, typename Fn>
 void till_the_end(T const& start,
                   Collection const& c,
@@ -47,14 +46,14 @@ void till_the_end(T const& start,
                   Fn&& fn) {
   if (dir == direction::kForward) {
     for (auto i = start; i != c.size(); ++i) {
-      if (fn(c[i]) == cflow::kBreak) {
+      if (fn(c[i]) == utl::cflow::kBreak) {
         break;
       }
     }
   } else {
     for (auto j = 0U; j <= start; ++j) {
       auto i = start - j;
-      if (fn(c[i]) == cflow::kBreak) {
+      if (fn(c[i]) == utl::cflow::kBreak) {
         break;
       }
     }
@@ -159,10 +158,10 @@ struct lookup {
                    if (way_node.has_value() &&
                        (blocked == nullptr || !blocked->test(*way_node))) {
                      c.node_ = *way_node;
-                     return cflow::kBreak;
+                     return utl::cflow::kBreak;
                    }
 
-                   return cflow::kContinue;
+                   return utl::cflow::kContinue;
                  });
 
     if (reverse) {
