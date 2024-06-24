@@ -93,6 +93,20 @@
             top: 48px;
         }
 
+        #journey-info {
+            color: white;
+            position: absolute;
+            bottom: 5px;
+            left: 5px;
+            z-index: 1000;
+            box-shadow: 0 1px 2px rgba(0, 0, 0, .1);
+            text-align: center;
+            text-decoration: none;
+            background: rgba(0, 0, 0, 0.5);
+            padding: 10px;
+            border-radius: 4px;
+        }
+
         .context {
             margin: 0.5em;
         }
@@ -112,6 +126,9 @@
     <option value="forward" selected>forward</option>
     <option value="backward">backward</option>
 </select>
+<div id="journey-info">
+    Test
+</div>
 <div id="map"></div>
 <script type="module">
     import {style} from "./style.js";
@@ -125,6 +142,8 @@
         profile: document.getElementById('profile').value,
         direction: document.getElementById('direction').value
     };
+
+    const meta = document.getElementById('journey-info');
 
     const updateRoute = async () => {
         try {
@@ -215,7 +234,13 @@
                 direction: query.direction
             })
         });
-        return await response.json();
+        const r =  await response.json();
+        const min = Math.floor(r.metadata.duration / 60);
+        const sec = r.metadata.duration % 60;
+        const m = Math.round(r.metadata.distance);
+
+        meta.innerHTML = `${min} min ${sec} s<br>${m} meter`;
+        return r;
     };
 
     const getGraph = async (bounds) => {

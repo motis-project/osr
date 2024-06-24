@@ -129,7 +129,7 @@ struct bike {
                                    direction,
                                    std::uint16_t const dist) {
     if (e.is_bike_accessible()) {
-      return static_cast<cost_t>(std::round(dist / 1.2F));
+      return static_cast<cost_t>(std::round(dist / 2.8F));
     } else {
       return kInfeasible;
     }

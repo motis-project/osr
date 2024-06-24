@@ -126,6 +126,8 @@ struct http_server::impl {
         p.has_value()
             ? boost::json::
                   value{{"type", "FeatureCollection"},
+                        {"metadata",
+                         {{"duration", p->cost_}, {"distance", p->dist_}}},
                         {"features",
                          utl::all(p->segments_)  //
                              |
