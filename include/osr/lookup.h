@@ -92,11 +92,11 @@ struct lookup {
   ~lookup() { rtree_free(rtree_); }
 
   template <typename Profile>
-  match_t match(location const& query,
-                bool const reverse,
-                direction const search_dir,
-                double const max_match_distance,
-                bitvec<node_idx_t> const* blocked) const {
+  match_t get_way_candidates(location const& query,
+                             bool const reverse,
+                             direction const search_dir,
+                             double const max_match_distance,
+                             bitvec<node_idx_t> const* blocked) const {
     auto way_candidates = std::vector<way_candidate>{};
     find(query.pos_, [&](way_idx_t const way) {
       auto d = distance_to_way(query.pos_, ways_.way_polylines_[way]);
@@ -112,6 +112,21 @@ struct lookup {
       }
     });
     utl::sort(way_candidates);
+    return way_candidates;
+  }
+
+  template <typename Profile>
+  match_t match(location const& query,
+                bool const reverse,
+                direction const search_dir,
+                double const max_match_distance,
+                bitvec<node_idx_t> const* blocked) const {
+    auto way_candidates = get_way_candidates<Profile>(
+        query, reverse, search_dir, max_match_distance, blocked);
+    if (way_candidates.empty()) {
+      way_candidates = get_way_candidates<Profile>(
+          query, reverse, search_dir, max_match_distance * 2U, blocked);
+    }
     return way_candidates;
   }
 
