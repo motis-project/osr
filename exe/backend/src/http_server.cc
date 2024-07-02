@@ -8,8 +8,6 @@
 #include "boost/json.hpp"
 #include "boost/thread/tss.hpp"
 
-#include "rapidjson/error/en.h"
-
 #include "fmt/core.h"
 
 #include "utl/enumerate.h"
@@ -121,7 +119,7 @@ struct http_server::impl {
     auto const max_it = q.find("max");
     auto const max = static_cast<cost_t>(
         max_it == q.end() ? 3600 : max_it->value().as_int64());
-    auto const p = route(w_, l_, profile, from, to, max, dir);
+    auto const p = route(w_, l_, profile, from, to, max, dir, 100);
     auto const response = json::serialize(
         p.has_value()
             ? boost::json::
@@ -211,8 +209,8 @@ struct http_server::impl {
         return;
       }
     });
-
-    cb(json_response(req, gj.finish(&get_dijkstra<foot<true>>())));
+    gj.finish(&get_dijkstra<foot<true>>());
+    cb(json_response(req, gj.string()));
   }
 
   void handle_platforms(web_server::http_req_t const& req,
@@ -236,7 +234,7 @@ struct http_server::impl {
       }
     });
 
-    cb(json_response(req, gj.finish(&get_dijkstra<foot<true>>())));
+    cb(json_response(req, gj.string()));
   }
 
   void handle_static(web_server::http_req_t const& req,
