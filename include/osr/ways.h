@@ -30,13 +30,6 @@
 
 namespace osr {
 
-#define OSR_DEBUG
-#ifdef OSR_DEBUG
-#define trace(...) fmt::println(std::cerr, __VA_ARGS__)
-#else
-#define trace(...)
-#endif
-
 struct resolved_restriction {
   enum class type { kNo, kOnly } type_;
   way_idx_t from_, to_;

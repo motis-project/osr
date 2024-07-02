@@ -1,5 +1,7 @@
 #pragma once
 
+#include "cista/reflection/printable.h"
+
 #include "osr/ways.h"
 
 #include "utl/cflow.h"
@@ -11,6 +13,8 @@
 namespace osr {
 
 struct location {
+  CISTA_PRINTABLE(location)
+  CISTA_FRIEND_COMPARABLE(location)
   geo::latlng pos_;
   level_t lvl_;
 };
