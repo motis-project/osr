@@ -72,7 +72,7 @@ struct bike {
 
   template <typename Fn>
   static void resolve(
-      ways::routing const&, way_idx_t, node_idx_t const n, level_t, Fn&& f) {
+      ways::routing const&, way_idx_t, node_idx_t const n, level_t, direction, Fn&& f) {
     f(node{n});
   }
 
