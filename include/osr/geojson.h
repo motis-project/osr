@@ -57,7 +57,8 @@ struct geojson_writer {
             {"level", to_float(level_t{p.from_level()})},
             {"to_level", to_float(level_t{p.to_level()})},
             {"is_elevator", p.is_elevator()},
-            {"is_steps", p.is_steps()}}},
+            {"is_steps", p.is_steps()},
+            {"is_parking", p.is_parking_}}},
           {"geometry", to_line_string(std::initializer_list<geo::latlng>{
                            w_.get_node_pos(from), w_.get_node_pos(to)})}});
     }
@@ -113,6 +114,7 @@ struct geojson_writer {
           {"is_restricted", w_.r_->node_is_restricted_[n]},
           {"is_entrance", p.is_entrance()},
           {"is_elevator", p.is_elevator()},
+          {"is_parking", p.is_parking()},
           {"multi_level", p.is_multi_level()},
           {"levels", levels.str()},
           {"ways", fmt::format("{}", w_.r_->node_ways_[n] |
@@ -128,6 +130,7 @@ struct geojson_writer {
                                  w_.way_osm_idx_[w_.r_->node_ways_[n][r.to_]]};
                            }))},
           {"label", ss.str().empty() ? "unreachable" : ss.str()}};
+
       features_.emplace_back(boost::json::value{
           {"type", "Feature"},
           {"properties", properties},

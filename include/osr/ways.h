@@ -94,6 +94,8 @@ struct way_properties {
 
   std::uint8_t from_level_ : 5;
   std::uint8_t to_level_ : 5;
+  
+  bool is_parking_: 1;
 };
 
 static_assert(sizeof(way_properties) == 3);
@@ -105,6 +107,7 @@ struct node_properties {
   constexpr bool is_elevator() const { return is_elevator_; }
   constexpr bool is_multi_level() const { return is_multi_level_; }
   constexpr bool is_entrance() const { return is_entrance_; }
+  constexpr bool is_parking() const { return is_parking_; }
 
   constexpr level_t from_level() const { return level_t{from_level_}; }
   constexpr level_t to_level() const { return level_t{to_level_}; }
@@ -129,11 +132,12 @@ struct node_properties {
   bool is_elevator_ : 1;
   bool is_entrance_ : 1;
   bool is_multi_level_ : 1;
+  bool is_parking_ : 1;
 
   std::uint8_t to_level_ : 5;
 };
 
-static_assert(sizeof(node_properties) == 2);
+static_assert(sizeof(node_properties) == 3);
 
 struct ways {
   ways(std::filesystem::path p, cista::mmap::protection const mode)
