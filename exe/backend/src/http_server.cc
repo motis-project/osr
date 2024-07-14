@@ -117,47 +117,73 @@ struct http_server::impl {
         max_it == q.end() ? 3600 : max_it->value().as_int64());
 
     auto p = std::optional<path>{};
+
     switch (profile) {
       case search_profile::kFoot:
-        p = route(w_, l_, get_dijkstra<foot<false>>(), from, to, max,
-                  direction);
+        handle_routing(req, cb, get_dijkstra<foot<false>>(), from, to, max, direction);
         break;
       case search_profile::kWheelchair:
-        p = route(w_, l_, get_dijkstra<foot<true>>(), from, to, max, direction);
+        handle_routing(req, cb, get_dijkstra<foot<true>>(), from, to, max, direction);
         break;
       case search_profile::kBike:
-        p = route(w_, l_, get_dijkstra<bike>(), from, to, max, direction);
+        handle_routing(req, cb, get_dijkstra<bike>(), from, to, max, direction);
         break;
       case search_profile::kCar:
-        p = route(w_, l_, get_dijkstra<car>(), from, to, max, direction);
+        handle_routing(req, cb, get_dijkstra<car>(), from, to, max, direction);
         break;
       default: throw utl::fail("not implemented");
     }
-
-    auto const response = json::serialize(
-        p.has_value()
-            ? boost::json::
-                  value{{"type", "FeatureCollection"},
-                        {"metadata",
-                         {{"duration", p->cost_}, {"distance", p->dist_}}},
-                        {"features",
-                         utl::all(p->segments_)  //
-                             |
-                             utl::transform([&](auto&& s) {
-                               return json::value{
-                                   {"type", "Feature"},
-                                   {"properties",
-                                    {{"level", to_float(s.from_level_)},
-                                     {"way",
-                                      s.way_ == way_idx_t::invalid()
-                                          ? 0U
-                                          : to_idx(w_.way_osm_idx_[s.way_])}}},
-                                   {"geometry", to_line_string(s.polyline_)}};
-                             })  //
-                             | utl::emplace_back_to<json::array>()}}
-            : json::value{{"error", "no path found"}});
-    return cb(json_response(req, response));
   }
+
+  template <typename Profile>
+  void handle_routing(
+    web_server::http_req_t const& req,
+    web_server::http_res_cb_t const& cb,
+    dijkstra<Profile> const& d,
+    location from,
+    location to,
+    cost_t max,
+    direction dir
+  ) {
+    auto p = route(w_, l_, get_dijkstra<Profile>(), from, to, max, dir);
+
+    if (!p.has_value()) {
+      cb(json_response(req, "could not find a valid path", http::status::not_found));
+      return;
+    }
+
+    auto to_feature = [&](const path::segment& s) {
+      return json::object{
+         {"type", "Feature"},
+         {"properties",
+          {
+              {"level", to_float(s.from_level_)},
+              {"osm_way_id", s.way_ == way_idx_t::invalid()
+                  ? 0U
+                  : to_idx(w_.way_osm_idx_[s.way_])},
+              {"cost", s.cost_},
+              {"distance", s.dist_},
+              {"from_node", s.from_node_properties_},
+              {"to_node", s.to_node_properties_}
+          },
+         },
+         {"geometry", to_line_string(s.polyline_)}
+      };
+    };
+
+    auto feature_collection_meta_data = json::value{{"duration", p->cost_}, {"distance", p->dist_}};
+    auto features = utl::all(p->segments_) | utl::transform(to_feature) | utl::emplace_back_to<json::array>();
+
+
+    auto feature_collection = json::object{
+      {"type", "FeatureCollection"},
+      {"metadata", feature_collection_meta_data},
+      {"features", features}
+    };
+
+    cb(json_response(req, json::serialize(feature_collection)));
+  }
+
 
   void handle_levels(web_server::http_req_t const& req,
                      web_server::http_res_cb_t const& cb) {

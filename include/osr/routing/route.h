@@ -28,12 +28,17 @@ search_profile to_profile(std::string_view s);
 
 std::string_view to_str(search_profile const p);
 
+
 struct path {
   struct segment {
     std::vector<geo::latlng> polyline_;
     level_t from_level_;
     level_t to_level_;
     way_idx_t way_;
+    cost_t cost_{kInfeasible};
+    distance_t dist_{0};
+    boost::json::object from_node_properties_{};
+    boost::json::object to_node_properties_{};
   };
 
   cost_t cost_{kInfeasible};
@@ -117,21 +122,46 @@ double add_path(ways const& w,
                 direction const dir) {
   auto const& [way, from_idx, to_idx, is_loop, distance] =
       find_connecting_way<Profile>(w, from, to, expected_cost, dir);
+
   auto j = 0U;
   auto active = false;
   auto& segment = path.emplace_back();
+
   segment.way_ = way;
+
+  segment.dist_ = distance;
+
+  // we can use the expected cost here, since it gets validated in find_connecting_way
+  // to be the same as the actual cost.
+  segment.cost_ = expected_cost;
+
+  // when going backwards we have to swap the properties, since we will be traversing
+  // the way in the opposite direction.
+  if (dir == direction::kForward) {
   segment.from_level_ = r.way_properties_[way].from_level();
   segment.to_level_ = r.way_properties_[way].to_level();
+
+    segment.from_node_properties_ = from.custom_geojson_properties(w);
+    segment.to_node_properties_ = to.custom_geojson_properties(w);
+  } else {
+    segment.from_level_ = r.way_properties_[way].to_level();
+    segment.to_level_ = r.way_properties_[way].from_level();
+
+    segment.from_node_properties_ = to.custom_geojson_properties(w);
+    segment.to_node_properties_ = from.custom_geojson_properties(w);
+  }
 
   for (auto const [osm_idx, coord] :
        infinite(reverse(utl::zip(w.way_osm_nodes_[way], w.way_polylines_[way]),
                         (from_idx > to_idx) ^ is_loop),
                 is_loop)) {
+
     utl::verify(j++ != 2 * w.way_polylines_[way].size() + 1U, "infinite loop");
+
     if (!active && w.node_to_osm_[r.way_nodes_[way][from_idx]] == osm_idx) {
       active = true;
     }
+
     if (active) {
       if (w.node_to_osm_[r.way_nodes_[way][from_idx]] == osm_idx) {
         // Again "from" node, then it's shorter to start from here.
