@@ -125,6 +125,7 @@ struct car {
                       way_idx_t const way,
                       node_idx_t const n,
                       level_t,
+                      direction,
                       Fn&& f) {
     auto const ways = w.node_ways_[n];
     for (auto i = way_pos_t{0U}; i != ways.size(); ++i) {

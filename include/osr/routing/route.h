@@ -22,6 +22,7 @@ enum class search_profile : std::uint8_t {
   kWheelchair,
   kBike,
   kCar,
+  khybrid,
 };
 
 search_profile to_profile(std::string_view s);
@@ -52,6 +53,7 @@ search_profile to_profile(std::string_view s) {
     case cista::hash("wheelchair"): return search_profile::kWheelchair;
     case cista::hash("bike"): return search_profile::kBike;
     case cista::hash("car"): return search_profile::kCar;
+    case cista::hash("hybrid"): return search_profile::khybrid;
   }
   throw utl::fail("{} is not a valid profile", s);
 }
@@ -62,6 +64,7 @@ std::string_view to_str(search_profile const p) {
     case search_profile::kWheelchair: return "wheelchair";
     case search_profile::kCar: return "car";
     case search_profile::kBike: return "bike";
+    case search_profile::khybrid: return "hybrid";
   }
   throw utl::fail("{} is not a valid profile", static_cast<std::uint8_t>(p));
 }
@@ -76,8 +79,8 @@ struct connecting_way {
 template <direction SearchDir, typename Profile>
 connecting_way find_connecting_way(ways const& w,
                                    ways::routing const& r,
-                                   typename Profile::node const to,
                                    typename Profile::node const from,
+                                   typename Profile::node const to,
                                    cost_t const expected_cost) {
   auto conn = std::optional<connecting_way>{};
   Profile::template adjacent<SearchDir>(
@@ -138,8 +141,8 @@ double add_path(ways const& w,
   // when going backwards we have to swap the properties, since we will be traversing
   // the way in the opposite direction.
   if (dir == direction::kForward) {
-  segment.from_level_ = r.way_properties_[way].from_level();
-  segment.to_level_ = r.way_properties_[way].to_level();
+    segment.from_level_ = r.way_properties_[way].from_level();
+    segment.to_level_ = r.way_properties_[way].to_level();
 
     segment.from_node_properties_ = from.custom_geojson_properties(w);
     segment.to_node_properties_ = to.custom_geojson_properties(w);
@@ -174,6 +177,7 @@ double add_path(ways const& w,
       }
     }
   }
+
   return distance;
 }
 
@@ -186,34 +190,40 @@ path reconstruct(ways const& w,
                  cost_t const cost,
                  direction const dir) {
   auto n = dest_node;
+
   auto segments = std::vector<path::segment>{{.polyline_ = dest.path_,
                                               .from_level_ = dest.lvl_,
                                               .to_level_ = dest.lvl_,
                                               .way_ = way_idx_t::invalid()}};
+
   auto dist = 0.0;
+
   while (true) {
     auto const& e = d.cost_.at(n.get_key());
     auto const pred = e.pred(n);
     if (pred.has_value()) {
-      auto const expected_dist = e.cost(n) - d.get_cost(*pred);
-      dist +=
-          add_path<Profile>(w, *w.r_, n, *pred, expected_dist, segments, dir);
+      auto const expected_cost = e.cost(n) - d.get_cost(*pred);
+      dist += add_path<Profile>(w, *w.r_, *pred, n, expected_cost, segments, dir);
     } else {
       break;
     }
     n = *pred;
   }
 
-  auto const& start_node =
-      n.get_node() == start.left_.node_ ? start.left_ : start.right_;
+  auto const& start_node = n.get_node() == start.left_.node_ ? start.left_ : start.right_;
+
   segments.push_back({.polyline_ = start_node.path_,
-                      .from_level_ = start_node.lvl_,
-                      .to_level_ = start_node.lvl_,
-                      .way_ = way_idx_t::invalid()});
+                    .from_level_ = start_node.lvl_,
+                    .to_level_ = start_node.lvl_,
+                    .way_ = way_idx_t::invalid()});
+
   std::reverse(begin(segments), end(segments));
-  return {.cost_ = cost,
-          .dist_ = start_node.dist_to_node_ + dist + dest.dist_to_node_,
-          .segments_ = segments};
+
+  return {
+    .cost_ = cost,
+    .dist_ = start_node.dist_to_node_ + dist + dest.dist_to_node_,
+    .segments_ = segments
+  };
 }
 
 template <typename Profile>
@@ -232,6 +242,7 @@ best_candidate(ways const& w,
     auto best_node = typename Profile::node{};
     auto best_cost = std::numeric_limits<cost_t>::max();
     Profile::resolve_all(*w.r_, x->node_, lvl, [&](auto&& node) {
+
       if (!Profile::is_reachable(*w.r_, node, dest.way_,
                                  flip(opposite(dir), x->way_dir_),
                                  opposite(dir))) {
@@ -296,8 +307,10 @@ std::optional<path> route(ways const& w,
     for (auto const* nc : {&start.left_, &start.right_}) {
       if (nc->valid() && nc->cost_ < max) {
         Profile::resolve(
-            *w.r_, start.way_, nc->node_, from.lvl_,
-            [&](auto const node) { d.add_start({node, nc->cost_}); });
+            *w.r_, start.way_, nc->node_, from.lvl_, dir,
+            [&](auto const node) {
+              d.add_start({node, nc->cost_});
+            });
       }
     }
 
@@ -341,7 +354,7 @@ std::vector<std::optional<path>> route(ways const& w,
     for (auto const* nc : {&start.left_, &start.right_}) {
       if (nc->valid() && nc->cost_ < max) {
         Profile::resolve(
-            *w.r_, start.way_, nc->node_, from.lvl_,
+            *w.r_, start.way_, nc->node_, from.lvl_, dir,
             [&](auto const node) { d.add_start({node, nc->cost_}); });
       }
     }

@@ -25,6 +25,7 @@
 #include "osr/routing/profiles/bike.h"
 #include "osr/routing/profiles/car.h"
 #include "osr/routing/profiles/foot.h"
+#include "osr/routing/profiles/hybrid.h"
 #include "osr/routing/route.h"
 
 using namespace net;
@@ -130,6 +131,9 @@ struct http_server::impl {
         break;
       case search_profile::kCar:
         handle_routing(req, cb, get_dijkstra<car>(), from, to, max, direction);
+        break;
+      case search_profile::khybrid:
+        handle_routing(req, cb, get_dijkstra<hybrid>(), from, to, max, direction);
         break;
       default: throw utl::fail("not implemented");
     }
