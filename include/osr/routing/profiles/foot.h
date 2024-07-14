@@ -16,6 +16,11 @@ struct foot {
       return {.n_ = node_idx_t::invalid(), .lvl_{level_t::invalid()}};
     }
     constexpr node_idx_t get_node() const noexcept { return n_; }
+
+    boost::json::object custom_geojson_properties(ways const& w) const {
+      return boost::json::object{{"node_id", n_.v_}, {"type", "foot"}};
+    }
+
     constexpr node get_key() const noexcept { return *this; }
 
     std::ostream& print(std::ostream& out, ways const& w) const {

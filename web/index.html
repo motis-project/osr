@@ -9,88 +9,102 @@
     <script src='https://unpkg.com/maplibre-gl@4.1.2/dist/maplibre-gl.js'></script>
     <script src="https://unpkg.com/maplibre-contour@0.0.5/dist/index.min.js"></script>
     <style>
-        body {
-            margin: 0;
-            padding: 0;
-        }
-
         html, body, #map {
             height: 100%;
             font-family: ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
         }
 
+        body {
+            margin: 0;
+            padding: 0;
+            position: relative;
+        }
+
+        button {
+            all: unset;
+            cursor: pointer;
+        }
+
+        li, ul {
+            all: unset;
+        }
+
+        button:focus {
+            outline: blue 1px auto;
+        }
+
         #map {
             position: absolute;
-            top: 0;
-            bottom: 0;
-            width: 100%;
+            inset: 0;
+            isolation: isolate;
         }
 
-        #graph-toggle {
-            position: relative;
-            top: 5px;
-            left: 5px;
-            z-index: 1000;
-            background: #fff;
-            border-radius: 3px;
-            box-shadow: 0 1px 2px rgba(0, 0, 0, .1);
+        .small-button {
             padding: 10px;
-            display: flex;
-            width: 28px;
-            height: 28px;
-            text-align: center;
-            align-items: center;
-            justify-content: center;
-            text-decoration: none;
-            color: black;
-            margin-bottom: 16px;
-        }
-
-        .level {
-            margin-top: 4px;
-            position: relative;
-            top: 5px;
-            left: 5px;
-            z-index: 1000;
-            background: #fff;
             border-radius: 3px;
-            box-shadow: 0 1px 2px rgba(0, 0, 0, .1);
-            padding: 9.5px;
+            background: #fff;
             display: flex;
-            width: 28px;
-            height: 28px;
-            text-align: center;
             align-items: center;
             justify-content: center;
             text-decoration: none;
             color: black;
-            font-size: 10pt;
+            width: 24px;
+            height: 24px;
+            border: 2px solid #fff;
         }
 
-        .active {
-            background: #8fff7b;
-        }
-
-        #graph-toggle:hover, .level:hover {
+        .small-button:hover {
             background: #EEE;
         }
 
-        .active:hover {
-            background: #bdffb1;
+        .small-button.active {
+            background: #bae6fd;
+            border: 2px solid #1890ff;
         }
 
-        #profile, #direction {
+        .controls {
+            box-shadow: none;
+            pointer-events: none;
+            text-decoration: none;
+            width: auto;
+        }
+
+        .controls > :not(.controls) {
+            box-shadow: 0 1px 2px rgba(0, 0, 0, .1);
+            pointer-events: auto;
+        }
+
+        .flex-col {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .flex-row {
+            display: flex;
+            flex-direction: row;
+        }
+
+        .flex-start {
+            align-items: start;
+        }
+
+        .map-button-list {
+            gap: 5px;
+            font-size: 10pt;
+        }
+
+        #controls-top-right {
             position: absolute;
+            gap: 16px;
             top: 5px;
             right: 5px;
-            z-index: 1000;
-            box-shadow: 0 1px 2px rgba(0, 0, 0, .1);
-            text-align: center;
-            text-decoration: none;
         }
 
-        #direction {
-            top: 48px;
+        #controls-top-left {
+            position: absolute;
+            gap: 16px;
+            top: 5px;
+            left: 5px;
         }
 
         #journey-info {
@@ -98,7 +112,6 @@
             position: absolute;
             bottom: 5px;
             left: 5px;
-            z-index: 1000;
             box-shadow: 0 1px 2px rgba(0, 0, 0, .1);
             text-align: center;
             text-decoration: none;
@@ -107,28 +120,124 @@
             border-radius: 4px;
         }
 
+        #journey-info.error {
+            border: 2px solid rgba(255, 0, 0, 0.5);
+            background: rgba(139, 0, 0, 0.5);
+        }
+
         .context {
             margin: 0.5em;
+        }
+
+        .info-popup {
+            max-height: 70vh;
+            overflow: auto;
+            margin-top: -10px;
+        }
+
+        .info-popup-layer-title-container {
+            display: flex;
+            align-items: center;
+            padding: 5px;
+        }
+
+        .info-popup-layer-title {
+            margin: 0 10px 0 0;
+            padding: 0;
+            font-size: 12pt;
+            font-weight: bold;
+        }
+
+        .info-popup-layer-feature-list {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+            display: flex;
+            gap: 5px;
+        }
+
+        .info-popup-layer-feature-list li {
+            cursor: pointer;
+        }
+
+        .info-popup-layer-feature-list li.active {
+            font-weight: bold;
+        }
+
+        .data-grid {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 5px;
+        }
+
+        .data-card {
+            background: #f5f5f5;
+            border-radius: 4px;
+            padding: 5px 10px;
+        }
+
+        .data-label {
+            color: #888;
+            font-size: 8pt;
+        }
+
+        .data-value {
+            color: #333;
+            font-size: 11pt;
+            font-weight: medium;
         }
     </style>
 </head>
 <body>
-<a id="graph-toggle" href="#" onclick="toggleGraph()">G</a>
-<div id="levels"></div>
-<select id="profile" onchange="selectProfile(event)">
-    <option value="foot" selected>foot</option>
-    <option value="wheelchair">wheelchair</option>
-    <option value="bike">bike</option>
-    <option value="car">car</option>
-</select>
-<select id="direction" onchange="selectDirection(event)">
-    <option value="forward" selected>forward</option>
-    <option value="backward">backward</option>
-</select>
-<div id="journey-info">
-    Test
-</div>
 <div id="map"></div>
+
+<div id="controls-top-left" class="controls flex-col">
+    <div class="controls flex-row map-button-list flex-start">
+        <button id="graph-toggle" class="small-button" type="button" onclick="toggleGraph()">G</button>
+        <button id="path-toggle" class="small-button" type="button" onclick="togglePath()">P</button>
+        <div class="flex-col">
+            <select id="graph-node-highlighting" onclick="setGraphNodeHighlighting()">
+                <option value="">None</option>
+                <option value="car">Car</option>
+                <option value="bike">Bike</option>
+                <option value="foot">Foot</option>
+                <option value="is_restricted">Restricted</option>
+                <option value="is_entrace">Entrance</option>
+                <option value="is_elevator">Elevator</option>
+                <option value="is_parking">Parking</option>
+                <option value="multi_level">MultiLevel</option>
+            </select>
+
+            <select id="graph-edge-highlighting" onclick="setGraphEdgeHiglighting()">
+                <option value="">None</option>
+                <option value="car">Car</option>
+                <option value="bike">Bike</option>
+                <option value="foot">Foot</option>
+                <option value="is_destination">Destination</option>
+                <option value="oneway_car">Oneway Car</option>
+                <option value="oneway_bike">Oneway Bike</option>
+                <option value="is_elevator">Elevator</option>
+                <option value="is_steps">Steps</option>
+                <option value="is_parking">Parking</option>
+            </select>
+        </div>
+    </div>
+    <div id="levels" class="controls flex-col map-button-list"></div>
+</div>
+<div id="controls-top-right" class="controls flex-col">
+    <select id="profile" onchange="selectProfile(event)">
+        <option value="foot" selected>foot</option>
+        <option value="wheelchair">wheelchair</option>
+        <option value="bike">bike</option>
+        <option value="car">car</option>
+    </select>
+
+    <select id="direction" onchange="selectDirection(event)">
+        <option value="forward" selected>forward</option>
+        <option value="backward">backward</option>
+    </select>
+</div>
+<div id="journey-info"></div>
 <script type="module">
     import {style} from "./style.js";
 
@@ -147,10 +256,11 @@
     const updateRoute = async () => {
         try {
             const route = await getRoute();
-            if (!route.error) {
-                map.getSource('path').setData(route);
-            }
+            map.getSource('path').setData(route);
+            meta.classList.remove('error');
         } catch (e) {
+            meta.classList.add('error');
+            meta.innerText = e.message;
         }
     }
 
@@ -170,45 +280,220 @@
         }
     });
 
-    const toTable = (properties) => {
-        var table = document.createElement("table");
-        table.classList.add("routing-graph", "properties");
-        for (var key in properties) {
-            var value = properties[key];
-            var row = document.createElement("tr");
-            var keyCell = document.createElement("td");
-            keyCell.innerText = key;
-            keyCell.className = "key";
-            var valueCell = document.createElement("td");
-            if (key == "osm_way_id" && value != 0) {
-                var osmLink = document.createElement("a");
-                osmLink.href = "https://www.openstreetmap.org/way/" + Math.abs(value);
-                osmLink.target = "_blank";
-                osmLink.innerText = value;
-                valueCell.appendChild(osmLink);
-            } else if (key == "osm_relation_id" && value != 0) {
-                var osmLink = document.createElement("a");
-                osmLink.href =
-                    "https://www.openstreetmap.org/relation/" + Math.abs(value);
-                osmLink.target = "_blank";
-                osmLink.innerText = value;
-                valueCell.appendChild(osmLink);
-            } else if (key == "osm_node_id" && value != 0) {
-                var osmLink = document.createElement("a");
-                osmLink.href =
-                    "https://www.openstreetmap.org/node/" + Math.abs(value);
-                osmLink.target = "_blank";
-                osmLink.innerText = value;
-                valueCell.appendChild(osmLink);
-            } else {
-                valueCell.innerText = value;
+    const getDataGrid = (entries, cols = 7) => {
+        const grid = document.createElement('div');
+        
+        grid.classList.add('data-grid');
+        grid.style.gridTemplateColumns = `repeat(${cols}, 1fr)`;
+
+        for (const entry of entries) {
+            const cardNode = document.createElement('div');
+            cardNode.classList.add('data-card');
+            cardNode.classList.add(...entry.classes ?? []);
+            
+            const labelNode = document.createElement('div');
+            labelNode.classList.add('data-label');
+            labelNode.innerText = entry.label;
+
+            const valueNode = document.createElement(entry.tag ?? 'div');
+            valueNode.classList.add('data-value');
+            valueNode.innerText = entry.value;
+
+            for (const [key, value] of Object.entries(entry.tagProperties ?? {})) {
+                valueNode.setAttribute(key, value);
             }
-            valueCell.className = "value";
-            row.appendChild(keyCell);
-            row.appendChild(valueCell);
-            table.appendChild(row);
+
+            cardNode.appendChild(labelNode);
+            cardNode.appendChild(valueNode);
+
+            grid.appendChild(cardNode);
+        };
+
+        return grid;
+    }
+
+    function getOsmEntry(key, value) {
+        if (key === 'osm_way_id' && value !== 0) {
+            return {
+                label: key,
+                value: value.toString(),
+                tag: 'a',
+                tagProperties: {
+                    href: `https://www.openstreetmap.org/way/${Math.abs(value)}`,
+                    target: '_blank'
+                }
+            }
         }
-        return table;
+
+        if (key === 'osm_relation_id' && value !== 0) {
+            return{
+                label: key,
+                value: value.toString(),
+                tag: 'a',
+                tagProperties: {
+                    href: `https://www.openstreetmap.org/relation/${Math.abs(value)}`,
+                    target: '_blank'
+                }
+            }
+        }
+
+        if (key === 'osm_node_id' && value !== 0) {
+            return {
+                label: key,
+                value: value.toString(),
+                tag: 'a',
+                tagProperties: {
+                    href: `https://www.openstreetmap.org/node/${Math.abs(value)}`,
+                    target: '_blank'
+                }
+            }
+        }
+    }
+
+    const getInfoPopupContentForGraphFeatures = (feature) => {
+        const entries = [];
+
+        for (const [key, value] of Object.entries(feature.properties)) {
+            const entry = getOsmEntry(key, value);
+
+            if (entry) {
+                entries.push(entry);
+                continue;
+            }
+
+            entries.push({
+                label: key,
+                value: value.toString(),
+            });
+        };
+
+        return getDataGrid(entries);
+    }
+
+    const getInfoPopupContentForPathSegment = (feature) => {
+        const entries = [];
+
+        for (const [key, value] of Object.entries(feature.properties)) {
+            const entry = getOsmEntry(key, value);
+
+            if (entry) {
+                entries.push(entry);
+                continue;
+            }
+
+
+            entries.push({
+                label: key,
+                value: value.toString(),
+            });
+        }
+
+        return getDataGrid(entries);
+    }
+
+    const getInfoPopupContentForFeature = (feature) => {
+        if (feature.source === 'graph') {
+            return {
+                id: feature.properties.internal_id,
+                content: getInfoPopupContentForGraphFeatures(feature),
+            };
+        }
+
+        if (feature.source === 'path') {
+            return {
+                id: feature.properties.osm_way_id,
+                content: getInfoPopupContentForPathSegment(feature),
+            };
+        }
+
+        const empty = document.createElement('div');
+        empty.innerText = 'No content available for this feature';
+    }
+
+    const getInfoPopupContent = (features) => {
+        const container = document.createElement('div');
+        container.classList.add("info-popup");
+
+        const groupedByLayer = new Map();
+
+        for (const feature of features) {
+            const layer = feature.layer.id;
+            if (!groupedByLayer.has(layer)) {
+                groupedByLayer.set(layer, []);
+            }
+
+            groupedByLayer.get(layer).push(feature);
+        }
+
+        for (const [layer, features] of groupedByLayer.entries()) {
+            const layerContainer = document.createElement('div');
+            layerContainer.classList.add('info-popup-layer-container');
+
+            const titleContainer = document.createElement('div');
+            titleContainer.classList.add('info-popup-layer-title-container');
+            layerContainer.appendChild(titleContainer);
+
+            const layerTitle = document.createElement('h3');
+            layerTitle.classList.add('info-popup-layer-title');
+            layerTitle.innerText = layer;
+            titleContainer.appendChild(layerTitle);
+
+            const featureList = document.createElement('ul');
+            featureList.classList.add('info-popup-layer-feature-list');
+            titleContainer.appendChild(featureList);
+
+            let selected = null;
+
+            for (const feature of features) {
+                const data = getInfoPopupContentForFeature(feature);
+
+                if (!data) {
+                    continue;
+                }
+
+                const { id, content } = data;
+
+                const featureItem = document.createElement('li');
+                featureItem.innerText = id;
+
+                featureItem.onclick = () => {
+
+                    if (selected) {
+                        selected.content.remove();
+                        selected.item.classList.remove('active');
+                    }
+
+                    selected = {
+                        item: featureItem,
+                        content
+                    };
+
+                    featureItem.classList.add('active');
+                    layerContainer.appendChild(content);
+                };
+
+                featureList.appendChild(featureItem);
+
+                if (!selected) {
+                    selected = {
+                        item: featureItem,
+                        content
+                    };
+
+                    featureItem.classList.add('active');
+                }
+            }
+
+            if(!selected) {
+                continue;
+            }
+
+            layerContainer.appendChild(selected.content);
+
+            container.appendChild(layerContainer);
+        };
+
+        return container;
     }
 
     const getRoute = async () => {
@@ -234,12 +519,20 @@
                 direction: query.direction
             })
         });
+
+        if (response.status !== 200) {
+            const error = await response.text();
+            throw new Error('Failed to fetch route. ' + error);
+        }
+
         const r =  await response.json();
+
         const min = Math.floor(r.metadata.duration / 60);
         const sec = r.metadata.duration % 60;
         const m = Math.round(r.metadata.distance);
 
         meta.innerHTML = `${min} min ${sec} s<br>${m} meter`;
+
         return r;
     };
 
@@ -273,39 +566,54 @@
         });
         return await response.json();
     }
-
-    let graph = false;
     let currentLevel = 0;
+    let currentLeveLButton = null;
+    let graphActive = false;
+
     const levelsDom = document.getElementById('levels');
+
     const setLevels = async (levels) => {
         if (levels.length === 0 && currentLevel !== 0) {
             currentLevel = 0;
-            graph = false;
             style(map, 0);
             await addRouting();
-            await updateGraph();
+            await toggleGraph(false);
         }
+
         levelsDom.innerHTML = '';
+
         levels.forEach(l => {
-            const levelLink = document.createElement('a');
-            levelLink.href = '#';
-            levelLink.textContent = `${l}`;
-            levelLink.classList.add('level');
-            levelLink.onclick = async () => {
+            const levelButton = document.createElement('button');
+            levelButton.type = 'button';
+            levelButton.textContent = `${l}`;
+            levelButton.classList.add('small-button', 'level');
+
+            if (l === currentLevel) {
+                levelButton.classList.add('active');
+                currentLeveLButton = levelButton;
+            }
+
+            levelButton.onclick = async () => {
                 currentLevel = l;
-                graph = false;
+                currentLeveLButton?.classList.remove('active');
+                currentLeveLButton = levelButton;
+                levelButton.classList.add('active');
                 style(map, l);
                 await addRouting();
-                await updateGraph();
+                await toggleGraph(false);
             };
-            levelsDom.appendChild(levelLink);
+
+            levelsDom.appendChild(levelButton);
         })
     }
 
-    const addRouting = async () => {
+    const addRouting = () => {
         map.addSource('path', {
             type: 'geojson',
-            data: await getRoute()
+            data: {
+                type: 'FeatureCollection',
+                features: []
+            },
         });
         map.addLayer({
             'id': 'path-outline',
@@ -321,9 +629,9 @@
                 ['==', 'level', currentLevel]
             ],
             'paint': {
-                'line-color': '#1966a4',
-                'line-width': 7.5,
-                'line-opacity': 0.8
+                'line-color': ['interpolate-lab', ['linear'], ['/', ['number', ['get', 'cost'], 0], ['max', ['number', ['get', 'distance'], 1], 1]], 0, 'green', 0.25, 'darkorange', 0.5, 'chocolate', 1, 'darkred'],
+                'line-width': 12,
+                'line-opacity': 1,
             }
         });
         map.addLayer({
@@ -340,9 +648,74 @@
                 ['==', 'level', currentLevel]
             ],
             'paint': {
-                'line-color': '#42a5f5',
+                'line-color': ['match', ['get', 'type', ['get', 'to_node']], 'foot', 'lightcyan', 'bike', 'cyan', 'car', 'skyblue', 'lightcyan'],
                 'line-width': 5,
-                'line-opacity': 0.8
+                'line-opacity': 1,
+            }
+        });
+    }
+
+    const addGraph = () => {
+        map.addSource('graph', {
+            type: 'geojson',
+            data: {
+                type: 'FeatureCollection',
+                features: []
+            },
+        });
+        map.addLayer({
+            'id': 'graph-geometry',
+            'type': 'line',
+            'source': 'graph',
+            'filter': [
+                'all',
+                ['==', 'type', 'geometry'],
+                [
+                    'any',
+                    ['!has', 'level'],
+                    ['==', 'level', currentLevel]
+                ]
+            ],
+            'layout': {
+                'line-join': 'round',
+                'line-cap': 'round',
+            },
+            'paint': {
+                'line-width': 3,
+                'line-opacity': 1
+            }
+        });
+        map.addLayer({
+            'id': 'graph-edge',
+            'type': 'line',
+            'source': 'graph',
+            'filter': [
+                'all',
+                ['==', 'type', 'edge'],
+                [
+                    'any',
+                    ['!has', 'level'],
+                    ['==', 'level', currentLevel]
+                ]
+            ],
+            'layout': {
+                'line-join': 'round',
+                'line-cap': 'round',
+            },
+            'paint': {
+                'line-width': 3
+            }
+        });
+        map.addLayer({
+            'id': 'graph-node',
+            'type': 'circle',
+            'source': 'graph',
+            'filter': [
+                'all',
+                ['==', '$type', 'Point']
+            ],
+            'paint': {
+                'circle-radius': 6,
             }
         });
     }
@@ -355,112 +728,125 @@
         }
     }
 
-    map.on('load', async () => {
-        style(map, 0);
-        await updateLevels();
-        await addRouting();
-    });
+    const graphToggle = document.getElementById("graph-toggle");
+    const toggleGraph = async (setTo = !graphActive) => {
+        if (setTo === graphActive) {
+            return;
+        }
 
-    const updateGraph = async () => {
-        if (!graphActive && graph) {
-            graph = false;
-            try {
-                graphToggle.classList.remove('active');
-                map.removeLayer('graph-geometry');
-                map.removeLayer('graph-edge');
-                map.removeLayer('graph-node');
-                map.removeSource('graph');
-            } catch (e) {
-                // ignore, already removed
-            }
-        } else if (graphActive && !graph) {
-            graph = true;
+        graphActive = setTo;
+
+        if (graphActive) {
             graphToggle.classList.add('active');
-            map.addSource('graph', {
-                type: 'geojson',
-                data: await getGraph(map.getBounds())
-            });
-            map.addLayer({
-                'id': 'graph-geometry',
-                'type': 'line',
-                'source': 'graph',
-                'filter': [
-                    'all',
-                    ['==', 'type', 'geometry'],
-                    [
-                        'any',
-                        ['!has', 'level'],
-                        ['==', 'level', currentLevel]
-                    ]
-                ],
-                'layout': {
-                    'line-join': 'round',
-                    'line-cap': 'round',
-                },
-                'paint': {
-                    'line-color': '#e55e5e',
-                    'line-width': 3,
-                    'line-opacity': 1
-                }
-            });
-            map.addLayer({
-                'id': 'graph-edge',
-                'type': 'line',
-                'source': 'graph',
-                'filter': [
-                    'all',
-                    ['==', 'type', 'edge'],
-                    [
-                        'any',
-                        ['!has', 'level'],
-                        ['==', 'level', currentLevel]
-                    ]
-                ],
-                'layout': {
-                    'line-join': 'round',
-                    'line-cap': 'round',
-                },
-                'paint': {
-                    'line-color': '#a300d9',
-                    'line-width': 3
-                }
-            });
-            map.addLayer({
-                'id': 'graph-node',
-                'type': 'circle',
-                'source': 'graph',
-                'filter': [
-                    'all',
-                    ['==', '$type', 'Point']
-                ],
-                'paint': {
-                    'circle-color': [
-                        'match',
-                        ['get', 'label'],
-                        'unreachable', '#ff1150',
-                        '#11ffaf'
-                    ],
-                    'circle-radius': 6,
-                }
-            });
+            map.getSource('graph').setData(await getGraph(map.getBounds()));
+            map.setLayoutProperty('graph-node', 'visibility', 'visible');
+            map.setLayoutProperty('graph-edge', 'visibility', 'visible');
+            map.setLayoutProperty('graph-geometry', 'visibility', 'visible');
+        } else {
+            graphToggle.classList.remove('active');
+            map.setLayoutProperty('graph-node', 'visibility', 'none');
+            map.setLayoutProperty('graph-edge', 'visibility', 'none');
+            map.setLayoutProperty('graph-geometry', 'visibility', 'none');
         }
     }
 
-    const graphToggle = document.getElementById("graph-toggle");
-    let graphActive = false;
+    const graphEdgeHighlightingDomElement = document.getElementById('graph-edge-highlighting');
+    let currentlyHighlightedGraphEdge = undefined;
+    const setGraphEdgeHiglighting = () => {
+        const selected = graphEdgeHighlightingDomElement.value;
+        console.log(selected, currentlyHighlightedGraphEdge);
+
+        if (selected === currentlyHighlightedGraphEdge) {
+            return;
+        }; 
+
+        if (selected === '') {
+            map.setPaintProperty('graph-edge', 'line-color', '#a300d9');
+            map.setPaintProperty('graph-geometry', 'line-color', '#e55e5e');
+        } else {
+            map.setPaintProperty('graph-edge', 'line-color', [
+                'case',
+                ['to-boolean', ['get', selected]], 'cyan',
+                '#a300d9',
+            ]);
+
+            map.setPaintProperty('graph-geometry', 'line-color', [
+                'case',
+                ['to-boolean', ['get', selected]], 'cyan',
+                '#e55e5e',
+            ]);
+        }
+
+        currentlyHighlightedGraphEdge = selected;
+    }
+
+    window.setGraphEdgeHiglighting = setGraphEdgeHiglighting;
+
+    const graphNodeHighlightingDomElement = document.getElementById('graph-node-highlighting');
+    let currentlyHighlightedGraphNode = undefined;
+    const setGraphNodeHighlighting = () => {
+        const selected = graphNodeHighlightingDomElement.value;
+        console.log(selected, currentlyHighlightedGraphNode);
+
+        if (selected === currentlyHighlightedGraphNode) {
+            return;
+        }; 
+
+        if (selected === '') {
+            map.setPaintProperty('graph-node', 'circle-color', '#ff1150');
+        } else {
+            map.setPaintProperty('graph-node', 'circle-color', [
+                'case',
+                ['to-boolean', ['get', selected]], 'cyan',
+                '#ff1150',
+            ]);
+        }
+
+        currentlyHighlightedGraphNode = selected;
+    }
+
+    window.setGraphNodeHighlighting = setGraphNodeHighlighting;
+
+
+    map.on('load', async () => {
+        style(map, 0);
+        await updateLevels();
+        addGraph();
+        addRouting();
+        await updateRoute();
+        setGraphNodeHighlighting();
+        setGraphEdgeHiglighting();
+    });
+
     window.toggleGraph = async () => {
-        graphActive = !graphActive;
-        await updateGraph();
+        await toggleGraph();
     }
 
     window.selectProfile = async (e) => {
         query.profile = e.target.value;
-        map.getSource('path').setData(await getRoute());
+        updateRoute();
     };
 
     window.selectDirection = async (e) => {
         query.direction = e.target.value;
-        map.getSource('path').setData(await getRoute());
+        updateRoute();
+    }
+
+    const pathToggle = document.getElementById("path-toggle");
+    let pathVisible = true;
+    pathToggle.classList.add('active');
+    window.togglePath = () => {
+        pathVisible = !pathVisible;
+
+        if (pathVisible) {
+            pathToggle.classList.add('active');
+            map.setLayoutProperty('path', 'visibility', 'visible');
+            map.setLayoutProperty('path-outline', 'visibility', 'visible');
+        } else {
+            pathToggle.classList.remove('active');
+            map.setLayoutProperty('path', 'visibility', 'none');
+            map.setLayoutProperty('path-outline', 'visibility', 'none');
+        }
     }
 
     map.on('moveend', async () => {
@@ -470,15 +856,26 @@
         updateLevels();
     });
 
-    ['graph-node', 'graph-edge', 'graph-geometry'].forEach((layer) => {
-        map.on('click', layer, (e) => {
-            new maplibregl.Popup()
-                .setLngLat(e.lngLat)
-                .setDOMContent(toTable(e.features[0].properties))
-                .addTo(map);
-            e.originalEvent.stopPropagation();
+    map.on('click', (e) => {
+        
+        const features = map.queryRenderedFeatures(e.point, {
+            layers: ['graph-node', 'graph-edge', 'graph-geometry', 'path-outline']
         });
 
+        if (features.length === 0) {
+            return;
+        }
+
+        new maplibregl.Popup()
+            .setLngLat(e.lngLat)
+            .setMaxWidth('30vw')
+            .setDOMContent(getInfoPopupContent(features))
+            .addTo(map);
+
+    });
+
+    
+    ['graph-node', 'graph-edge', 'graph-geometry', 'path-outline'].forEach(layer => {
         map.on('mouseenter', layer, () => {
             map.getCanvas().style.cursor = 'pointer';
         });
@@ -492,27 +889,27 @@
         draggable: true,
         color: 'green'
     })
-        .setLngLat(start)
-        .addTo(map)
-        .on('dragend', async () => {
-            const x = startMarker.getLngLat();
-            query.start = [x.lng, x.lat];
-            query.start_level = currentLevel;
-            updateRoute();
-        });
+    .setLngLat(start)
+    .addTo(map)
+    .on('dragend', async () => {
+        const x = startMarker.getLngLat();
+        query.start = [x.lng, x.lat];
+        query.start_level = currentLevel;
+        updateRoute();
+    });
 
     const destinationMarker = new maplibregl.Marker({
         draggable: true,
         color: 'red'
     })
-        .setLngLat(destination)
-        .addTo(map)
-        .on('dragend', async () => {
-            const x = destinationMarker.getLngLat();
-            query.destination = [x.lng, x.lat];
-            query.destination_level = currentLevel;
-            updateRoute();
-        });
+    .setLngLat(destination)
+    .addTo(map)
+    .on('dragend', async () => {
+        const x = destinationMarker.getLngLat();
+        query.destination = [x.lng, x.lat];
+        query.destination_level = currentLevel;
+        updateRoute();
+    });
 
     let popup = null;
     map.on('contextmenu', (e) => {

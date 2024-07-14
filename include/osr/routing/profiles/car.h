@@ -6,6 +6,8 @@
 
 #include "osr/ways.h"
 
+#include <boost/json/object.hpp>
+
 namespace osr {
 
 struct car {
@@ -23,6 +25,11 @@ struct car {
     }
 
     constexpr node_idx_t get_node() const noexcept { return n_; }
+
+    boost::json::object custom_geojson_properties(ways const& w) const {
+      return boost::json::object{{"node_id", n_.v_}, {"type", "car"}};
+    }
+
     constexpr node_idx_t get_key() const noexcept { return n_; }
 
     std::ostream& print(std::ostream& out, ways const& w) const {

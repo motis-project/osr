@@ -16,6 +16,11 @@ struct bike {
     }
 
     constexpr node_idx_t get_node() const noexcept { return n_; }
+
+    boost::json::object custom_geojson_properties(ways const& w) const {
+      return boost::json::object{{"node_id", n_.v_}, {"type", "bike"}};
+    }
+
     constexpr node get_key() const noexcept { return *this; }
 
     std::ostream& print(std::ostream& out, ways const& w) const {
