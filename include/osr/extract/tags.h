@@ -196,6 +196,10 @@ struct foot_profile {
       return override::kWhitelist;
     }
 
+    if (t.is_parking_) {
+      return override::kWhitelist;
+    }
+
     if (t.access_ == override::kBlacklist) {
       return override::kBlacklist;
     }
@@ -329,7 +333,7 @@ struct car_profile {
         case cista::hash("designated"):
         case cista::hash("permissive"): [[fallthrough]];
         case cista::hash("yes"): return override::kWhitelist;
-
+        
         default: return override::kNone;
       }
     };
@@ -338,9 +342,13 @@ struct car_profile {
       return mv;
     } else if (auto mc = get_override(t.motorcar_); mc != override::kNone) {
       return mc;
-    } else {
-      return t.vehicle_;
     }
+
+    if (t.is_parking_) {
+      return override::kWhitelist;
+    }
+
+    return t.vehicle_;
   }
 
   static bool default_access(tags const& t, osm_obj_type const type) {
