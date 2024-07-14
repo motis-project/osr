@@ -44,15 +44,15 @@ struct node {
       return node{};
     }
 
-    node() : type_{node_type::kInvalid}, idx_{node_idx_t::invalid()}, lvl_{level_t::invalid()} {}
+    constexpr node() : type_{node_type::kInvalid}, idx_{node_idx_t::invalid()}, lvl_{level_t::invalid()} {}
 
-    node(node_idx_t const n, level_t const lvl, bool const is_parking)
+    constexpr node(node_idx_t const n, level_t const lvl, bool const is_parking)
         : type_{node_type::kFoot}, idx_{n}, lvl_{lvl}, is_parking_{is_parking} {}
 
-    node(node_idx_t const n, level_t const lvl, bool const is_parking, direction const dir, way_pos_t const way)
+    constexpr node(node_idx_t const n, level_t const lvl, bool const is_parking, direction const dir, way_pos_t const way)
         : type_{node_type::kCar}, idx_{n}, lvl_{lvl}, is_parking_{is_parking}, dir_{dir}, node_way_index_{way} {}
 
-    node(node_type const t, node_idx_t const n, level_t const lvl, bool const is_parking, direction const dir, way_pos_t const way)
+    constexpr node(node_type const t, node_idx_t const n, level_t const lvl, bool const is_parking, direction const dir, way_pos_t const way)
         : type_{t}, idx_{n}, lvl_{lvl}, is_parking_{is_parking}, dir_{dir}, node_way_index_{way} {}
 
     node_type type_;
