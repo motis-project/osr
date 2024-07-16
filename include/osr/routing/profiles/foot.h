@@ -164,11 +164,11 @@ struct foot {
     }
   }
 
-  static bool is_reachable(ways::routing const& w,
-                           node const n,
-                           way_idx_t const way,
-                           direction const way_dir,
-                           direction const search_dir) {
+  static bool is_dest_reachable(ways::routing const& w,
+                                node const n,
+                                way_idx_t const way,
+                                direction const way_dir,
+                                direction const search_dir) {
     auto const target_way_prop = w.way_properties_[way];
     if (way_cost(
             target_way_prop,

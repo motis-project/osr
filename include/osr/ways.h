@@ -60,6 +60,7 @@ struct way_properties {
   constexpr bool is_oneway_bike() const { return is_oneway_bike_; }
   constexpr bool is_elevator() const { return is_elevator_; }
   constexpr bool is_steps() const { return is_steps_; }
+  constexpr bool is_parking() const { return is_parking_; }
   constexpr std::uint16_t max_speed_m_per_s() const {
     return to_meters_per_second(static_cast<speed_limit>(speed_limit_));
   }
