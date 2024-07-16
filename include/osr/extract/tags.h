@@ -192,11 +192,7 @@ struct foot_profile {
       case cista::hash("designated"): return override::kWhitelist;
     }
 
-    if (t.is_platform_) {
-      return override::kWhitelist;
-    }
-
-    if (t.is_parking_) {
+    if (t.is_platform_ || t.is_parking_) {
       return override::kWhitelist;
     }
 
@@ -209,11 +205,7 @@ struct foot_profile {
 
   static bool default_access(tags const& t, osm_obj_type const type) {
     if (type == osm_obj_type::kWay) {
-      if (t.is_elevator_) {
-        return true;
-      }
-
-      if (t.is_parking_) {
+      if (t.is_elevator_ || t.is_parking_) {
         return true;
       }
 
