@@ -124,13 +124,10 @@ double add_path(ways const& w,
                 direction const dir) {
   auto const& [way, from_idx, to_idx, is_loop, distance] =
       find_connecting_way<Profile>(w, from, to, expected_cost, dir);
-
   auto j = 0U;
   auto active = false;
   auto& segment = path.emplace_back();
-
   segment.way_ = way;
-
   segment.dist_ = distance;
 
   // we can use the expected cost here, since it gets validated in
@@ -157,13 +154,10 @@ double add_path(ways const& w,
        infinite(reverse(utl::zip(w.way_osm_nodes_[way], w.way_polylines_[way]),
                         (from_idx > to_idx) ^ is_loop),
                 is_loop)) {
-
     utl::verify(j++ != 2 * w.way_polylines_[way].size() + 1U, "infinite loop");
-
     if (!active && w.node_to_osm_[r.way_nodes_[way][from_idx]] == osm_idx) {
       active = true;
     }
-
     if (active) {
       if (w.node_to_osm_[r.way_nodes_[way][from_idx]] == osm_idx) {
         // Again "from" node, then it's shorter to start from here.
@@ -176,7 +170,6 @@ double add_path(ways const& w,
       }
     }
   }
-
   return distance;
 }
 
@@ -189,14 +182,11 @@ path reconstruct(ways const& w,
                  cost_t const cost,
                  direction const dir) {
   auto n = dest_node;
-
   auto segments = std::vector<path::segment>{{.polyline_ = dest.path_,
                                               .from_level_ = dest.lvl_,
                                               .to_level_ = dest.lvl_,
                                               .way_ = way_idx_t::invalid()}};
-
   auto dist = 0.0;
-
   while (true) {
     auto const& e = d.cost_.at(n.get_key());
     auto const pred = e.pred(n);
@@ -212,14 +202,11 @@ path reconstruct(ways const& w,
 
   auto const& start_node =
       n.get_node() == start.left_.node_ ? start.left_ : start.right_;
-
   segments.push_back({.polyline_ = start_node.path_,
                       .from_level_ = start_node.lvl_,
                       .to_level_ = start_node.lvl_,
                       .way_ = way_idx_t::invalid()});
-
   std::reverse(begin(segments), end(segments));
-
   return {.cost_ = cost,
           .dist_ = start_node.dist_to_node_ + dist + dest.dist_to_node_,
           .segments_ = segments};
