@@ -20,7 +20,6 @@ struct hybrid {
 
   enum class node_type : std::uint8_t { kCar, kFoot, kInvalid };
 
-
   static constexpr std::string_view node_type_to_str(node_type const type) {
     switch (type) {
       case node_type::kCar: return "car";
@@ -37,23 +36,17 @@ struct hybrid {
    *
    * E.g. if a ndoes has 3 ways connected to it, we have 7 nodes for this node.
    */
-struct node {
+  struct node {
     friend bool operator==(node, node) = default;
 
-    static constexpr node invalid() noexcept {
-      return node{};
-    }
+    static constexpr node invalid() noexcept { return node{}; }
 
-    constexpr node_idx_t get_node() const noexcept {
-      return idx_;
-    }
+    constexpr node_idx_t get_node() const noexcept { return idx_; }
 
     boost::json::object geojson_properties(ways const& w) const {
-      auto properties =  boost::json::object{
-        {"node_id", idx_.v_},
-        {"level", to_float(lvl_)},
-        {"type", node_type_to_str(type_)}
-      };
+      auto properties = boost::json::object{{"node_id", idx_.v_},
+                                            {"level", to_float(lvl_)},
+                                            {"type", node_type_to_str(type_)}};
 
       if (is_car_node()) {
         properties.emplace("direction", to_str(dir_));
@@ -62,19 +55,17 @@ struct node {
       return properties;
     }
 
-    constexpr node_idx_t get_key() const noexcept {
-      return idx_;
-    }
+    constexpr node_idx_t get_key() const noexcept { return idx_; }
 
     std::ostream& print(std::ostream& out, ways const& w) const {
       return out << "(node=" << w.node_to_osm_[idx_]
-          << ", level=" << to_float(lvl_)
-          << ", dir=" << to_str(dir_)
-          << ", way=" << w.way_osm_idx_[w.r_->node_ways_[idx_][node_way_index_]]
-          << ")";
+                 << ", level=" << to_float(lvl_) << ", dir=" << to_str(dir_)
+                 << ", way="
+                 << w.way_osm_idx_[w.r_->node_ways_[idx_][node_way_index_]]
+                 << ")";
     }
 
-  constexpr bool is_car_node() const noexcept {
+    constexpr bool is_car_node() const noexcept {
       return type_ == node_type::kCar;
     }
 
@@ -113,12 +104,12 @@ struct node {
       }
 
       return node{
-        to_node_type(pred_type_[idx]),
-        pred_[idx],
-        pred_lvl_[idx],
-        pred_parking_[idx],
-        to_dir(pred_dir_[idx]),
-        pred_way_[idx],
+          to_node_type(pred_type_[idx]),
+          pred_[idx],
+          pred_lvl_[idx],
+          pred_parking_[idx],
+          to_dir(pred_dir_[idx]),
+          pred_way_[idx],
       };
     }
 
@@ -148,10 +139,11 @@ struct node {
 
     static constexpr std::size_t get_index(node const n) {
       if (n.is_foot_node()) {
-          return 0;
+        return 0;
       }
 
-      return 1 + (n.dir_ == direction::kForward ? 0 : 1) * kMaxWays + n.node_way_index_;
+      return 1 + (n.dir_ == direction::kForward ? 0 : 1) * kMaxWays +
+             n.node_way_index_;
     }
 
     static constexpr direction to_dir(bool const b) {
@@ -181,11 +173,18 @@ struct node {
 
   struct label {
     label(node const n, cost_t const c)
-        : idx_{n.idx_}, type_{n.type_}, lvl_{n.lvl_}, dir_{n.dir_}, node_way_index_(n.node_way_index_), cost_{c}, is_parking_{n.is_parking_} {}
+        : idx_{n.idx_},
+          type_{n.type_},
+          lvl_{n.lvl_},
+          dir_{n.dir_},
+          node_way_index_(n.node_way_index_),
+          cost_{c},
+          is_parking_{n.is_parking_} {}
 
-    constexpr node get_node() const noexcept { return node{type_, idx_, lvl_, is_parking_, dir_, node_way_index_}; }
+    constexpr node get_node() const noexcept {
+      return node{type_, idx_, lvl_, is_parking_, dir_, node_way_index_};
+    }
     constexpr cost_t cost() const noexcept { return cost_; }
-
 
     node_idx_t idx_;
 
@@ -213,21 +212,23 @@ struct node {
    */
   template <typename Fn>
   static void resolve_start_node(ways::routing const& w,
-                      way_idx_t const way,
-                      node_idx_t const n,
-                      level_t const lvl,
-                      direction const search_dir,
-                      Fn&& f) {
+                                 way_idx_t const way,
+                                 node_idx_t const n,
+                                 level_t const lvl,
+                                 direction const search_dir,
+                                 Fn&& f) {
     auto const way_properties = w.way_properties_[way];
     auto const ways = w.node_ways_[n];
 
-
-    level_t const node_level = lvl == level_t::invalid() ? way_properties.from_level() : lvl;
+    level_t const node_level =
+        lvl == level_t::invalid() ? way_properties.from_level() : lvl;
     bool const is_parking = w.node_properties_[n].is_parking_;
 
     if (search_dir == direction::kBackward) {
       // when seraching backward, we have to start with the foot node
-      if (lvl == level_t::invalid() || (way_properties.from_level() == lvl || way_properties.to_level() == lvl || can_use_elevator(w, n, lvl))) {
+      if (lvl == level_t::invalid() ||
+          (way_properties.from_level() == lvl ||
+           way_properties.to_level() == lvl || can_use_elevator(w, n, lvl))) {
         f(node{node_type::kFoot, n, node_level, is_parking});
       }
 
@@ -236,8 +237,10 @@ struct node {
 
     for (auto i = way_pos_t{0U}; i != ways.size(); ++i) {
       if (ways[i] == way) {
-        f(node{node_type::kCar, n, node_level, is_parking, direction::kForward, i});
-        f(node{node_type::kCar, n, node_level, is_parking, direction::kBackward, i});
+        f(node{node_type::kCar, n, node_level, is_parking, direction::kForward,
+               i});
+        f(node{node_type::kCar, n, node_level, is_parking, direction::kBackward,
+               i});
       }
     }
   }
@@ -247,7 +250,8 @@ struct node {
                           node_idx_t const n,
                           level_t const lvl,
                           Fn&& f) {
-    auto const ways = w.node_ways_[n];;
+    auto const ways = w.node_ways_[n];
+    ;
     auto const node_properties = w.node_properties_[n];
 
     auto levels = hash_set<level_t>{};
@@ -259,8 +263,10 @@ struct node {
 
       auto const node_level = lvl == level_t::invalid() ? p.from_level() : lvl;
 
-      f(node{node_type::kCar, n, node_level, is_parking, direction::kForward, i});
-      f(node{node_type::kCar, n, node_level, is_parking, direction::kBackward, i});
+      f(node{node_type::kCar, n, node_level, is_parking, direction::kForward,
+             i});
+      f(node{node_type::kCar, n, node_level, is_parking, direction::kBackward,
+             i});
 
       if (lvl == level_t::invalid()) {
         if (levels.emplace(p.from_level()).second) {
@@ -278,18 +284,16 @@ struct node {
   }
 
   template <direction SearchDir, typename Fn>
-  static void adjacent_foot_nodes(
-    ways::routing const& w,
-    node const& n,
-    direction const way_dir,
-    way_idx_t const way,
-    std::uint16_t const from,
-    std::uint16_t const to,
-    Fn&& fn
-  ) {
+  static void adjacent_foot_nodes(ways::routing const& w,
+                                  node const& n,
+                                  direction const way_dir,
+                                  way_idx_t const way,
+                                  std::uint16_t const from,
+                                  std::uint16_t const to,
+                                  Fn&& fn) {
     if (SearchDir == direction::kBackward && n.is_car_node()) {
-      // we will transition to foot via the adjacents_by_car function when going backwards,
-      // since we are computing the path in reverse order
+      // we will transition to foot via the adjacents_by_car function when going
+      // backwards, since we are computing the path in reverse order
       return;
     }
 
@@ -316,14 +320,16 @@ struct node {
     }
 
     if (can_use_elevator(w, target_node, n.lvl_)) {
-      for_each_elevator_level(
-          w, target_node, [&](level_t const target_lvl) {
-            auto const dist = w.way_node_dist_[way][std::min(from, to)];
-            auto const cost = foot_way_cost(target_way_prop, dist) + target_node_cost;
-            fn(node{node_type::kFoot, target_node, target_lvl, target_node_prop.is_parking_}, cost, dist, way, from, to);
-          });
+      for_each_elevator_level(w, target_node, [&](level_t const target_lvl) {
+        auto const dist = w.way_node_dist_[way][std::min(from, to)];
+        auto const cost =
+            foot_way_cost(target_way_prop, dist) + target_node_cost;
+        fn(node{node_type::kFoot, target_node, target_lvl,
+                target_node_prop.is_parking_},
+           cost, dist, way, from, to);
+      });
 
-      return; // node is an elevator
+      return;  // node is an elevator
     }
 
     auto const target_lvl = get_target_level(w, n, way);
@@ -334,23 +340,24 @@ struct node {
 
     auto const dist = w.way_node_dist_[way][std::min(from, to)];
     auto const cost = foot_way_cost(target_way_prop, dist) + target_node_cost;
-    fn(node{node_type::kFoot, target_node, *target_lvl, target_node_prop.is_parking_}, cost, dist, way, from, to);
+    fn(node{node_type::kFoot, target_node, *target_lvl,
+            target_node_prop.is_parking_},
+       cost, dist, way, from, to);
   }
 
   template <direction SearchDir, typename Fn>
-  static void adjacent_car_nodes(
-    ways::routing const& w,
-    node const& n,
-    direction const way_dir,
-    way_pos_t const way_pos,
-    way_idx_t const way,
-    std::uint16_t const from,
-    std::uint16_t const to,
-    Fn&& fn
-    ) {
+  static void adjacent_car_nodes(ways::routing const& w,
+                                 node const& n,
+                                 direction const way_dir,
+                                 way_pos_t const way_pos,
+                                 way_idx_t const way,
+                                 std::uint16_t const from,
+                                 std::uint16_t const to,
+                                 Fn&& fn) {
 
-    if(SearchDir == direction::kForward && n.is_foot_node()) {
-      // we will transition to car via the adjacents_by_foot function when going forward.
+    if (SearchDir == direction::kForward && n.is_foot_node()) {
+      // we will transition to car via the adjacents_by_foot function when going
+      // forward.
       return;
     }
 
@@ -369,18 +376,22 @@ struct node {
     }
 
     auto const way_prop = w.way_properties_[way];
-    auto const target_level = way_prop.from_level() == n.lvl_ ? way_prop.to_level() : way_prop.from_level();
+    auto const target_level = way_prop.from_level() == n.lvl_
+                                  ? way_prop.to_level()
+                                  : way_prop.from_level();
 
-    auto const target =
-        node{node_type::kCar, target_node, target_level, target_node_prop.is_parking_, way_dir, w.get_way_pos(target_node, way)};
+    auto const target = node{node_type::kCar, target_node,
+                             target_level,    target_node_prop.is_parking_,
+                             way_dir,         w.get_way_pos(target_node, way)};
 
-    if(n.is_foot_node()) {
+    if (n.is_foot_node()) {
       if (!n.is_parking_) {
         return;
       }
 
       auto const dist = w.way_node_dist_[way][std::min(from, to)];
-      cost_t const cost = car_way_cost(target_way_prop, way_dir, dist) + target_node_cost + kSwitchPenalty;
+      cost_t const cost = car_way_cost(target_way_prop, way_dir, dist) +
+                          target_node_cost + kSwitchPenalty;
       fn(target, cost, dist, way, from, to);
     }
 
@@ -388,11 +399,11 @@ struct node {
       return;
     }
 
-    auto const is_u_turn = way_pos == n.node_way_index_ && way_dir == opposite(n.dir_);
+    auto const is_u_turn =
+        way_pos == n.node_way_index_ && way_dir == opposite(n.dir_);
     auto const dist = w.way_node_dist_[way][std::min(from, to)];
-    cost_t const cost = car_way_cost(target_way_prop, way_dir, dist)
-                            + target_node_cost
-                            + (is_u_turn ? kUturnPenalty : 0U);
+    cost_t const cost = car_way_cost(target_way_prop, way_dir, dist) +
+                        target_node_cost + (is_u_turn ? kUturnPenalty : 0U);
     fn(target, cost, dist, way, from, to);
   }
 
@@ -404,13 +415,21 @@ struct node {
          utl::zip_unchecked(w.node_ways_[n.idx_], w.node_in_way_idx_[n.idx_])) {
 
       if (i != 0U) {
-        adjacent_foot_nodes<SearchDir, Fn>(w, n, flip<SearchDir>(direction::kBackward), way, i, i - 1, std::forward<Fn>(fn));
-        adjacent_car_nodes<SearchDir, Fn>(w, n, flip<SearchDir>(direction::kBackward), way_pos, way, i, i - 1, std::forward<Fn>(fn));
+        adjacent_foot_nodes<SearchDir, Fn>(
+            w, n, flip<SearchDir>(direction::kBackward), way, i, i - 1,
+            std::forward<Fn>(fn));
+        adjacent_car_nodes<SearchDir, Fn>(
+            w, n, flip<SearchDir>(direction::kBackward), way_pos, way, i, i - 1,
+            std::forward<Fn>(fn));
       }
 
       if (i != w.way_nodes_[way].size() - 1U) {
-        adjacent_foot_nodes<SearchDir, Fn>(w, n, flip<SearchDir>(direction::kForward), way, i, i + 1, std::forward<Fn>(fn));
-        adjacent_car_nodes<SearchDir, Fn>(w, n, flip<SearchDir>(direction::kForward), way_pos, way, i, i + 1, std::forward<Fn>(fn));
+        adjacent_foot_nodes<SearchDir, Fn>(w, n,
+                                           flip<SearchDir>(direction::kForward),
+                                           way, i, i + 1, std::forward<Fn>(fn));
+        adjacent_car_nodes<SearchDir, Fn>(
+            w, n, flip<SearchDir>(direction::kForward), way_pos, way, i, i + 1,
+            std::forward<Fn>(fn));
       }
 
       ++way_pos;
@@ -430,18 +449,19 @@ struct node {
     auto const target_way_prop = w.way_properties_[way];
 
     if (search_dir == direction::kBackward) {
-      if ((n.is_parking_ || n.is_foot_node())
-          && foot_way_cost(target_way_prop, 0U) != kInfeasible
-          && get_target_level(w, n, way).has_value()) {
+      if ((n.is_parking_ || n.is_foot_node()) &&
+          foot_way_cost(target_way_prop, 0U) != kInfeasible &&
+          get_target_level(w, n, way).has_value()) {
         return true;
       }
 
       return false;
     }
 
-    if ((n.is_parking_ || n.is_car_node())
-      && car_way_cost(target_way_prop, way_dir, 0U) != kInfeasible
-      && !w.is_restricted(n.idx_, n.node_way_index_, w.get_way_pos(n.idx_, way), search_dir)) {
+    if ((n.is_parking_ || n.is_car_node()) &&
+        car_way_cost(target_way_prop, way_dir, 0U) != kInfeasible &&
+        !w.is_restricted(n.idx_, n.node_way_index_, w.get_way_pos(n.idx_, way),
+                         search_dir)) {
       return true;
     }
 
@@ -449,9 +469,10 @@ struct node {
   }
 
   static constexpr cost_t car_way_cost(way_properties const& e,
-                                   direction const dir,
-                                   std::uint16_t const dist) {
-    if (e.is_car_accessible() && (dir == direction::kForward || !e.is_oneway_car())) {
+                                       direction const dir,
+                                       std::uint16_t const dist) {
+    if (e.is_car_accessible() &&
+        (dir == direction::kForward || !e.is_oneway_car())) {
       return (dist / e.max_speed_m_per_s()) * (e.is_destination() ? 5U : 1U) +
              (e.is_destination() ? 120U : 0U);
     }
@@ -460,7 +481,7 @@ struct node {
   }
 
   static constexpr cost_t foot_way_cost(way_properties const& e,
-                                   std::uint16_t const dist) {
+                                        std::uint16_t const dist) {
     if (e.is_foot_accessible() || e.is_bike_accessible()) {
       return static_cast<cost_t>(std::round(static_cast<float>(dist) / 1.1F));
     }
@@ -499,8 +520,8 @@ struct node {
   // foot level stuff
 
   static std::optional<level_t> get_target_level(ways::routing const& w,
-                                               node const& from_node,
-                                               way_idx_t const to_way) {
+                                                 node const& from_node,
+                                                 way_idx_t const to_way) {
     auto const way_prop = w.way_properties_[to_way];
     level_t const from_level = from_node.lvl_;
 
@@ -520,7 +541,8 @@ struct node {
       return from_level;
     }
 
-    if (can_use_elevator(w, from_node.idx_, way_prop.from_level(), from_level)) {
+    if (can_use_elevator(w, from_node.idx_, way_prop.from_level(),
+                         from_level)) {
       return way_prop.from_level();
     }
 
@@ -530,7 +552,6 @@ struct node {
 
     return std::nullopt;
   }
-
 
   static bool can_use_elevator(ways::routing const& w,
                                way_idx_t const way,
@@ -582,7 +603,6 @@ struct node {
     assert(it != end(w.multi_level_elevators_) && it->first == n);
     return it->second;
   }
-
 };
 
 }  // namespace osr

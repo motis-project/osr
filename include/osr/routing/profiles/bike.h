@@ -71,8 +71,12 @@ struct bike {
   };
 
   template <typename Fn>
-  static void resolve_start_node(
-      ways::routing const&, way_idx_t, node_idx_t const n, level_t, direction, Fn&& f) {
+  static void resolve_start_node(ways::routing const&,
+                                 way_idx_t,
+                                 node_idx_t const n,
+                                 level_t,
+                                 direction,
+                                 Fn&& f) {
     f(node{n});
   }
 

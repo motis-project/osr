@@ -135,23 +135,11 @@ struct way_handler : public osm::handler::Handler {
       elevator_nodes_.emplace(first_node, t.level_bits_);
     }
 
-    if (
-        !t.is_elevator_ &&  // elevators tagged as building would be landuse
+    if (!t.is_elevator_ &&  // elevators tagged as building would be landuse
         !t.is_parking_ &&
-        (
-          (
-            it == end(rel_ways_) &&
-            t.highway_.empty() &&
-            !t.is_platform_
-          ) ||
-          (
-            t.highway_.empty() &&
-            !t.is_platform_ &&
-            it != end(rel_ways_) &&
-            t.landuse_
-          )
-        )
-      ) {
+        ((it == end(rel_ways_) && t.highway_.empty() && !t.is_platform_) ||
+         (t.highway_.empty() && !t.is_platform_ && it != end(rel_ways_) &&
+          t.landuse_))) {
       return;
     }
 
