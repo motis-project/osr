@@ -130,7 +130,6 @@ struct geojson_writer {
                                  w_.way_osm_idx_[w_.r_->node_ways_[n][r.to_]]};
                            }))},
           {"label", ss.str().empty() ? "unreachable" : ss.str()}};
-
       features_.emplace_back(boost::json::value{
           {"type", "Feature"},
           {"properties", properties},

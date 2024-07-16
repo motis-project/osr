@@ -214,7 +214,6 @@ struct foot_profile {
       if (t.is_elevator_ || t.is_parking_) {
         return true;
       }
-
       switch (cista::hash(t.highway_)) {
         case cista::hash("primary"):
         case cista::hash("primary_link"):
@@ -331,7 +330,6 @@ struct car_profile {
         case cista::hash("designated"):
         case cista::hash("permissive"): [[fallthrough]];
         case cista::hash("yes"): return override::kWhitelist;
-
         default: return override::kNone;
       }
     };
