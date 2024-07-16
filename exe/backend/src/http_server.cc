@@ -135,8 +135,12 @@ struct http_server::impl {
         handle_routing(req, cb, get_dijkstra<car>(), from, to, max, direction);
         break;
       case search_profile::kCarParking:
-        handle_routing(req, cb, get_dijkstra<car_parking>(), from, to, max,
-                       direction);
+        handle_routing(req, cb, get_dijkstra<car_parking<false>>(), from, to,
+                       max, direction);
+        break;
+      case search_profile::kCarParkingWheelchair:
+        handle_routing(req, cb, get_dijkstra<car_parking<true>>(), from, to,
+                       max, direction);
         break;
       default: throw utl::fail("not implemented");
     }
