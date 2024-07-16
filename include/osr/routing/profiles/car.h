@@ -2,11 +2,11 @@
 
 #include <bitset>
 
+#include "boost/json/object.hpp"
+
 #include "utl/helpers/algorithm.h"
 
 #include "osr/ways.h"
-
-#include <boost/json/object.hpp>
 
 namespace osr {
 
@@ -26,7 +26,7 @@ struct car {
 
     constexpr node_idx_t get_node() const noexcept { return n_; }
 
-    boost::json::object custom_geojson_properties(ways const& w) const {
+    boost::json::object geojson_properties(ways const& w) const {
       return boost::json::object{{"node_id", n_.v_}, {"type", "car"}};
     }
 
@@ -121,7 +121,7 @@ struct car {
   };
 
   template <typename Fn>
-  static void resolve(ways::routing const& w,
+  static void resolve_start_node(ways::routing const& w,
                       way_idx_t const way,
                       node_idx_t const n,
                       level_t,

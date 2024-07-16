@@ -25,7 +25,7 @@
 #include "osr/routing/profiles/bike.h"
 #include "osr/routing/profiles/car.h"
 #include "osr/routing/profiles/foot.h"
-#include "osr/routing/profiles/hybrid.h"
+#include "osr/routing/profiles/car_foot.h"
 #include "osr/routing/route.h"
 
 using namespace net;

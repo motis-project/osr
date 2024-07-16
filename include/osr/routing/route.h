@@ -144,14 +144,14 @@ double add_path(ways const& w,
     segment.from_level_ = r.way_properties_[way].from_level();
     segment.to_level_ = r.way_properties_[way].to_level();
 
-    segment.from_node_properties_ = from.custom_geojson_properties(w);
-    segment.to_node_properties_ = to.custom_geojson_properties(w);
+    segment.from_node_properties_ = from.geojson_properties(w);
+    segment.to_node_properties_ = to.geojson_properties(w);
   } else {
     segment.from_level_ = r.way_properties_[way].to_level();
     segment.to_level_ = r.way_properties_[way].from_level();
 
-    segment.from_node_properties_ = to.custom_geojson_properties(w);
-    segment.to_node_properties_ = from.custom_geojson_properties(w);
+    segment.from_node_properties_ = to.geojson_properties(w);
+    segment.to_node_properties_ = from.geojson_properties(w);
   }
 
   for (auto const [osm_idx, coord] :
@@ -306,7 +306,7 @@ std::optional<path> route(ways const& w,
   for (auto const& start : from_match) {
     for (auto const* nc : {&start.left_, &start.right_}) {
       if (nc->valid() && nc->cost_ < max) {
-        Profile::resolve(
+        Profile::resolve_start_node(
             *w.r_, start.way_, nc->node_, from.lvl_, dir,
             [&](auto const node) {
               d.add_start({node, nc->cost_});
@@ -353,7 +353,7 @@ std::vector<std::optional<path>> route(ways const& w,
   for (auto const& start : from_match) {
     for (auto const* nc : {&start.left_, &start.right_}) {
       if (nc->valid() && nc->cost_ < max) {
-        Profile::resolve(
+        Profile::resolve_start_node(
             *w.r_, start.way_, nc->node_, from.lvl_, dir,
             [&](auto const node) { d.add_start({node, nc->cost_}); });
       }
