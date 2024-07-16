@@ -134,7 +134,7 @@ struct http_server::impl {
       case search_profile::kCar:
         handle_routing(req, cb, get_dijkstra<car>(), from, to, max, direction);
         break;
-      case search_profile::khybrid:
+      case search_profile::kCarParking:
         handle_routing(req, cb, get_dijkstra<car_parking>(), from, to, max,
                        direction);
         break;
