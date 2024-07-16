@@ -22,7 +22,7 @@ enum class search_profile : std::uint8_t {
   kWheelchair,
   kBike,
   kCar,
-  khybrid,
+  kCarParking,
 };
 
 search_profile to_profile(std::string_view s);
@@ -52,7 +52,7 @@ search_profile to_profile(std::string_view s) {
     case cista::hash("wheelchair"): return search_profile::kWheelchair;
     case cista::hash("bike"): return search_profile::kBike;
     case cista::hash("car"): return search_profile::kCar;
-    case cista::hash("hybrid"): return search_profile::khybrid;
+    case cista::hash("car_parking"): return search_profile::kCarParking;
   }
   throw utl::fail("{} is not a valid profile", s);
 }
@@ -63,7 +63,7 @@ std::string_view to_str(search_profile const p) {
     case search_profile::kWheelchair: return "wheelchair";
     case search_profile::kCar: return "car";
     case search_profile::kBike: return "bike";
-    case search_profile::khybrid: return "hybrid";
+    case search_profile::kCarParking: return "hybrid";
   }
   throw utl::fail("{} is not a valid profile", static_cast<std::uint8_t>(p));
 }
