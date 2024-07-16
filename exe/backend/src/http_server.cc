@@ -24,7 +24,7 @@
 #include "osr/lookup.h"
 #include "osr/routing/profiles/bike.h"
 #include "osr/routing/profiles/car.h"
-#include "osr/routing/profiles/car_foot.h"
+#include "osr/routing/profiles/car_parking.h"
 #include "osr/routing/profiles/foot.h"
 #include "osr/routing/route.h"
 
@@ -135,7 +135,7 @@ struct http_server::impl {
         handle_routing(req, cb, get_dijkstra<car>(), from, to, max, direction);
         break;
       case search_profile::khybrid:
-        handle_routing(req, cb, get_dijkstra<hybrid>(), from, to, max,
+        handle_routing(req, cb, get_dijkstra<car_parking>(), from, to, max,
                        direction);
         break;
       default: throw utl::fail("not implemented");

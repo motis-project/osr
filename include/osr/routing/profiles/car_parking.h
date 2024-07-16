@@ -10,7 +10,7 @@
 
 namespace osr {
 
-struct hybrid {
+struct car_parking {
   static constexpr auto const kMaxMatchDistance = 200U;
   static constexpr auto const kUturnPenalty = cost_t{120U};
   static constexpr auto const kSwitchPenalty = cost_t{200U};
