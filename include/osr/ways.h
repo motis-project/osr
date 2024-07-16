@@ -94,8 +94,8 @@ struct way_properties {
 
   std::uint8_t from_level_ : 5;
   std::uint8_t to_level_ : 5;
-  
-  bool is_parking_: 1;
+
+  bool is_parking_ : 1;
 };
 
 static_assert(sizeof(way_properties) == 3);

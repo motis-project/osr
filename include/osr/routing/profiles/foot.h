@@ -79,11 +79,11 @@ struct foot {
 
   template <typename Fn>
   static void resolve_start_node(ways::routing const& w,
-                      way_idx_t const way,
-                      node_idx_t const n,
-                      level_t const lvl,
-                      direction,
-                      Fn&& f) {
+                                 way_idx_t const way,
+                                 node_idx_t const n,
+                                 level_t const lvl,
+                                 direction,
+                                 Fn&& f) {
     auto const p = w.way_properties_[way];
     if (lvl == level_t::invalid() ||
         (p.from_level() == lvl || p.to_level() == lvl ||

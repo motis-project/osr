@@ -122,11 +122,11 @@ struct car {
 
   template <typename Fn>
   static void resolve_start_node(ways::routing const& w,
-                      way_idx_t const way,
-                      node_idx_t const n,
-                      level_t,
-                      direction,
-                      Fn&& f) {
+                                 way_idx_t const way,
+                                 node_idx_t const n,
+                                 level_t,
+                                 direction,
+                                 Fn&& f) {
     auto const ways = w.node_ways_[n];
     for (auto i = way_pos_t{0U}; i != ways.size(); ++i) {
       if (ways[i] == way) {

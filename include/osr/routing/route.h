@@ -29,7 +29,6 @@ search_profile to_profile(std::string_view s);
 
 std::string_view to_str(search_profile const p);
 
-
 struct path {
   struct segment {
     std::vector<geo::latlng> polyline_;
@@ -134,12 +133,12 @@ double add_path(ways const& w,
 
   segment.dist_ = distance;
 
-  // we can use the expected cost here, since it gets validated in find_connecting_way
-  // to be the same as the actual cost.
+  // we can use the expected cost here, since it gets validated in
+  // find_connecting_way to be the same as the actual cost.
   segment.cost_ = expected_cost;
 
-  // when going backwards we have to swap the properties, since we will be traversing
-  // the way in the opposite direction.
+  // when going backwards we have to swap the properties, since we will be
+  // traversing the way in the opposite direction.
   if (dir == direction::kForward) {
     segment.from_level_ = r.way_properties_[way].from_level();
     segment.to_level_ = r.way_properties_[way].to_level();
@@ -203,27 +202,27 @@ path reconstruct(ways const& w,
     auto const pred = e.pred(n);
     if (pred.has_value()) {
       auto const expected_cost = e.cost(n) - d.get_cost(*pred);
-      dist += add_path<Profile>(w, *w.r_, *pred, n, expected_cost, segments, dir);
+      dist +=
+          add_path<Profile>(w, *w.r_, *pred, n, expected_cost, segments, dir);
     } else {
       break;
     }
     n = *pred;
   }
 
-  auto const& start_node = n.get_node() == start.left_.node_ ? start.left_ : start.right_;
+  auto const& start_node =
+      n.get_node() == start.left_.node_ ? start.left_ : start.right_;
 
   segments.push_back({.polyline_ = start_node.path_,
-                    .from_level_ = start_node.lvl_,
-                    .to_level_ = start_node.lvl_,
-                    .way_ = way_idx_t::invalid()});
+                      .from_level_ = start_node.lvl_,
+                      .to_level_ = start_node.lvl_,
+                      .way_ = way_idx_t::invalid()});
 
   std::reverse(begin(segments), end(segments));
 
-  return {
-    .cost_ = cost,
-    .dist_ = start_node.dist_to_node_ + dist + dest.dist_to_node_,
-    .segments_ = segments
-  };
+  return {.cost_ = cost,
+          .dist_ = start_node.dist_to_node_ + dist + dest.dist_to_node_,
+          .segments_ = segments};
 }
 
 template <typename Profile>
@@ -242,7 +241,6 @@ best_candidate(ways const& w,
     auto best_node = typename Profile::node{};
     auto best_cost = std::numeric_limits<cost_t>::max();
     Profile::resolve_all(*w.r_, x->node_, lvl, [&](auto&& node) {
-
       if (!Profile::is_reachable(*w.r_, node, dest.way_,
                                  flip(opposite(dir), x->way_dir_),
                                  opposite(dir))) {
@@ -306,11 +304,10 @@ std::optional<path> route(ways const& w,
   for (auto const& start : from_match) {
     for (auto const* nc : {&start.left_, &start.right_}) {
       if (nc->valid() && nc->cost_ < max) {
-        Profile::resolve_start_node(
-            *w.r_, start.way_, nc->node_, from.lvl_, dir,
-            [&](auto const node) {
-              d.add_start({node, nc->cost_});
-            });
+        Profile::resolve_start_node(*w.r_, start.way_, nc->node_, from.lvl_,
+                                    dir, [&](auto const node) {
+                                      d.add_start({node, nc->cost_});
+                                    });
       }
     }
 
@@ -353,9 +350,10 @@ std::vector<std::optional<path>> route(ways const& w,
   for (auto const& start : from_match) {
     for (auto const* nc : {&start.left_, &start.right_}) {
       if (nc->valid() && nc->cost_ < max) {
-        Profile::resolve_start_node(
-            *w.r_, start.way_, nc->node_, from.lvl_, dir,
-            [&](auto const node) { d.add_start({node, nc->cost_}); });
+        Profile::resolve_start_node(*w.r_, start.way_, nc->node_, from.lvl_,
+                                    dir, [&](auto const node) {
+                                      d.add_start({node, nc->cost_});
+                                    });
       }
     }
 

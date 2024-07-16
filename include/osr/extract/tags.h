@@ -18,8 +18,14 @@ struct tags {
       switch (cista::hash(std::string_view{t.key()})) {
         using namespace std::string_view_literals;
         case cista::hash("parking"): is_parking_ = true; break;
-        case cista::hash("amenity"): is_parking_ |= (t.value() == "parking"sv || t.value() == "parking_entrance"sv); break;
-        case cista::hash("building"): is_parking_ |= t.value() == "parking"sv; landuse_ = true; break;
+        case cista::hash("amenity"):
+          is_parking_ |=
+              (t.value() == "parking"sv || t.value() == "parking_entrance"sv);
+          break;
+        case cista::hash("building"):
+          is_parking_ |= t.value() == "parking"sv;
+          landuse_ = true;
+          break;
         case cista::hash("landuse"): landuse_ = true; break;
         case cista::hash("railway"):
           landuse_ |= t.value() == "station_area"sv;
@@ -325,7 +331,7 @@ struct car_profile {
         case cista::hash("designated"):
         case cista::hash("permissive"): [[fallthrough]];
         case cista::hash("yes"): return override::kWhitelist;
-        
+
         default: return override::kNone;
       }
     };
