@@ -23,6 +23,7 @@ enum class search_profile : std::uint8_t {
   kBike,
   kCar,
   kCarParking,
+  kCarParkingWheelchair
 };
 
 search_profile to_profile(std::string_view s);
@@ -63,7 +64,8 @@ std::string_view to_str(search_profile const p) {
     case search_profile::kWheelchair: return "wheelchair";
     case search_profile::kCar: return "car";
     case search_profile::kBike: return "bike";
-    case search_profile::kCarParking: return "hybrid";
+    case search_profile::kCarParking: return "car_parking";
+    case search_profile::kCarParkingWheelchair: return "car_parking_wheelchair";
   }
   throw utl::fail("{} is not a valid profile", static_cast<std::uint8_t>(p));
 }
@@ -228,9 +230,9 @@ best_candidate(ways const& w,
     auto best_node = typename Profile::node{};
     auto best_cost = std::numeric_limits<cost_t>::max();
     Profile::resolve_all(*w.r_, x->node_, lvl, [&](auto&& node) {
-      if (!Profile::is_reachable(*w.r_, node, dest.way_,
-                                 flip(opposite(dir), x->way_dir_),
-                                 opposite(dir))) {
+      if (!Profile::is_dest_reachable(*w.r_, node, dest.way_,
+                                      flip(opposite(dir), x->way_dir_),
+                                      opposite(dir))) {
         return;
       }
 
@@ -291,10 +293,9 @@ std::optional<path> route(ways const& w,
   for (auto const& start : from_match) {
     for (auto const* nc : {&start.left_, &start.right_}) {
       if (nc->valid() && nc->cost_ < max) {
-        Profile::resolve_start_node(*w.r_, start.way_, nc->node_, from.lvl_,
-                                    dir, [&](auto const node) {
-                                      d.add_start({node, nc->cost_});
-                                    });
+        Profile::resolve_start_node(
+            *w.r_, start.way_, nc->node_, from.lvl_, dir,
+            [&](auto const node) { d.add_start({node, nc->cost_}); });
       }
     }
 
@@ -337,10 +338,9 @@ std::vector<std::optional<path>> route(ways const& w,
   for (auto const& start : from_match) {
     for (auto const* nc : {&start.left_, &start.right_}) {
       if (nc->valid() && nc->cost_ < max) {
-        Profile::resolve_start_node(*w.r_, start.way_, nc->node_, from.lvl_,
-                                    dir, [&](auto const node) {
-                                      d.add_start({node, nc->cost_});
-                                    });
+        Profile::resolve_start_node(
+            *w.r_, start.way_, nc->node_, from.lvl_, dir,
+            [&](auto const node) { d.add_start({node, nc->cost_}); });
       }
     }
 

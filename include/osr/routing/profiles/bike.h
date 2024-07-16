@@ -88,7 +88,7 @@ struct bike {
     f(node{n});
   }
 
-  static bool is_reachable(
+  static bool is_dest_reachable(
       ways::routing const&, node, way_idx_t, direction, direction) {
     return true;
   }
