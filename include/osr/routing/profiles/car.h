@@ -4,6 +4,7 @@
 
 #include "utl/helpers/algorithm.h"
 
+#include "osr/routing/td.h"
 #include "osr/ways.h"
 
 namespace osr {
@@ -143,7 +144,8 @@ struct car {
   template <direction SearchDir, bool WithBlocked, typename Fn>
   static void adjacent(ways::routing const& w,
                        node const n,
-                       bitvec<node_idx_t> const* blocked,
+                       unixtime_t,
+                       blocked const*,
                        Fn&& fn) {
     auto way_pos = way_pos_t{0U};
     for (auto const [way, i] :
@@ -152,12 +154,6 @@ struct car {
                               std::uint16_t const to) {
         // NOLINTNEXTLINE(clang-analyzer-core.CallAndMessage)
         auto const target_node = w.way_nodes_[way][to];
-        if constexpr (WithBlocked) {
-          if (blocked->test(target_node)) {
-            return;
-          }
-        }
-
         auto const target_node_prop = w.node_properties_[target_node];
         if (node_cost(target_node_prop) == kInfeasible) {
           return;

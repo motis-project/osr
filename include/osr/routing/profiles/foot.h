@@ -1,5 +1,6 @@
 #pragma once
 
+#include "osr/routing/td.h"
 #include "osr/ways.h"
 
 namespace osr {
@@ -114,19 +115,32 @@ struct foot {
   template <direction SearchDir, bool WithBlocked, typename Fn>
   static void adjacent(ways::routing const& w,
                        node const n,
-                       bitvec<node_idx_t> const* blocked,
+                       unixtime_t t,
+                       blocked const* b,
                        Fn&& fn) {
+    auto const call_with_wait_time = [&](node const neighbor,
+                                         std::uint32_t const way_cost,
+                                         distance_t const dist,
+                                         way_idx_t const way,
+                                         std::uint16_t const from,
+                                         std::uint16_t const to) {
+      if constexpr (WithBlocked) {
+        auto const wait_time = b->get_wait_time(neighbor.n_, t + way_cost);
+        auto const total =
+            way_cost + wait_time + node_cost(w.node_properties_[neighbor.n_]);
+        fn(neighbor, total, dist, way, from, to);
+      } else {
+        auto const total =
+            way_cost + node_cost(w.node_properties_[neighbor.n_]);
+        fn(neighbor, static_cast<std::uint32_t>(total), dist, way, from, to);
+      }
+    };
+
     for (auto const [way, i] :
          utl::zip_unchecked(w.node_ways_[n.n_], w.node_in_way_idx_[n.n_])) {
       auto const expand = [&](direction const way_dir, std::uint16_t const from,
                               std::uint16_t const to) {
         auto const target_node = w.way_nodes_[way][to];
-        if constexpr (WithBlocked) {
-          if (blocked->test(target_node)) {
-            return;
-          }
-        }
-
         auto const target_node_prop = w.node_properties_[target_node];
         if (node_cost(target_node_prop) == kInfeasible) {
           return;
@@ -143,8 +157,9 @@ struct foot {
                 auto const dist = w.way_node_dist_[way][std::min(from, to)];
                 auto const cost = way_cost(target_way_prop, way_dir, dist) +
                                   node_cost(target_node_prop);
-                fn(node{target_node, target_lvl},
-                   static_cast<std::uint32_t>(cost), dist, way, from, to);
+                call_with_wait_time(node{target_node, target_lvl},
+                                    static_cast<std::uint32_t>(cost), dist, way,
+                                    from, to);
               });
         } else {
           auto const target_lvl = get_target_level(w, n.n_, n.lvl_, way);
@@ -153,10 +168,10 @@ struct foot {
           }
 
           auto const dist = w.way_node_dist_[way][std::min(from, to)];
-          auto const cost = way_cost(target_way_prop, way_dir, dist) +
-                            node_cost(target_node_prop);
-          fn(node{target_node, *target_lvl}, static_cast<std::uint32_t>(cost),
-             dist, way, from, to);
+          call_with_wait_time(node{target_node, *target_lvl},
+                              static_cast<std::uint32_t>(
+                                  way_cost(target_way_prop, way_dir, dist)),
+                              dist, way, from, to);
         }
       };
 

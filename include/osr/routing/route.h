@@ -11,6 +11,7 @@
 
 #include "osr/lookup.h"
 #include "osr/routing/dijkstra.h"
+#include "osr/routing/td.h"
 #include "osr/types.h"
 #include "osr/util/infinite.h"
 #include "osr/util/reverse.h"
@@ -51,16 +52,16 @@ struct connecting_way {
 template <typename Profile>
 dijkstra<Profile>& get_dijkstra();
 
-std::vector<std::optional<path>> route(
-    ways const&,
-    lookup const&,
-    search_profile,
-    location const& from,
-    std::vector<location> const& to,
-    cost_t max,
-    direction,
-    double max_match_distance,
-    bitvec<node_idx_t> const* blocked = nullptr);
+std::vector<std::optional<path>> route(ways const&,
+                                       lookup const&,
+                                       search_profile,
+                                       location const& from,
+                                       std::vector<location> const& to,
+                                       cost_t max,
+                                       direction,
+                                       double max_match_distance,
+                                       unixtime_t start_time = 0,
+                                       blocked const* = nullptr);
 
 std::optional<path> route(ways const&,
                           lookup const&,
@@ -70,6 +71,7 @@ std::optional<path> route(ways const&,
                           cost_t max,
                           direction,
                           double max_match_distance,
-                          bitvec<node_idx_t> const* blocked = nullptr);
+                          unixtime_t start_time = 0,
+                          blocked const* blocked = nullptr);
 
 }  // namespace osr

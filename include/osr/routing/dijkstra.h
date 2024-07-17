@@ -1,6 +1,7 @@
 #pragma once
 
 #include "osr/routing/dial.h"
+#include "osr/routing/td.h"
 #include "osr/types.h"
 #include "osr/ways.h"
 
@@ -40,7 +41,8 @@ struct dijkstra {
   template <direction SearchDir, bool WithBlocked>
   void run(ways::routing const& r,
            cost_t const max,
-           bitvec<node_idx_t> const* blocked) {
+           unixtime_t const start_time,
+           blocked const* b) {
     while (!pq_.empty()) {
       auto l = pq_.pop();
       if (get_cost(l.get_node()) < l.cost()) {
@@ -49,7 +51,7 @@ struct dijkstra {
 
       auto const curr = l.get_node();
       Profile::template adjacent<SearchDir, WithBlocked>(
-          r, curr, blocked,
+          r, curr, start_time, b,
           [&](node const neighbor, std::uint32_t const cost, distance_t,
               way_idx_t, std::uint16_t, std::uint16_t) {
             auto const total = l.cost() + cost;
@@ -64,16 +66,17 @@ struct dijkstra {
 
   void run(ways::routing const& r,
            cost_t const max,
-           bitvec<node_idx_t> const* blocked,
-           direction const dir) {
-    if (blocked == nullptr) {
+           direction const dir,
+           unixtime_t const start_time,
+           blocked const* b) {
+    if (b == nullptr) {
       dir == direction::kForward
-          ? run<direction::kForward, false>(r, max, blocked)
-          : run<direction::kBackward, false>(r, max, blocked);
+          ? run<direction::kForward, false>(r, max, start_time, b)
+          : run<direction::kBackward, false>(r, max, start_time, b);
     } else {
       dir == direction::kForward
-          ? run<direction::kForward, true>(r, max, blocked)
-          : run<direction::kBackward, true>(r, max, blocked);
+          ? run<direction::kForward, true>(r, max, start_time, b)
+          : run<direction::kBackward, true>(r, max, start_time, b);
     }
   }
 

@@ -2,13 +2,14 @@
 
 #include "cista/reflection/printable.h"
 
-#include "osr/ways.h"
-
 #include "utl/cflow.h"
 #include "utl/helpers/algorithm.h"
 #include "utl/pairwise.h"
 
 #include "rtree.h"
+
+#include "osr/routing/td.h"
+#include "osr/ways.h"
 
 namespace osr {
 
@@ -100,7 +101,8 @@ struct lookup {
                              bool const reverse,
                              direction const search_dir,
                              double const max_match_distance,
-                             bitvec<node_idx_t> const* blocked) const {
+                             unixtime_t const start_time,
+                             blocked const* b) const {
     auto way_candidates = std::vector<way_candidate>{};
     find(query.pos_, [&](way_idx_t const way) {
       auto d = distance_to_way(query.pos_, ways_.way_polylines_[way]);
@@ -109,10 +111,10 @@ struct lookup {
         wc.way_ = way;
         wc.left_ =
             find_next_node<Profile>(wc, query, direction::kBackward, query.lvl_,
-                                    reverse, search_dir, blocked);
+                                    reverse, search_dir, start_time, b);
         wc.right_ =
             find_next_node<Profile>(wc, query, direction::kForward, query.lvl_,
-                                    reverse, search_dir, blocked);
+                                    reverse, search_dir, start_time, b);
       }
     });
     utl::sort(way_candidates);
@@ -124,12 +126,13 @@ struct lookup {
                 bool const reverse,
                 direction const search_dir,
                 double const max_match_distance,
-                bitvec<node_idx_t> const* blocked) const {
+                unixtime_t const start_time,
+                blocked const* b) const {
     auto way_candidates = get_way_candidates<Profile>(
-        query, reverse, search_dir, max_match_distance, blocked);
+        query, reverse, search_dir, max_match_distance, start_time, b);
     if (way_candidates.empty()) {
       way_candidates = get_way_candidates<Profile>(
-          query, reverse, search_dir, max_match_distance * 2U, blocked);
+          query, reverse, search_dir, max_match_distance * 2U, start_time, b);
     }
     return way_candidates;
   }
@@ -141,7 +144,8 @@ struct lookup {
                                 level_t const lvl,
                                 bool const reverse,
                                 direction const search_dir,
-                                bitvec<node_idx_t> const* blocked) const {
+                                unixtime_t const start_time,
+                                blocked const* b) const {
     auto const way_prop = ways_.r_->way_properties_[wc.way_];
     auto const edge_dir = reverse ? opposite(dir) : dir;
     auto const way_cost =
@@ -162,26 +166,33 @@ struct lookup {
     auto const polyline = ways_.way_polylines_[wc.way_];
     auto const osm_nodes = ways_.way_osm_nodes_[wc.way_];
 
-    till_the_end(wc.segment_idx_ + (dir == direction::kForward ? 1U : 0U),
-                 utl::zip(polyline, osm_nodes), dir, [&](auto&& x) {
-                   auto const& [pos, osm_node_idx] = x;
+    till_the_end(
+        wc.segment_idx_ + (dir == direction::kForward ? 1U : 0U),
+        utl::zip(polyline, osm_nodes), dir, [&](auto&& x) {
+          auto const& [pos, osm_node_idx] = x;
 
-                   auto const segment_dist = geo::distance(c.path_.back(), pos);
-                   c.dist_to_node_ += segment_dist;
-                   c.cost_ +=
-                       Profile::way_cost(way_prop, flip(search_dir, edge_dir),
-                                         static_cast<distance_t>(segment_dist));
-                   c.path_.push_back(pos);
+          auto const segment_dist = geo::distance(c.path_.back(), pos);
+          c.dist_to_node_ += segment_dist;
+          c.cost_ += Profile::way_cost(way_prop, flip(search_dir, edge_dir),
+                                       static_cast<distance_t>(segment_dist));
+          c.path_.push_back(pos);
 
-                   auto const way_node = ways_.find_node_idx(osm_node_idx);
-                   if (way_node.has_value() &&
-                       (blocked == nullptr || !blocked->test(*way_node))) {
-                     c.node_ = *way_node;
-                     return utl::cflow::kBreak;
-                   }
+          auto const way_node = ways_.find_node_idx(osm_node_idx);
+          if (way_node.has_value()) {
+            c.node_ = *way_node;
+            if (b != nullptr) {
+              auto const total =
+                  c.cost_ + b->get_wait_time(*way_node, start_time + c.cost_);
+              if (total >= std::numeric_limits<cost_t>::max()) {
+                return utl::cflow::kContinue;
+              }
+              c.cost_ = static_cast<cost_t>(total);
+            }
+            return utl::cflow::kBreak;
+          }
 
-                   return utl::cflow::kContinue;
-                 });
+          return utl::cflow::kContinue;
+        });
 
     if (reverse) {
       std::reverse(begin(c.path_), end(c.path_));
