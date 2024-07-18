@@ -241,7 +241,7 @@
 </div>
 <div id="journey-info"></div>
 <script type="module">
-    import {style} from "./style.js";
+    import { style, setStyleLayerFilters } from "./style.js";
 
     const start = [8.663205312233744, 50.106847864540164];
     const destination = [8.665205312233744, 50.106847864540164];
@@ -552,7 +552,6 @@
                 'Content-Type': 'application/json'
             },
             body: JSON.stringify({
-                level: currentLevel,
                 waypoints: bounds.toArray().flat(),
                 profile: query.profile,
             })
@@ -580,12 +579,49 @@
 
     const levelsDom = document.getElementById('levels');
 
+    const updateRenderedMapLevels = () => {
+        setStyleLayerFilters(map, currentLevel);
+        const filter = [
+            'any',
+            ['==', 'level', currentLevel],
+        ]
+        map.setFilter('path-outline', [
+            'any',
+            ['==', 'level', currentLevel],
+        ])
+        map.setFilter('path', [
+            'any',
+            ['==', 'level', currentLevel],
+        ])
+        map.setFilter('graph-node', [
+            'all',
+            ['in', currentLevel, ['get', 'levels']]
+        ])
+        map.setFilter('graph-geometry', [
+            'all',
+            ['==', 'type', 'geometry'],
+            [
+                'any',
+                ['==', 'from_level', currentLevel],
+                ['==', 'to_level', currentLevel],
+            ],
+        ])
+        map.setFilter('graph-edge', [
+            'all',
+            ['==', 'type', 'edge'],
+            [
+                'any',
+                ['==', 'from_level', currentLevel],
+                ['==', 'to_level', currentLevel],
+            ],
+        ])
+
+    }
+
     const setLevels = async (levels) => {
         if (levels.length === 0 && currentLevel !== 0) {
             currentLevel = 0;
-            style(map, 0);
-            await addRouting();
-            await toggleGraph(false);
+            updateRenderedMapLevels();
         }
 
         levelsDom.innerHTML = '';
@@ -606,9 +642,7 @@
                 currentLeveLButton?.classList.remove('active');
                 currentLeveLButton = levelButton;
                 levelButton.classList.add('active');
-                style(map, l);
-                await addRouting();
-                await toggleGraph(false);
+                updateRenderedMapLevels();
             };
 
             levelsDom.appendChild(levelButton);
@@ -631,11 +665,6 @@
                 'line-join': 'round',
                 'line-cap': 'round',
             },
-            'filter': [
-                'any',
-                ['!has', 'level'],
-                ['==', 'level', currentLevel]
-            ],
             'paint': {
                 'line-color': ['interpolate-lab', ['linear'], ['/', ['number', ['get', 'cost'], 0], ['max', ['number', ['get', 'distance'], 1], 1]], 0, 'green', 0.25, 'darkorange', 0.5, 'chocolate', 1, 'darkred'],
                 'line-width': 12,
@@ -650,11 +679,6 @@
                 'line-join': 'round',
                 'line-cap': 'round',
             },
-            'filter': [
-                'any',
-                ['!has', 'level'],
-                ['==', 'level', currentLevel]
-            ],
             'paint': {
                 'line-color': ['match', ['get', 'type', ['get', 'to_node']], 'foot', 'lightcyan', 'bike', 'cyan', 'car', 'skyblue', 'lightcyan'],
                 'line-width': 5,
@@ -675,15 +699,6 @@
             'id': 'graph-geometry',
             'type': 'line',
             'source': 'graph',
-            'filter': [
-                'all',
-                ['==', 'type', 'geometry'],
-                [
-                    'any',
-                    ['!has', 'level'],
-                    ['==', 'level', currentLevel]
-                ]
-            ],
             'layout': {
                 'line-join': 'round',
                 'line-cap': 'round',
@@ -697,15 +712,6 @@
             'id': 'graph-edge',
             'type': 'line',
             'source': 'graph',
-            'filter': [
-                'all',
-                ['==', 'type', 'edge'],
-                [
-                    'any',
-                    ['!has', 'level'],
-                    ['==', 'level', currentLevel]
-                ]
-            ],
             'layout': {
                 'line-join': 'round',
                 'line-cap': 'round',
@@ -718,10 +724,6 @@
             'id': 'graph-node',
             'type': 'circle',
             'source': 'graph',
-            'filter': [
-                'all',
-                ['==', '$type', 'Point']
-            ],
             'paint': {
                 'circle-radius': 6,
             }
@@ -838,6 +840,7 @@
         addGraph();
         addRouting();
         await updateRoute();
+        updateRenderedMapLevels();
         setGraphNodeHighlighting();
         setGraphEdgeHiglighting();
     });

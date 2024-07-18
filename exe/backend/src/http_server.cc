@@ -217,9 +217,6 @@ struct http_server::impl {
   void handle_graph(web_server::http_req_t const& req,
                     web_server::http_res_cb_t const& cb) {
     auto const query = boost::json::parse(req.body()).as_object();
-    auto const level = query.contains("level")
-                           ? to_level(query.at("level").to_number<float>())
-                           : level_t::invalid();
     auto const waypoints = query.at("waypoints").as_array();
     auto const profile = get_search_profile_from_request(query);
     auto const min = point::from_latlng(
@@ -229,31 +226,7 @@ struct http_server::impl {
 
     auto gj = geojson_writer{.w_ = w_};
     l_.find(min, max, [&](way_idx_t const w) {
-      if (level == level_t::invalid()) {
         gj.write_way(w);
-        return;
-      }
-
-      auto const way_prop = w_.r_->way_properties_[w];
-      if (way_prop.is_elevator()) {
-        auto const n = w_.r_->way_nodes_[w][0];
-        auto const np = w_.r_->node_properties_[n];
-        if (np.is_multi_level()) {
-          auto has_level = false;
-          for_each_set_bit(
-              foot<true>::get_elevator_multi_levels(*w_.r_, n),
-              [&](auto&& bit) { has_level |= (level == level_t{bit}); });
-          if (has_level) {
-            gj.write_way(w);
-            return;
-          }
-        }
-      }
-
-      if (way_prop.from_level() == level || way_prop.to_level() == level) {
-        gj.write_way(w);
-        return;
-      }
     });
 
     switch (profile) {
