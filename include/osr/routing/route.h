@@ -54,6 +54,8 @@ search_profile to_profile(std::string_view s) {
     case cista::hash("bike"): return search_profile::kBike;
     case cista::hash("car"): return search_profile::kCar;
     case cista::hash("car_parking"): return search_profile::kCarParking;
+    case cista::hash("car_parking_wheelchair"):
+      return search_profile::kCarParkingWheelchair;
   }
   throw utl::fail("{} is not a valid profile", s);
 }
