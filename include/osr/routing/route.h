@@ -39,6 +39,7 @@ struct path {
   cost_t cost_{kInfeasible};
   double dist_{0.0};
   std::vector<segment> segments_{};
+  bool uses_elevator_{false};
 };
 
 struct connecting_way {

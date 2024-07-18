@@ -1,10 +1,11 @@
 #pragma once
 
+#include "osr/routing/tracking.h"
 #include "osr/ways.h"
 
 namespace osr {
 
-template <bool IsWheelchair>
+template <bool IsWheelchair, typename Tracking = noop_tracking>
 struct foot {
   static constexpr auto const kMaxMatchDistance = 100U;
   static constexpr auto const kOffroadPenalty = 3U;
@@ -29,6 +30,22 @@ struct foot {
 
   using key = node;
 
+  struct label {
+    label(node const n, cost_t const c) : n_{n.n_}, cost_{c}, lvl_{n.lvl_} {}
+
+    constexpr node get_node() const noexcept { return {n_, lvl_}; }
+    constexpr cost_t cost() const noexcept { return cost_; }
+
+    void track(ways::routing const& r, way_idx_t const w, node_idx_t const n) {
+      tracking_.track(r, w, n);
+    }
+
+    node_idx_t n_;
+    cost_t cost_;
+    level_t lvl_;
+    [[no_unique_address]] Tracking tracking_;
+  };
+
   struct entry {
     constexpr std::optional<node> pred(node) const noexcept {
       return pred_ == node_idx_t::invalid()
@@ -36,8 +53,12 @@ struct foot {
                  : std::optional{node{pred_, pred_lvl_}};
     }
     constexpr cost_t cost(node) const noexcept { return cost_; }
-    constexpr bool update(node, cost_t const c, node const pred) noexcept {
+    constexpr bool update(label const& l,
+                          node,
+                          cost_t const c,
+                          node const pred) noexcept {
       if (c < cost_) {
+        tracking_ = l.tracking_;
         cost_ = c;
         pred_ = pred.n_;
         pred_lvl_ = pred.lvl_;
@@ -46,20 +67,12 @@ struct foot {
       return false;
     }
 
+    void write(node, path& p) const { tracking_.write(p); }
+
     node_idx_t pred_{node_idx_t::invalid()};
-    level_t pred_lvl_;
     cost_t cost_{kInfeasible};
-  };
-
-  struct label {
-    label(node const n, cost_t const c) : n_{n.n_}, lvl_{n.lvl_}, cost_{c} {}
-
-    constexpr node get_node() const noexcept { return {n_, lvl_}; }
-    constexpr cost_t cost() const noexcept { return cost_; }
-
-    node_idx_t n_;
-    level_t lvl_;
-    cost_t cost_;
+    level_t pred_lvl_;
+    [[no_unique_address]] Tracking tracking_;
   };
 
   struct hash {

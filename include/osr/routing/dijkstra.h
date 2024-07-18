@@ -26,7 +26,7 @@ struct dijkstra {
   }
 
   void add_start(label const l) {
-    if (cost_[l.get_node().get_key()].update(l.get_node(), l.cost(),
+    if (cost_[l.get_node().get_key()].update(l, l.get_node(), l.cost(),
                                              node::invalid())) {
       pq_.push(l);
     }
@@ -51,12 +51,14 @@ struct dijkstra {
       Profile::template adjacent<SearchDir, WithBlocked>(
           r, curr, blocked,
           [&](node const neighbor, std::uint32_t const cost, distance_t,
-              way_idx_t, std::uint16_t, std::uint16_t) {
+              way_idx_t const way, std::uint16_t, std::uint16_t) {
             auto const total = l.cost() + cost;
             if (total < max &&
                 cost_[neighbor.get_key()].update(
-                    neighbor, static_cast<cost_t>(total), curr)) {
-              pq_.push(label{neighbor, static_cast<cost_t>(total)});
+                    l, neighbor, static_cast<cost_t>(total), curr)) {
+              auto next = label{neighbor, static_cast<cost_t>(total)};
+              next.track(r, way, neighbor.get_node());
+              pq_.push(std::move(next));
             }
           });
     }

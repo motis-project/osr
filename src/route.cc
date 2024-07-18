@@ -155,9 +155,11 @@ path reconstruct(ways const& w,
                       .to_level_ = start_node.lvl_,
                       .way_ = way_idx_t::invalid()});
   std::reverse(begin(segments), end(segments));
-  return {.cost_ = cost,
-          .dist_ = start_node.dist_to_node_ + dist + dest.dist_to_node_,
-          .segments_ = segments};
+  auto p = path{.cost_ = cost,
+                .dist_ = start_node.dist_to_node_ + dist + dest.dist_to_node_,
+                .segments_ = segments};
+  d.cost_.at(dest_node.get_key()).write(dest_node, p);
+  return p;
 }
 
 template <typename Profile>
@@ -370,8 +372,8 @@ std::optional<path> route(ways const& w,
       return route(w, l, get_dijkstra<foot<false>>(), from, to, max, dir,
                    max_match_distance, blocked);
     case search_profile::kWheelchair:
-      return route(w, l, get_dijkstra<foot<true>>(), from, to, max, dir,
-                   max_match_distance, blocked);
+      return route(w, l, get_dijkstra<foot<true, elevator_tracking>>(), from,
+                   to, max, dir, max_match_distance, blocked);
     case search_profile::kBike:
       return route(w, l, get_dijkstra<bike>(), from, to, max, dir,
                    max_match_distance, blocked);

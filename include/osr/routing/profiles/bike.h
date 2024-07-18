@@ -1,5 +1,6 @@
 #pragma once
 
+#include "osr/routing/route.h"
 #include "osr/ways.h"
 
 namespace osr {
@@ -27,30 +28,13 @@ struct bike {
 
   using key = node;
 
-  struct entry {
-    constexpr std::optional<node> pred(node) const noexcept {
-      return pred_ == node_idx_t::invalid() ? std::nullopt
-                                            : std::optional{node{pred_}};
-    }
-    constexpr cost_t cost(node) const noexcept { return cost_; }
-    constexpr bool update(node, cost_t const c, node const pred) noexcept {
-      if (c < cost_) {
-        cost_ = c;
-        pred_ = pred.n_;
-        return true;
-      }
-      return false;
-    }
-
-    node_idx_t pred_{node_idx_t::invalid()};
-    cost_t cost_{kInfeasible};
-  };
-
   struct label {
     label(node const n, cost_t const c) : n_{n.n_}, cost_{c} {}
 
     constexpr node get_node() const noexcept { return {n_}; }
     constexpr cost_t cost() const noexcept { return cost_; }
+
+    void track(ways::routing const&, way_idx_t, node_idx_t) {}
 
     node_idx_t n_;
     level_t lvl_;
@@ -63,6 +47,30 @@ struct bike {
       using namespace ankerl::unordered_dense::detail;
       return wyhash::hash(static_cast<std::uint64_t>(to_idx(n.n_)));
     }
+  };
+
+  struct entry {
+    constexpr std::optional<node> pred(node) const noexcept {
+      return pred_ == node_idx_t::invalid() ? std::nullopt
+                                            : std::optional{node{pred_}};
+    }
+    constexpr cost_t cost(node) const noexcept { return cost_; }
+    constexpr bool update(label const&,
+                          node,
+                          cost_t const c,
+                          node const pred) noexcept {
+      if (c < cost_) {
+        cost_ = c;
+        pred_ = pred.n_;
+        return true;
+      }
+      return false;
+    }
+
+    void write(node, path&) const {}
+
+    node_idx_t pred_{node_idx_t::invalid()};
+    cost_t cost_{kInfeasible};
   };
 
   template <typename Fn>
