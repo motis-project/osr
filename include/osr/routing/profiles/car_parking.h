@@ -50,6 +50,7 @@ struct car_parking {
       return out << "(node=" << w.node_to_osm_[n_]
                  << ", level=" << to_float(lvl_) << ", dir=" << to_str(dir_)
                  << ", way=" << w.way_osm_idx_[w.r_->node_ways_[n_][way_]]
+                 << ", type=" << node_type_to_str(type_)
                  << ")";
     }
 
@@ -69,7 +70,7 @@ struct car_parking {
       return type_ == node_type::kInvalid;
     }
 
-    node_idx_t n_;
+    node_idx_t n_{node_idx_t::invalid()};
     node_type type_;
     level_t lvl_;
     direction dir_;
@@ -185,10 +186,10 @@ struct car_parking {
     return {.n_ = n.n_, .lvl_ = n.lvl_};
   }
 
-  static node to_node(car::node const n) {
+  static node to_node(car::node const n, level_t const lvl) {
     return {.n_ = n.n_,
             .type_ = node_type::kCar,
-            .lvl_ = level_t::invalid(),
+            .lvl_ = lvl,
             .dir_ = n.dir_,
             .way_ = n.way_};
   }
@@ -206,8 +207,12 @@ struct car_parking {
                           node_idx_t const n,
                           level_t const lvl,
                           Fn&& f) {
-    foot::resolve_all(w, n, lvl, [&](foot::node const n) { f(to_node(n)); });
-    car::resolve_all(w, n, lvl, [&](car::node const n) { f(to_node(n)); });
+    foot::resolve_all(w, n, lvl, [&](foot::node const neighbor) { f(to_node(neighbor)); });
+    car::resolve_all(w, n, lvl, [&](car::node const neighbor) {
+      auto const p = w.way_properties_[w.node_ways_[n][neighbor.way_]];
+      auto const node_level = lvl == level_t::invalid() ? p.from_level() : lvl;
+      f(to_node(neighbor, node_level));
+    });
   }
 
   template <direction SearchDir, typename Fn>
@@ -235,7 +240,9 @@ struct car_parking {
           [&](car::node const neighbor, std::uint32_t const cost,
               distance_t const dist, way_idx_t const way,
               std::uint16_t const from, std::uint16_t const to) {
-            fn(to_node(neighbor), cost + (n.is_car_node() ? 0 : kSwitchPenalty),
+            auto const way_prop = w.way_properties_[way];
+            auto const target_level = way_prop.from_level() == n.lvl_ ? way_prop.to_level() : way_prop.from_level();
+            fn(to_node(neighbor, target_level), cost + (n.is_car_node() ? 0 : kSwitchPenalty),
                dist, way, from, to);
           });
     }
@@ -248,9 +255,13 @@ struct car_parking {
                                  level_t lvl,
                                  direction search_dir,
                                  Fn&& f) {
+    auto const way_properties = w.way_properties_[way];
     search_dir == direction::kForward
         ? car::resolve_start_node(w, way, n, lvl, search_dir,
-                                  [&](car::node const n) { f(to_node(n)); })
+                                  [&](car::node const n) {
+                                    auto const node_level = lvl == level_t::invalid() ? way_properties.from_level() : lvl;
+                                    f(to_node(n, node_level));
+                                  })
         : foot::resolve_start_node(w, way, n, lvl, search_dir,
                                    [&](foot::node const n) { f(to_node(n)); });
   }
@@ -261,7 +272,7 @@ struct car_parking {
                                 direction const way_dir,
                                 direction const search_dir) {
     return w.way_properties_[way].is_parking() ||
-           (search_dir == direction::kForward
+           (search_dir == direction::kBackward
                 ? n.is_foot_node() &&
                       foot::is_dest_reachable(w, to_foot(n), way, way_dir,
                                               search_dir)
