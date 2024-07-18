@@ -66,17 +66,7 @@ const sport_outline = "#b3e998";
 const building = "#ded7d3";
 const building_outline = "#cfc8c4";
 
-export const style = (map, level) => {
-    const matchLevel = (expression) => {
-        return ["all",
-                    ["any",
-                        ["!has", "level"],
-                        ["==", ["get", "level"], level]
-                    ],
-                expression
-            ];
-    }
-
+const style = (map, level) => {
     const demSource = new mlcontour.DemSource({
         url: 'https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png',
         encoding: 'terrarium',
@@ -84,6 +74,7 @@ export const style = (map, level) => {
         // offload contour line computation to a web worker
         worker: true
     });
+
     demSource.setupMaplibre(maplibregl);
 
     map.setStyle({
@@ -749,3 +740,74 @@ export const style = (map, level) => {
         );
     }
 };
+
+function setStyleLayerFilters(map, level) {
+    const layersWithLevelFilters = [
+        {
+            id: "indoor-corridor",
+            filter: ["all", ["==", "indoor", "corridor"], ["==", "level", level]]
+        },
+        {
+            id: "indoor",
+            filter: ["all", ["!in", "indoor", "corridor", "wall", "elevator"], ["==", "level", level]]
+        },
+        {
+            id: "indoor-outline",
+            filter: ["all", ["!in", "indoor", "corridor", "wall", "elevator"], ["==", "level", level]]
+        },
+        {
+            id: "indoor-names",
+            filter: ["any", ["!has", "level"], ["==", "level", level]]
+        },
+        {
+            id: "landuse-public-transport",
+            filter: ["all", ["==", "landuse", "public_transport"], ["any", ["!has", "level"], ["==", "level", level]]]
+        },
+        {
+            id: "footway",
+            filter: [
+                "all",
+                ["in", "highway", "footway", "track", "cycleway", "path", "unclassified", "service"],
+                level === 0
+                    ? ["any", ["!has", "level"], ["==", "level", level]]
+                    : ["==", "level", level]
+            ]
+        },
+        {
+            id: "steps",
+            filter: [
+                "all",
+                ["==", "highway", "steps"],
+                level === 0
+                    ? ["any", ["!has", "from_level"], ["any", ["==", "from_level", level], ["==", "to_level", level]]]
+                    : ["any", ["==", "from_level", level], ["==", "to_level", level]]
+            ]
+        },
+        {
+            id: "indoor-elevator-outline",
+            filter: ["all", ["==", "indoor", "elevator"], ["<=", "from_level", level], [">=", "to_level", level]]
+        },
+        {
+            id: "indoor-elevator",
+            filter: ["all", ["==", "indoor", "elevator"], ["<=", "from_level", level], [">=", "to_level", level]]
+        },
+        {
+            id: "indoor-elevator-icon",
+            filter: ["all", ["==", "indoor", "elevator"], ["<=", "from_level", level], [">=", "to_level", level]]
+        },
+        {
+            id: "rail_secondary",
+            filter: ["all", ["==", "rail", "secondary"], ["any", ["!has", "level"], ["==", "level", level]]]
+        },
+        {
+            id: "rail_primary",
+            filter: ["all", ["==", "rail", "primary"], ["any", ["!has", "level"], ["==", "level", level]]]
+        }
+    ];
+
+    layersWithLevelFilters.forEach(layer => {
+        map.setFilter(layer.id, layer.filter);
+    });
+}
+
+export { style, setStyleLayerFilters }
