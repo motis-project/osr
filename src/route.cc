@@ -186,7 +186,11 @@ path reconstruct(ways const& w,
   segments.push_back({.polyline_ = start_node.path_,
                       .from_level_ = start_node.lvl_,
                       .to_level_ = start_node.lvl_,
-                      .way_ = way_idx_t::invalid()});
+                      .way_ = way_idx_t::invalid(),
+                      .cost_ = kInfeasible,
+                      .dist_ = 0,
+                      .from_node_properties_ = {},
+                      .to_node_properties_ = {}});
   std::reverse(begin(segments), end(segments));
   auto p = path{.cost_ = cost,
                 .dist_ = start_node.dist_to_node_ + dist + dest.dist_to_node_,
