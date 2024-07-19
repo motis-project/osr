@@ -259,6 +259,11 @@
             const route = await getRoute();
             map.getSource('path').setData(route);
             meta.classList.remove('error');
+
+            if (graphActive) {
+                map.getSource('graph').setData(await getGraph(map.getBounds()));
+            }
+            
         } catch (e) {
             meta.classList.add('error');
             meta.innerText = e.message;
@@ -755,7 +760,6 @@
     let currentlyHighlightedGraphEdge = undefined;
     const setGraphEdgeHiglighting = () => {
         const selected = graphEdgeHighlightingDomElement.value;
-        console.log(selected, currentlyHighlightedGraphEdge);
 
         if (selected === currentlyHighlightedGraphEdge) {
             return;
@@ -787,20 +791,37 @@
     let currentlyHighlightedGraphNode = undefined;
     const setGraphNodeHighlighting = () => {
         const selected = graphNodeHighlightingDomElement.value;
-        console.log(selected, currentlyHighlightedGraphNode);
 
         if (selected === currentlyHighlightedGraphNode) {
             return;
         }; 
 
         if (selected === '') {
-            map.setPaintProperty('graph-node', 'circle-color', '#ff1150');
+            map.setPaintProperty('graph-node', 'circle-color', [
+                'match',
+                ['get', 'label'],
+                'unreachable', '#ff1150',
+                '#11ffaf'
+            ]);
+            map.setPaintProperty('graph-node', 'circle-stroke-width', 0)
+            map.setPaintProperty('graph-node', 'circle-radius', 6)
         } else {
             map.setPaintProperty('graph-node', 'circle-color', [
                 'case',
-                ['to-boolean', ['get', selected]], 'cyan',
+                ['!=', ['get', 'label'], 'unreachable'], '#11ffaf',
+                ['to-boolean', ['get', selected]], 'orange',
                 '#ff1150',
             ]);
+
+            map.setPaintProperty('graph-node', 'circle-stroke-color', [
+                'case',
+                ['to-boolean', ['get', selected]], 'orange',
+                ['!=', ['get', 'label'], 'unreachable'], '#11ffaf',
+                '#ff1150',
+            ]);
+
+            map.setPaintProperty('graph-node', 'circle-radius', 4);
+            map.setPaintProperty('graph-node', 'circle-stroke-width', 2);
         }
 
         currentlyHighlightedGraphNode = selected;
