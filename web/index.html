@@ -289,7 +289,7 @@
 
     const getDataGrid = (entries, cols = 7) => {
         const grid = document.createElement('div');
-
+        
         grid.classList.add('data-grid');
         grid.style.gridTemplateColumns = `repeat(${cols}, 1fr)`;
 
@@ -297,7 +297,7 @@
             const cardNode = document.createElement('div');
             cardNode.classList.add('data-card');
             cardNode.classList.add(...entry.classes ?? []);
-
+            
             const labelNode = document.createElement('div');
             labelNode.classList.add('data-label');
             labelNode.innerText = entry.label;
@@ -573,8 +573,6 @@
         });
         return await response.json();
     }
-
-    let graph = false;
     let currentLevel = 0;
     let currentLeveLButton = null;
     let graphActive = false;
@@ -623,10 +621,7 @@
     const setLevels = async (levels) => {
         if (levels.length === 0 && currentLevel !== 0) {
             currentLevel = 0;
-            graph = false;
-            style(map, 0);
-            await addRouting();
-            await updateGraph();
+            updateRenderedMapLevels();
         }
 
         levelsDom.innerHTML = '';
@@ -644,10 +639,10 @@
 
             levelButton.onclick = async () => {
                 currentLevel = l;
-                graph = false;
-                style(map, l);
-                await addRouting();
-                await updateGraph();
+                currentLeveLButton?.classList.remove('active');
+                currentLeveLButton = levelButton;
+                levelButton.classList.add('active');
+                updateRenderedMapLevels();
             };
 
             levelsDom.appendChild(levelButton);
@@ -692,6 +687,49 @@
         });
     }
 
+    const addGraph = () => {
+        map.addSource('graph', {
+            type: 'geojson',
+            data: {
+                type: 'FeatureCollection',
+                features: []
+            },
+        });
+        map.addLayer({
+            'id': 'graph-geometry',
+            'type': 'line',
+            'source': 'graph',
+            'layout': {
+                'line-join': 'round',
+                'line-cap': 'round',
+            },
+            'paint': {
+                'line-width': 3,
+                'line-opacity': 1
+            }
+        });
+        map.addLayer({
+            'id': 'graph-edge',
+            'type': 'line',
+            'source': 'graph',
+            'layout': {
+                'line-join': 'round',
+                'line-cap': 'round',
+            },
+            'paint': {
+                'line-width': 3
+            }
+        });
+        map.addLayer({
+            'id': 'graph-node',
+            'type': 'circle',
+            'source': 'graph',
+            'paint': {
+                'circle-radius': 6,
+            }
+        });
+    }
+
     const updateLevels = async () => {
         if (map.getZoom() < 18) {
             setLevels([]);
@@ -700,96 +738,112 @@
         }
     }
 
+    const graphToggle = document.getElementById("graph-toggle");
+    const toggleGraph = async (setTo = !graphActive) => {
+        if (setTo === graphActive) {
+            return;
+        }
+
+        graphActive = setTo;
+
+        if (graphActive) {
+            graphToggle.classList.add('active');
+            map.getSource('graph').setData(await getGraph(map.getBounds()));
+            map.setLayoutProperty('graph-node', 'visibility', 'visible');
+            map.setLayoutProperty('graph-edge', 'visibility', 'visible');
+            map.setLayoutProperty('graph-geometry', 'visibility', 'visible');
+        } else {
+            graphToggle.classList.remove('active');
+            map.setLayoutProperty('graph-node', 'visibility', 'none');
+            map.setLayoutProperty('graph-edge', 'visibility', 'none');
+            map.setLayoutProperty('graph-geometry', 'visibility', 'none');
+        }
+    }
+
+    const graphEdgeHighlightingDomElement = document.getElementById('graph-edge-highlighting');
+    let currentlyHighlightedGraphEdge = undefined;
+    const setGraphEdgeHiglighting = () => {
+        const selected = graphEdgeHighlightingDomElement.value;
+
+        if (selected === currentlyHighlightedGraphEdge) {
+            return;
+        }; 
+
+        if (selected === '') {
+            map.setPaintProperty('graph-edge', 'line-color', '#a300d9');
+            map.setPaintProperty('graph-geometry', 'line-color', '#e55e5e');
+        } else {
+            map.setPaintProperty('graph-edge', 'line-color', [
+                'case',
+                ['to-boolean', ['get', selected]], 'cyan',
+                '#a300d9',
+            ]);
+
+            map.setPaintProperty('graph-geometry', 'line-color', [
+                'case',
+                ['to-boolean', ['get', selected]], 'cyan',
+                '#e55e5e',
+            ]);
+        }
+
+        currentlyHighlightedGraphEdge = selected;
+    }
+
+    window.setGraphEdgeHiglighting = setGraphEdgeHiglighting;
+
+    const graphNodeHighlightingDomElement = document.getElementById('graph-node-highlighting');
+    let currentlyHighlightedGraphNode = undefined;
+    const setGraphNodeHighlighting = () => {
+        const selected = graphNodeHighlightingDomElement.value;
+
+        if (selected === currentlyHighlightedGraphNode) {
+            return;
+        }; 
+
+        if (selected === '') {
+            map.setPaintProperty('graph-node', 'circle-color', [
+                'match',
+                ['get', 'label'],
+                'unreachable', '#ff1150',
+                '#11ffaf'
+            ]);
+            map.setPaintProperty('graph-node', 'circle-stroke-width', 0)
+            map.setPaintProperty('graph-node', 'circle-radius', 6)
+        } else {
+            map.setPaintProperty('graph-node', 'circle-color', [
+                'case',
+                ['!=', ['get', 'label'], 'unreachable'], '#11ffaf',
+                ['to-boolean', ['get', selected]], 'orange',
+                '#ff1150',
+            ]);
+
+            map.setPaintProperty('graph-node', 'circle-stroke-color', [
+                'case',
+                ['to-boolean', ['get', selected]], 'orange',
+                ['!=', ['get', 'label'], 'unreachable'], '#11ffaf',
+                '#ff1150',
+            ]);
+
+            map.setPaintProperty('graph-node', 'circle-radius', 4);
+            map.setPaintProperty('graph-node', 'circle-stroke-width', 2);
+        }
+
+        currentlyHighlightedGraphNode = selected;
+    }
+
+    window.setGraphNodeHighlighting = setGraphNodeHighlighting;
+
+
     map.on('load', async () => {
         style(map, 0);
         await updateLevels();
-        await addRouting();
+        addGraph();
+        addRouting();
+        await updateRoute();
+        updateRenderedMapLevels();
+        setGraphNodeHighlighting();
+        setGraphEdgeHiglighting();
     });
-
-    const updateGraph = async () => {
-        if (!graphActive && graph) {
-            graph = false;
-            try {
-                graphToggle.classList.remove('active');
-                map.removeLayer('graph-geometry');
-                map.removeLayer('graph-edge');
-                map.removeLayer('graph-node');
-                map.removeSource('graph');
-            } catch (e) {
-                // ignore, already removed
-            }
-        } else if (graphActive && !graph) {
-            graph = true;
-            graphToggle.classList.add('active');
-            map.addSource('graph', {
-                type: 'geojson',
-                data: await getGraph(map.getBounds())
-            });
-            map.addLayer({
-                'id': 'graph-geometry',
-                'type': 'line',
-                'source': 'graph',
-                'filter': [
-                    'all',
-                    ['==', 'type', 'geometry'],
-                    [
-                        'any',
-                        ['!has', 'level'],
-                        ['==', 'level', currentLevel]
-                    ]
-                ],
-                'layout': {
-                    'line-join': 'round',
-                    'line-cap': 'round',
-                },
-                'paint': {
-                    'line-color': '#e55e5e',
-                    'line-width': 3,
-                    'line-opacity': 1
-                }
-            });
-            map.addLayer({
-                'id': 'graph-edge',
-                'type': 'line',
-                'source': 'graph',
-                'filter': [
-                    'all',
-                    ['==', 'type', 'edge'],
-                    [
-                        'any',
-                        ['!has', 'level'],
-                        ['==', 'level', currentLevel]
-                    ]
-                ],
-                'layout': {
-                    'line-join': 'round',
-                    'line-cap': 'round',
-                },
-                'paint': {
-                    'line-color': '#a300d9',
-                    'line-width': 3
-                }
-            });
-            map.addLayer({
-                'id': 'graph-node',
-                'type': 'circle',
-                'source': 'graph',
-                'filter': [
-                    'all',
-                    ['==', '$type', 'Point']
-                ],
-                'paint': {
-                    'circle-color': [
-                        'match',
-                        ['get', 'label'],
-                        'unreachable', '#ff1150',
-                        '#11ffaf'
-                    ],
-                    'circle-radius': 6,
-                }
-            });
-        }
-    }
 
     window.toggleGraph = async () => {
         await toggleGraph();
@@ -829,16 +883,25 @@
         updateLevels();
     });
 
-    ['graph-node', 'graph-edge', 'graph-geometry'].forEach((layer) => {
-        map.on('click', layer, (e) => {
-            new maplibregl.Popup()
-                .setLngLat(e.lngLat)
-                .setDOMContent(toTable(e.features[0].properties))
-                .addTo(map);
-            e.originalEvent.stopPropagation();
+    map.on('click', (e) => {
+        
+        const features = map.queryRenderedFeatures(e.point, {
+            layers: ['graph-node', 'graph-edge', 'graph-geometry', 'path-outline']
         });
 
+        if (features.length === 0) {
+            return;
+        }
 
+        new maplibregl.Popup()
+            .setLngLat(e.lngLat)
+            .setMaxWidth('30vw')
+            .setDOMContent(getInfoPopupContent(features))
+            .addTo(map);
+
+    });
+
+    
     ['graph-node', 'graph-edge', 'graph-geometry', 'path-outline'].forEach(layer => {
         map.on('mouseenter', layer, () => {
             map.getCanvas().style.cursor = 'pointer';
