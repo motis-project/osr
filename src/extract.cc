@@ -565,8 +565,11 @@ void extract(bool const with_platforms,
   w.add_restriction(r);
 
   utl::sort(w.r_->multi_level_elevators_);
-  utl::sort(pl->node_pos_,
-            [](auto&& a, auto&& b) { return a.first < b.first; });
+
+  if (pl) {
+    utl::sort(pl->node_pos_,
+              [](auto&& a, auto&& b) { return a.first < b.first; });
+  }
 
   w.r_->write(out);
 }
