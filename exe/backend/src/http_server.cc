@@ -98,14 +98,17 @@ struct http_server::impl {
     return *s.get();
   }
 
+  search_profile get_search_profile_from_request(boost::json::object const& q) {
+    auto const profile_it = q.find("profile");
+    return profile_it == q.end() || !profile_it->value().is_string()
+               ? search_profile::kFoot
+               : to_profile(profile_it->value().as_string());
+  }
+
   void handle_route(web_server::http_req_t const& req,
                     web_server::http_res_cb_t const& cb) {
     auto const q = boost::json::parse(req.body()).as_object();
-    auto const profile_it = q.find("profile");
-    auto const profile =
-        to_profile(profile_it == q.end() || !profile_it->value().is_string()
-                       ? to_str(search_profile::kFoot)
-                       : profile_it->value().as_string());
+    auto const profile = get_search_profile_from_request(q);
     auto const direction_it = q.find("direction");
     auto const direction = to_direction(
         direction_it == q.end() || !direction_it->value().is_string()
@@ -218,6 +221,7 @@ struct http_server::impl {
                            ? to_level(query.at("level").to_number<float>())
                            : level_t::invalid();
     auto const waypoints = query.at("waypoints").as_array();
+    auto const profile = get_search_profile_from_request(query);
     auto const min = point::from_latlng(
         {waypoints[1].as_double(), waypoints[0].as_double()});
     auto const max = point::from_latlng(
@@ -252,7 +256,30 @@ struct http_server::impl {
       }
     });
 
-    cb(json_response(req, gj.finish(get_dijkstra<car_parking<false>>())));
+    switch (profile) {
+      case search_profile::kFoot:
+        send_graph_response<foot<false>>(req, cb, gj);
+        break;
+      case search_profile::kWheelchair:
+        send_graph_response<foot<true>>(req, cb, gj);
+        break;
+      case search_profile::kBike: send_graph_response<bike>(req, cb, gj); break;
+      case search_profile::kCar: send_graph_response<car>(req, cb, gj); break;
+      case search_profile::kCarParking:
+        send_graph_response<car_parking<false>>(req, cb, gj);
+        break;
+      case search_profile::kCarParkingWheelchair:
+        send_graph_response<car_parking<true>>(req, cb, gj);
+        break;
+      default: throw utl::fail("not implemented");
+    }
+  }
+
+  template <typename Profile>
+  void send_graph_response(web_server::http_req_t const& req,
+                           web_server::http_res_cb_t const& cb,
+                           geojson_writer& gj) {
+    cb(json_response(req, gj.finish(get_dijkstra<Profile>())));
   }
 
   void handle_static(web_server::http_req_t const& req,

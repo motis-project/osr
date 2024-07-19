@@ -263,7 +263,7 @@
             if (graphActive) {
                 map.getSource('graph').setData(await getGraph(map.getBounds()));
             }
-            
+
         } catch (e) {
             meta.classList.add('error');
             meta.innerText = e.message;
@@ -552,7 +552,8 @@
             },
             body: JSON.stringify({
                 level: currentLevel,
-                waypoints: bounds.toArray().flat()
+                waypoints: bounds.toArray().flat(),
+                profile: query.profile,
             })
         });
         return await response.json();
