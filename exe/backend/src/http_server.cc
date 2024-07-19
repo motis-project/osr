@@ -153,42 +153,36 @@ struct http_server::impl {
                       location const to,
                       cost_t const max,
                       direction const dir) {
-    auto p = route(w_, l_, get_dijkstra<Profile>(), from, to, max, dir);
-
+    auto const p = route(w_, l_, get_dijkstra<Profile>(), from, to, max, dir);
     if (!p.has_value()) {
       cb(json_response(req, "could not find a valid path",
                        http::status::not_found));
       return;
     }
-
-    auto to_feature = [&](const path::segment& s) {
-      return json::object{
-          {"type", "Feature"},
-          {
-              "properties",
-              {{"level", to_float(s.from_level_)},
-               {"osm_way_id", s.way_ == way_idx_t::invalid()
-                                  ? 0U
-                                  : to_idx(w_.way_osm_idx_[s.way_])},
-               {"cost", s.cost_},
-               {"distance", s.dist_},
-               {"from_node", s.from_node_properties_},
-               {"to_node", s.to_node_properties_}},
-          },
-          {"geometry", to_line_string(s.polyline_)}};
-    };
-
-    auto feature_collection_meta_data =
-        json::value{{"duration", p->cost_}, {"distance", p->dist_}};
-    auto features = utl::all(p->segments_) | utl::transform(to_feature) |
-                    utl::emplace_back_to<json::array>();
-
-    auto feature_collection =
-        json::object{{"type", "FeatureCollection"},
-                     {"metadata", feature_collection_meta_data},
-                     {"features", features}};
-
-    cb(json_response(req, json::serialize(feature_collection)));
+    cb(json_response(
+        req,
+        json::serialize(json::object{
+            {"type", "FeatureCollection"},
+            {"metadata", {{"duration", p->cost_}, {"distance", p->dist_}}},
+            {"features", utl::all(p->segments_) |
+                             utl::transform([&](const path::segment& s) {
+                               return json::object{
+                                   {"type", "Feature"},
+                                   {
+                                       "properties",
+                                       {{"level", to_float(s.from_level_)},
+                                        {"osm_way_id",
+                                         s.way_ == way_idx_t::invalid()
+                                             ? 0U
+                                             : to_idx(w_.way_osm_idx_[s.way_])},
+                                        {"cost", s.cost_},
+                                        {"distance", s.dist_},
+                                        {"from_node", s.from_node_properties_},
+                                        {"to_node", s.to_node_properties_}},
+                                   },
+                                   {"geometry", to_line_string(s.polyline_)}};
+                             }) |
+                             utl::emplace_back_to<json::array>()}})));
   }
 
   void handle_levels(web_server::http_req_t const& req,
