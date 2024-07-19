@@ -18,7 +18,7 @@ struct foot {
     }
     constexpr node_idx_t get_node() const noexcept { return n_; }
 
-    boost::json::object geojson_properties(ways const& w) const {
+    boost::json::object geojson_properties(ways const&) const {
       return boost::json::object{{"node_id", n_.v_}, {"type", "foot"}};
     }
 

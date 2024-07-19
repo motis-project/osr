@@ -8,6 +8,7 @@
 
 #include "osr/routing/profiles/car.h"
 #include "osr/routing/profiles/foot.h"
+#include "osr/routing/route.h"
 #include "osr/ways.h"
 
 namespace osr {
@@ -76,6 +77,32 @@ struct car_parking {
     way_pos_t way_;
   };
 
+  struct label {
+    label(node const n, cost_t const c)
+        : n_{n.n_},
+          cost_{c},
+          type_{n.type_},
+          lvl_{n.lvl_},
+          dir_{n.dir_},
+          way_(n.way_) {}
+
+    constexpr node get_node() const noexcept {
+      return {
+          .n_ = n_, .type_ = type_, .lvl_ = lvl_, .dir_ = dir_, .way_ = way_};
+    }
+
+    constexpr cost_t cost() const noexcept { return cost_; }
+
+    void track(ways::routing const&, way_idx_t, node_idx_t) {}
+
+    node_idx_t n_;
+    cost_t cost_;
+    node_type type_;
+    level_t lvl_;
+    direction dir_;
+    way_pos_t way_;
+  };
+
   struct entry {
     static constexpr auto const kMaxWays = way_pos_t{16U};
     static constexpr auto const kN = kMaxWays * 2U + 1 /* FWD+BWD + foot */;
@@ -97,7 +124,8 @@ struct car_parking {
       return cost_[get_index(n)];
     }
 
-    constexpr bool update(node const n,
+    constexpr bool update(label const,
+                          node const n,
                           cost_t const c,
                           node const pred) noexcept {
       auto const idx = get_index(n);
@@ -136,6 +164,8 @@ struct car_parking {
       return t == node_type::kFoot;
     }
 
+    void write(node, path&) const {}
+
     std::array<node_idx_t, kN> pred_;
     std::array<cost_t, kN> cost_;
     std::array<way_pos_t, kN> pred_way_;
@@ -143,30 +173,6 @@ struct car_parking {
     std::bitset<kN> pred_dir_;
     std::bitset<kN> pred_type_;
     std::bitset<kN> pred_parking_;
-  };
-
-  struct label {
-    label(node const n, cost_t const c)
-        : n_{n.n_},
-          cost_{c},
-          type_{n.type_},
-          lvl_{n.lvl_},
-          dir_{n.dir_},
-          way_(n.way_) {}
-
-    constexpr node get_node() const noexcept {
-      return {
-          .n_ = n_, .type_ = type_, .lvl_ = lvl_, .dir_ = dir_, .way_ = way_};
-    }
-
-    constexpr cost_t cost() const noexcept { return cost_; }
-
-    node_idx_t n_;
-    cost_t cost_;
-    node_type type_;
-    level_t lvl_;
-    direction dir_;
-    way_pos_t way_;
   };
 
   struct hash {
@@ -215,16 +221,19 @@ struct car_parking {
     });
   }
 
-  template <direction SearchDir, typename Fn>
-  static void adjacent(ways::routing const& w, node const n, Fn&& fn) {
+  template <direction SearchDir, bool WithBlocked, typename Fn>
+  static void adjacent(ways::routing const& w,
+                       node const n,
+                       bitvec<node_idx_t> const* blocked,
+                       Fn&& fn) {
     static constexpr auto const kFwd = SearchDir == direction::kForward;
     static constexpr auto const kBwd = SearchDir == direction::kBackward;
 
     auto const is_parking = w.node_properties_[n.n_].is_parking();
 
     if (n.is_foot_node() || (kFwd && n.is_car_node() && is_parking)) {
-      foot::template adjacent<SearchDir>(
-          w, to_foot(n),
+      foot::template adjacent<SearchDir, WithBlocked>(
+          w, to_foot(n), blocked,
           [&](foot::node const neighbor, std::uint32_t const cost,
               distance_t const dist, way_idx_t const way,
               std::uint16_t const from, std::uint16_t const to) {
@@ -235,8 +244,8 @@ struct car_parking {
     }
 
     if (n.is_car_node() || (kBwd && n.is_foot_node() && is_parking)) {
-      car::template adjacent<SearchDir>(
-          w, to_car(n),
+      car::template adjacent<SearchDir, WithBlocked>(
+          w, to_car(n), blocked,
           [&](car::node const neighbor, std::uint32_t const cost,
               distance_t const dist, way_idx_t const way,
               std::uint16_t const from, std::uint16_t const to) {
@@ -261,15 +270,16 @@ struct car_parking {
     auto const way_properties = w.way_properties_[way];
     search_dir == direction::kForward
         ? car::resolve_start_node(w, way, n, lvl, search_dir,
-                                  [&](car::node const n) {
+                                  [&](car::node const cn) {
                                     auto const node_level =
                                         lvl == level_t::invalid()
                                             ? way_properties.from_level()
                                             : lvl;
-                                    f(to_node(n, node_level));
+                                    f(to_node(cn, node_level));
                                   })
-        : foot::resolve_start_node(w, way, n, lvl, search_dir,
-                                   [&](foot::node const n) { f(to_node(n)); });
+        : foot::resolve_start_node(
+              w, way, n, lvl, search_dir,
+              [&](foot::node const fn) { f(to_node(fn)); });
   }
 
   static bool is_dest_reachable(ways::routing const& w,

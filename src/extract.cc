@@ -154,9 +154,9 @@ struct way_handler : public osm::handler::Handler {
       return;
     }
 
-    auto const p = (t.is_platform_ || t.is_parking_ || !t.highway_.empty())
-                       ? get_way_properties(t)
-                       : it->second;
+    auto p = (t.is_platform_ || t.is_parking_ || !t.highway_.empty())
+                 ? get_way_properties(t)
+                 : it->second.p_;
     if (!p.is_accessible()) {
       return;
     }

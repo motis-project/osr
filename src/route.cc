@@ -171,7 +171,8 @@ path reconstruct(ways const& w,
     auto const& e = d.cost_.at(n.get_key());
     auto const pred = e.pred(n);
     if (pred.has_value()) {
-      auto const expected_cost = e.cost(n) - d.get_cost(*pred);
+      auto const expected_cost =
+          static_cast<cost_t>(e.cost(n) - d.get_cost(*pred));
       dist += add_path<Profile>(w, *w.r_, blocked, *pred, n, expected_cost,
                                 segments, dir);
     } else {

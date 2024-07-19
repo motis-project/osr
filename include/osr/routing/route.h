@@ -3,6 +3,8 @@
 #include <string_view>
 #include <vector>
 
+#include "boost/json/object.hpp"
+
 #include "osr/lookup.h"
 #include "osr/routing/dijkstra.h"
 #include "osr/types.h"
