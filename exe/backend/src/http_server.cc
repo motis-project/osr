@@ -92,15 +92,6 @@ struct http_server::impl {
     }
   }
 
-  template <typename Profile>
-  dijkstra<Profile>& get_dijkstra() {
-    static auto s = boost::thread_specific_ptr<dijkstra<Profile>>{};
-    if (s.get() == nullptr) {
-      s.reset(new dijkstra<Profile>{});
-    }
-    return *s.get();
-  }
-
   static search_profile get_search_profile_from_request(
       boost::json::object const& q) {
     auto const profile_it = q.find("profile");
