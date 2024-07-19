@@ -98,7 +98,8 @@ struct http_server::impl {
     return *s.get();
   }
 
-  search_profile get_search_profile_from_request(boost::json::object const& q) {
+  static search_profile get_search_profile_from_request(
+      boost::json::object const& q) {
     auto const profile_it = q.find("profile");
     return profile_it == q.end() || !profile_it->value().is_string()
                ? search_profile::kFoot
