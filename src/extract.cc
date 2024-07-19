@@ -1,3 +1,9 @@
+#ifdef _WIN_32
+// Otherwise
+// winnt.h(169): fatal error C1189: #error:  "No Target Architecture"
+#include <windows.h>
+#endif
+
 #include "osr/extract/extract.h"
 
 #include "boost/thread/tss.hpp"
