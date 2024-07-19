@@ -3,12 +3,6 @@
 #include <string_view>
 #include <vector>
 
-#include "fmt/ranges.h"
-
-#include "utl/concat.h"
-#include "utl/power_set_intersection.h"
-#include "utl/to_vec.h"
-
 #include "osr/lookup.h"
 #include "osr/routing/dijkstra.h"
 #include "osr/types.h"
@@ -22,6 +16,8 @@ enum class search_profile : std::uint8_t {
   kWheelchair,
   kBike,
   kCar,
+  kCarParking,
+  kCarParkingWheelchair
 };
 
 search_profile to_profile(std::string_view);
@@ -34,19 +30,16 @@ struct path {
     level_t from_level_;
     level_t to_level_;
     way_idx_t way_;
+    cost_t cost_;
+    distance_t dist_;
+    boost::json::object from_node_properties_;
+    boost::json::object to_node_properties_;
   };
 
   cost_t cost_{kInfeasible};
   double dist_{0.0};
   std::vector<segment> segments_{};
   bool uses_elevator_{false};
-};
-
-struct connecting_way {
-  way_idx_t way_;
-  std::uint16_t from_, to_;
-  bool is_loop_;
-  std::uint16_t distance_;
 };
 
 template <typename Profile>

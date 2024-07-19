@@ -17,6 +17,11 @@ struct foot {
       return {.n_ = node_idx_t::invalid(), .lvl_{level_t::invalid()}};
     }
     constexpr node_idx_t get_node() const noexcept { return n_; }
+
+    boost::json::object geojson_properties(ways const& w) const {
+      return boost::json::object{{"node_id", n_.v_}, {"type", "foot"}};
+    }
+
     constexpr node get_key() const noexcept { return *this; }
 
     std::ostream& print(std::ostream& out, ways const& w) const {
@@ -86,11 +91,12 @@ struct foot {
   };
 
   template <typename Fn>
-  static void resolve(ways::routing const& w,
-                      way_idx_t const way,
-                      node_idx_t const n,
-                      level_t const lvl,
-                      Fn&& f) {
+  static void resolve_start_node(ways::routing const& w,
+                                 way_idx_t const way,
+                                 node_idx_t const n,
+                                 level_t const lvl,
+                                 direction,
+                                 Fn&& f) {
     auto const p = w.way_properties_[way];
     if (lvl == level_t::invalid() ||
         (p.from_level() == lvl || p.to_level() == lvl ||
@@ -182,11 +188,11 @@ struct foot {
     }
   }
 
-  static bool is_reachable(ways::routing const& w,
-                           node const n,
-                           way_idx_t const way,
-                           direction const way_dir,
-                           direction const search_dir) {
+  static bool is_dest_reachable(ways::routing const& w,
+                                node const n,
+                                way_idx_t const way,
+                                direction const way_dir,
+                                direction const search_dir) {
     auto const target_way_prop = w.way_properties_[way];
     if (way_cost(
             target_way_prop,

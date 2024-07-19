@@ -2,9 +2,14 @@
 
 #include "boost/thread/tss.hpp"
 
+#include "utl/concat.h"
+#include "utl/to_vec.h"
+#include "utl/verify.h"
+
 #include "osr/routing/dijkstra.h"
 #include "osr/routing/profiles/bike.h"
 #include "osr/routing/profiles/car.h"
+#include "osr/routing/profiles/car_parking.h"
 #include "osr/routing/profiles/foot.h"
 
 namespace osr {
@@ -15,6 +20,9 @@ search_profile to_profile(std::string_view s) {
     case cista::hash("wheelchair"): return search_profile::kWheelchair;
     case cista::hash("bike"): return search_profile::kBike;
     case cista::hash("car"): return search_profile::kCar;
+    case cista::hash("car_parking"): return search_profile::kCarParking;
+    case cista::hash("car_parking_wheelchair"):
+      return search_profile::kCarParkingWheelchair;
   }
   throw utl::fail("{} is not a valid profile", s);
 }
@@ -25,16 +33,25 @@ std::string_view to_str(search_profile const p) {
     case search_profile::kWheelchair: return "wheelchair";
     case search_profile::kCar: return "car";
     case search_profile::kBike: return "bike";
+    case search_profile::kCarParking: return "car_parking";
+    case search_profile::kCarParkingWheelchair: return "car_parking_wheelchair";
   }
   throw utl::fail("{} is not a valid profile", static_cast<std::uint8_t>(p));
 }
+
+struct connecting_way {
+  way_idx_t way_;
+  std::uint16_t from_, to_;
+  bool is_loop_;
+  std::uint16_t distance_;
+};
 
 template <direction SearchDir, bool WithBlocked, typename Profile>
 connecting_way find_connecting_way(ways const& w,
                                    ways::routing const& r,
                                    bitvec<node_idx_t> const* blocked,
-                                   typename Profile::node const to,
                                    typename Profile::node const from,
+                                   typename Profile::node const to,
                                    cost_t const expected_cost) {
   auto conn = std::optional<connecting_way>{};
   Profile::template adjacent<SearchDir, WithBlocked>(
@@ -93,8 +110,24 @@ double add_path(ways const& w,
   auto active = false;
   auto& segment = path.emplace_back();
   segment.way_ = way;
-  segment.from_level_ = r.way_properties_[way].from_level();
-  segment.to_level_ = r.way_properties_[way].to_level();
+  segment.dist_ = distance;
+  segment.cost_ = expected_cost;
+
+  // when going backwards we have to swap the properties, since we will be
+  // traversing the way in the opposite direction.
+  if (dir == direction::kForward) {
+    segment.from_level_ = r.way_properties_[way].from_level();
+    segment.to_level_ = r.way_properties_[way].to_level();
+
+    segment.from_node_properties_ = from.geojson_properties(w);
+    segment.to_node_properties_ = to.geojson_properties(w);
+  } else {
+    segment.from_level_ = r.way_properties_[way].to_level();
+    segment.to_level_ = r.way_properties_[way].from_level();
+
+    segment.from_node_properties_ = to.geojson_properties(w);
+    segment.to_node_properties_ = from.geojson_properties(w);
+  }
 
   for (auto const [osm_idx, coord] :
        infinite(reverse(utl::zip(w.way_osm_nodes_[way], w.way_polylines_[way]),
@@ -138,9 +171,8 @@ path reconstruct(ways const& w,
     auto const& e = d.cost_.at(n.get_key());
     auto const pred = e.pred(n);
     if (pred.has_value()) {
-      auto const expected_dist =
-          static_cast<cost_t>(e.cost(n) - d.get_cost(*pred));
-      dist += add_path<Profile>(w, *w.r_, blocked, n, *pred, expected_dist,
+      auto const expected_cost = e.cost(n) - d.get_cost(*pred);
+      dist += add_path<Profile>(w, *w.r_, blocked, *pred, n, expected_cost,
                                 segments, dir);
     } else {
       break;
@@ -178,9 +210,9 @@ best_candidate(ways const& w,
     auto best_node = typename Profile::node{};
     auto best_cost = std::numeric_limits<cost_t>::max();
     Profile::resolve_all(*w.r_, x->node_, lvl, [&](auto&& node) {
-      if (!Profile::is_reachable(*w.r_, node, dest.way_,
-                                 flip(opposite(dir), x->way_dir_),
-                                 opposite(dir))) {
+      if (!Profile::is_dest_reachable(*w.r_, node, dest.way_,
+                                      flip(opposite(dir), x->way_dir_),
+                                      opposite(dir))) {
         return;
       }
 
@@ -245,8 +277,8 @@ std::optional<path> route(ways const& w,
   for (auto const& start : from_match) {
     for (auto const* nc : {&start.left_, &start.right_}) {
       if (nc->valid() && nc->cost_ < max) {
-        Profile::resolve(
-            *w.r_, start.way_, nc->node_, from.lvl_,
+        Profile::resolve_start_node(
+            *w.r_, start.way_, nc->node_, from.lvl_, dir,
             [&](auto const node) { d.add_start({node, nc->cost_}); });
       }
     }
@@ -294,8 +326,8 @@ std::vector<std::optional<path>> route(ways const& w,
   for (auto const& start : from_match) {
     for (auto const* nc : {&start.left_, &start.right_}) {
       if (nc->valid() && nc->cost_ < max) {
-        Profile::resolve(
-            *w.r_, start.way_, nc->node_, from.lvl_,
+        Profile::resolve_start_node(
+            *w.r_, start.way_, nc->node_, from.lvl_, dir,
             [&](auto const node) { d.add_start({node, nc->cost_}); });
       }
     }
@@ -354,6 +386,12 @@ std::vector<std::optional<path>> route(ways const& w,
     case search_profile::kCar:
       return route(w, l, get_dijkstra<car>(), from, to, max, dir,
                    max_match_distance, blocked);
+    case search_profile::kCarParking:
+      return route(w, l, get_dijkstra<car_parking<false>>(), from, to, max, dir,
+                   max_match_distance, blocked);
+    case search_profile::kCarParkingWheelchair:
+      return route(w, l, get_dijkstra<car_parking<true>>(), from, to, max, dir,
+                   max_match_distance, blocked);
   }
   throw utl::fail("not implemented");
 }
@@ -379,6 +417,12 @@ std::optional<path> route(ways const& w,
                    max_match_distance, blocked);
     case search_profile::kCar:
       return route(w, l, get_dijkstra<car>(), from, to, max, dir,
+                   max_match_distance, blocked);
+    case search_profile::kCarParking:
+      return route(w, l, get_dijkstra<car_parking<false>>(), from, to, max, dir,
+                   max_match_distance, blocked);
+    case search_profile::kCarParkingWheelchair:
+      return route(w, l, get_dijkstra<car_parking<true>>(), from, to, max, dir,
                    max_match_distance, blocked);
   }
   throw utl::fail("not implemented");

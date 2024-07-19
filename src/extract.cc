@@ -16,7 +16,6 @@
 #include "utl/helpers/algorithm.h"
 #include "utl/parser/arg_parser.h"
 #include "utl/progress_tracker.h"
-#include "utl/to_vec.h"
 
 #include "tiles/osm/hybrid_node_idx.h"
 #include "tiles/osm/tmp_file.h"
@@ -99,6 +98,7 @@ way_properties get_way_properties(tags const& t) {
   p.is_oneway_bike_ = t.oneway_ && !t.not_oneway_bike_;
   p.is_elevator_ = t.is_elevator_;
   p.is_steps_ = (t.highway_ == "steps"sv);
+  p.is_parking_ = t.is_parking_;
   p.speed_limit_ = get_speed_limit(t);
   p.from_level_ = to_idx(from);
   p.to_level_ = to_idx(to);
@@ -117,6 +117,7 @@ std::pair<node_properties, level_bits_t> get_node_properties(tags const& t) {
   p.is_elevator_ = t.is_elevator_;
   p.is_entrance_ = t.is_entrance_;
   p.is_multi_level_ = is_multi;
+  p.is_parking_ = t.is_parking_;
   p.to_level_ = to_idx(to);
   return {p, t.level_bits_};
 }
@@ -146,14 +147,16 @@ struct way_handler : public osm::handler::Handler {
     }
 
     if (!t.is_elevator_ &&  // elevators tagged as building would be landuse
+        !t.is_parking_ &&
         ((it == end(rel_ways_) && t.highway_.empty() && !t.is_platform_) ||
          (t.highway_.empty() && !t.is_platform_ && it != end(rel_ways_) &&
           t.landuse_))) {
       return;
     }
 
-    auto p = (t.is_platform_ || !t.highway_.empty()) ? get_way_properties(t)
-                                                     : it->second.p_;
+    auto const p = (t.is_platform_ || t.is_parking_ || !t.highway_.empty())
+                       ? get_way_properties(t)
+                       : it->second;
     if (!p.is_accessible()) {
       return;
     }

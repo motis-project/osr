@@ -17,6 +17,11 @@ struct bike {
     }
 
     constexpr node_idx_t get_node() const noexcept { return n_; }
+
+    boost::json::object geojson_properties(ways const& w) const {
+      return boost::json::object{{"node_id", n_.v_}, {"type", "bike"}};
+    }
+
     constexpr node get_key() const noexcept { return *this; }
 
     std::ostream& print(std::ostream& out, ways const& w) const {
@@ -74,8 +79,12 @@ struct bike {
   };
 
   template <typename Fn>
-  static void resolve(
-      ways::routing const&, way_idx_t, node_idx_t const n, level_t, Fn&& f) {
+  static void resolve_start_node(ways::routing const&,
+                                 way_idx_t,
+                                 node_idx_t const n,
+                                 level_t,
+                                 direction,
+                                 Fn&& f) {
     f(node{n});
   }
 
@@ -87,7 +96,7 @@ struct bike {
     f(node{n});
   }
 
-  static bool is_reachable(
+  static bool is_dest_reachable(
       ways::routing const&, node, way_idx_t, direction, direction) {
     return true;
   }

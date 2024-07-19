@@ -22,7 +22,7 @@ jobs:
 
       - name: Format files
         run: |
-          find base libs modules test \
+          find exe include src test \
             -type f -a \( -name "*.cc" -o -name "*.h" -o -name ".cuh" -o -name ".cu" \) \
             -print0 | xargs -0 clang-format-17 -i
 

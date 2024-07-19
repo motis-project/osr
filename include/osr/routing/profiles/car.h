@@ -2,6 +2,8 @@
 
 #include <bitset>
 
+#include "boost/json/object.hpp"
+
 #include "utl/helpers/algorithm.h"
 
 #include "osr/routing/route.h"
@@ -24,6 +26,11 @@ struct car {
     }
 
     constexpr node_idx_t get_node() const noexcept { return n_; }
+
+    boost::json::object geojson_properties(ways const& w) const {
+      return boost::json::object{{"node_id", n_.v_}, {"type", "car"}};
+    }
+
     constexpr node_idx_t get_key() const noexcept { return n_; }
 
     void track(ways::routing const&, way_idx_t, node_idx_t) {}
@@ -122,11 +129,12 @@ struct car {
   };
 
   template <typename Fn>
-  static void resolve(ways::routing const& w,
-                      way_idx_t const way,
-                      node_idx_t const n,
-                      level_t,
-                      Fn&& f) {
+  static void resolve_start_node(ways::routing const& w,
+                                 way_idx_t const way,
+                                 node_idx_t const n,
+                                 level_t,
+                                 direction,
+                                 Fn&& f) {
     auto const ways = w.node_ways_[n];
     for (auto i = way_pos_t{0U}; i != ways.size(); ++i) {
       if (ways[i] == way) {
@@ -201,11 +209,11 @@ struct car {
     }
   }
 
-  static bool is_reachable(ways::routing const& w,
-                           node const n,
-                           way_idx_t const way,
-                           direction const way_dir,
-                           direction const search_dir) {
+  static bool is_dest_reachable(ways::routing const& w,
+                                node const n,
+                                way_idx_t const way,
+                                direction const way_dir,
+                                direction const search_dir) {
     auto const target_way_prop = w.way_properties_[way];
     if (way_cost(target_way_prop, way_dir, 0U) == kInfeasible) {
       return false;

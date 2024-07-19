@@ -17,7 +17,15 @@ struct tags {
     for (auto const& t : o.tags()) {
       switch (cista::hash(std::string_view{t.key()})) {
         using namespace std::string_view_literals;
-        case cista::hash("building"): [[fallthrough]];
+        case cista::hash("parking"): is_parking_ = true; break;
+        case cista::hash("amenity"):
+          is_parking_ |=
+              (t.value() == "parking"sv || t.value() == "parking_entrance"sv);
+          break;
+        case cista::hash("building"):
+          is_parking_ |= t.value() == "parking"sv;
+          landuse_ = true;
+          break;
         case cista::hash("landuse"): landuse_ = true; break;
         case cista::hash("railway"):
           landuse_ |= t.value() == "station_area"sv;
@@ -31,7 +39,7 @@ struct tags {
           break;
         case cista::hash("motor_vehicle"):
           motor_vehicle_ = t.value();
-          is_destination_ |= motor_vehicle_ == "destination";
+          is_destination_ |= motor_vehicle_ == "destination"sv;
           break;
         case cista::hash("foot"): foot_ = t.value(); break;
         case cista::hash("bicycle"): bicycle_ = t.value(); break;
@@ -166,6 +174,9 @@ struct tags {
   // https://wiki.openstreetmap.org/wiki/Key:entrance
   bool is_entrance_{false};
 
+  // https://wiki.openstreetmap.org/wiki/Tag:amenity%3Dparking
+  bool is_parking_{false};
+
   // https://wiki.openstreetmap.org/wiki/Key:level
   bool has_level_{false};
   level_bits_t level_bits_{0U};
@@ -196,7 +207,7 @@ struct foot_profile {
       case cista::hash("designated"): return override::kWhitelist;
     }
 
-    if (t.is_platform_) {
+    if (t.is_platform_ || t.is_parking_) {
       return override::kWhitelist;
     }
 
@@ -209,7 +220,7 @@ struct foot_profile {
 
   static bool default_access(tags const& t, osm_obj_type const type) {
     if (type == osm_obj_type::kWay) {
-      if (t.is_elevator_) {
+      if (t.is_elevator_ || t.is_parking_) {
         return true;
       }
       switch (cista::hash(t.highway_)) {
@@ -328,18 +339,21 @@ struct car_profile {
         case cista::hash("designated"):
         case cista::hash("permissive"): [[fallthrough]];
         case cista::hash("yes"): return override::kWhitelist;
-
         default: return override::kNone;
       }
     };
 
     if (auto mv = get_override(t.motor_vehicle_); mv != override::kNone) {
       return mv;
-    } else if (auto mc = get_override(t.motorcar_); mv != override::kNone) {
+    } else if (auto mc = get_override(t.motorcar_); mc != override::kNone) {
       return mc;
-    } else {
-      return t.vehicle_;
     }
+
+    if (t.is_parking_) {
+      return override::kWhitelist;
+    }
+
+    return t.vehicle_;
   }
 
   static bool default_access(tags const& t, osm_obj_type const type) {

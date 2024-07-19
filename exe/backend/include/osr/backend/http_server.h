@@ -15,8 +15,8 @@ struct http_server {
   http_server(boost::asio::io_context& ioc,
               boost::asio::io_context& thread_pool,
               ways const&,
-              platforms const*,
               lookup const&,
+              platforms const*,
               std::string const& static_file_path);
   ~http_server();
   http_server(http_server const&) = delete;

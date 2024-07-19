@@ -93,10 +93,11 @@ struct geojson_writer {
             {"oneway_car", p.is_oneway_car()},
             {"oneway_bike", p.is_oneway_bike()},
             {"max_speed", p.max_speed_km_per_h()},
-            {"level", to_float(level_t{p.from_level()})},
+            {"from_level", to_float(level_t{p.from_level()})},
             {"to_level", to_float(level_t{p.to_level()})},
             {"is_elevator", p.is_elevator()},
-            {"is_steps", p.is_steps()}}},
+            {"is_steps", p.is_steps()},
+            {"is_parking", p.is_parking_}}},
           {"geometry", to_line_string(std::initializer_list<geo::latlng>{
                            w_.get_node_pos(from), w_.get_node_pos(to)})}});
     }
@@ -139,9 +140,9 @@ struct geojson_writer {
                                          }
                                        });
 
-      auto levels = std::stringstream{};
+      auto levels = std::vector<float>();
       foot<true>::for_each_elevator_level(
-          *w_.r_, n, [&](auto&& l) { levels << to_float(level_t{l}) << " "; });
+          *w_.r_, n, [&](auto&& l) { levels.push_back(to_float(level_t{l})); });
 
       auto properties = boost::json::object{
           {"osm_node_id", to_idx(w_.node_to_osm_[n])},
@@ -152,8 +153,9 @@ struct geojson_writer {
           {"is_restricted", w_.r_->node_is_restricted_[n]},
           {"is_entrance", p.is_entrance()},
           {"is_elevator", p.is_elevator()},
+          {"is_parking", p.is_parking()},
           {"multi_level", p.is_multi_level()},
-          {"levels", levels.str()},
+          {"levels", boost::json::array(levels.begin(), levels.end())},
           {"ways", fmt::format("{}", w_.r_->node_ways_[n] |
                                          std::views::transform([&](auto&& w) {
                                            return w_.way_osm_idx_[w];

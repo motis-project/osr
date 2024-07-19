@@ -8,6 +8,8 @@
 #include "boost/json.hpp"
 #include "boost/thread/tss.hpp"
 
+#include "rapidjson/error/en.h"
+
 #include "fmt/core.h"
 
 #include "utl/enumerate.h"
@@ -22,6 +24,7 @@
 #include "osr/lookup.h"
 #include "osr/routing/profiles/bike.h"
 #include "osr/routing/profiles/car.h"
+#include "osr/routing/profiles/car_parking.h"
 #include "osr/routing/profiles/foot.h"
 #include "osr/routing/route.h"
 
@@ -73,14 +76,14 @@ struct http_server::impl {
   impl(boost::asio::io_context& ios,
        boost::asio::io_context& thread_pool,
        ways const& g,
-       platforms const* pl,
        lookup const& l,
+       platforms const* pl,
        std::string const& static_file_path)
       : ioc_{ios},
         thread_pool_{thread_pool},
         w_{g},
-        pl_{pl},
         l_{l},
+        pl_{pl},
         server_{ioc_} {
     try {
       if (!static_file_path.empty() && fs::is_directory(static_file_path)) {
@@ -101,14 +104,18 @@ struct http_server::impl {
     return *s.get();
   }
 
+  static search_profile get_search_profile_from_request(
+      boost::json::object const& q) {
+    auto const profile_it = q.find("profile");
+    return profile_it == q.end() || !profile_it->value().is_string()
+               ? search_profile::kFoot
+               : to_profile(profile_it->value().as_string());
+  }
+
   void handle_route(web_server::http_req_t const& req,
                     web_server::http_res_cb_t const& cb) {
     auto const q = boost::json::parse(req.body()).as_object();
-    auto const profile_it = q.find("profile");
-    auto const profile =
-        to_profile(profile_it == q.end() || !profile_it->value().is_string()
-                       ? to_str(search_profile::kFoot)
-                       : profile_it->value().as_string());
+    auto const profile = get_search_profile_from_request(q);
     auto const direction_it = q.find("direction");
     auto const dir = to_direction(direction_it == q.end() ||
                                           !direction_it->value().is_string()
@@ -120,29 +127,35 @@ struct http_server::impl {
     auto const max = static_cast<cost_t>(
         max_it == q.end() ? 3600 : max_it->value().as_int64());
     auto const p = route(w_, l_, profile, from, to, max, dir, 100);
-    auto const response = json::serialize(
-        p.has_value()
-            ? boost::json::
-                  value{{"type", "FeatureCollection"},
-                        {"metadata",
-                         {{"duration", p->cost_}, {"distance", p->dist_}}},
-                        {"features",
-                         utl::all(p->segments_)  //
-                             |
-                             utl::transform([&](auto&& s) {
-                               return json::value{
+    if (!p.has_value()) {
+      cb(json_response(req, "could not find a valid path",
+                       http::status::not_found));
+      return;
+    }
+    cb(json_response(
+        req,
+        json::serialize(json::object{
+            {"type", "FeatureCollection"},
+            {"metadata", {{"duration", p->cost_}, {"distance", p->dist_}}},
+            {"features", utl::all(p->segments_) |
+                             utl::transform([&](const path::segment& s) {
+                               return json::object{
                                    {"type", "Feature"},
-                                   {"properties",
-                                    {{"level", to_float(s.from_level_)},
-                                     {"way",
-                                      s.way_ == way_idx_t::invalid()
-                                          ? 0U
-                                          : to_idx(w_.way_osm_idx_[s.way_])}}},
+                                   {
+                                       "properties",
+                                       {{"level", to_float(s.from_level_)},
+                                        {"osm_way_id",
+                                         s.way_ == way_idx_t::invalid()
+                                             ? 0U
+                                             : to_idx(w_.way_osm_idx_[s.way_])},
+                                        {"cost", s.cost_},
+                                        {"distance", s.dist_},
+                                        {"from_node", s.from_node_properties_},
+                                        {"to_node", s.to_node_properties_}},
+                                   },
                                    {"geometry", to_line_string(s.polyline_)}};
-                             })  //
-                             | utl::emplace_back_to<json::array>()}}
-            : json::value{{"error", "no path found"}});
-    return cb(json_response(req, response));
+                             }) |
+                             utl::emplace_back_to<json::array>()}})));
   }
 
   void handle_levels(web_server::http_req_t const& req,
@@ -172,45 +185,49 @@ struct http_server::impl {
   void handle_graph(web_server::http_req_t const& req,
                     web_server::http_res_cb_t const& cb) {
     auto const query = boost::json::parse(req.body()).as_object();
-    auto const level = query.contains("level")
-                           ? to_level(query.at("level").to_number<float>())
-                           : level_t::invalid();
     auto const waypoints = query.at("waypoints").as_array();
+    auto const profile = get_search_profile_from_request(query);
     auto const min = point::from_latlng(
         {waypoints[1].as_double(), waypoints[0].as_double()});
     auto const max = point::from_latlng(
         {waypoints[3].as_double(), waypoints[2].as_double()});
 
-    auto gj = geojson_writer{.w_ = w_, .platforms_ = pl_};
-    l_.find(min, max, [&](way_idx_t const w) {
-      if (level == level_t::invalid()) {
-        gj.write_way(w);
-        return;
-      }
+    auto gj = geojson_writer{.w_ = w_};
+    l_.find(min, max, [&](way_idx_t const w) { gj.write_way(w); });
 
-      auto const way_prop = w_.r_->way_properties_[w];
-      if (way_prop.is_elevator()) {
-        auto const n = w_.r_->way_nodes_[w][0];
-        auto const np = w_.r_->node_properties_[n];
-        if (np.is_multi_level()) {
-          auto has_level = false;
-          for_each_set_bit(
-              foot<true>::get_elevator_multi_levels(*w_.r_, n),
-              [&](auto&& bit) { has_level |= (level == level_t{bit}); });
-          if (has_level) {
-            gj.write_way(w);
-            return;
-          }
-        }
-      }
+    switch (profile) {
+      case search_profile::kFoot:
+        send_graph_response<foot<false>>(req, cb, gj);
+        break;
+      case search_profile::kWheelchair:
+        send_graph_response<foot<true>>(req, cb, gj);
+        break;
+      case search_profile::kBike: send_graph_response<bike>(req, cb, gj); break;
+      case search_profile::kCar: send_graph_response<car>(req, cb, gj); break;
+      case search_profile::kCarParking:
+        send_graph_response<car_parking<false>>(req, cb, gj);
+        break;
+      case search_profile::kCarParkingWheelchair:
+        send_graph_response<car_parking<true>>(req, cb, gj);
+        break;
+      default: throw utl::fail("not implemented");
+    }
+  }
 
-      if (way_prop.from_level() == level || way_prop.to_level() == level) {
-        gj.write_way(w);
-        return;
-      }
-    });
-    gj.finish(&get_dijkstra<foot<true>>());
+  template <typename Profile>
+  void send_graph_response(web_server::http_req_t const& req,
+                           web_server::http_res_cb_t const& cb,
+                           geojson_writer& gj) {
+    gj.finish(&get_dijkstra<Profile>());
     cb(json_response(req, gj.string()));
+  }
+
+  void handle_static(web_server::http_req_t const& req,
+                     web_server::http_res_cb_t const& cb) {
+    if (!serve_static_files_ ||
+        !net::serve_static_file(static_file_path_, req, cb)) {
+      return cb(net::not_found_response(req));
+    }
   }
 
   void handle_platforms(web_server::http_req_t const& req,
@@ -235,14 +252,6 @@ struct http_server::impl {
     });
 
     cb(json_response(req, gj.string()));
-  }
-
-  void handle_static(web_server::http_req_t const& req,
-                     web_server::http_res_cb_t const& cb) {
-    if (!serve_static_files_ ||
-        !net::serve_static_file(static_file_path_, req, cb)) {
-      return cb(net::not_found_response(req));
-    }
   }
 
   void handle_request(web_server::http_req_t const& req,
@@ -348,8 +357,8 @@ private:
   boost::asio::io_context& ioc_;
   boost::asio::io_context& thread_pool_;
   ways const& w_;
-  platforms const* pl_;
   lookup const& l_;
+  platforms const* pl_;
   web_server server_;
   bool serve_static_files_{false};
   std::string static_file_path_;
@@ -358,10 +367,10 @@ private:
 http_server::http_server(boost::asio::io_context& ioc,
                          boost::asio::io_context& thread_pool,
                          ways const& w,
-                         platforms const* p,
                          lookup const& l,
+                         platforms const* pl,
                          std::string const& static_file_path)
-    : impl_(new impl(ioc, thread_pool, w, p, l, static_file_path)) {}
+    : impl_(new impl(ioc, thread_pool, w, l, pl, static_file_path)) {}
 
 http_server::~http_server() = default;
 
