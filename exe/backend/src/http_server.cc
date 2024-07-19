@@ -225,9 +225,7 @@ struct http_server::impl {
         {waypoints[3].as_double(), waypoints[2].as_double()});
 
     auto gj = geojson_writer{.w_ = w_};
-    l_.find(min, max, [&](way_idx_t const w) {
-        gj.write_way(w);
-    });
+    l_.find(min, max, [&](way_idx_t const w) { gj.write_way(w); });
 
     switch (profile) {
       case search_profile::kFoot:

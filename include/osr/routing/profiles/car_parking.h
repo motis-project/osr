@@ -50,8 +50,7 @@ struct car_parking {
       return out << "(node=" << w.node_to_osm_[n_]
                  << ", level=" << to_float(lvl_) << ", dir=" << to_str(dir_)
                  << ", way=" << w.way_osm_idx_[w.r_->node_ways_[n_][way_]]
-                 << ", type=" << node_type_to_str(type_)
-                 << ")";
+                 << ", type=" << node_type_to_str(type_) << ")";
     }
 
     static constexpr node invalid() noexcept { return node{}; }
@@ -207,7 +206,8 @@ struct car_parking {
                           node_idx_t const n,
                           level_t const lvl,
                           Fn&& f) {
-    foot::resolve_all(w, n, lvl, [&](foot::node const neighbor) { f(to_node(neighbor)); });
+    foot::resolve_all(w, n, lvl,
+                      [&](foot::node const neighbor) { f(to_node(neighbor)); });
     car::resolve_all(w, n, lvl, [&](car::node const neighbor) {
       auto const p = w.way_properties_[w.node_ways_[n][neighbor.way_]];
       auto const node_level = lvl == level_t::invalid() ? p.from_level() : lvl;
@@ -241,9 +241,12 @@ struct car_parking {
               distance_t const dist, way_idx_t const way,
               std::uint16_t const from, std::uint16_t const to) {
             auto const way_prop = w.way_properties_[way];
-            auto const target_level = way_prop.from_level() == n.lvl_ ? way_prop.to_level() : way_prop.from_level();
-            fn(to_node(neighbor, target_level), cost + (n.is_car_node() ? 0 : kSwitchPenalty),
-               dist, way, from, to);
+            auto const target_level = way_prop.from_level() == n.lvl_
+                                          ? way_prop.to_level()
+                                          : way_prop.from_level();
+            fn(to_node(neighbor, target_level),
+               cost + (n.is_car_node() ? 0 : kSwitchPenalty), dist, way, from,
+               to);
           });
     }
   }
@@ -259,7 +262,10 @@ struct car_parking {
     search_dir == direction::kForward
         ? car::resolve_start_node(w, way, n, lvl, search_dir,
                                   [&](car::node const n) {
-                                    auto const node_level = lvl == level_t::invalid() ? way_properties.from_level() : lvl;
+                                    auto const node_level =
+                                        lvl == level_t::invalid()
+                                            ? way_properties.from_level()
+                                            : lvl;
                                     f(to_node(n, node_level));
                                   })
         : foot::resolve_start_node(w, way, n, lvl, search_dir,
