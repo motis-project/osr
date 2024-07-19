@@ -110,6 +110,7 @@ struct bike {
          utl::zip_unchecked(w.node_ways_[n.n_], w.node_in_way_idx_[n.n_])) {
       auto const expand = [&](direction const way_dir, std::uint16_t const from,
                               std::uint16_t const to) {
+        // NOLINTNEXTLINE(clang-analyzer-core.CallAndMessage)
         auto const target_node = w.way_nodes_[way][to];
         if constexpr (WithBlocked) {
           if (blocked->test(target_node)) {
