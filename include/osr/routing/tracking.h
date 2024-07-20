@@ -7,8 +7,11 @@ namespace osr {
 
 struct elevator_tracking {
   void write(path& p) const { p.uses_elevator_ = uses_elevator_; }
-  void track(ways::routing const& r, way_idx_t, node_idx_t const n) {
-    uses_elevator_ |= r.node_properties_[n].is_elevator();
+  void track(elevator_tracking const& l,
+             ways::routing const& r,
+             way_idx_t,
+             node_idx_t const n) {
+    uses_elevator_ = l.uses_elevator_ || r.node_properties_[n].is_elevator();
   }
 
   bool uses_elevator_{false};
@@ -16,7 +19,10 @@ struct elevator_tracking {
 
 struct noop_tracking {
   void write(path&) const {}
-  void track(ways::routing const&, way_idx_t, node_idx_t) {}
+  void track(noop_tracking const&,
+             ways::routing const&,
+             way_idx_t,
+             node_idx_t) {}
 };
 
 }  // namespace osr
