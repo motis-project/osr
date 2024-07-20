@@ -282,9 +282,10 @@ std::optional<path> route(ways const& w,
   for (auto const& start : from_match) {
     for (auto const* nc : {&start.left_, &start.right_}) {
       if (nc->valid() && nc->cost_ < max) {
-        Profile::resolve_start_node(
-            *w.r_, start.way_, nc->node_, from.lvl_, dir,
-            [&](auto const node) { d.add_start({node, nc->cost_}); });
+        Profile::resolve_start_node(*w.r_, start.way_, nc->node_, from.lvl_,
+                                    dir, [&](auto const node) {
+                                      d.add_start({node, nc->cost_});
+                                    });
       }
     }
 
@@ -331,9 +332,10 @@ std::vector<std::optional<path>> route(ways const& w,
   for (auto const& start : from_match) {
     for (auto const* nc : {&start.left_, &start.right_}) {
       if (nc->valid() && nc->cost_ < max) {
-        Profile::resolve_start_node(
-            *w.r_, start.way_, nc->node_, from.lvl_, dir,
-            [&](auto const node) { d.add_start({node, nc->cost_}); });
+        Profile::resolve_start_node(*w.r_, start.way_, nc->node_, from.lvl_,
+                                    dir, [&](auto const node) {
+                                      d.add_start({node, nc->cost_});
+                                    });
       }
     }
 
