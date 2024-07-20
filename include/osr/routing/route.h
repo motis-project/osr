@@ -32,10 +32,10 @@ struct path {
     level_t from_level_;
     level_t to_level_;
     way_idx_t way_;
-    cost_t cost_;
-    distance_t dist_;
-    boost::json::object from_node_properties_;
-    boost::json::object to_node_properties_;
+    cost_t cost_{kInfeasible};
+    distance_t dist_{0};
+    boost::json::object from_node_properties_{};
+    boost::json::object to_node_properties_{};
   };
 
   cost_t cost_{kInfeasible};
