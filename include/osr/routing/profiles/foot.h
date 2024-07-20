@@ -1,10 +1,11 @@
 #pragma once
 
+#include "osr/routing/tracking.h"
 #include "osr/ways.h"
 
 namespace osr {
 
-template <bool IsWheelchair>
+template <bool IsWheelchair, typename Tracking = noop_tracking>
 struct foot {
   static constexpr auto const kMaxMatchDistance = 100U;
   static constexpr auto const kOffroadPenalty = 3U;
@@ -17,7 +18,7 @@ struct foot {
     }
     constexpr node_idx_t get_node() const noexcept { return n_; }
 
-    boost::json::object geojson_properties(ways const& w) const {
+    boost::json::object geojson_properties(ways const&) const {
       return boost::json::object{{"node_id", n_.v_}, {"type", "foot"}};
     }
 
@@ -34,6 +35,22 @@ struct foot {
 
   using key = node;
 
+  struct label {
+    label(node const n, cost_t const c) : n_{n.n_}, cost_{c}, lvl_{n.lvl_} {}
+
+    constexpr node get_node() const noexcept { return {n_, lvl_}; }
+    constexpr cost_t cost() const noexcept { return cost_; }
+
+    void track(ways::routing const& r, way_idx_t const w, node_idx_t const n) {
+      tracking_.track(r, w, n);
+    }
+
+    node_idx_t n_;
+    cost_t cost_;
+    level_t lvl_;
+    [[no_unique_address]] Tracking tracking_;
+  };
+
   struct entry {
     constexpr std::optional<node> pred(node) const noexcept {
       return pred_ == node_idx_t::invalid()
@@ -41,8 +58,12 @@ struct foot {
                  : std::optional{node{pred_, pred_lvl_}};
     }
     constexpr cost_t cost(node) const noexcept { return cost_; }
-    constexpr bool update(node, cost_t const c, node const pred) noexcept {
+    constexpr bool update(label const& l,
+                          node,
+                          cost_t const c,
+                          node const pred) noexcept {
       if (c < cost_) {
+        tracking_ = l.tracking_;
         cost_ = c;
         pred_ = pred.n_;
         pred_lvl_ = pred.lvl_;
@@ -51,20 +72,12 @@ struct foot {
       return false;
     }
 
+    void write(node, path& p) const { tracking_.write(p); }
+
     node_idx_t pred_{node_idx_t::invalid()};
-    level_t pred_lvl_;
     cost_t cost_{kInfeasible};
-  };
-
-  struct label {
-    label(node const n, cost_t const c) : n_{n.n_}, lvl_{n.lvl_}, cost_{c} {}
-
-    constexpr node get_node() const noexcept { return {n_, lvl_}; }
-    constexpr cost_t cost() const noexcept { return cost_; }
-
-    node_idx_t n_;
-    level_t lvl_;
-    cost_t cost_;
+    level_t pred_lvl_;
+    [[no_unique_address]] Tracking tracking_;
   };
 
   struct hash {
@@ -117,13 +130,23 @@ struct foot {
     }
   }
 
-  template <direction SearchDir, typename Fn>
-  static void adjacent(ways::routing const& w, node const n, Fn&& fn) {
+  template <direction SearchDir, bool WithBlocked, typename Fn>
+  static void adjacent(ways::routing const& w,
+                       node const n,
+                       bitvec<node_idx_t> const* blocked,
+                       Fn&& fn) {
     for (auto const [way, i] :
          utl::zip_unchecked(w.node_ways_[n.n_], w.node_in_way_idx_[n.n_])) {
       auto const expand = [&](direction const way_dir, std::uint16_t const from,
                               std::uint16_t const to) {
+        // NOLINTNEXTLINE(clang-analyzer-core.CallAndMessage)
         auto const target_node = w.way_nodes_[way][to];
+        if constexpr (WithBlocked) {
+          if (blocked->test(target_node)) {
+            return;
+          }
+        }
+
         auto const target_node_prop = w.node_properties_[target_node];
         if (node_cost(target_node_prop) == kInfeasible) {
           return;
@@ -140,7 +163,8 @@ struct foot {
                 auto const dist = w.way_node_dist_[way][std::min(from, to)];
                 auto const cost = way_cost(target_way_prop, way_dir, dist) +
                                   node_cost(target_node_prop);
-                fn(node{target_node, target_lvl}, cost, dist, way, from, to);
+                fn(node{target_node, target_lvl},
+                   static_cast<std::uint32_t>(cost), dist, way, from, to);
               });
         } else {
           auto const target_lvl = get_target_level(w, n.n_, n.lvl_, way);
@@ -151,7 +175,8 @@ struct foot {
           auto const dist = w.way_node_dist_[way][std::min(from, to)];
           auto const cost = way_cost(target_way_prop, way_dir, dist) +
                             node_cost(target_node_prop);
-          fn(node{target_node, *target_lvl}, cost, dist, way, from, to);
+          fn(node{target_node, *target_lvl}, static_cast<std::uint32_t>(cost),
+             dist, way, from, to);
         }
       };
 

@@ -22,7 +22,7 @@ TEST(extract, wa) {
   fs::remove_all(p, ec);
   fs::create_directories(p, ec);
 
-  osr::extract("test/map.osm", "/tmp/osr_test");
+  osr::extract(false, "test/map.osm", "/tmp/osr_test");
 
   auto w = osr::ways{"/tmp/osr_test", cista::mmap::protection::READ};
   auto l = osr::lookup{w};

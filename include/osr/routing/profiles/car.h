@@ -6,6 +6,7 @@
 
 #include "utl/helpers/algorithm.h"
 
+#include "osr/routing/route.h"
 #include "osr/ways.h"
 
 namespace osr {
@@ -26,11 +27,13 @@ struct car {
 
     constexpr node_idx_t get_node() const noexcept { return n_; }
 
-    boost::json::object geojson_properties(ways const& w) const {
+    boost::json::object geojson_properties(ways const&) const {
       return boost::json::object{{"node_id", n_.v_}, {"type", "car"}};
     }
 
     constexpr node_idx_t get_key() const noexcept { return n_; }
+
+    void track(ways::routing const&, way_idx_t, node_idx_t) {}
 
     std::ostream& print(std::ostream& out, ways const& w) const {
       return out << "(node=" << w.node_to_osm_[n_] << ", dir=" << to_str(dir_)
@@ -41,6 +44,21 @@ struct car {
     node_idx_t n_;
     way_pos_t way_;
     direction dir_;
+  };
+
+  struct label {
+    label(node const n, cost_t const c)
+        : n_{n.n_}, way_{n.way_}, dir_{n.dir_}, cost_{c} {}
+
+    constexpr node get_node() const noexcept { return {n_, way_, dir_}; }
+    constexpr cost_t cost() const noexcept { return cost_; }
+
+    void track(ways::routing const&, way_idx_t, node_idx_t) {}
+
+    node_idx_t n_;
+    way_pos_t way_;
+    direction dir_;
+    cost_t cost_;
   };
 
   struct entry {
@@ -61,7 +79,8 @@ struct car {
       return cost_[get_index(n)];
     }
 
-    constexpr bool update(node const n,
+    constexpr bool update(label const&,
+                          node const n,
                           cost_t const c,
                           node const pred) noexcept {
       auto const idx = get_index(n);
@@ -74,6 +93,8 @@ struct car {
       }
       return false;
     }
+
+    void write(node, path&) const {}
 
     static constexpr node get_node(node_idx_t const n,
                                    std::size_t const index) {
@@ -97,19 +118,6 @@ struct car {
     std::array<way_pos_t, kN> pred_way_;
     std::bitset<kN> pred_dir_;
     std::array<cost_t, kN> cost_;
-  };
-
-  struct label {
-    label(node const n, cost_t const c)
-        : n_{n.n_}, way_{n.way_}, dir_{n.dir_}, cost_{c} {}
-
-    constexpr node get_node() const noexcept { return {n_, way_, dir_}; }
-    constexpr cost_t cost() const noexcept { return cost_; }
-
-    node_idx_t n_;
-    way_pos_t way_;
-    direction dir_;
-    cost_t cost_;
   };
 
   struct hash {
@@ -148,8 +156,11 @@ struct car {
     }
   }
 
-  template <direction SearchDir, typename Fn>
-  static void adjacent(ways::routing const& w, node const n, Fn&& fn) {
+  template <direction SearchDir, bool WithBlocked, typename Fn>
+  static void adjacent(ways::routing const& w,
+                       node const n,
+                       bitvec<node_idx_t> const* blocked,
+                       Fn&& fn) {
     auto way_pos = way_pos_t{0U};
     for (auto const [way, i] :
          utl::zip_unchecked(w.node_ways_[n.n_], w.node_in_way_idx_[n.n_])) {
@@ -157,6 +168,12 @@ struct car {
                               std::uint16_t const to) {
         // NOLINTNEXTLINE(clang-analyzer-core.CallAndMessage)
         auto const target_node = w.way_nodes_[way][to];
+        if constexpr (WithBlocked) {
+          if (blocked->test(target_node)) {
+            return;
+          }
+        }
+
         auto const target_node_prop = w.node_properties_[target_node];
         if (node_cost(target_node_prop) == kInfeasible) {
           return;

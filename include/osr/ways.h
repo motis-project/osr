@@ -1,6 +1,8 @@
 #pragma once
 
 #if defined(_WIN32) || defined(_WIN64)
+#include "windows.h"
+
 #include "Memoryapi.h"
 #define mlock(addr, size) VirtualLock((LPVOID)addr, (SIZE_T)size)
 #else
@@ -29,13 +31,6 @@
 #include "osr/util/multi_counter.h"
 
 namespace osr {
-
-#define OSR_DEBUG
-#ifdef OSR_DEBUG
-#define trace(...) fmt::println(std::cerr, __VA_ARGS__)
-#else
-#define trace(...)
-#endif
 
 struct resolved_restriction {
   enum class type { kNo, kOnly } type_;
@@ -96,6 +91,7 @@ struct way_properties {
   std::uint8_t from_level_ : 5;
   std::uint8_t to_level_ : 5;
 
+  std::uint8_t is_platform_ : 1;  // only used during extract
   bool is_parking_ : 1;
 };
 
@@ -308,7 +304,7 @@ struct ways {
         return p;
       }
     }
-    throw utl::fail("unable to find node {} [osm={}] in way {} [osm]", i,
+    throw utl::fail("unable to find node {} [osm={}] in way {} [osm={}]", i,
                     osm_idx, way, way_osm_idx_[way]);
   }
 

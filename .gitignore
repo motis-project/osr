@@ -3,3 +3,5 @@
 /deps
 /.pkg.mutex
 /.clang-tidy
+/.vs
+/out

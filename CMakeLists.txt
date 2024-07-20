@@ -91,6 +91,7 @@ else ()
     set(osr-compile-options
             -Wall
             -Wextra
+            -Wno-changes-meaning
             -Wno-maybe-uninitialized)
     if (NOT CMAKE_CROSSCOMPILING)
         set(osr-compile-options ${osr-compile-options} -Werror)
@@ -115,7 +116,6 @@ target_link_libraries(osr
         rtree
         unordered_dense
         boost-thread
-        rapidjson
 )
 
 # --- MAIN ---

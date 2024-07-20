@@ -1,5 +1,6 @@
 #pragma once
 
+#include "osr/routing/route.h"
 #include "osr/ways.h"
 
 namespace osr {
@@ -17,7 +18,7 @@ struct bike {
 
     constexpr node_idx_t get_node() const noexcept { return n_; }
 
-    boost::json::object geojson_properties(ways const& w) const {
+    boost::json::object geojson_properties(ways const&) const {
       return boost::json::object{{"node_id", n_.v_}, {"type", "bike"}};
     }
 
@@ -32,30 +33,13 @@ struct bike {
 
   using key = node;
 
-  struct entry {
-    constexpr std::optional<node> pred(node) const noexcept {
-      return pred_ == node_idx_t::invalid() ? std::nullopt
-                                            : std::optional{node{pred_}};
-    }
-    constexpr cost_t cost(node) const noexcept { return cost_; }
-    constexpr bool update(node, cost_t const c, node const pred) noexcept {
-      if (c < cost_) {
-        cost_ = c;
-        pred_ = pred.n_;
-        return true;
-      }
-      return false;
-    }
-
-    node_idx_t pred_{node_idx_t::invalid()};
-    cost_t cost_{kInfeasible};
-  };
-
   struct label {
     label(node const n, cost_t const c) : n_{n.n_}, cost_{c} {}
 
     constexpr node get_node() const noexcept { return {n_}; }
     constexpr cost_t cost() const noexcept { return cost_; }
+
+    void track(ways::routing const&, way_idx_t, node_idx_t) {}
 
     node_idx_t n_;
     level_t lvl_;
@@ -68,6 +52,30 @@ struct bike {
       using namespace ankerl::unordered_dense::detail;
       return wyhash::hash(static_cast<std::uint64_t>(to_idx(n.n_)));
     }
+  };
+
+  struct entry {
+    constexpr std::optional<node> pred(node) const noexcept {
+      return pred_ == node_idx_t::invalid() ? std::nullopt
+                                            : std::optional{node{pred_}};
+    }
+    constexpr cost_t cost(node) const noexcept { return cost_; }
+    constexpr bool update(label const&,
+                          node,
+                          cost_t const c,
+                          node const pred) noexcept {
+      if (c < cost_) {
+        cost_ = c;
+        pred_ = pred.n_;
+        return true;
+      }
+      return false;
+    }
+
+    void write(node, path&) const {}
+
+    node_idx_t pred_{node_idx_t::invalid()};
+    cost_t cost_{kInfeasible};
   };
 
   template <typename Fn>
@@ -93,13 +101,22 @@ struct bike {
     return true;
   }
 
-  template <direction SearchDir, typename Fn>
-  static void adjacent(ways::routing const& w, node const n, Fn&& fn) {
+  template <direction SearchDir, bool WithBlocked, typename Fn>
+  static void adjacent(ways::routing const& w,
+                       node const n,
+                       bitvec<node_idx_t> const* blocked,
+                       Fn&& fn) {
     for (auto const [way, i] :
          utl::zip_unchecked(w.node_ways_[n.n_], w.node_in_way_idx_[n.n_])) {
       auto const expand = [&](direction const way_dir, std::uint16_t const from,
                               std::uint16_t const to) {
+        // NOLINTNEXTLINE(clang-analyzer-core.CallAndMessage)
         auto const target_node = w.way_nodes_[way][to];
+        if constexpr (WithBlocked) {
+          if (blocked->test(target_node)) {
+            return;
+          }
+        }
         auto const target_node_prop = w.node_properties_[target_node];
         if (node_cost(target_node_prop) == kInfeasible) {
           return;
@@ -113,7 +130,8 @@ struct bike {
         auto const dist = w.way_node_dist_[way][std::min(from, to)];
         auto const cost = way_cost(target_way_prop, way_dir, dist) +
                           node_cost(target_node_prop);
-        fn(node{target_node}, cost, dist, way, from, to);
+        fn(node{target_node}, static_cast<std::uint32_t>(cost), dist, way, from,
+           to);
       };
 
       if (i != 0U) {

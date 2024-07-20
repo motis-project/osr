@@ -6,9 +6,6 @@
 #include "boost/asio/post.hpp"
 #include "boost/beast/version.hpp"
 #include "boost/json.hpp"
-#include "boost/thread/tss.hpp"
-
-#include "rapidjson/error/en.h"
 
 #include "fmt/core.h"
 
@@ -77,8 +74,14 @@ struct http_server::impl {
        boost::asio::io_context& thread_pool,
        ways const& g,
        lookup const& l,
+       platforms const* pl,
        std::string const& static_file_path)
-      : ioc_{ios}, thread_pool_{thread_pool}, w_{g}, l_{l}, server_{ioc_} {
+      : ioc_{ios},
+        thread_pool_{thread_pool},
+        w_{g},
+        l_{l},
+        pl_{pl},
+        server_{ioc_} {
     try {
       if (!static_file_path.empty() && fs::is_directory(static_file_path)) {
         static_file_path_ = fs::canonical(static_file_path).string();
@@ -87,15 +90,6 @@ struct http_server::impl {
     } catch (fs::filesystem_error const& e) {
       throw utl::fail("static file directory not found: {}", e.what());
     }
-  }
-
-  template <typename Profile>
-  dijkstra<Profile>& get_dijkstra() {
-    static auto s = boost::thread_specific_ptr<dijkstra<Profile>>{};
-    if (s.get() == nullptr) {
-      s.reset(new dijkstra<Profile>{});
-    }
-    return *s.get();
   }
 
   static search_profile get_search_profile_from_request(
@@ -111,49 +105,16 @@ struct http_server::impl {
     auto const q = boost::json::parse(req.body()).as_object();
     auto const profile = get_search_profile_from_request(q);
     auto const direction_it = q.find("direction");
-    auto const direction = to_direction(
-        direction_it == q.end() || !direction_it->value().is_string()
-            ? to_str(direction::kForward)
-            : direction_it->value().as_string());
+    auto const dir = to_direction(direction_it == q.end() ||
+                                          !direction_it->value().is_string()
+                                      ? to_str(direction::kForward)
+                                      : direction_it->value().as_string());
     auto const from = parse_location(q.at("start"));
     auto const to = parse_location(q.at("destination"));
     auto const max_it = q.find("max");
     auto const max = static_cast<cost_t>(
         max_it == q.end() ? 3600 : max_it->value().as_int64());
-
-    auto p = std::optional<path>{};
-
-    switch (profile) {
-      case search_profile::kFoot:
-        handle_routing<foot<false>>(req, cb, from, to, max, direction);
-        break;
-      case search_profile::kWheelchair:
-        handle_routing<foot<true>>(req, cb, from, to, max, direction);
-        break;
-      case search_profile::kBike:
-        handle_routing<bike>(req, cb, from, to, max, direction);
-        break;
-      case search_profile::kCar:
-        handle_routing<car>(req, cb, from, to, max, direction);
-        break;
-      case search_profile::kCarParking:
-        handle_routing<car_parking<false>>(req, cb, from, to, max, direction);
-        break;
-      case search_profile::kCarParkingWheelchair:
-        handle_routing<car_parking<true>>(req, cb, from, to, max, direction);
-        break;
-      default: throw utl::fail("not implemented");
-    }
-  }
-
-  template <typename Profile>
-  void handle_routing(web_server::http_req_t const& req,
-                      web_server::http_res_cb_t const& cb,
-                      location const from,
-                      location const to,
-                      cost_t const max,
-                      direction const dir) {
-    auto const p = route(w_, l_, get_dijkstra<Profile>(), from, to, max, dir);
+    auto const p = route(w_, l_, profile, from, to, max, dir, 100);
     if (!p.has_value()) {
       cb(json_response(req, "could not find a valid path",
                        http::status::not_found));
@@ -245,7 +206,8 @@ struct http_server::impl {
   void send_graph_response(web_server::http_req_t const& req,
                            web_server::http_res_cb_t const& cb,
                            geojson_writer& gj) {
-    cb(json_response(req, gj.finish(get_dijkstra<Profile>())));
+    gj.finish(&get_dijkstra<Profile>());
+    cb(json_response(req, gj.string()));
   }
 
   void handle_static(web_server::http_req_t const& req,
@@ -254,6 +216,30 @@ struct http_server::impl {
         !net::serve_static_file(static_file_path_, req, cb)) {
       return cb(net::not_found_response(req));
     }
+  }
+
+  void handle_platforms(web_server::http_req_t const& req,
+                        web_server::http_res_cb_t const& cb) {
+    utl::verify(pl_ != nullptr, "no platforms");
+
+    auto const query = boost::json::parse(req.body()).as_object();
+    auto const level = query.contains("level")
+                           ? to_level(query.at("level").to_number<float>())
+                           : level_t::invalid();
+    auto const waypoints = query.at("waypoints").as_array();
+    auto const min = point::from_latlng(
+        {waypoints[1].as_double(), waypoints[0].as_double()});
+    auto const max = point::from_latlng(
+        {waypoints[3].as_double(), waypoints[2].as_double()});
+
+    auto gj = geojson_writer{.w_ = w_, .platforms_ = pl_};
+    pl_->find(min, max, [&](platform_idx_t const i) {
+      if (level == level_t::invalid() || pl_->get_level(w_, i) == level) {
+        gj.write_platform(i);
+      }
+    });
+
+    cb(json_response(req, gj.string()));
   }
 
   void handle_request(web_server::http_req_t const& req,
@@ -282,6 +268,13 @@ struct http_server::impl {
               [this](web_server::http_req_t const& req1,
                      web_server::http_res_cb_t const& cb1) {
                 handle_graph(req1, cb1);
+              },
+              req, cb);
+        } else if (target.starts_with("/api/platforms")) {
+          return run_parallel(
+              [this](web_server::http_req_t const& req1,
+                     web_server::http_res_cb_t const& cb1) {
+                handle_platforms(req1, cb1);
               },
               req, cb);
         } else {
@@ -353,6 +346,7 @@ private:
   boost::asio::io_context& thread_pool_;
   ways const& w_;
   lookup const& l_;
+  platforms const* pl_;
   web_server server_;
   bool serve_static_files_{false};
   std::string static_file_path_;
@@ -362,8 +356,9 @@ http_server::http_server(boost::asio::io_context& ioc,
                          boost::asio::io_context& thread_pool,
                          ways const& w,
                          lookup const& l,
+                         platforms const* pl,
                          std::string const& static_file_path)
-    : impl_(new impl(ioc, thread_pool, w, l, static_file_path)) {}
+    : impl_(new impl(ioc, thread_pool, w, l, pl, static_file_path)) {}
 
 http_server::~http_server() = default;
 
