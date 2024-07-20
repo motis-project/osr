@@ -137,9 +137,7 @@ struct http_server::impl {
                                              ? 0U
                                              : to_idx(w_.way_osm_idx_[s.way_])},
                                         {"cost", s.cost_},
-                                        {"distance", s.dist_},
-                                        {"from_node", s.from_node_properties_},
-                                        {"to_node", s.to_node_properties_}},
+                                        {"distance", s.dist_}},
                                    },
                                    {"geometry", to_line_string(s.polyline_)}};
                              }) |

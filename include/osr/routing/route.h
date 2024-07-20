@@ -31,11 +31,10 @@ struct path {
     std::vector<geo::latlng> polyline_;
     level_t from_level_;
     level_t to_level_;
+    node_idx_t from_, to_;
     way_idx_t way_;
     cost_t cost_{kInfeasible};
     distance_t dist_{0};
-    boost::json::object from_node_properties_{};
-    boost::json::object to_node_properties_{};
   };
 
   cost_t cost_{kInfeasible};
@@ -56,7 +55,10 @@ std::vector<std::optional<path>> route(
     cost_t max,
     direction,
     double max_match_distance,
-    bitvec<node_idx_t> const* blocked = nullptr);
+    bitvec<node_idx_t> const* blocked = nullptr,
+    std::function<bool(path const&)> const& = [](path const&) {
+      return false;
+    });
 
 std::optional<path> route(ways const&,
                           lookup const&,

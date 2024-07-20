@@ -33,8 +33,6 @@ struct car {
 
     constexpr node_idx_t get_key() const noexcept { return n_; }
 
-    void track(ways::routing const&, way_idx_t, node_idx_t) {}
-
     std::ostream& print(std::ostream& out, ways const& w) const {
       return out << "(node=" << w.node_to_osm_[n_] << ", dir=" << to_str(dir_)
                  << ", way=" << w.way_osm_idx_[w.r_->node_ways_[n_][way_]]
@@ -53,7 +51,7 @@ struct car {
     constexpr node get_node() const noexcept { return {n_, way_, dir_}; }
     constexpr cost_t cost() const noexcept { return cost_; }
 
-    void track(ways::routing const&, way_idx_t, node_idx_t) {}
+    void track(label const&, ways::routing const&, way_idx_t, node_idx_t) {}
 
     node_idx_t n_;
     way_pos_t way_;

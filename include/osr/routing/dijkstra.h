@@ -57,7 +57,7 @@ struct dijkstra {
                 cost_[neighbor.get_key()].update(
                     l, neighbor, static_cast<cost_t>(total), curr)) {
               auto next = label{neighbor, static_cast<cost_t>(total)};
-              next.track(r, way, neighbor.get_node());
+              next.track(l, r, way, neighbor.get_node());
               pq_.push(std::move(next));
             }
           });

@@ -39,7 +39,7 @@ struct bike {
     constexpr node get_node() const noexcept { return {n_}; }
     constexpr cost_t cost() const noexcept { return cost_; }
 
-    void track(ways::routing const&, way_idx_t, node_idx_t) {}
+    void track(label const&, ways::routing const&, way_idx_t, node_idx_t) {}
 
     node_idx_t n_;
     level_t lvl_;

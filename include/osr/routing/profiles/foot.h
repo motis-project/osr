@@ -41,8 +41,11 @@ struct foot {
     constexpr node get_node() const noexcept { return {n_, lvl_}; }
     constexpr cost_t cost() const noexcept { return cost_; }
 
-    void track(ways::routing const& r, way_idx_t const w, node_idx_t const n) {
-      tracking_.track(r, w, n);
+    void track(label const& l,
+               ways::routing const& r,
+               way_idx_t const w,
+               node_idx_t const n) {
+      tracking_.track(l.tracking_, r, w, n);
     }
 
     node_idx_t n_;
