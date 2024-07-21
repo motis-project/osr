@@ -1,6 +1,10 @@
 #pragma once
 
+#include <ostream>
+
 #include "cista/reflection/printable.h"
+
+#include "geo/box.h"
 
 #include "osr/ways.h"
 
@@ -13,8 +17,12 @@
 namespace osr {
 
 struct location {
-  CISTA_PRINTABLE(location)
   CISTA_FRIEND_COMPARABLE(location)
+
+  friend std::ostream& operator<<(std::ostream& out, location const& l) {
+    return out << "{ pos=" << l.pos_ << ", lvl=" << to_float(l.lvl_) << " }";
+  }
+
   geo::latlng pos_;
   level_t lvl_;
 };
@@ -192,16 +200,15 @@ struct lookup {
 
   template <typename Fn>
   void find(geo::latlng const& x, Fn&& fn) const {
-    find({x.lat() - 0.01, x.lng() - 0.01}, {x.lat() + 0.01, x.lng() + 0.01},
+    find(geo::box{{x.lat() - 0.01, x.lng() - 0.01},
+                  {x.lat() + 0.01, x.lng() + 0.01}},
          std::forward<Fn>(fn));
   }
 
   template <typename Fn>
-  void find(geo::latlng const& a, geo::latlng const& b, Fn&& fn) const {
-    auto const min =
-        std::array{std::min(a.lng_, b.lng_), std::min(a.lat_, b.lat_)};
-    auto const max =
-        std::array{std::max(a.lng_, b.lng_), std::max(a.lat_, b.lat_)};
+  void find(geo::box const& b, Fn&& fn) const {
+    auto const min = b.min_.lnglat();
+    auto const max = b.max_.lnglat();
     rtree_search(
         rtree_, min.data(), max.data(),
         [](double const* /* min */, double const* /* max */, void const* item,
@@ -214,10 +221,9 @@ struct lookup {
         &fn);
   }
 
-  hash_set<node_idx_t> find_elevators(geo::latlng const& a,
-                                      geo::latlng const& b) const {
+  hash_set<node_idx_t> find_elevators(geo::box const& b) const {
     auto elevators = hash_set<node_idx_t>{};
-    find(a, b, [&](way_idx_t const way) {
+    find(b, [&](way_idx_t const way) {
       for (auto const n : ways_.r_->way_nodes_[way]) {
         if (ways_.r_->node_properties_[n].is_elevator()) {
           elevators.emplace(n);
@@ -228,18 +234,15 @@ struct lookup {
   }
 
   void insert(way_idx_t const way) {
-    auto b = osmium::Box{};
+    auto b = geo::box{};
     for (auto const& c : ways_.way_polylines_[way]) {
-      b.extend(osmium::Location{c.lat_, c.lng_});
+      b.extend(c);
     }
 
-    auto const min_corner =
-        std::array{b.bottom_left().lon(), b.bottom_left().lat()};
-    auto const max_corner =
-        std::array{b.top_right().lon(), b.top_right().lat()};
-
+    auto const min = b.min_.lnglat();
+    auto const max = b.max_.lnglat();
     rtree_insert(
-        rtree_, min_corner.data(), max_corner.data(),
+        rtree_, min.data(), max.data(),
         reinterpret_cast<void*>(static_cast<std::size_t>(to_idx(way))));
   }
 
