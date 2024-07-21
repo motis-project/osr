@@ -153,7 +153,7 @@ struct http_server::impl {
     auto const max = point::from_latlng(
         {waypoints[3].as_double(), waypoints[2].as_double()});
     auto levels = hash_set<level_t>{};
-    l_.find(min, max, [&](way_idx_t const x) {
+    l_.find({min, max}, [&](way_idx_t const x) {
       auto const p = w_.r_->way_properties_[x];
       levels.emplace(p.from_level());
       if (p.from_level() != p.to_level()) {
@@ -173,13 +173,13 @@ struct http_server::impl {
     auto const query = boost::json::parse(req.body()).as_object();
     auto const waypoints = query.at("waypoints").as_array();
     auto const profile = get_search_profile_from_request(query);
-    auto const min = point::from_latlng(
-        {waypoints[1].as_double(), waypoints[0].as_double()});
-    auto const max = point::from_latlng(
-        {waypoints[3].as_double(), waypoints[2].as_double()});
+    auto const min =
+        geo::latlng{waypoints[1].as_double(), waypoints[0].as_double()};
+    auto const max =
+        geo::latlng{waypoints[3].as_double(), waypoints[2].as_double()};
 
     auto gj = geojson_writer{.w_ = w_};
-    l_.find(min, max, [&](way_idx_t const w) { gj.write_way(w); });
+    l_.find({min, max}, [&](way_idx_t const w) { gj.write_way(w); });
 
     switch (profile) {
       case search_profile::kFoot:
