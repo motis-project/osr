@@ -248,6 +248,25 @@ best_candidate(ways const& w,
   return std::nullopt;
 }
 
+std::optional<path> try_direct(osr::location const& from,
+                               osr::location const& to) {
+  auto const dist = geo::distance(from.pos_, to.pos_);
+  return dist < 5.0
+             ? std::optional{path{.cost_ = 60U,
+                                  .dist_ = dist,
+                                  .segments_ = {path::segment{
+                                      .polyline_ = {from.pos_, to.pos_},
+                                      .from_level_ = from.lvl_,
+                                      .to_level_ = to.lvl_,
+                                      .from_ = node_idx_t::invalid(),
+                                      .to_ = node_idx_t::invalid(),
+                                      .way_ = way_idx_t::invalid(),
+                                      .cost_ = 60U,
+                                      .dist_ = static_cast<distance_t>(dist)}},
+                                  .uses_elevator_ = false}}
+             : std::nullopt;
+}
+
 template <typename Profile>
 std::optional<path> route(ways const& w,
                           lookup const& l,
@@ -265,6 +284,10 @@ std::optional<path> route(ways const& w,
 
   if (from_match.empty() || to_match.empty()) {
     return std::nullopt;
+  }
+
+  if (auto const direct = try_direct(from, to); direct.has_value()) {
+    return *direct;
   }
 
   d.reset(max);
@@ -339,6 +362,8 @@ std::vector<std::optional<path>> route(
     for (auto const [m, t, r] : utl::zip(to_match, to, result)) {
       if (r.has_value()) {
         ++found;
+      } else if (auto const direct = try_direct(from, t); direct.has_value()) {
+        r = direct;
       } else {
         auto const c = best_candidate(w, d, t.lvl_, m, max, dir);
         if (c.has_value()) {
