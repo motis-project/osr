@@ -153,6 +153,8 @@ path reconstruct(ways const& w,
   auto segments = std::vector<path::segment>{{.polyline_ = dest.path_,
                                               .from_level_ = dest.lvl_,
                                               .to_level_ = dest.lvl_,
+                                              .from_ = node_idx_t::invalid(),
+                                              .to_ = node_idx_t::invalid(),
                                               .way_ = way_idx_t::invalid()}};
   auto dist = 0.0;
   while (true) {
