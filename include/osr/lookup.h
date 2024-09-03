@@ -15,8 +15,10 @@
 namespace osr {
 
 struct location {
-  CISTA_PRINTABLE(location)
   CISTA_FRIEND_COMPARABLE(location)
+  friend std::ostream& operator<<(std::ostream& out, location const& l) {
+    return out << l.pos_ << ", lvl=" << to_float(l.lvl_);
+  }
   geo::latlng pos_;
   level_t lvl_;
 };
