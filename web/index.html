@@ -504,7 +504,7 @@
     }
 
     const getRoute = async () => {
-        const response = await fetch(`${window.origin}/api/route`, {
+        const response = await fetch('api/route', {
             method: 'POST',
             mode: 'cors',
             headers: {
@@ -544,7 +544,7 @@
     };
 
     const getGraph = async (bounds) => {
-        const response = await fetch(`${window.origin}/api/graph`, {
+        const response = await fetch('api/graph', {
             method: 'POST',
             mode: 'cors',
             headers: {
@@ -560,7 +560,7 @@
     };
 
     const getLevels = async (bounds) => {
-        const response = await fetch(`${window.origin}/api/levels`, {
+        const response = await fetch('api/levels', {
             method: 'POST',
             mode: 'cors',
             headers: {
