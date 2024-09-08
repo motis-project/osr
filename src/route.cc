@@ -11,33 +11,10 @@
 #include "osr/routing/profiles/car.h"
 #include "osr/routing/profiles/car_parking.h"
 #include "osr/routing/profiles/foot.h"
+#include "osr/util/infinite.h"
+#include "osr/util/reverse.h"
 
 namespace osr {
-
-search_profile to_profile(std::string_view s) {
-  switch (cista::hash(s)) {
-    case cista::hash("foot"): return search_profile::kFoot;
-    case cista::hash("wheelchair"): return search_profile::kWheelchair;
-    case cista::hash("bike"): return search_profile::kBike;
-    case cista::hash("car"): return search_profile::kCar;
-    case cista::hash("car_parking"): return search_profile::kCarParking;
-    case cista::hash("car_parking_wheelchair"):
-      return search_profile::kCarParkingWheelchair;
-  }
-  throw utl::fail("{} is not a valid profile", s);
-}
-
-std::string_view to_str(search_profile const p) {
-  switch (p) {
-    case search_profile::kFoot: return "foot";
-    case search_profile::kWheelchair: return "wheelchair";
-    case search_profile::kCar: return "car";
-    case search_profile::kBike: return "bike";
-    case search_profile::kCarParking: return "car_parking";
-    case search_profile::kCarParkingWheelchair: return "car_parking_wheelchair";
-  }
-  throw utl::fail("{} is not a valid profile", static_cast<std::uint8_t>(p));
-}
 
 struct connecting_way {
   way_idx_t way_;
@@ -199,7 +176,7 @@ std::optional<std::tuple<node_candidate const*,
 best_candidate(ways const& w,
                dijkstra<Profile>& d,
                level_t const lvl,
-               match_t const& m,
+               match_view_t m,
                cost_t const max,
                direction const dir) {
   auto const get_best = [&](way_candidate const& dest,
@@ -271,23 +248,14 @@ std::optional<path> try_direct(osr::location const& from,
 
 template <typename Profile>
 std::optional<path> route(ways const& w,
-                          lookup const& l,
                           dijkstra<Profile>& d,
                           location const& from,
                           location const& to,
+                          match_view_t from_match,
+                          match_view_t to_match,
                           cost_t const max,
                           direction const dir,
-                          double const max_match_distance,
                           bitvec<node_idx_t> const* blocked) {
-  auto const from_match =
-      l.match<Profile>(from, false, dir, max_match_distance, blocked);
-  auto const to_match =
-      l.match<Profile>(to, true, dir, max_match_distance, blocked);
-
-  if (from_match.empty() || to_match.empty()) {
-    return std::nullopt;
-  }
-
   if (auto const direct = try_direct(from, to); direct.has_value()) {
     return *direct;
   }
@@ -323,23 +291,17 @@ std::optional<path> route(ways const& w,
 template <typename Profile>
 std::vector<std::optional<path>> route(
     ways const& w,
-    lookup const& l,
     dijkstra<Profile>& d,
     location const& from,
     std::vector<location> const& to,
+    match_view_t from_match,
+    std::vector<match_t> const& to_match,
     cost_t const max,
     direction const dir,
-    double const max_match_distance,
     bitvec<node_idx_t> const* blocked,
     std::function<bool(path const&)> const& do_reconstruct) {
-  auto const from_match =
-      l.match<Profile>(from, false, dir, max_match_distance, blocked);
-  auto const to_match = utl::to_vec(to, [&](auto&& x) {
-    return l.match<Profile>(x, true, dir, max_match_distance, blocked);
-  });
-
   auto result = std::vector<std::optional<path>>{};
-  result.resize(to.size());
+  result.resize(to_match.size());
 
   if (from_match.empty()) {
     return result;
@@ -390,15 +352,6 @@ std::vector<std::optional<path>> route(
   return result;
 }
 
-template <typename Profile>
-dijkstra<Profile>& get_dijkstra() {
-  static auto s = boost::thread_specific_ptr<dijkstra<Profile>>{};
-  if (s.get() == nullptr) {
-    s.reset(new dijkstra<Profile>{});
-  }
-  return *s.get();
-}
-
 std::vector<std::optional<path>> route(
     ways const& w,
     lookup const& l,
@@ -410,26 +363,33 @@ std::vector<std::optional<path>> route(
     double const max_match_distance,
     bitvec<node_idx_t> const* blocked,
     std::function<bool(path const&)> const& do_reconstruct) {
+  auto const r = [&]<typename Profile>(
+                     dijkstra<Profile>& d) -> std::vector<std::optional<path>> {
+    auto const from_match =
+        l.match<Profile>(from, false, dir, max_match_distance, blocked);
+    if (from_match.empty()) {
+      return std::vector<std::optional<path>>(to.size());
+    }
+    auto const to_match = utl::to_vec(to, [&](auto&& x) {
+      return l.match<Profile>(x, true, dir, max_match_distance, blocked);
+    });
+    return route(w, d, from, to, from_match, to_match, max, dir, blocked,
+                 do_reconstruct);
+  };
+
   switch (profile) {
     case search_profile::kFoot:
-      return route(w, l, get_dijkstra<foot<false, elevator_tracking>>(), from,
-                   to, max, dir, max_match_distance, blocked, do_reconstruct);
+      return r(get_dijkstra<foot<false, elevator_tracking>>());
     case search_profile::kWheelchair:
-      return route(w, l, get_dijkstra<foot<true, elevator_tracking>>(), from,
-                   to, max, dir, max_match_distance, blocked, do_reconstruct);
-    case search_profile::kBike:
-      return route(w, l, get_dijkstra<bike>(), from, to, max, dir,
-                   max_match_distance, blocked, do_reconstruct);
-    case search_profile::kCar:
-      return route(w, l, get_dijkstra<car>(), from, to, max, dir,
-                   max_match_distance, blocked, do_reconstruct);
+      return r(get_dijkstra<foot<true, elevator_tracking>>());
+    case search_profile::kBike: return r(get_dijkstra<bike>());
+    case search_profile::kCar: return r(get_dijkstra<car>());
     case search_profile::kCarParking:
-      return route(w, l, get_dijkstra<car_parking<false>>(), from, to, max, dir,
-                   max_match_distance, blocked, do_reconstruct);
+      return r(get_dijkstra<car_parking<false>>());
     case search_profile::kCarParkingWheelchair:
-      return route(w, l, get_dijkstra<car_parking<true>>(), from, to, max, dir,
-                   max_match_distance, blocked, do_reconstruct);
+      return r(get_dijkstra<car_parking<true>>());
   }
+
   throw utl::fail("not implemented");
 }
 
@@ -442,27 +402,114 @@ std::optional<path> route(ways const& w,
                           direction const dir,
                           double const max_match_distance,
                           bitvec<node_idx_t> const* blocked) {
+  auto const r =
+      [&]<typename Profile>(dijkstra<Profile>& d) -> std::optional<path> {
+    auto const from_match =
+        l.match<Profile>(from, false, dir, max_match_distance, blocked);
+    auto const to_match =
+        l.match<Profile>(to, true, dir, max_match_distance, blocked);
+
+    if (from_match.empty() || to_match.empty()) {
+      return std::nullopt;
+    }
+
+    return route(w, d, from, to, from_match, to_match, max, dir, blocked);
+  };
+
   switch (profile) {
     case search_profile::kFoot:
-      return route(w, l, get_dijkstra<foot<false, elevator_tracking>>(), from,
-                   to, max, dir, max_match_distance, blocked);
+      return r(get_dijkstra<foot<false, elevator_tracking>>());
     case search_profile::kWheelchair:
-      return route(w, l, get_dijkstra<foot<true, elevator_tracking>>(), from,
-                   to, max, dir, max_match_distance, blocked);
-    case search_profile::kBike:
-      return route(w, l, get_dijkstra<bike>(), from, to, max, dir,
-                   max_match_distance, blocked);
-    case search_profile::kCar:
-      return route(w, l, get_dijkstra<car>(), from, to, max, dir,
-                   max_match_distance, blocked);
+      return r(get_dijkstra<foot<true, elevator_tracking>>());
+    case search_profile::kBike: return r(get_dijkstra<bike>());
+    case search_profile::kCar: return r(get_dijkstra<car>());
     case search_profile::kCarParking:
-      return route(w, l, get_dijkstra<car_parking<false>>(), from, to, max, dir,
-                   max_match_distance, blocked);
+      return r(get_dijkstra<car_parking<false>>());
     case search_profile::kCarParkingWheelchair:
-      return route(w, l, get_dijkstra<car_parking<true>>(), from, to, max, dir,
-                   max_match_distance, blocked);
+      return r(get_dijkstra<car_parking<true>>());
   }
+
   throw utl::fail("not implemented");
+}
+
+std::vector<std::optional<path>> route(
+    ways const& w,
+    search_profile const profile,
+    location const& from,
+    std::vector<location> const& to,
+    match_view_t from_match,
+    std::vector<match_t> const& to_match,
+    cost_t const max,
+    direction const dir,
+    bitvec<node_idx_t> const* blocked,
+    std::function<bool(path const&)> const& do_reconstruct) {
+  if (from_match.empty()) {
+    return std::vector<std::optional<path>>(to.size());
+  }
+
+  auto const r = [&]<typename Profile>(
+                     dijkstra<Profile>& d) -> std::vector<std::optional<path>> {
+    return route(w, d, from, to, from_match, to_match, max, dir, blocked,
+                 do_reconstruct);
+  };
+
+  switch (profile) {
+    case search_profile::kFoot:
+      return r(get_dijkstra<foot<false, elevator_tracking>>());
+    case search_profile::kWheelchair:
+      return r(get_dijkstra<foot<true, elevator_tracking>>());
+    case search_profile::kBike: return r(get_dijkstra<bike>());
+    case search_profile::kCar: return r(get_dijkstra<car>());
+    case search_profile::kCarParking:
+      return r(get_dijkstra<car_parking<false>>());
+    case search_profile::kCarParkingWheelchair:
+      return r(get_dijkstra<car_parking<true>>());
+  }
+
+  throw utl::fail("not implemented");
+}
+
+std::optional<path> route(ways const& w,
+                          search_profile const profile,
+                          location const& from,
+                          location const& to,
+                          match_view_t from_match,
+                          match_view_t to_match,
+                          cost_t const max,
+                          direction const dir,
+                          bitvec<node_idx_t> const* blocked) {
+  if (from_match.empty() || to_match.empty()) {
+    return std::nullopt;
+  }
+
+  auto const r =
+      [&]<typename Profile>(dijkstra<Profile>& d) -> std::optional<path> {
+    return route(w, d, from, to, from_match, to_match, max, dir, blocked);
+  };
+
+  switch (profile) {
+    case search_profile::kFoot:
+      return r(get_dijkstra<foot<false, elevator_tracking>>());
+    case search_profile::kWheelchair:
+      return r(get_dijkstra<foot<true, elevator_tracking>>());
+    case search_profile::kBike: return r(get_dijkstra<bike>());
+    case search_profile::kCar: return r(get_dijkstra<car>());
+    case search_profile::kCarParking:
+      return r(get_dijkstra<car_parking<false>>());
+    case search_profile::kCarParkingWheelchair:
+      return r(get_dijkstra<car_parking<true>>());
+  }
+
+  throw utl::fail("not implemented");
+}
+
+template <typename Profile>
+dijkstra<Profile>& get_dijkstra() {
+  static auto s = boost::thread_specific_ptr<dijkstra<Profile>>{};
+  if (s.get() == nullptr) {
+    s.reset(new dijkstra<Profile>{});
+  }
+  return *s.get();
 }
 
 template dijkstra<foot<true, osr::noop_tracking>>&

@@ -3,32 +3,23 @@
 #include <string_view>
 #include <vector>
 
-#include "boost/json/object.hpp"
+#include "geo/polyline.h"
 
+#include "osr/location.h"
 #include "osr/lookup.h"
-#include "osr/routing/dijkstra.h"
+#include "osr/routing/profile.h"
 #include "osr/types.h"
-#include "osr/util/infinite.h"
-#include "osr/util/reverse.h"
 
 namespace osr {
 
-enum class search_profile : std::uint8_t {
-  kFoot,
-  kWheelchair,
-  kBike,
-  kCar,
-  kCarParking,
-  kCarParkingWheelchair
-};
+struct ways;
 
-search_profile to_profile(std::string_view);
-
-std::string_view to_str(search_profile);
+template <typename Profile>
+struct dijkstra;
 
 struct path {
   struct segment {
-    std::vector<geo::latlng> polyline_;
+    geo::polyline polyline_;
     level_t from_level_;
     level_t to_level_;
     node_idx_t from_, to_;
@@ -69,5 +60,29 @@ std::optional<path> route(ways const&,
                           direction,
                           double max_match_distance,
                           bitvec<node_idx_t> const* blocked = nullptr);
+
+std::optional<path> route(ways const&,
+                          search_profile,
+                          location const& from,
+                          location const& to,
+                          match_view_t from_match,
+                          match_view_t to_match,
+                          cost_t const max,
+                          direction,
+                          bitvec<node_idx_t> const* blocked = nullptr);
+
+std::vector<std::optional<path>> route(
+    ways const&,
+    search_profile const,
+    location const& from,
+    std::vector<location> const& to,
+    match_view_t from_match,
+    std::vector<match_t> const& to_match,
+    cost_t const max,
+    direction const,
+    bitvec<node_idx_t> const* blocked = nullptr,
+    std::function<bool(path const&)> const& = [](path const&) {
+      return false;
+    });
 
 }  // namespace osr

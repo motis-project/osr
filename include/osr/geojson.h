@@ -8,6 +8,7 @@
 #include "utl/pipes/vec.h"
 
 #include "osr/platforms.h"
+#include "osr/routing/dijkstra.h"
 #include "osr/routing/profiles/foot.h"
 #include "osr/ways.h"
 
