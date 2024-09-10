@@ -66,6 +66,7 @@ void lookup::insert(way_idx_t const way) {
   auto const min = b.min_.lnglat();
   auto const max = b.max_.lnglat();
   rtree_insert(rtree_, min.data(), max.data(),
+               // NOLINTNEXTLINE(performance-no-int-to-ptr)
                reinterpret_cast<void*>(static_cast<std::size_t>(to_idx(way))));
 }
 

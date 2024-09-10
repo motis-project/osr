@@ -13,6 +13,7 @@
 #include "utl/timer.h"
 
 #include "osr/lookup.h"
+#include "osr/routing/dijkstra.h"
 #include "osr/routing/profiles/car.h"
 #include "osr/routing/route.h"
 #include "osr/ways.h"
