@@ -96,12 +96,6 @@ struct lookup {
   }
 
   template <typename Fn>
-  void find(geo::latlng const& x, Fn&& fn) const {
-    find({{x.lat() - 0.01, x.lng() - 0.01}, {x.lat() + 0.01, x.lng() + 0.01}},
-         std::forward<Fn>(fn));
-  }
-
-  template <typename Fn>
   void find(geo::box const& b, Fn&& fn) const {
     auto const min = b.min_.lnglat();
     auto const max = b.max_.lnglat();
@@ -129,7 +123,7 @@ private:
                              double const max_match_distance,
                              bitvec<node_idx_t> const* blocked) const {
     auto way_candidates = std::vector<way_candidate>{};
-    find(query.pos_, [&](way_idx_t const way) {
+    find(geo::box{query.pos_, max_match_distance}, [&](way_idx_t const way) {
       auto d = geo::distance_to_polyline<way_candidate>(
           query.pos_, ways_.way_polylines_[way]);
       if (d.dist_to_way_ < max_match_distance) {
