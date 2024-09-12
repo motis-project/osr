@@ -80,6 +80,8 @@ using osm_way_idx_t = cista::strong<std::uint64_t, struct osm_way_idx_>;
 using way_idx_t = cista::strong<std::uint32_t, struct way_idx_>;
 using node_idx_t = cista::strong<std::uint32_t, struct node_idx_>;
 
+using platform_idx_t = cista::strong<std::uint32_t, struct platform_idx_>;
+
 using multi_level_elevator_idx_t =
     cista::strong<std::uint32_t, struct multi_level_elevator_idx_>;
 
