@@ -3,6 +3,8 @@
 #include <cinttypes>
 #include <filesystem>
 
+#include "utl/for_each_bit_set.h"
+
 #include "ankerl/cista_adapter.h"
 
 #include "cista/containers/bitvec.h"
@@ -148,26 +150,13 @@ constexpr auto const kLevelBits = cista::constexpr_trailing_zeros(
 
 using level_bits_t = std::uint32_t;
 
-constexpr bool has_bit_set(level_bits_t const levels, unsigned const bit) {
-  return (levels & (level_bits_t{1U} << bit)) != 0U;
-}
-
-template <typename Fn>
-constexpr void for_each_set_bit(level_bits_t const levels, Fn&& f) {
-  for (auto bit = 0U; bit != sizeof(level_bits_t) * 8U; ++bit) {
-    if (has_bit_set(levels, bit)) {
-      f(bit);
-    }
-  }
-}
-
 constexpr std::tuple<level_t, level_t, bool> get_levels(
     bool const has_level, level_bits_t const levels) noexcept {
   if (!has_level) {
     return {level_t{to_level(0.F)}, level_t{to_level(0.F)}, false};
   }
   auto from = level_t::invalid(), to = level_t::invalid();
-  for_each_set_bit(levels, [&](auto&& bit) {
+  utl::for_each_set_bit(levels, [&](auto&& bit) {
     from == level_t::invalid()  //
         ? from = level_t{bit}
         : to = level_t{bit};
