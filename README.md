@@ -112,9 +112,8 @@ and "right") on that `way_idx_t` can be initialized.
 
 All attributes of the OpenStreetMap ways that are relevant for routing are packed into a compact struct. Distances
 between routing nodes (i.e. `node_idx_t`) on a way are stored for fast access.
-A `profile_edge_weight(distance, way_attributes, direction) -> duration` function then computes the edge weight for this
-specific profile. In case of one-way streets or other ways that should not be used by a profile, the function can
-return `kInfeasible` to indicate this case.
+The profile (see blow) function then computes the edge weights and feasibility of a way based on the stored OpenStreetMap attributes.
+To implement more finegrained control over path finding, it might be necessary to extract more attributes from OpenSteetMap.
 
 The current set of routing profiles can be found in the [`include/osr/routing/profiles`](https://github.com/motis-project/osr/tree/master/include/osr/routing/profiles) folder. Here's what a profile needs to provide in order to be usable by the shortest path algorithm:
 
