@@ -4,12 +4,12 @@ Demo (currently limited to 1h radius): https://osr.motis-project.de
 
 # Open Street Router
 
-This project is a *proof of concept* for planet wide street routing (pedestrian, bike, car, etc.) on OpenStreetMap. The
+This router is the most memory-efficient multi-profile routing for planet wide street routing (pedestrian, bike, car, etc.) on OpenStreetMap. The
 goal is to make it possible to import data on affordable low-end machines. This is mainly achieved by using compact data
 structures and [memory mapped](https://en.wikipedia.org/wiki/Memory-mapped_file) files. A planet import should not need
-more than 10GB of RAM. More RAM (and a fast SSD) will speed up the import. The reverse geocoding to map geo coordinates to the routing graph is currently required to be in memory. This is around 25 GB of memory for the whole planet during production use. In the future, a memory mapped version of the r-tree should be implemented and evaluated.
+more than 10GB of RAM. More RAM (and a fast SSD) will speed up the import.
 
-Directory with all created files after extract (all files can be memory mapped but it helps to lock routing data into memory):
+Directory with all created files after extract (only routing data has to be in-memory):
 
 ```bash
 # routing data 12.7G
@@ -108,13 +108,33 @@ lookup gives us all `way_idx_t` in the area. Sorting those ways by perpendicular
 to the way gives us the closes `way_idx_t` for start and destination. After that, the two closest routing nodes ("left"
 and "right") on that `way_idx_t` can be initialized.
 
-### Profiles
+### Routing Profiles
 
 All attributes of the OpenStreetMap ways that are relevant for routing are packed into a compact struct. Distances
 between routing nodes (i.e. `node_idx_t`) on a way are stored for fast access.
 A `profile_edge_weight(distance, way_attributes, direction) -> duration` function then computes the edge weight for this
 specific profile. In case of one-way streets or other ways that should not be used by a profile, the function can
 return `kInfeasible` to indicate this case.
+
+The current set of routing profiles can be found in the [`include/osr/routing/profiles`](https://github.com/motis-project/osr/tree/master/include/osr/routing/profiles) folder. Here's what a profile needs to provide in order to be usable by the shortest path algorithm:
+
+- Types:
+  - `node` struct: a node defines what is considered a node for this routing profile. The most basic definition of a node would basically be just what's considered a node in the data model (`node_idx_t`, see above). However, for many profiles, this is not succifient. Let's take the foot routing profile as an example: for indoor routing, it should be possible to distinguish the same OSM node on different levels. Therefore, the level has to be part of the foot profile's node definition. Another example is the car profile: to be able to detect u-turns (just changing the direction but staying on the same way), the node has to define the current direction. In order to properly handle turn restrictions, also the last used way has to be part of the node definition. The member function `node::get_key()` returns the key (see `key`).
+  - `label` struct: basically the same as the `node` struct but it should additionally carry the routing costs (currently tracked in seconds). The label has to provide `get_node()` and `cost()`  member functions.
+  - `key`: The shortest path algorithm (e.g. Dijkstra) tracks minimal costs to each node in a hash map. In theory, it would be sufficient to use `node` as hash map key as we need to only track one shortest path to each profile `node`. To allow for a more efficient storage, multiple nodes can share the same hash map key, therefore reducing the hash map size (which can speedup the routing significantly). Therefore, a profile can define a `key` which can be the same as `node` but doesn't have to be. The key doesn't need any member functions and can therefore just be a typedef to `node_idx_t` (in the most simple case).
+  - `entry`: The entry is the hash map entry and is stored for each `key`. It has to store the costs and precessor. If `key` maps several `node`s to the same `entry`, then the `entry` has to store costs and predecessory for each of the `node`s. It has to provide the following member functions:
+   - `std::optional<node> pred(node)`: returns the predecessor for the node, or `std::nullopt` if this `node` has never been visited.
+   - `cost_t cost(node)`: returns the shortest path costs to this `node`
+   - `bool update(label, node, cost_t, node pred)`: updates the costs for this node if they are better than the previously stored costs and returns `true` if the costs where updated and `false` otherwise.
+- Static functions:
+  - `resolve_start_node(ways::routing, way_idx_t, node_idx_t, level_t, direction, Fn&& f)`: resolves all nodes that belong to this particular (`way_idx_t`, `node_idx_t`, `level_t`, `direction`) combination. `Fn f` will be called with each `node`. It's the task of the profile to give the routing algorithm and entry point to its overlay graph.
+  - `resolve_all(ways::routing, node_ix_t, level_t, Fn&& f)`: Same as `resolve_start_node`, just without the condition that `way_idx_t` has to match.
+  - `adjacent<SearcHdir, WithBlocked, Fn>(ways::routing, node, bitvec<node_idx_t> blocked, Fn&& f)`: Calls `Fn f` with each adjacent neighbor of the given `node`. This is used in the shortest path algorithm to expand a node and visit all its neighbors. This takes a runtime provided bit vector `blocked` into account where bit `i` indicates if `i` can be visited or not. This allows us to dynamically block nodes depending on the routing query.
+
+As we can see, each profile can define its own overlay graph on top of the data model. This gives us the flexibility to define a routing for anything we want from pedestrians or wheelchair users over cars, trucks, trains to ships without any additional memory overhead. Even combined profiles (e.g. walking, taking a bike, walking) can be implemented. Commonly, routing engines have to have a graph for each profile which makes it quite expensive (in terms of memory) to add a new profile on a global routing server. With our approach, a new profile doesn't come with extra costs.
+
+Profiles have to be defined at compile time. However, it would be possible to parameterize the cost calculation (or any other aspect, like restrictions, etc.) at runtime.
+
 
 ### Reconstruction
 
