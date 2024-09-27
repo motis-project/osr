@@ -17,7 +17,7 @@
 [cista]
   url=git@github.com:felixguendling/cista.git
   branch=master
-  commit=bcabd041ddf07baf1b544bbe46ef195c2b6d22bd
+  commit=de453ae4f0a82729af8a9dd57ee5a8f19c5c5af5
 [googletest]
   url=git@github.com:motis-project/googletest.git
   branch=master
@@ -37,7 +37,7 @@
 [tiles]
   url=git@github.com:motis-project/tiles.git
   branch=master
-  commit=64f297ea0f782d04c89e82c6d478a1dd453e5f70
+  commit=ef9dbbb09353ce5064c5f6ffe605efa7e19e24d7
 [mimalloc]
   url=git@github.com:motis-project/mimalloc.git
   branch=master
