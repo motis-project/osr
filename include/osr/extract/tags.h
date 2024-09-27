@@ -17,6 +17,7 @@ struct tags {
     for (auto const& t : o.tags()) {
       switch (cista::hash(std::string_view{t.key()})) {
         using namespace std::string_view_literals;
+        case cista::hash("type"): is_route_ |= t.value() == "route"sv; break;
         case cista::hash("parking"): is_parking_ = true; break;
         case cista::hash("amenity"):
           is_parking_ |=
@@ -118,6 +119,9 @@ struct tags {
     }
   }
 
+  // https://wiki.openstreetmap.org/wiki/Relation:route
+  bool is_route_{false};
+
   // https://wiki.openstreetmap.org/wiki/Key:oneway
   // https://wiki.openstreetmap.org/wiki/Tag:junction=roundabout
   bool oneway_{false};
@@ -191,6 +195,10 @@ bool is_accessible(tags const& o, osm_obj_type const type) {
 
 struct foot_profile {
   static override access_override(tags const& t) {
+    if (t.is_route_) {
+      return override::kBlacklist;
+    }
+
     switch (cista::hash(t.barrier_)) {
       case cista::hash("yes"):
       case cista::hash("wall"):
@@ -252,6 +260,9 @@ struct foot_profile {
 
 struct bike_profile {
   static override access_override(tags const& t) {
+    if (t.is_route_) {
+      return override::kBlacklist;
+    }
 
     switch (cista::hash(t.barrier_)) {
       case cista::hash("yes"):
@@ -304,7 +315,7 @@ struct bike_profile {
 
 struct car_profile {
   static override access_override(tags const& t) {
-    if (t.access_ == override::kBlacklist) {
+    if (t.access_ == override::kBlacklist || t.is_route_) {
       return override::kBlacklist;
     }
 
