@@ -84,13 +84,15 @@ struct lookup {
   match_t match(location const& query,
                 bool const reverse,
                 direction const search_dir,
-                double const max_match_distance,
+                double max_match_distance,
                 bitvec<node_idx_t> const* blocked) const {
     auto way_candidates = get_way_candidates<Profile>(
         query, reverse, search_dir, max_match_distance, blocked);
-    if (way_candidates.empty()) {
-      way_candidates = get_way_candidates<Profile>(
-          query, reverse, search_dir, max_match_distance * 2U, blocked);
+    auto i = 0U;
+    while (way_candidates.empty() && i++ < 4U) {
+      max_match_distance *= 2U;
+      way_candidates = get_way_candidates<Profile>(query, reverse, search_dir,
+                                                   max_match_distance, blocked);
     }
     return way_candidates;
   }

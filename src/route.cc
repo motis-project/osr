@@ -230,7 +230,7 @@ best_candidate(ways const& w,
 std::optional<path> try_direct(osr::location const& from,
                                osr::location const& to) {
   auto const dist = geo::distance(from.pos_, to.pos_);
-  return dist < 5.0
+  return dist < 8.0
              ? std::optional{path{.cost_ = 60U,
                                   .dist_ = dist,
                                   .segments_ = {path::segment{
