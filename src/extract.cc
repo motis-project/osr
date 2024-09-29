@@ -4,6 +4,8 @@
 #include <windows.h>
 #endif
 
+#include <ranges>
+
 #include "osr/extract/extract.h"
 
 #include "boost/thread/tss.hpp"
@@ -577,6 +579,8 @@ void extract(bool const with_platforms,
               [](auto&& a, auto&& b) { return a.first < b.first; });
   }
 
+  w.build_components();
+  
   w.r_->write(out);
 }
 
