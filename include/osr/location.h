@@ -2,6 +2,8 @@
 
 #include <ostream>
 
+#include "geo/latlng.h"
+
 #include "cista/reflection/comparable.h"
 
 #include "osr/types.h"
