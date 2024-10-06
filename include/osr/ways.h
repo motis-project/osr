@@ -32,7 +32,7 @@
 
 namespace osr {
 
-constexpr auto const kBinaryVersion = 1U;
+constexpr auto const kBinaryVersion = 2U;
 
 struct resolved_restriction {
   enum class type { kNo, kOnly } type_;

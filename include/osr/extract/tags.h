@@ -69,7 +69,13 @@ struct tags {
         }
         case cista::hash("name"): name_ = t.value(); break;
         case cista::hash("entrance"): is_entrance_ = true; break;
-        case cista::hash("sidewalk"): sidewalk_ = t.value(); break;
+        case cista::hash("sidewalk"):
+        case cista::hash("sidewalk:left"): [[fallthrough]];
+        case cista::hash("sidewalk:right"):
+          if (t.value() == "separate"sv) {
+            sidewalk_separate_ = true;
+          }
+          break;
         case cista::hash("cycleway"): cycleway_ = t.value(); break;
         case cista::hash("motorcar"):
           motorcar_ = t.value();
@@ -148,7 +154,7 @@ struct tags {
   std::string_view highway_;
 
   // https://wiki.openstreetmap.org/wiki/Key:sidewalk
-  std::string_view sidewalk_;
+  bool sidewalk_separate_{false};
 
   // https://wiki.openstreetmap.org/wiki/Key:cycleway
   std::string_view cycleway_;
@@ -195,7 +201,7 @@ bool is_accessible(tags const& o, osm_obj_type const type) {
 
 struct foot_profile {
   static override access_override(tags const& t) {
-    if (t.is_route_) {
+    if (t.is_route_ || t.sidewalk_separate_) {
       return override::kBlacklist;
     }
 
