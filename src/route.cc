@@ -1,5 +1,7 @@
 #include "osr/routing/route.h"
 
+#include <osr/routing/profiles/combi_profile.h>
+
 #include "boost/thread/tss.hpp"
 
 #include "utl/concat.h"
@@ -11,6 +13,7 @@
 #include "osr/routing/profiles/car.h"
 #include "osr/routing/profiles/car_parking.h"
 #include "osr/routing/profiles/foot.h"
+#include "osr/routing/profiles/combi_profile.h"
 #include "osr/util/infinite.h"
 #include "osr/util/reverse.h"
 
@@ -136,7 +139,7 @@ path reconstruct(ways const& w,
   auto dist = 0.0;
   while (true) {
     auto const& e = d.cost_.at(n.get_key());
-    auto const pred = e.pred(n);
+    auto const pred = e.pred(n, dir);
     if (pred.has_value()) {
       auto const expected_cost =
           static_cast<cost_t>(e.cost(n) - d.get_cost(*pred));
@@ -267,7 +270,7 @@ std::optional<path> route(ways const& w,
       if (nc->valid() && nc->cost_ < max) {
         Profile::resolve_start_node(
             *w.r_, start.way_, nc->node_, from.lvl_, dir,
-            [&](auto const node) { d.add_start({node, nc->cost_}); });
+            [&](auto const node) { d.add_start({node, nc->cost_}, dir); });
       }
     }
 
@@ -315,7 +318,7 @@ std::vector<std::optional<path>> route(
             *w.r_, start.way_, nc->node_, from.lvl_, dir, [&](auto const node) {
               auto label = typename Profile::label{node, nc->cost_};
               label.track(label, *w.r_, start.way_, node.get_node());
-              d.add_start(label);
+              d.add_start(label, dir);
             });
       }
     }
@@ -388,6 +391,8 @@ std::vector<std::optional<path>> route(
       return r(get_dijkstra<car_parking<false>>());
     case search_profile::kCarParkingWheelchair:
       return r(get_dijkstra<car_parking<true>>());
+    case search_profile::kCombiFootCarFootViaParking:
+      return r(get_dijkstra<combi_foot_car_foot_profile>());
   }
 
   throw utl::fail("not implemented");
@@ -427,6 +432,8 @@ std::optional<path> route(ways const& w,
       return r(get_dijkstra<car_parking<false>>());
     case search_profile::kCarParkingWheelchair:
       return r(get_dijkstra<car_parking<true>>());
+    case search_profile::kCombiFootCarFootViaParking:
+      return r(get_dijkstra<combi_foot_car_foot_profile>());
   }
 
   throw utl::fail("not implemented");
@@ -464,6 +471,8 @@ std::vector<std::optional<path>> route(
       return r(get_dijkstra<car_parking<false>>());
     case search_profile::kCarParkingWheelchair:
       return r(get_dijkstra<car_parking<true>>());
+    case search_profile::kCombiFootCarFootViaParking:
+      return r(get_dijkstra<combi_foot_car_foot_profile>());
   }
 
   throw utl::fail("not implemented");
@@ -498,6 +507,8 @@ std::optional<path> route(ways const& w,
       return r(get_dijkstra<car_parking<false>>());
     case search_profile::kCarParkingWheelchair:
       return r(get_dijkstra<car_parking<true>>());
+    case search_profile::kCombiFootCarFootViaParking:
+      return r(get_dijkstra<combi_foot_car_foot_profile>());
   }
 
   throw utl::fail("not implemented");

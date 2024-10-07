@@ -51,11 +51,13 @@ struct bike {
   };
 
   struct entry {
-    constexpr std::optional<node> pred(node) const noexcept {
+    constexpr std::optional<node> pred(node, direction) const noexcept {
       return pred_ == node_idx_t::invalid() ? std::nullopt
                                             : std::optional{node{pred_}};
     }
     constexpr cost_t cost(node) const noexcept { return cost_; }
+
+    template<direction>
     constexpr bool update(label const&,
                           node,
                           cost_t const c,
@@ -65,6 +67,7 @@ struct bike {
         pred_ = pred.n_;
         return true;
       }
+
       return false;
     }
 
@@ -82,6 +85,11 @@ struct bike {
                                  direction,
                                  Fn&& f) {
     f(node{n});
+  }
+
+  template<direction SearchDir>
+  static constexpr node get_starting_node_pred() noexcept {
+    return node::invalid();
   }
 
   template <typename Fn>
@@ -119,12 +127,12 @@ struct bike {
         }
 
         auto const target_way_prop = w.way_properties_[way];
-        if (way_cost(target_way_prop, way_dir, 0U) == kInfeasible) {
+        if (way_cost(target_way_prop, way_dir, SearchDir, 0U) == kInfeasible) {
           return;
         }
 
         auto const dist = w.way_node_dist_[way][std::min(from, to)];
-        auto const cost = way_cost(target_way_prop, way_dir, dist) +
+        auto const cost = way_cost(target_way_prop, way_dir, SearchDir, dist) +
                           node_cost(target_node_prop);
         fn(node{target_node}, static_cast<std::uint32_t>(cost), dist, way, from,
            to);
@@ -140,6 +148,7 @@ struct bike {
   }
 
   static constexpr cost_t way_cost(way_properties const e,
+                                   direction,
                                    direction,
                                    std::uint16_t const dist) {
     if (e.is_bike_accessible()) {

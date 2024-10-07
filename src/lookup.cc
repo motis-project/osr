@@ -4,6 +4,7 @@
 #include "osr/routing/profiles/car.h"
 #include "osr/routing/profiles/car_parking.h"
 #include "osr/routing/profiles/foot.h"
+#include "osr/routing/profiles/combi_profile.h"
 
 namespace osr {
 
@@ -40,6 +41,9 @@ match_t lookup::match(location const& query,
                                        max_match_distance, blocked);
     case search_profile::kCarParkingWheelchair:
       return match<car_parking<true>>(query, reverse, search_dir,
+      max_match_distance, blocked);
+    case search_profile::kCombiFootCarFootViaParking:
+      return match<combi_foot_car_foot_profile>(query, reverse, search_dir,
                                       max_match_distance, blocked);
   }
   throw utl::fail("{} is not a valid profile", static_cast<std::uint8_t>(p));
