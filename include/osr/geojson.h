@@ -132,11 +132,11 @@ struct geojson_writer {
 
       auto ss = std::stringstream{};
       Dijkstra::profile_t::resolve_all(*w_.r_, n, level_t::invalid(),
-                                       [&](auto const n) {
-                                         auto const cost = s->get_cost(n);
+                                       [&](auto const x) {
+                                         auto const cost = s->get_cost(x);
                                          if (cost != kInfeasible) {
                                            ss << "{";
-                                           n.print(ss, w_);
+                                           x.print(ss, w_);
                                            ss << ", " << cost << "}\n";
                                          }
                                        });
@@ -191,8 +191,8 @@ struct geojson_writer {
 
   ways const& w_;
   platforms const* platforms_{nullptr};
-  boost::json::array features_;
-  hash_set<node_idx_t> nodes_;
+  boost::json::array features_{};
+  hash_set<node_idx_t> nodes_{};
 };
 
 }  // namespace osr
