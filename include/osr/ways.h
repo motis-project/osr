@@ -32,8 +32,6 @@
 
 namespace osr {
 
-constexpr auto const kBinaryVersion = 2U;
-
 struct resolved_restriction {
   enum class type { kNo, kOnly } type_;
   way_idx_t from_, to_;
