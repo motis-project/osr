@@ -8,7 +8,7 @@ ways::ways(std::filesystem::path p, cista::mmap::protection const mode)
     : p_{std::move(p)},
       mode_{mode},
       r_{mode == cista::mmap::protection::READ
-             ? routing::read(p_ / "routing.bin")
+             ? routing::read(p_)
              : cista::wrapped<routing>{cista::raw::make_unique<routing>()}},
       node_to_osm_{mm("node_to_osm.bin")},
       way_osm_idx_{mm("way_osm_idx.bin")},
@@ -140,11 +140,11 @@ void ways::connect_ways() {
 
 cista::wrapped<ways::routing> ways::routing::read(
     std::filesystem::path const& p) {
-  return cista::read<ways::routing>(p);
+  return cista::read<ways::routing>(p / "routing.bin");
 }
 
 void ways::routing::write(std::filesystem::path const& p) {
-  return cista::write(p, *this);
+  return cista::write(p / "routing.bin", *this);
 }
 
 }  // namespace osr
