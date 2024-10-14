@@ -1,7 +1,7 @@
 [boost]
   url=git@github.com:motis-project/boost.git
   branch=master
-  commit=60cae66449fa3c9599b2b7d3d5d44c65301ed3a3
+  commit=73549ebca677fe6214202a1ab580362b4f80e653
 [osmium]
   url=git@github.com:motis-project/libosmium.git
   branch=master
@@ -30,10 +30,10 @@
   url=git@github.com:motis-project/protozero.git
   branch=master
   commit=8c9f3fa97c2cfdceef86d0b61818ae98e9328f29
-[zlib]
-  url=git@github.com:motis-project/zlib.git
-  branch=master
-  commit=8e7c86d3a0e49101b9a67d74c4a07345dcb0e485
+[zlib-ng]
+  url=git@github.com:motis-project/zlib-ng.git
+  branch=develop
+  commit=68ab3e2d80253ec5dc3c83691d9ff70477b32cd3
 [tiles]
   url=git@github.com:motis-project/tiles.git
   branch=master
@@ -65,4 +65,4 @@
 [net]
   url=git@github.com:motis-project/net.git
   branch=master
-  commit=44674d2f3917e20b7019a0f7254d332522c36fb7
+  commit=75611343512242c64a5b3f50f3a660a17298339d
