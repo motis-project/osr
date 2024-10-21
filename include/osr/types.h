@@ -142,7 +142,7 @@ constexpr level_t to_level(float const f) {
 }
 
 constexpr float to_float(level_t const l) {
-  return kMinLevel + (to_idx(l) / 4.0F);
+  return l == level_t::invalid() ? 0.0F : (kMinLevel + (to_idx(l) / 4.0F));
 }
 
 constexpr auto const kLevelBits = cista::constexpr_trailing_zeros(
