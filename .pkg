@@ -57,7 +57,7 @@
 [unordered_dense]
   url=git@github.com:motis-project/unordered_dense.git
   branch=main
-  commit=c11595a7743d20622637584bddf77243d72ae152
+  commit=b33b037377ca966bbdd9cccc3417e46e88f83bfb
 [expat]
   url=git@github.com:motis-project/expat.git
   branch=master
