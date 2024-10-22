@@ -129,6 +129,36 @@ std::pair<node_properties, level_bits_t> get_node_properties(tags const& t) {
 }
 
 struct way_handler : public osm::handler::Handler {
+  using is_transparent = void;
+
+  struct strings_hash {
+    using is_transparent = void;
+
+    cista::hash_t operator()(string_idx_t const& x) const {
+      return (*this)(((*strings_)[x]).view());
+    }
+
+    cista::hash_t operator()(std::string_view x) const {
+      return cista::hash(x);
+    }
+
+    mm_vecvec<string_idx_t, char, std::uint64_t> const* strings_{nullptr};
+  };
+
+  struct strings_equals {
+    using is_transparent = void;
+
+    cista::hash_t operator()(string_idx_t const a, string_idx_t const b) const {
+      return a == b;
+    }
+
+    cista::hash_t operator()(std::string_view a, string_idx_t const b) const {
+      return a == (*strings_)[b].view();
+    }
+
+    mm_vecvec<string_idx_t, char, std::uint64_t> const* strings_{nullptr};
+  };
+
   way_handler(ways& w,
               platforms* platforms,
               rel_ways_t const& rel_ways,
@@ -136,7 +166,10 @@ struct way_handler : public osm::handler::Handler {
       : w_{w},
         platforms_{platforms},
         rel_ways_{rel_ways},
-        elevator_nodes_{elevator_nodes} {}
+        elevator_nodes_{elevator_nodes} {
+    strings_set_.hash_function().strings_ = &w_.strings_;
+    strings_set_.key_eq().strings_ = &w_.strings_;
+  }
 
   void way(osm::Way const& w) {
     auto const osm_way_idx = osm_way_idx_t{w.positive_id()};
@@ -200,7 +233,25 @@ struct way_handler : public osm::handler::Handler {
     w_.way_osm_nodes_.emplace_back(w.nodes() |
                                    std::views::transform(get_node_id));
     w_.r_->way_properties_.emplace_back(p);
+
+    auto const name = t.name_.empty() ? t.ref_ : t.name_;
+    if (!name.empty()) {
+      auto str_idx = string_idx_t::invalid();
+      if (auto const string_it = strings_set_.find(name);
+          string_it != end(strings_set_)) {
+        str_idx = *string_it;
+      } else {
+        str_idx = string_idx_t{w_.strings_.size()};
+        w_.strings_.emplace_back(name);
+      }
+      w_.way_names_.emplace_back(str_idx);
+    } else {
+      w_.way_names_.emplace_back(string_idx_t::invalid());
+    }
   }
+
+  using strings_set_t = hash_set<string_idx_t, strings_hash, strings_equals>;
+  strings_set_t strings_set_;
 
   std::mutex mutex_;
   ways& w_;

@@ -15,7 +15,10 @@ ways::ways(std::filesystem::path p, cista::mmap::protection const mode)
       way_polylines_{mm_vec<point>{mm("way_polylines_data.bin")},
                      mm_vec<std::uint64_t>{mm("way_polylines_index.bin")}},
       way_osm_nodes_{mm_vec<osm_node_idx_t>{mm("way_osm_nodes_data.bin")},
-                     mm_vec<std::uint64_t>{mm("way_osm_nodes_index.bin")}} {}
+                     mm_vec<std::uint64_t>{mm("way_osm_nodes_index.bin")}},
+      strings_{mm_vec<char>(mm("strings_data.bin")),
+               mm_vec<std::uint64_t>(mm("strings_idx.bin"))},
+      way_names_{mm("way_names.bin")} {}
 
 void ways::add_restriction(std::vector<resolved_restriction>& rs) {
   using it_t = std::vector<resolved_restriction>::iterator;

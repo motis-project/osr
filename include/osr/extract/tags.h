@@ -68,6 +68,7 @@ struct tags {
           break;
         }
         case cista::hash("name"): name_ = t.value(); break;
+        case cista::hash("ref"): ref_ = t.value(); break;
         case cista::hash("entrance"): is_entrance_ = true; break;
         case cista::hash("sidewalk"):
         case cista::hash("sidewalk:left"): [[fallthrough]];
@@ -164,6 +165,9 @@ struct tags {
 
   // https://wiki.openstreetmap.org/wiki/Key:name
   std::string_view name_;
+
+  // https://wiki.openstreetmap.org/wiki/Key:ref
+  std::string_view ref_;
 
   // https://wiki.openstreetmap.org/wiki/Key:vehicle
   bool is_destination_{false};

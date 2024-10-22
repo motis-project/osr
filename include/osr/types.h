@@ -76,6 +76,8 @@ template <typename K,
           typename Equality = cista::equals_all>
 using hash_set = cista::raw::ankerl_set<K, Hash, Equality>;
 
+using string_idx_t = cista::strong<std::uint32_t, struct string_idx_>;
+
 using osm_node_idx_t = cista::strong<std::uint64_t, struct osm_node_idx_>;
 using osm_way_idx_t = cista::strong<std::uint64_t, struct osm_way_idx_>;
 

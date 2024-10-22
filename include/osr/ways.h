@@ -254,6 +254,8 @@ struct ways {
   mm_vec_map<way_idx_t, osm_way_idx_t> way_osm_idx_;
   mm_vecvec<way_idx_t, point, std::uint64_t> way_polylines_;
   mm_vecvec<way_idx_t, osm_node_idx_t, std::uint64_t> way_osm_nodes_;
+  mm_vecvec<string_idx_t, char, std::uint64_t> strings_;
+  mm_vec_map<way_idx_t, string_idx_t> way_names_;
 
   multi_counter node_way_counter_;
 };
