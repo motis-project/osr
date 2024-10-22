@@ -210,9 +210,12 @@ struct http_server::impl {
 
   void handle_static(web_server::http_req_t const& req,
                      web_server::http_res_cb_t const& cb) {
-    if (!serve_static_files_ ||
-        !net::serve_static_file(static_file_path_, req, cb)) {
-      return cb(net::not_found_response(req));
+    if (auto res = net::serve_static_file(static_file_path_, req);
+        res.has_value()) {
+      cb(std::move(*res));
+    } else {
+      namespace http = boost::beast::http;
+      cb(net::web_server::string_res_t{http::status::not_found, req.version()});
     }
   }
 
