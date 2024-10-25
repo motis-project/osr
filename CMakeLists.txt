@@ -21,6 +21,8 @@ if (MSVC)
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /wd4996")  # ignore deprecated fileno in tiles
 endif ()
 
+option(OSR_MIMALLOC "use mimalloc" OFF)
+
 if (NOT DEFINED CMAKE_MSVC_RUNTIME_LIBRARY)
     if (OSR_MIMALLOC)
         set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>DLL")
@@ -29,7 +31,6 @@ if (NOT DEFINED CMAKE_MSVC_RUNTIME_LIBRARY)
     endif ()
 endif ()
 
-option(OSR_MIMALLOC "use mimalloc" OFF)
 if (OSR_MIMALLOC AND WIN32)
     set(MI_BUILD_SHARED ON)
 endif ()
@@ -155,7 +156,7 @@ if (OSR_MIMALLOC)
         add_custom_command(
                 TARGET osr-extract POST_BUILD
                 COMMAND "${CMAKE_COMMAND}" -E copy
-                "${CMAKE_CURRENT_BINARY_DIR}/deps/mimalloc/mimalloc-redirect.dll"
+                "${CMAKE_BINARY_DIR}/deps/mimalloc/mimalloc-redirect.dll"
                 $<TARGET_FILE_DIR:osr>
                 COMMENT "Copy mimalloc-redirect.dll to output directory"
         )
