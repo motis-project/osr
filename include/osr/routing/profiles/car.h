@@ -6,8 +6,8 @@
 
 #include "utl/helpers/algorithm.h"
 
-#include "osr/routing/route.h"
 #include "osr/routing/mode.h"
+#include "osr/routing/route.h"
 #include "osr/ways.h"
 
 namespace osr {
