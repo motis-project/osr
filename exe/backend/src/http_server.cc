@@ -23,6 +23,7 @@
 #include "osr/routing/profiles/car.h"
 #include "osr/routing/profiles/car_parking.h"
 #include "osr/routing/profiles/foot.h"
+#include "osr/routing/profiles/bike_sharing.h"
 #include "osr/routing/route.h"
 
 using namespace net;
@@ -196,6 +197,9 @@ struct http_server::impl {
       case search_profile::kCarParkingWheelchair:
         send_graph_response<car_parking<true>>(req, cb, gj);
         break;
+      case search_profile::kBikeSharing:
+        send_graph_response<bike_sharing>(req, cb, gj);
+      break;
       default: throw utl::fail("not implemented");
     }
   }

@@ -1,6 +1,7 @@
 #include "osr/lookup.h"
 
 #include "osr/routing/profiles/bike.h"
+#include "osr/routing/profiles/bike_sharing.h"
 #include "osr/routing/profiles/car.h"
 #include "osr/routing/profiles/car_parking.h"
 #include "osr/routing/profiles/foot.h"
@@ -41,6 +42,9 @@ match_t lookup::match(location const& query,
     case search_profile::kCarParkingWheelchair:
       return match<car_parking<true>>(query, reverse, search_dir,
                                       max_match_distance, blocked);
+    case search_profile::kBikeSharing:
+      return match<bike_sharing>(query, reverse, search_dir, max_match_distance,
+                                 blocked);
   }
   throw utl::fail("{} is not a valid profile", static_cast<std::uint8_t>(p));
 }

@@ -1,9 +1,12 @@
 #pragma once
 
+#include "osr/routing/mode.h"
 #include "osr/routing/route.h"
 #include "osr/ways.h"
 
 namespace osr {
+
+struct sharing_data;
 
 struct bike {
   static constexpr auto const kMaxMatchDistance = 100U;
@@ -19,6 +22,8 @@ struct bike {
     constexpr node_idx_t get_node() const noexcept { return n_; }
 
     constexpr node get_key() const noexcept { return *this; }
+
+    static constexpr mode get_mode() noexcept { return mode::kBike; }
 
     std::ostream& print(std::ostream& out, ways const& w) const {
       return out << w.node_to_osm_[n_];
@@ -101,6 +106,7 @@ struct bike {
   static void adjacent(ways::routing const& w,
                        node const n,
                        bitvec<node_idx_t> const* blocked,
+                       sharing_data const*,
                        Fn&& fn) {
     for (auto const [way, i] :
          utl::zip_unchecked(w.node_ways_[n.n_], w.node_in_way_idx_[n.n_])) {
