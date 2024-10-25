@@ -15,6 +15,8 @@ search_profile to_profile(std::string_view s) {
     case cista::hash("car_parking"): return search_profile::kCarParking;
     case cista::hash("car_parking_wheelchair"):
       return search_profile::kCarParkingWheelchair;
+    case cista::hash("combi_foot_car_foot_via_parking"):
+      return search_profile::kCombiFootCarFootViaParking;
   }
   throw utl::fail("{} is not a valid profile", s);
 }
@@ -27,6 +29,8 @@ std::string_view to_str(search_profile const p) {
     case search_profile::kBike: return "bike";
     case search_profile::kCarParking: return "car_parking";
     case search_profile::kCarParkingWheelchair: return "car_parking_wheelchair";
+    case search_profile::kCombiFootCarFootViaParking:
+      return "combi_foot_car_foot_via_parking";
   }
   throw utl::fail("{} is not a valid profile", static_cast<std::uint8_t>(p));
 }

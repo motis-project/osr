@@ -109,7 +109,7 @@ struct car_parking {
 
     entry() { utl::fill(cost_, kInfeasible); }
 
-    constexpr std::optional<node> pred(node const n) const noexcept {
+    constexpr std::optional<node> pred(node const n, direction) const noexcept {
       auto const idx = get_index(n);
       return pred_[idx] == node_idx_t::invalid()
                  ? std::nullopt
@@ -124,6 +124,7 @@ struct car_parking {
       return cost_[get_index(n)];
     }
 
+    template<direction>
     constexpr bool update(label const,
                           node const n,
                           cost_t const c,
@@ -282,6 +283,11 @@ struct car_parking {
               [&](footp::node const fn) { f(to_node(fn)); });
   }
 
+  template<direction SearchDir>
+  static constexpr node get_starting_node_pred() noexcept {
+    return node::invalid();
+  }
+
   static bool is_dest_reachable(ways::routing const& w,
                                 node const n,
                                 way_idx_t const way,
@@ -299,8 +305,9 @@ struct car_parking {
 
   static constexpr cost_t way_cost(way_properties const& e,
                                    direction const dir,
+                                   direction const search_dir,
                                    std::uint16_t const dist) {
-    return footp::way_cost(e, dir, dist);
+    return footp::way_cost(e, dir, search_dir, dist);
   }
 };
 

@@ -53,12 +53,14 @@ struct foot {
   };
 
   struct entry {
-    constexpr std::optional<node> pred(node) const noexcept {
+    constexpr std::optional<node> pred(node, direction) const noexcept {
       return pred_ == node_idx_t::invalid()
                  ? std::nullopt
                  : std::optional{node{pred_, pred_lvl_}};
     }
     constexpr cost_t cost(node) const noexcept { return cost_; }
+
+    template<direction>
     constexpr bool update(label const& l,
                           node,
                           cost_t const c,
@@ -106,26 +108,33 @@ struct foot {
     }
   }
 
+  template<direction SearchDir>
+  static constexpr node get_starting_node_pred() noexcept {
+    return node::invalid();
+  }
+
   template <typename Fn>
   static void resolve_all(ways::routing const& w,
                           node_idx_t const n,
                           level_t const lvl,
                           Fn&& f) {
     auto const ways = w.node_ways_[n];
-    auto levels = hash_set<level_t>{};
+    auto levelsBitSet = std::bitset<255>();
     for (auto i = way_pos_t{0U}; i != ways.size(); ++i) {
       // TODO what's with stairs? need to resolve to from_level or to_level?
       auto const p = w.way_properties_[w.node_ways_[n][i]];
       if (lvl == level_t::invalid()) {
-        if (levels.emplace(p.from_level()).second) {
+        if (!levelsBitSet.test(p.from_level().v_)) {
+          levelsBitSet.set(p.to_level().v_);
           f(node{n, p.from_level()});
         }
-        if (levels.emplace(p.to_level()).second) {
+        if (!levelsBitSet.test(p.to_level().v_)) {
+          levelsBitSet.set(p.from_level().v_);
           f(node{n, p.to_level()});
         }
       } else if ((p.from_level() == lvl || p.to_level() == lvl ||
-                  can_use_elevator(w, n, lvl)) &&
-                 levels.emplace(lvl).second) {
+                  can_use_elevator(w, n, lvl)) && !levelsBitSet.test(lvl.v_)) {
+        levelsBitSet.set(lvl.v_);
         f(node{n, lvl});
       }
     }
@@ -154,7 +163,7 @@ struct foot {
         }
 
         auto const target_way_prop = w.way_properties_[way];
-        if (way_cost(target_way_prop, way_dir, 0U) == kInfeasible) {
+        if (way_cost(target_way_prop, way_dir, SearchDir, 0U) == kInfeasible) {
           return;
         }
 
@@ -162,7 +171,7 @@ struct foot {
           for_each_elevator_level(
               w, target_node, [&](level_t const target_lvl) {
                 auto const dist = w.way_node_dist_[way][std::min(from, to)];
-                auto const cost = way_cost(target_way_prop, way_dir, dist) +
+                auto const cost = way_cost(target_way_prop, way_dir, SearchDir, dist) +
                                   node_cost(target_node_prop);
                 fn(node{target_node, target_lvl},
                    static_cast<std::uint32_t>(cost), dist, way, from, to);
@@ -174,7 +183,7 @@ struct foot {
           }
 
           auto const dist = w.way_node_dist_[way][std::min(from, to)];
-          auto const cost = way_cost(target_way_prop, way_dir, dist) +
+          auto const cost = way_cost(target_way_prop, way_dir, SearchDir, dist) +
                             node_cost(target_node_prop);
           fn(node{target_node, *target_lvl}, static_cast<std::uint32_t>(cost),
              dist, way, from, to);
@@ -199,6 +208,7 @@ struct foot {
     if (way_cost(
             target_way_prop,
             search_dir == direction::kForward ? way_dir : opposite(way_dir),
+            search_dir,
             0U) == kInfeasible) {
       return false;
     }
@@ -292,6 +302,7 @@ struct foot {
   }
 
   static constexpr cost_t way_cost(way_properties const e,
+                                   direction,
                                    direction,
                                    std::uint16_t const dist) {
     if ((e.is_foot_accessible() || e.is_bike_accessible()) &&

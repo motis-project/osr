@@ -25,10 +25,19 @@ struct dijkstra {
     cost_.clear();
   }
 
+  template<direction SearchDir>
   void add_start(label const l) {
-    if (cost_[l.get_node().get_key()].update(l, l.get_node(), l.cost(),
-                                             node::invalid())) {
+    if (cost_[l.get_node().get_key()].template update<SearchDir>(l, l.get_node(), l.cost(),
+                                             Profile::template get_starting_node_pred<SearchDir>())) {
       pq_.push(l);
+    }
+  }
+
+  void add_start(label const l, direction const dir) {
+    if (dir == direction::kForward) {
+      add_start<direction::kForward>(l);
+    } else {
+      add_start<direction::kBackward>(l);
     }
   }
 
@@ -54,7 +63,7 @@ struct dijkstra {
               way_idx_t const way, std::uint16_t, std::uint16_t) {
             auto const total = l.cost() + cost;
             if (total < max &&
-                cost_[neighbor.get_key()].update(
+                cost_[neighbor.get_key()].template update<SearchDir>(
                     l, neighbor, static_cast<cost_t>(total), curr)) {
               auto next = label{neighbor, static_cast<cost_t>(total)};
               next.track(l, r, way, neighbor.get_node());
