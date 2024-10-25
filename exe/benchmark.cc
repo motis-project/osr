@@ -73,7 +73,8 @@ int main(int argc, char const* argv[]) {
         d.reset(opt.max_dist_);
         d.add_start(car::label{car::node{start, 0, direction::kForward}, 0U});
         d.add_start(car::label{car::node{start, 0, direction::kBackward}, 0U});
-        d.run<direction::kForward, false>(*w.r_, opt.max_dist_, nullptr, nullptr);
+        d.run<direction::kForward, false>(*w.r_, opt.max_dist_, nullptr,
+                                          nullptr);
       }
     });
   }
