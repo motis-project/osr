@@ -30,12 +30,28 @@ struct bike_sharing {
   static constexpr auto const kAdditionalWayProperties =
       way_properties{.is_foot_accessible_ = true,
                      .is_bike_accessible_ = true,
-                     .is_steps_ = false};
+                     .is_car_accessible_ = false,
+                     .is_destination_ = false,
+                     .is_oneway_car_ = false,
+                     .is_oneway_bike_ = false,
+                     .is_elevator_ = false,
+                     .is_steps_ = false,
+                     .speed_limit_ = 0,
+                     .from_level_ = 0,
+                     .to_level_ = 0,
+                     .is_platform_ = 0,
+                     .is_parking_ = 0};
 
   static constexpr auto const kAdditionalNodeProperties =
-      node_properties{.is_foot_accessible_ = true,
+      node_properties{.from_level_ = 0,
+                      .is_foot_accessible_ = true,
                       .is_bike_accessible_ = true,
-                      .is_elevator_ = false};
+                      .is_car_accessible_ = false,
+                      .is_elevator_ = false,
+                      .is_entrance_ = false,
+                      .is_multi_level_ = false,
+                      .is_parking_ = false,
+                      .to_level_ = 0};
 
   enum class node_type : std::uint8_t {
     kInitialFoot,
