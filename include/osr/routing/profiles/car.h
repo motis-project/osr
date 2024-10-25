@@ -6,10 +6,13 @@
 
 #include "utl/helpers/algorithm.h"
 
+#include "osr/routing/mode.h"
 #include "osr/routing/route.h"
 #include "osr/ways.h"
 
 namespace osr {
+
+struct sharing_data;
 
 struct car {
   static constexpr auto const kMaxMatchDistance = 200U;
@@ -32,6 +35,8 @@ struct car {
     }
 
     constexpr node_idx_t get_key() const noexcept { return n_; }
+
+    static constexpr mode get_mode() noexcept { return mode::kCar; }
 
     std::ostream& print(std::ostream& out, ways const& w) const {
       return out << "(node=" << w.node_to_osm_[n_] << ", dir=" << to_str(dir_)
@@ -158,6 +163,7 @@ struct car {
   static void adjacent(ways::routing const& w,
                        node const n,
                        bitvec<node_idx_t> const* blocked,
+                       sharing_data const*,
                        Fn&& fn) {
     auto way_pos = way_pos_t{0U};
     for (auto const [way, i] :

@@ -6,12 +6,15 @@
 
 #include "utl/helpers/algorithm.h"
 
+#include "osr/routing/mode.h"
 #include "osr/routing/profiles/car.h"
 #include "osr/routing/profiles/foot.h"
 #include "osr/routing/route.h"
 #include "osr/ways.h"
 
 namespace osr {
+
+struct sharing_data;
 
 template <bool IsWheelchair>
 struct car_parking {
@@ -57,6 +60,10 @@ struct car_parking {
     static constexpr node invalid() noexcept { return node{}; }
     constexpr node_idx_t get_node() const noexcept { return n_; }
     constexpr node_idx_t get_key() const noexcept { return n_; }
+
+    constexpr mode get_mode() const noexcept {
+      return is_car_node() ? mode::kCar : mode::kFoot;
+    }
 
     constexpr bool is_car_node() const noexcept {
       return type_ == node_type::kCar;
@@ -225,6 +232,7 @@ struct car_parking {
   static void adjacent(ways::routing const& w,
                        node const n,
                        bitvec<node_idx_t> const* blocked,
+                       sharing_data const*,
                        Fn&& fn) {
     static constexpr auto const kFwd = SearchDir == direction::kForward;
     static constexpr auto const kBwd = SearchDir == direction::kBackward;
@@ -233,7 +241,7 @@ struct car_parking {
 
     if (n.is_foot_node() || (kFwd && n.is_car_node() && is_parking)) {
       footp::template adjacent<SearchDir, WithBlocked>(
-          w, to_foot(n), blocked,
+          w, to_foot(n), blocked, nullptr,
           [&](footp::node const neighbor, std::uint32_t const cost,
               distance_t const dist, way_idx_t const way,
               std::uint16_t const from, std::uint16_t const to) {
@@ -245,7 +253,7 @@ struct car_parking {
 
     if (n.is_car_node() || (kBwd && n.is_foot_node() && is_parking)) {
       car::template adjacent<SearchDir, WithBlocked>(
-          w, to_car(n), blocked,
+          w, to_car(n), blocked, nullptr,
           [&](car::node const neighbor, std::uint32_t const cost,
               distance_t const dist, way_idx_t const way,
               std::uint16_t const from, std::uint16_t const to) {
