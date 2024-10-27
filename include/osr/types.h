@@ -136,35 +136,42 @@ constexpr direction to_direction(std::string_view s) {
 // level
 using level_t = cista::strong<std::uint8_t, struct level_>;
 
-constexpr auto const kMinLevel = -4.0F;
+// would be -4.0 as float but represented as NaN
+constexpr auto const kNoLevel = level_t{0U};
+constexpr auto const kMinLevel = -3.75F;
 constexpr auto const kMaxLevel = 3.75F;
 
 constexpr level_t to_level(float const f) {
-  return level_t{static_cast<std::uint8_t>((f - kMinLevel) / 0.25F)};
+  return level_t{static_cast<std::uint8_t>((f - kMinLevel) / 0.25F) + 1U};
 }
 
 constexpr float to_float(level_t const l) {
-  return l == level_t::invalid() ? 0.0F : (kMinLevel + (to_idx(l) / 4.0F));
+  switch (to_idx(l)) {
+    case 0U: return std::numeric_limits<float>::signaling_NaN();
+    case to_idx(level_t::invalid()): return 0.0F;
+    default: return (kMinLevel + ((to_idx(l) - 1U) / 4.0F));
+  }
 }
 
 constexpr auto const kLevelBits = cista::constexpr_trailing_zeros(
     cista::next_power_of_two(to_idx(to_level(kMaxLevel))));
+
+constexpr auto const kGroundLevel = to_level(0.0F);
 
 using level_bits_t = std::uint32_t;
 
 constexpr std::tuple<level_t, level_t, bool> get_levels(
     bool const has_level, level_bits_t const levels) noexcept {
   if (!has_level) {
-    return {level_t{to_level(0.F)}, level_t{to_level(0.F)}, false};
+    return {kNoLevel, kNoLevel, false};
   }
-  auto from = level_t::invalid(), to = level_t::invalid();
+  auto from = kNoLevel, to = kNoLevel;
   utl::for_each_set_bit(levels, [&](auto&& bit) {
-    from == level_t::invalid()  //
+    from == kNoLevel  //
         ? from = level_t{bit}
         : to = level_t{bit};
   });
-  return {from, to == level_t::invalid() ? from : to,
-          std::popcount(levels) > 2};
+  return {from, to == kNoLevel ? from : to, std::popcount(levels) > 2};
 }
 
 static_assert(kLevelBits == 5U);
