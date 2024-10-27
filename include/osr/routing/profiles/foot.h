@@ -226,6 +226,11 @@ struct foot {
       return std::nullopt;
     }
 
+    if (from_level == kNoLevel || way_prop.from_level() == kNoLevel) {
+      return way_prop.to_level() == kGroundLevel ? way_prop.from_level()
+                                                 : way_prop.to_level();
+    }
+
     if (way_prop.is_steps()) {
       if (way_prop.from_level() == from_level) {
         return way_prop.to_level();
