@@ -136,10 +136,9 @@ constexpr direction to_direction(std::string_view s) {
 // level
 using level_t = cista::strong<std::uint8_t, struct level_>;
 
-// would be -4.0 as float but represented as NaN
 constexpr auto const kNoLevel = level_t{0U};
-constexpr auto const kMinLevel = -3.75F;
-constexpr auto const kMaxLevel = 3.75F;
+constexpr auto const kMinLevel = -4.0F;
+constexpr auto const kMaxLevel = 3.5F;
 
 constexpr level_t to_level(float const f) {
   return level_t{static_cast<std::uint8_t>((f - kMinLevel) / 0.25F) + 1U};
