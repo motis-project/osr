@@ -23,6 +23,11 @@ endif ()
 
 option(OSR_MIMALLOC "use mimalloc" OFF)
 
+if (OSR_MIMALLOC)
+    set(CISTA_USE_MIMALLOC ON)
+    set(TILES_MIMALLOC ON)
+endif()
+
 if (NOT DEFINED CMAKE_MSVC_RUNTIME_LIBRARY)
     if (OSR_MIMALLOC)
         set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>DLL")
@@ -145,6 +150,7 @@ target_link_libraries(osr-test gtest osr)
 # --- MIMALLOC ---
 if (OSR_MIMALLOC)
     target_link_libraries(osr-extract ${osr-mimalloc-lib})
+    target_link_libraries(osr-backend ${osr-mimalloc-lib})
     if (WIN32)
         add_custom_command(
                 TARGET osr-extract POST_BUILD
