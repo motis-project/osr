@@ -41,7 +41,7 @@
 [mimalloc]
   url=git@github.com:motis-project/mimalloc.git
   branch=master
-  commit=0087f000848de31b0090cb6f282348bd2fd3a9b8
+  commit=2a557cafb2e9e7c872358a83a63c62a7e14330b3
 [rapidjson]
   url=git@github.com:motis-project/rapidjson.git
   branch=master
