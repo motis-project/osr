@@ -154,15 +154,13 @@ private:
                                 bitvec<node_idx_t> const* blocked) const {
     auto const way_prop = ways_.r_->way_properties_[wc.way_];
     auto const edge_dir = reverse ? opposite(dir) : dir;
-    auto const way_cost =
-        Profile::way_cost(way_prop, flip(search_dir, edge_dir), 0U);
-    if (way_cost == kInfeasible) {
-      return node_candidate{};
-    }
-
     auto const offroad_cost =
         Profile::way_cost(way_prop, flip(search_dir, edge_dir),
                           static_cast<distance_t>(wc.dist_to_way_));
+    if (offroad_cost == kInfeasible) {
+      return node_candidate{};
+    }
+
     auto c = node_candidate{.lvl_ = lvl,
                             .way_dir_ = dir,
                             .dist_to_node_ = wc.dist_to_way_,
