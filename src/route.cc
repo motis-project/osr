@@ -155,12 +155,16 @@ path reconstruct(ways const& w,
                  cost_t const cost,
                  direction const dir) {
   auto n = dest_node;
-  auto segments = std::vector<path::segment>{{.polyline_ = dest.path_,
-                                              .from_level_ = dest.lvl_,
-                                              .to_level_ = dest.lvl_,
-                                              .from_ = node_idx_t::invalid(),
-                                              .to_ = node_idx_t::invalid(),
-                                              .way_ = way_idx_t::invalid()}};
+  auto segments = std::vector<path::segment>{
+      {.polyline_ = dest.path_,
+       .from_level_ = dest.lvl_,
+       .to_level_ = dest.lvl_,
+       .from_ = node_idx_t::invalid(),
+       .to_ = node_idx_t::invalid(),
+       .way_ = way_idx_t::invalid(),
+       .cost_ = dest.cost_,
+       .dist_ = static_cast<distance_t>(dest.dist_to_node_),
+       .mode_ = dest_node.get_mode()}};
   auto dist = 0.0;
   while (true) {
     auto const& e = d.cost_.at(n.get_key());
@@ -186,8 +190,9 @@ path reconstruct(ways const& w,
            dir == direction::kBackward ? n.get_node() : node_idx_t::invalid(),
        .to_ = dir == direction::kForward ? n.get_node() : node_idx_t::invalid(),
        .way_ = way_idx_t::invalid(),
-       .cost_ = kInfeasible,
-       .dist_ = 0});
+       .cost_ = start_node.cost_,
+       .dist_ = static_cast<distance_t>(start_node.dist_to_node_),
+       .mode_ = n.get_mode()});
   std::reverse(begin(segments), end(segments));
   auto p = path{.cost_ = cost,
                 .dist_ = start_node.dist_to_node_ + dist + dest.dist_to_node_,
