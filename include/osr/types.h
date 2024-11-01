@@ -134,21 +134,39 @@ constexpr direction to_direction(std::string_view s) {
 }
 
 // level
-using level_t = cista::strong<std::uint8_t, struct level_>;
+struct level_t {
+  static constexpr level_t invalid() {
+    return level_t{std::numeric_limits<std::uint8_t>::max()};
+  }
+
+  friend constexpr std::uint8_t to_idx(level_t l) { return l.v_; }
+
+  template <std::integral X>
+  explicit constexpr level_t(X x) : v_{static_cast<std::uint8_t>(x)} {}
+
+  constexpr level_t() = default;
+
+  auto operator<=>(level_t const&) const = default;
+
+  constexpr cista::hash_t hash() const { return v_; }
+
+  std::uint8_t v_;
+};
 
 constexpr auto const kMinLevel = -4.0F;
-constexpr auto const kMaxLevel = 3.75F;
+constexpr auto const kMaxLevel = 3.5F;
 
 constexpr level_t to_level(float const f) {
-  return level_t{static_cast<std::uint8_t>((f - kMinLevel) / 0.25F)};
+  return level_t{static_cast<std::uint8_t>((f - kMinLevel) / 0.25F + 1U)};
 }
 
 constexpr float to_float(level_t const l) {
-  return l == level_t::invalid() ? 0.0F : (kMinLevel + (to_idx(l) / 4.0F));
+  return l == level_t::invalid() ? 0.0F
+                                 : (kMinLevel + ((to_idx(l) - 1U) / 4.0F));
 }
 
 constexpr auto const kLevelBits = cista::constexpr_trailing_zeros(
-    cista::next_power_of_two(to_idx(to_level(kMaxLevel))));
+    cista::next_power_of_two(to_idx(to_level(kMaxLevel)) + 1U));
 
 using level_bits_t = std::uint32_t;
 
