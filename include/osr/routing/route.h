@@ -23,8 +23,8 @@ struct sharing_data;
 struct path {
   struct segment {
     geo::polyline polyline_;
-    level_t from_level_{level_t::invalid()};
-    level_t to_level_{level_t::invalid()};
+    level_t from_level_{kNoLevel};
+    level_t to_level_{kNoLevel};
     node_idx_t from_{node_idx_t::invalid()};
     node_idx_t to_{node_idx_t::invalid()};
     way_idx_t way_{way_idx_t::invalid()};

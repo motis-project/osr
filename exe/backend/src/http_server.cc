@@ -59,7 +59,7 @@ location parse_location(json::value const& v) {
   auto const& obj = v.as_object();
   return {obj.at("lat").as_double(), obj.at("lng").as_double(),
           obj.contains("level") ? to_level(obj.at("level").to_number<float>())
-                                : level_t::invalid()};
+                                : kNoLevel};
 }
 
 json::value to_json(std::vector<geo::latlng> const& polyline) {
@@ -230,7 +230,7 @@ struct http_server::impl {
     auto const query = boost::json::parse(req.body()).as_object();
     auto const level = query.contains("level")
                            ? to_level(query.at("level").to_number<float>())
-                           : level_t::invalid();
+                           : kNoLevel;
     auto const waypoints = query.at("waypoints").as_array();
     auto const min = point::from_latlng(
         {waypoints[1].as_double(), waypoints[0].as_double()});
@@ -239,7 +239,7 @@ struct http_server::impl {
 
     auto gj = geojson_writer{.w_ = w_, .platforms_ = pl_};
     pl_->find(min, max, [&](platform_idx_t const i) {
-      if (level == level_t::invalid() || pl_->get_level(w_, i) == level) {
+      if (level == kNoLevel || pl_->get_level(w_, i) == level) {
         gj.write_platform(i);
       }
     });

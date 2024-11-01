@@ -19,7 +19,7 @@ struct foot {
     friend bool operator==(node, node) = default;
 
     static constexpr node invalid() noexcept {
-      return {.n_ = node_idx_t::invalid(), .lvl_{level_t::invalid()}};
+      return {.n_ = node_idx_t::invalid(), .lvl_{kNoLevel}};
     }
     constexpr node_idx_t get_node() const noexcept { return n_; }
 
@@ -104,10 +104,12 @@ struct foot {
                                  direction,
                                  Fn&& f) {
     auto const p = w.way_properties_[way];
-    if (lvl == level_t::invalid() ||
+    if (lvl == kNoLevel ||
         (p.from_level() == lvl || p.to_level() == lvl ||
-         can_use_elevator(w, n, lvl))) {
-      f(node{n, lvl == level_t::invalid() ? p.from_level() : lvl});
+         can_use_elevator(w, n, lvl)) ||
+        (lvl == to_level(0.F) &&
+         (p.from_level() == kNoLevel && p.to_level() == kNoLevel))) {
+      f(node{n, lvl == kNoLevel ? p.from_level() : lvl});
     }
   }
 
@@ -121,7 +123,7 @@ struct foot {
     for (auto i = way_pos_t{0U}; i != ways.size(); ++i) {
       // TODO what's with stairs? need to resolve to from_level or to_level?
       auto const p = w.way_properties_[w.node_ways_[n][i]];
-      if (lvl == level_t::invalid()) {
+      if (lvl == kNoLevel) {
         if (levels.emplace(p.from_level()).second) {
           f(node{n, p.from_level()});
         }
@@ -129,7 +131,7 @@ struct foot {
           f(node{n, p.to_level()});
         }
       } else if ((p.from_level() == lvl || p.to_level() == lvl ||
-                  can_use_elevator(w, n, lvl)) &&
+                  p.from_level() == kNoLevel || can_use_elevator(w, n, lvl)) &&
                  levels.emplace(lvl).second) {
         f(node{n, lvl});
       }
@@ -239,7 +241,8 @@ struct foot {
     } else if (can_use_elevator(w, from_node, way_prop.from_level(),
                                 from_level)) {
       return way_prop.from_level();
-    } else if (way_prop.from_level() == from_level) {
+    } else if (way_prop.from_level() == from_level ||
+               way_prop.from_level() == kNoLevel || from_level == kNoLevel) {
       return from_level;
     } else {
       return std::nullopt;
@@ -249,7 +252,7 @@ struct foot {
   static bool can_use_elevator(ways::routing const& w,
                                way_idx_t const way,
                                level_t const a,
-                               level_t const b = level_t::invalid()) {
+                               level_t const b = kNoLevel) {
     return w.way_properties_[way].is_elevator() &&
            can_use_elevator(w, w.way_nodes_[way][0], a, b);
   }
@@ -271,7 +274,7 @@ struct foot {
   static bool can_use_elevator(ways::routing const& w,
                                node_idx_t const n,
                                level_t const a,
-                               level_t const b = level_t::invalid()) {
+                               level_t const b = kNoLevel) {
     auto const p = w.node_properties_[n];
     if (!p.is_elevator()) {
       return false;
@@ -279,12 +282,11 @@ struct foot {
 
     if (p.is_multi_level()) {
       auto const levels = get_elevator_multi_levels(w, n);
-      return utl::has_bit_set(levels, to_idx(a)) &&
-             (b == level_t::invalid() || utl::has_bit_set(levels, to_idx(b)));
+      return (a == kNoLevel || utl::has_bit_set(levels, to_idx(a))) &&
+             (b == kNoLevel || utl::has_bit_set(levels, to_idx(b)));
     } else {
-      return (a == p.from_level() || a == p.to_level()) &&
-             (b == level_t::invalid() || b == p.from_level() ||
-              b == p.to_level());
+      return (a == kNoLevel || a == p.from_level() || a == p.to_level()) &&
+             (b == kNoLevel || b == p.from_level() || b == p.to_level());
     }
   }
 
