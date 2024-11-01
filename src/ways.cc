@@ -141,6 +141,18 @@ void ways::connect_ways() {
   std::filesystem::remove(p_ / "tmp_node_in_way_idx_index.bin", e);
 }
 
+void ways::sync() {
+  node_to_osm_.mmap_.sync();
+  way_osm_idx_.mmap_.sync();
+  way_polylines_.data_.mmap_.sync();
+  way_polylines_.bucket_starts_.mmap_.sync();
+  way_osm_nodes_.data_.mmap_.sync();
+  way_osm_nodes_.bucket_starts_.mmap_.sync();
+  strings_.data_.mmap_.sync();
+  strings_.bucket_starts_.mmap_.sync();
+  way_names_.mmap_.sync();
+}
+
 cista::wrapped<ways::routing> ways::routing::read(
     std::filesystem::path const& p) {
   return cista::read<ways::routing>(p / "routing.bin");

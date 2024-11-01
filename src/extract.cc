@@ -558,6 +558,9 @@ void extract(bool const with_platforms,
     reader.close();
   }
 
+  w.r_->write(out);
+  w.sync();
+
   w.connect_ways();
 
   auto r = std::vector<resolved_restriction>{};

@@ -183,6 +183,8 @@ struct ways {
     return cista::mmap{(p_ / file).generic_string().c_str(), mode_};
   }
 
+  void sync();
+
   way_idx_t::value_t n_ways() const { return way_osm_idx_.size(); }
   node_idx_t::value_t n_nodes() const { return node_to_osm_.size(); }
 
