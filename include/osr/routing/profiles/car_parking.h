@@ -223,7 +223,7 @@ struct car_parking {
         w, n, lvl, [&](footp::node const neighbor) { f(to_node(neighbor)); });
     car::resolve_all(w, n, lvl, [&](car::node const neighbor) {
       auto const p = w.way_properties_[w.node_ways_[n][neighbor.way_]];
-      auto const node_level = lvl == level_t::invalid() ? p.from_level() : lvl;
+      auto const node_level = lvl == kNoLevel ? p.from_level() : lvl;
       f(to_node(neighbor, node_level));
     });
   }
@@ -277,14 +277,13 @@ struct car_parking {
                                  Fn&& f) {
     auto const way_properties = w.way_properties_[way];
     search_dir == direction::kForward
-        ? car::resolve_start_node(w, way, n, lvl, search_dir,
-                                  [&](car::node const cn) {
-                                    auto const node_level =
-                                        lvl == level_t::invalid()
-                                            ? way_properties.from_level()
-                                            : lvl;
-                                    f(to_node(cn, node_level));
-                                  })
+        ? car::resolve_start_node(
+              w, way, n, lvl, search_dir,
+              [&](car::node const cn) {
+                auto const node_level =
+                    lvl == kNoLevel ? way_properties.from_level() : lvl;
+                f(to_node(cn, node_level));
+              })
         : footp::resolve_start_node(
               w, way, n, lvl, search_dir,
               [&](footp::node const fn) { f(to_node(fn)); });

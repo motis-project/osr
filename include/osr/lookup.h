@@ -44,7 +44,7 @@ void till_the_end(T const& start,
 struct node_candidate {
   bool valid() const { return node_ != node_idx_t::invalid(); }
 
-  level_t lvl_{level_t::invalid()};
+  level_t lvl_{kNoLevel};
   direction way_dir_{direction::kForward};
   node_idx_t node_{node_idx_t::invalid()};
   double dist_to_node_{0.0};

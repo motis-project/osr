@@ -153,7 +153,7 @@ struct bike_sharing {
     entry() {
       utl::fill(pred_, node_idx_t::invalid());
       utl::fill(cost_, kInfeasible);
-      utl::fill(pred_lvl_, level_t::invalid());
+      utl::fill(pred_lvl_, kNoLevel);
       utl::fill(pred_type_, node_type::kInvalid);
     }
 

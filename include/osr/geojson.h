@@ -131,15 +131,14 @@ struct geojson_writer {
       auto const p = w_.r_->node_properties_[n];
 
       auto ss = std::stringstream{};
-      Dijkstra::profile_t::resolve_all(*w_.r_, n, level_t::invalid(),
-                                       [&](auto const x) {
-                                         auto const cost = s->get_cost(x);
-                                         if (cost != kInfeasible) {
-                                           ss << "{";
-                                           x.print(ss, w_);
-                                           ss << ", " << cost << "}\n";
-                                         }
-                                       });
+      Dijkstra::profile_t::resolve_all(*w_.r_, n, kNoLevel, [&](auto const x) {
+        auto const cost = s->get_cost(x);
+        if (cost != kInfeasible) {
+          ss << "{";
+          x.print(ss, w_);
+          ss << ", " << cost << "}\n";
+        }
+      });
 
       auto levels = std::vector<float>();
       foot<true>::for_each_elevator_level(

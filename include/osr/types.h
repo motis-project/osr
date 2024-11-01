@@ -103,6 +103,10 @@ enum class direction : std::uint8_t {
   kBackward,
 };
 
+inline std::ostream& operator<<(std::ostream& out, direction const d) {
+  return out << (d == direction::kBackward ? "bwd" : "fwd");
+}
+
 constexpr direction opposite(direction const dir) {
   return dir == direction::kForward ? direction::kBackward
                                     : direction::kForward;
@@ -135,11 +139,15 @@ constexpr direction to_direction(std::string_view s) {
 
 // level
 struct level_t {
-  static constexpr level_t invalid() {
-    return level_t{std::numeric_limits<std::uint8_t>::max()};
-  }
-
   friend constexpr std::uint8_t to_idx(level_t l) { return l.v_; }
+
+  friend std::ostream& operator<<(std::ostream& out, level_t const l) {
+    if (to_idx(l) == 0) {
+      return out << "-";
+    } else {
+      return out << (-4.0 + ((to_idx(l) - 1U) / 4.0F));
+    }
+  }
 
   template <std::integral X>
   explicit constexpr level_t(X x) : v_{static_cast<std::uint8_t>(x)} {}
@@ -153,6 +161,7 @@ struct level_t {
   std::uint8_t v_;
 };
 
+constexpr auto const kNoLevel = level_t{0U};
 constexpr auto const kMinLevel = -4.0F;
 constexpr auto const kMaxLevel = 3.5F;
 
@@ -161,8 +170,7 @@ constexpr level_t to_level(float const f) {
 }
 
 constexpr float to_float(level_t const l) {
-  return l == level_t::invalid() ? 0.0F
-                                 : (kMinLevel + ((to_idx(l) - 1U) / 4.0F));
+  return (l == kNoLevel) ? 0.0F : (kMinLevel + ((to_idx(l) - 1U) / 4.0F));
 }
 
 constexpr auto const kLevelBits = cista::constexpr_trailing_zeros(
@@ -173,16 +181,15 @@ using level_bits_t = std::uint32_t;
 constexpr std::tuple<level_t, level_t, bool> get_levels(
     bool const has_level, level_bits_t const levels) noexcept {
   if (!has_level) {
-    return {level_t{to_level(0.F)}, level_t{to_level(0.F)}, false};
+    return {level_t{kNoLevel}, level_t{kNoLevel}, false};
   }
-  auto from = level_t::invalid(), to = level_t::invalid();
+  auto from = kNoLevel, to = kNoLevel;
   utl::for_each_set_bit(levels, [&](auto&& bit) {
-    from == level_t::invalid()  //
+    from == kNoLevel  //
         ? from = level_t{bit}
         : to = level_t{bit};
   });
-  return {from, to == level_t::invalid() ? from : to,
-          std::popcount(levels) > 2};
+  return {from, to == kNoLevel ? from : to, std::popcount(levels) > 2};
 }
 
 static_assert(kLevelBits == 5U);
