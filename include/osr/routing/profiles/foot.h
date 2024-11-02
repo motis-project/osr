@@ -16,7 +16,13 @@ struct foot {
   static constexpr auto const kOffroadPenalty = 3U;
 
   struct node {
-    friend bool operator==(node, node) = default;
+    friend bool operator==(node const a, node const b) {
+      auto const is_zero = [](level_t const l) {
+        return l == kNoLevel || l == level_t{0.F};
+      };
+      return a.n_ == b.n_ &&
+             (a.lvl_ == b.lvl_ || (is_zero(a.lvl_) && is_zero(b.lvl_)));
+    }
 
     static constexpr node invalid() noexcept {
       return {.n_ = node_idx_t::invalid(), .lvl_{kNoLevel}};
@@ -90,7 +96,8 @@ struct foot {
     auto operator()(node const n) const noexcept -> std::uint64_t {
       using namespace ankerl::unordered_dense::detail;
       return wyhash::mix(
-          wyhash::hash(static_cast<std::uint64_t>(to_idx(n.lvl_))),
+          wyhash::hash(static_cast<std::uint64_t>(
+              to_idx(n.lvl_ == kNoLevel ? level_t{0.F} : n.lvl_))),
           wyhash::hash(static_cast<std::uint64_t>(to_idx(n.n_))));
     }
   };

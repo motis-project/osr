@@ -82,10 +82,10 @@ int main(int argc, char const* argv[]) {
   if (!fs::exists(platforms_check_path)) {
     std::cout << platforms_check_path << " does not exist\n";
   }
-  auto const pl = (!fs::exists(platforms_check_path))
-                      ? std::unique_ptr<platforms>{}
-                      : std::make_unique<platforms>(
-                            opt.data_dir_, cista::mmap::protection::READ);
+  auto const pl = fs::exists(platforms_check_path)
+                      ? std::make_unique<platforms>(
+                            opt.data_dir_, cista::mmap::protection::READ)
+                      : nullptr;
   if (pl != nullptr) {
     pl->build_rtree(w);
   }
