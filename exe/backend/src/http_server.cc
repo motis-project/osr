@@ -58,7 +58,7 @@ web_server::string_res_t json_response(
 location parse_location(json::value const& v) {
   auto const& obj = v.as_object();
   return {obj.at("lat").as_double(), obj.at("lng").as_double(),
-          obj.contains("level") ? to_level(obj.at("level").to_number<float>())
+          obj.contains("level") ? level_t{obj.at("level").to_number<float>()}
                                 : kNoLevel};
 }
 
@@ -132,7 +132,7 @@ struct http_server::impl {
                                    {"type", "Feature"},
                                    {
                                        "properties",
-                                       {{"level", to_float(s.from_level_)},
+                                       {{"level", s.from_level_.to_float()},
                                         {"osm_way_id",
                                          s.way_ == way_idx_t::invalid()
                                              ? 0U
@@ -162,7 +162,7 @@ struct http_server::impl {
       }
     });
     auto levels_sorted =
-        utl::to_vec(levels, [](level_t const l) { return to_float(l); });
+        utl::to_vec(levels, [](level_t const l) { return l.to_float(); });
     utl::sort(levels_sorted, [](auto&& a, auto&& b) { return a > b; });
     cb(json_response(req,
                      json::serialize(utl::all(levels_sorted)  //
@@ -184,10 +184,10 @@ struct http_server::impl {
 
     switch (profile) {
       case search_profile::kFoot:
-        send_graph_response<foot<false>>(req, cb, gj);
+        send_graph_response<foot<false, elevator_tracking>>(req, cb, gj);
         break;
       case search_profile::kWheelchair:
-        send_graph_response<foot<true>>(req, cb, gj);
+        send_graph_response<foot<true, elevator_tracking>>(req, cb, gj);
         break;
       case search_profile::kBike: send_graph_response<bike>(req, cb, gj); break;
       case search_profile::kCar: send_graph_response<car>(req, cb, gj); break;
@@ -229,7 +229,7 @@ struct http_server::impl {
 
     auto const query = boost::json::parse(req.body()).as_object();
     auto const level = query.contains("level")
-                           ? to_level(query.at("level").to_number<float>())
+                           ? level_t{query.at("level").to_number<float>()}
                            : kNoLevel;
     auto const waypoints = query.at("waypoints").as_array();
     auto const min = point::from_latlng(

@@ -64,7 +64,7 @@ struct geojson_writer {
           {"properties",
            {{"type", is_way(r) ? "way" : "node"},
             {"platform_idx", to_idx(i)},
-            {"level", to_float(platforms_->get_level(w_, i))},
+            {"level", platforms_->get_level(w_, i).to_float()},
             {"names", platform_names(*platforms_, i)}}},
           {"geometry", geometry}});
     }
@@ -94,8 +94,8 @@ struct geojson_writer {
             {"oneway_car", p.is_oneway_car()},
             {"oneway_bike", p.is_oneway_bike()},
             {"max_speed", p.max_speed_km_per_h()},
-            {"from_level", to_float(level_t{p.from_level()})},
-            {"to_level", to_float(level_t{p.to_level()})},
+            {"from_level", p.from_level().to_float()},
+            {"to_level", p.to_level().to_float()},
             {"is_elevator", p.is_elevator()},
             {"is_steps", p.is_steps()},
             {"is_parking", p.is_parking_}}},
@@ -116,8 +116,8 @@ struct geojson_writer {
                              {"oneway_car", p.is_oneway_car()},
                              {"oneway_bike", p.is_oneway_bike()},
                              {"max_speed", p.max_speed_km_per_h()},
-                             {"from_level", to_float(level_t{p.from_level()})},
-                             {"to_level", to_float(level_t{p.to_level()})},
+                             {"from_level", p.from_level().to_float()},
+                             {"to_level", p.to_level().to_float()},
                              {"is_elevator", p.is_elevator()},
                              {"is_steps", p.is_steps()}}},
                            {"geometry", to_line_string(w_.way_polylines_[i])}});
@@ -142,7 +142,7 @@ struct geojson_writer {
 
       auto levels = std::vector<float>();
       foot<true>::for_each_elevator_level(
-          *w_.r_, n, [&](auto&& l) { levels.push_back(to_float(level_t{l})); });
+          *w_.r_, n, [&](level_t const l) { levels.push_back(l.to_float()); });
 
       auto properties = boost::json::object{
           {"osm_node_id", to_idx(w_.node_to_osm_[n])},

@@ -53,13 +53,16 @@ struct tags {
             is_platform_ = true;
           }
           break;
+        case cista::hash("layer"):
+          // not correct but layer seems to be used like level in some places :/
+          [[fallthrough]];
         case cista::hash("level"): {
           has_level_ = true;
           auto s = utl::cstr{t.value()};
           while (s) {
             auto l = 0.0F;
             utl::parse_arg(s, l);
-            auto const lvl = to_level(std::clamp(l, kMinLevel, kMaxLevel));
+            auto const lvl = level_t{std::clamp(l, kMinLevel, kMaxLevel)};
             level_bits_ |= (1U << to_idx(lvl));
             if (s) {
               ++s;

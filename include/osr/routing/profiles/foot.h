@@ -28,8 +28,7 @@ struct foot {
     static constexpr mode get_mode() noexcept { return mode::kFoot; }
 
     std::ostream& print(std::ostream& out, ways const& w) const {
-      return out << "(node=" << w.node_to_osm_[n_]
-                 << ", level=" << to_float(lvl_) << ")";
+      return out << "(node=" << w.node_to_osm_[n_] << ", level=" << lvl_ << ")";
     }
 
     node_idx_t n_;
@@ -107,9 +106,9 @@ struct foot {
     if (lvl == kNoLevel ||
         (p.from_level() == lvl || p.to_level() == lvl ||
          can_use_elevator(w, n, lvl)) ||
-        (lvl == to_level(0.F) &&
+        (lvl == level_t{0.F} &&
          (p.from_level() == kNoLevel && p.to_level() == kNoLevel))) {
-      f(node{n, lvl == kNoLevel ? p.from_level() : lvl});
+      f(node{n, p.from_level()});
     }
   }
 
@@ -243,7 +242,7 @@ struct foot {
       return way_prop.from_level();
     } else if (way_prop.from_level() == from_level ||
                way_prop.from_level() == kNoLevel || from_level == kNoLevel) {
-      return from_level;
+      return way_prop.from_level();
     } else {
       return std::nullopt;
     }
@@ -263,8 +262,9 @@ struct foot {
                                       Fn&& f) {
     auto const p = w.node_properties_[n];
     if (p.is_multi_level()) {
-      utl::for_each_set_bit(get_elevator_multi_levels(w, n),
-                            [&](auto&& l) { f(level_t{l}); });
+      utl::for_each_set_bit(get_elevator_multi_levels(w, n), [&](auto&& l) {
+        f(level_t{static_cast<std::uint8_t>(l)});
+      });
     } else {
       f(p.from_level());
       f(p.to_level());

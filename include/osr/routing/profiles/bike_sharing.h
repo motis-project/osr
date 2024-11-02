@@ -83,14 +83,14 @@ struct bike_sharing {
     boost::json::object geojson_properties(ways const& w) const {
       auto properties =
           boost::json::object{{"osm_node_id", to_idx(w.node_to_osm_[n_])},
-                              {"level", to_float(lvl_)},
+                              {"level", lvl_.to_float()},
                               {"type", node_type_to_str(type_)}};
       return properties;
     }
 
     std::ostream& print(std::ostream& out, ways const& w) const {
       return out << "(node=" << w.node_to_osm_[n_]
-                 << ", level=" << to_float(lvl_)
+                 << ", level=" << lvl_.to_float()
                  << ", type=" << node_type_to_str(type_) << ")";
     }
 

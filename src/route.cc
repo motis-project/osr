@@ -133,8 +133,8 @@ double add_path(ways const& w,
       }
     }
   } else {
-    segment.from_level_ = to_level(0);
-    segment.to_level_ = to_level(0);
+    segment.from_level_ = level_t{0.0F};
+    segment.to_level_ = level_t{0.0F};
     segment.from_ = from.get_node();
     segment.to_ = to.get_node();
     // polyline has to be filled by the caller, because we don't know

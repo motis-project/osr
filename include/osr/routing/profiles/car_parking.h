@@ -42,7 +42,7 @@ struct car_parking {
     boost::json::object geojson_properties(ways const& w) const {
       auto properties =
           boost::json::object{{"osm_node_id", to_idx(w.node_to_osm_[n_])},
-                              {"level", to_float(lvl_)},
+                              {"level", lvl_.to_float()},
                               {"type", node_type_to_str(type_)}};
       if (is_car_node()) {
         properties.emplace("direction", to_str(dir_));
@@ -52,7 +52,7 @@ struct car_parking {
 
     std::ostream& print(std::ostream& out, ways const& w) const {
       return out << "(node=" << w.node_to_osm_[n_]
-                 << ", level=" << to_float(lvl_) << ", dir=" << to_str(dir_)
+                 << ", level=" << lvl_.to_float() << ", dir=" << to_str(dir_)
                  << ", way=" << w.way_osm_idx_[w.r_->node_ways_[n_][way_]]
                  << ", type=" << node_type_to_str(type_) << ")";
     }

@@ -138,19 +138,26 @@ constexpr direction to_direction(std::string_view s) {
 }
 
 // level
+constexpr auto const kMinLevel = -4.0F;
+constexpr auto const kMaxLevel = 3.5F;
+
 struct level_t {
+  static constexpr auto kNoLevel = 0U;
+
   friend constexpr std::uint8_t to_idx(level_t l) { return l.v_; }
 
   friend std::ostream& operator<<(std::ostream& out, level_t const l) {
-    if (to_idx(l) == 0) {
-      return out << "-";
-    } else {
-      return out << (-4.0 + ((to_idx(l) - 1U) / 4.0F));
-    }
+    return (l.v_ == kNoLevel) ? (out << "-") : (out << l.to_float());
   }
 
-  template <std::integral X>
-  explicit constexpr level_t(X x) : v_{static_cast<std::uint8_t>(x)} {}
+  explicit constexpr level_t(std::uint8_t const x) : v_{x} {}
+
+  explicit constexpr level_t(float const f)
+      : v_{static_cast<std::uint8_t>((f - kMinLevel) / 0.25F + 1U)} {}
+
+  constexpr float to_float() const {
+    return (v_ == kNoLevel) ? 0.0F : (kMinLevel + ((v_ - 1U) / 4.0F));
+  }
 
   constexpr level_t() = default;
 
@@ -161,20 +168,10 @@ struct level_t {
   std::uint8_t v_;
 };
 
-constexpr auto const kNoLevel = level_t{0U};
-constexpr auto const kMinLevel = -4.0F;
-constexpr auto const kMaxLevel = 3.5F;
-
-constexpr level_t to_level(float const f) {
-  return level_t{static_cast<std::uint8_t>((f - kMinLevel) / 0.25F + 1U)};
-}
-
-constexpr float to_float(level_t const l) {
-  return (l == kNoLevel) ? 0.0F : (kMinLevel + ((to_idx(l) - 1U) / 4.0F));
-}
+constexpr auto const kNoLevel = level_t{std::uint8_t{0U}};
 
 constexpr auto const kLevelBits = cista::constexpr_trailing_zeros(
-    cista::next_power_of_two(to_idx(to_level(kMaxLevel)) + 1U));
+    cista::next_power_of_two(to_idx(level_t{kMaxLevel}) + 1U));
 
 using level_bits_t = std::uint32_t;
 
@@ -186,8 +183,8 @@ constexpr std::tuple<level_t, level_t, bool> get_levels(
   auto from = kNoLevel, to = kNoLevel;
   utl::for_each_set_bit(levels, [&](auto&& bit) {
     from == kNoLevel  //
-        ? from = level_t{bit}
-        : to = level_t{bit};
+        ? from = level_t{static_cast<std::uint8_t>(bit)}
+        : to = level_t{static_cast<std::uint8_t>(bit)};
   });
   return {from, to == kNoLevel ? from : to, std::popcount(levels) > 2};
 }
