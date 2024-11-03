@@ -92,8 +92,13 @@ struct rel_way {
 
 using rel_ways_t = hash_map<osm_way_idx_t, rel_way>;
 
+std::tuple<level_t, level_t, bool> get_levels(tags const& t) {
+  return t.has_level_ ? get_levels(t.has_level_, t.level_bits_)
+                      : get_levels(t.has_layer_, t.layer_bits_);
+}
+
 way_properties get_way_properties(tags const& t) {
-  auto const [from, to, _] = get_levels(t.has_level_, t.level_bits_);
+  auto const [from, to, _] = get_levels(t);
   auto p = way_properties{};
   std::memset(&p, 0, sizeof(way_properties));
   p.is_foot_accessible_ = is_accessible<foot_profile>(t, osm_obj_type::kWay);
@@ -113,7 +118,7 @@ way_properties get_way_properties(tags const& t) {
 }
 
 std::pair<node_properties, level_bits_t> get_node_properties(tags const& t) {
-  auto const [from, to, is_multi] = get_levels(t.has_level_, t.level_bits_);
+  auto const [from, to, is_multi] = get_levels(t);
   auto p = node_properties{};
   std::memset(&p, 0, sizeof(node_properties));
   p.from_level_ = to_idx(from);

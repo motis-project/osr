@@ -14,6 +14,19 @@ enum class override : std::uint8_t { kNone, kWhitelist, kBlacklist };
 
 struct tags {
   explicit tags(osmium::OSMObject const& o) {
+    auto const add_levels = [](auto&& t, level_bits_t& level_bits) {
+      auto s = utl::cstr{t.value()};
+      while (s) {
+        auto l = 0.0F;
+        utl::parse_arg(s, l);
+        auto const lvl = level_t{std::clamp(l, kMinLevel, kMaxLevel)};
+        level_bits |= (1U << to_idx(lvl));
+        if (s) {
+          ++s;
+        }
+      }
+    };
+
     for (auto const& t : o.tags()) {
       switch (cista::hash(std::string_view{t.key()})) {
         using namespace std::string_view_literals;
@@ -53,23 +66,15 @@ struct tags {
             is_platform_ = true;
           }
           break;
+        case cista::hash("level"):
+          has_level_ = true;
+          add_levels(t, level_bits_);
+          break;
         case cista::hash("layer"):
           // not correct but layer seems to be used like level in some places :/
-          [[fallthrough]];
-        case cista::hash("level"): {
-          has_level_ = true;
-          auto s = utl::cstr{t.value()};
-          while (s) {
-            auto l = 0.0F;
-            utl::parse_arg(s, l);
-            auto const lvl = level_t{std::clamp(l, kMinLevel, kMaxLevel)};
-            level_bits_ |= (1U << to_idx(lvl));
-            if (s) {
-              ++s;
-            }
-          }
+          has_layer_ = true;
+          add_levels(t, layer_bits_);
           break;
-        }
         case cista::hash("name"): name_ = t.value(); break;
         case cista::hash("ref"): ref_ = t.value(); break;
         case cista::hash("entrance"): is_entrance_ = true; break;
@@ -197,6 +202,10 @@ struct tags {
   // https://wiki.openstreetmap.org/wiki/Key:level
   bool has_level_{false};
   level_bits_t level_bits_{0U};
+
+  // https://wiki.openstreetmap.org/wiki/Key:layer
+  bool has_layer_{false};
+  level_bits_t layer_bits_{0U};
 };
 
 template <typename T>
