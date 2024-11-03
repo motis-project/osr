@@ -235,7 +235,10 @@ struct foot {
     }
 
     if (way_prop.is_steps()) {
-      if (way_prop.from_level() == from_level) {
+      if (from_level == kNoLevel) {
+        return way_prop.from_level() == level_t{0.F} ? way_prop.to_level()
+                                                     : way_prop.from_level();
+      } else if (way_prop.from_level() == from_level) {
         return way_prop.to_level();
       } else if (way_prop.to_level() == from_level) {
         return way_prop.from_level();
