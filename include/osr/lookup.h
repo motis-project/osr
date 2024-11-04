@@ -2,6 +2,7 @@
 
 #include <ostream>
 
+#include "cista/containers/rtree.h"
 #include "cista/reflection/printable.h"
 
 #include "geo/box.h"
@@ -12,8 +13,6 @@
 #include "utl/cflow.h"
 #include "utl/helpers/algorithm.h"
 #include "utl/pairwise.h"
-
-#include "rtree.h"
 
 #include "osr/location.h"
 #include "osr/routing/profile.h"
@@ -70,8 +69,13 @@ using match_t = std::vector<way_candidate>;
 using match_view_t = std::span<way_candidate const>;
 
 struct lookup {
-  lookup(ways const&);
-  ~lookup();
+  lookup(ways const&, std::filesystem::path, cista::mmap::protection);
+
+  void build_rtree();
+
+  cista::mmap mm(char const* file) {
+    return cista::mmap{(p_ / file).generic_string().c_str(), mode_};
+  }
 
   match_t match(location const& query,
                 bool const reverse,
@@ -99,18 +103,12 @@ struct lookup {
 
   template <typename Fn>
   void find(geo::box const& b, Fn&& fn) const {
-    auto const min = b.min_.lnglat();
-    auto const max = b.max_.lnglat();
-    rtree_search(
-        rtree_, min.data(), max.data(),
-        [](double const* /* min */, double const* /* max */, void const* item,
-           void* udata) {
-          (*reinterpret_cast<Fn*>(udata))(
-              way_idx_t{static_cast<way_idx_t::value_t>(
-                  reinterpret_cast<std::size_t>(item))});
-          return true;
-        },
-        &fn);
+    auto const min = b.min_.lnglat_float();
+    auto const max = b.max_.lnglat_float();
+    rtree_.search(min, max, [&](auto, auto, way_idx_t const w) {
+      fn(w);
+      return true;
+    });
   }
 
   hash_set<node_idx_t> find_elevators(geo::box const& b) const;
@@ -198,7 +196,9 @@ private:
     return c;
   }
 
-  rtree* rtree_;
+  std::filesystem::path p_;
+  cista::mmap::protection mode_;
+  cista::mm_rtree<way_idx_t> rtree_;
   ways const& ways_;
 };
 
