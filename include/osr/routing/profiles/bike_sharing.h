@@ -107,7 +107,10 @@ struct bike_sharing {
     }
 
     std::ostream& print(std::ostream& out, ways const& w) const {
-      return out << "(node=" << w.node_to_osm_[n_]
+      return out << "(node="
+                 << (n_ >= w.n_nodes() ? osm_node_idx_t{to_idx(n_)}
+                                       : w.node_to_osm_[n_])
+                 << (n_ >= w.n_nodes() ? "*" : "")
                  << ", level=" << lvl_.to_float()
                  << ", type=" << node_type_to_str(type_) << ")";
     }
@@ -252,6 +255,7 @@ struct bike_sharing {
     footp::resolve_all(w, n, lvl, [&](footp::node const neighbor) {
       f(to_node(neighbor, node_type::kInitialFoot));
       f(to_node(neighbor, node_type::kTrailingFoot));
+      f(to_node(neighbor, node_type::kBike));
     });
   }
 

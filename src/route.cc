@@ -301,7 +301,7 @@ std::optional<path> route(ways const& w,
       if (nc->valid() && nc->cost_ < max) {
         Profile::resolve_start_node(
             *w.r_, start.way_, nc->node_, from.lvl_, dir,
-            [&](auto const node) { d.add_start({node, nc->cost_}); });
+            [&](auto const node) { d.add_start(w, {node, nc->cost_}); });
       }
     }
 
@@ -309,7 +309,7 @@ std::optional<path> route(ways const& w,
       continue;
     }
 
-    d.run(*w.r_, max, blocked, sharing, dir);
+    d.run(w, *w.r_, max, blocked, sharing, dir);
 
     auto const c = best_candidate(w, d, to.lvl_, to_match, max, dir);
     if (c.has_value()) {
@@ -350,12 +350,12 @@ std::vector<std::optional<path>> route(
             *w.r_, start.way_, nc->node_, from.lvl_, dir, [&](auto const node) {
               auto label = typename Profile::label{node, nc->cost_};
               label.track(label, *w.r_, start.way_, node.get_node());
-              d.add_start(label);
+              d.add_start(w, label);
             });
       }
     }
 
-    d.run(*w.r_, max, blocked, sharing, dir);
+    d.run(w, *w.r_, max, blocked, sharing, dir);
 
     auto found = 0U;
     for (auto const [m, t, r] : utl::zip(to_match, to, result)) {
