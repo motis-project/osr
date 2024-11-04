@@ -28,6 +28,7 @@
 #include "tiles/util_parallel.h"
 
 #include "osr/extract/tags.h"
+#include "osr/lookup.h"
 #include "osr/platforms.h"
 #include "osr/ways.h"
 
@@ -637,6 +638,8 @@ void extract(bool const with_platforms,
   }
 
   w.r_->write(out);
+
+  lookup{w, out, cista::mmap::protection::WRITE}.build_rtree();
 }
 
 }  // namespace osr
