@@ -33,7 +33,7 @@ TEST(routing, no_lvl_wildcard) {
   extract(false, "test/stuttgart.osm.pbf", kTestFolder);
 
   auto w = osr::ways{kTestFolder, cista::mmap::protection::READ};
-  auto l = osr::lookup{w};
+  auto l = osr::lookup{w, kTestFolder, cista::mmap::protection::READ};
 
   auto const p = route(w, l, search_profile::kFoot,  //
                        {{48.7829, 9.18212}, level_t{0.F}},

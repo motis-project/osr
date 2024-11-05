@@ -71,9 +71,11 @@ int main(int argc, char const* argv[]) {
         auto const start =
             node_idx_t{cista::hash_combine(h, ++n, i.load()) % w.n_nodes()};
         d.reset(opt.max_dist_);
-        d.add_start(car::label{car::node{start, 0, direction::kForward}, 0U});
-        d.add_start(car::label{car::node{start, 0, direction::kBackward}, 0U});
-        d.run<direction::kForward, false>(*w.r_, opt.max_dist_, nullptr,
+        d.add_start(w,
+                    car::label{car::node{start, 0, direction::kForward}, 0U});
+        d.add_start(w,
+                    car::label{car::node{start, 0, direction::kBackward}, 0U});
+        d.run<direction::kForward, false>(w, *w.r_, opt.max_dist_, nullptr,
                                           nullptr);
       }
     });

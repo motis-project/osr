@@ -71,14 +71,28 @@ struct bike_sharing {
   }
 
   struct key {
-    friend bool operator==(key, key) = default;
+    friend bool operator==(key const a, key const b) {
+      auto const is_zero = [](level_t const l) {
+        return l == kNoLevel || l == level_t{0.F};
+      };
+      return a.n_ == b.n_ &&
+             (a.lvl_ == b.lvl_ || (is_zero(a.lvl_) && is_zero(b.lvl_)));
+    }
 
     node_idx_t n_{node_idx_t::invalid()};
     level_t lvl_{};
   };
 
+  using hash = footp::hash;
+
   struct node {
-    friend bool operator==(node, node) = default;
+    friend bool operator==(node const a, node const b) {
+      auto const is_zero = [](level_t const l) {
+        return l == kNoLevel || l == level_t{0.F};
+      };
+      return a.n_ == b.n_ && a.type_ == b.type_ &&
+             (a.lvl_ == b.lvl_ || (is_zero(a.lvl_) && is_zero(b.lvl_)));
+    }
 
     boost::json::object geojson_properties(ways const& w) const {
       auto properties =
@@ -89,8 +103,10 @@ struct bike_sharing {
     }
 
     std::ostream& print(std::ostream& out, ways const& w) const {
-      return out << "(node=" << w.node_to_osm_[n_]
-                 << ", level=" << lvl_.to_float()
+      return out << "(node="
+                 << (n_ >= w.n_nodes() ? osm_node_idx_t{to_idx(n_)}
+                                       : w.node_to_osm_[n_])
+                 << (n_ >= w.n_nodes() ? "*" : "") << ", level=" << lvl_
                  << ", type=" << node_type_to_str(type_) << ")";
     }
 
@@ -197,16 +213,6 @@ struct bike_sharing {
     std::array<node_type, kN> pred_type_{};
   };
 
-  struct hash {
-    using is_avalanching = void;
-    auto operator()(key const k) const noexcept -> std::uint64_t {
-      using namespace ankerl::unordered_dense::detail;
-      return wyhash::mix(
-          wyhash::hash(static_cast<std::uint64_t>(to_idx(k.lvl_))),
-          wyhash::hash(static_cast<std::uint64_t>(to_idx(k.n_))));
-    }
-  };
-
   static footp::node to_foot(node const n) {
     return {.n_ = n.n_, .lvl_ = n.lvl_};
   }
@@ -244,6 +250,7 @@ struct bike_sharing {
     footp::resolve_all(w, n, lvl, [&](footp::node const neighbor) {
       f(to_node(neighbor, node_type::kInitialFoot));
       f(to_node(neighbor, node_type::kTrailingFoot));
+      f(to_node(neighbor, node_type::kBike));
     });
   }
 
@@ -257,8 +264,10 @@ struct bike_sharing {
 
     auto const& handle_additional_edge =
         [&](additional_edge const& ae, node_type const nt, cost_t const cost) {
-          fn(node{.n_ = ae.node_, .type_ = nt, .lvl_ = n.lvl_}, cost,
-             ae.distance_, way_idx_t::invalid(), 0, 1);
+          fn(node{.n_ = ae.node_,
+                  .type_ = nt,
+                  .lvl_ = nt == node_type::kBike ? kNoLevel : n.lvl_},
+             cost, ae.distance_, way_idx_t::invalid(), 0, 1);
         };
 
     auto const& continue_on_foot = [&](node_type const nt,
@@ -294,7 +303,7 @@ struct bike_sharing {
           [&](bike::node const neighbor, std::uint32_t const cost,
               distance_t const dist, way_idx_t const way,
               std::uint16_t const from, std::uint16_t const to) {
-            fn(to_node(neighbor, n.lvl_), cost + switch_penalty, dist, way,
+            fn(to_node(neighbor, kNoLevel), cost + switch_penalty, dist, way,
                from, to);
           });
       if (include_additional_edges) {
