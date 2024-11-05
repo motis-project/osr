@@ -71,8 +71,6 @@ struct bike_sharing {
   }
 
   struct key {
-    // friend bool operator==(key, key) = default;
-
     friend bool operator==(key const a, key const b) {
       auto const is_zero = [](level_t const l) {
         return l == kNoLevel || l == level_t{0.F};
@@ -305,8 +303,8 @@ struct bike_sharing {
           [&](bike::node const neighbor, std::uint32_t const cost,
               distance_t const dist, way_idx_t const way,
               std::uint16_t const from, std::uint16_t const to) {
-            fn(to_node(neighbor, kNoLevel /*n.lvl_*/), cost + switch_penalty,
-               dist, way, from, to);
+            fn(to_node(neighbor, kNoLevel), cost + switch_penalty, dist, way,
+               from, to);
           });
       if (include_additional_edges) {
         // drive to station
