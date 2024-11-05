@@ -90,7 +90,7 @@ int main(int argc, char const* argv[]) {
     pl->build_rtree(w);
   }
 
-  auto const l = lookup{w};
+  auto const l = lookup{w, opt.data_dir_, cista::mmap::protection::READ};
 
   auto ioc = boost::asio::io_context{};
   auto pool = boost::asio::io_context{};
