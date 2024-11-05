@@ -93,7 +93,7 @@ struct foot {
 
   struct hash {
     using is_avalanching = void;
-    auto operator()(node const n) const noexcept -> std::uint64_t {
+    auto operator()(auto const n) const noexcept -> std::uint64_t {
       using namespace ankerl::unordered_dense::detail;
       return wyhash::mix(
           wyhash::hash(static_cast<std::uint64_t>(

@@ -85,18 +85,16 @@ struct bike_sharing {
     level_t lvl_{};
   };
 
-  struct hash {
-    using is_avalanching = void;
-    auto operator()(key const k) const noexcept -> std::uint64_t {
-      using namespace ankerl::unordered_dense::detail;
-      return wyhash::mix(
-          wyhash::hash(static_cast<std::uint64_t>(to_idx(k.lvl_))),
-          wyhash::hash(static_cast<std::uint64_t>(to_idx(k.n_))));
-    }
-  };
+  using hash = footp::hash;
 
   struct node {
-    friend bool operator==(node, node) = default;
+    friend bool operator==(node const a, node const b) {
+      auto const is_zero = [](level_t const l) {
+        return l == kNoLevel || l == level_t{0.F};
+      };
+      return a.n_ == b.n_ && a.type_ == b.type_ &&
+             (a.lvl_ == b.lvl_ || (is_zero(a.lvl_) && is_zero(b.lvl_)));
+    }
 
     boost::json::object geojson_properties(ways const& w) const {
       auto properties =
