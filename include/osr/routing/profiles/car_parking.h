@@ -37,7 +37,14 @@ struct car_parking {
   }
 
   struct node {
-    friend bool operator==(node, node) = default;
+    friend bool operator==(node const& a, node const& b) {
+      auto const is_zero = [](level_t const l) {
+        return l == kNoLevel || l == level_t{0.F};
+      };
+      return a.n_ == b.n_ && a.type_ == b.type_ && a.dir_ == b.dir_ &&
+             a.way_ == b.way_ &&
+             (a.lvl_ == b.lvl_ || (is_zero(a.lvl_) && is_zero(b.lvl_)));
+    }
 
     boost::json::object geojson_properties(ways const& w) const {
       auto properties =
@@ -51,8 +58,8 @@ struct car_parking {
     }
 
     std::ostream& print(std::ostream& out, ways const& w) const {
-      return out << "(node=" << w.node_to_osm_[n_]
-                 << ", level=" << lvl_.to_float() << ", dir=" << to_str(dir_)
+      return out << "(node=" << w.node_to_osm_[n_] << ", level=" << lvl_
+                 << ", dir=" << to_str(dir_)
                  << ", way=" << w.way_osm_idx_[w.r_->node_ways_[n_][way_]]
                  << ", type=" << node_type_to_str(type_) << ")";
     }
@@ -258,10 +265,7 @@ struct car_parking {
               distance_t const dist, way_idx_t const way,
               std::uint16_t const from, std::uint16_t const to) {
             auto const way_prop = w.way_properties_[way];
-            auto const target_level = way_prop.from_level() == n.lvl_
-                                          ? way_prop.to_level()
-                                          : way_prop.from_level();
-            fn(to_node(neighbor, target_level),
+            fn(to_node(neighbor, way_prop.from_level()),
                cost + (n.is_car_node() ? 0 : kSwitchPenalty), dist, way, from,
                to);
           });
