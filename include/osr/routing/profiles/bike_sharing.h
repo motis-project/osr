@@ -110,8 +110,7 @@ struct bike_sharing {
       return out << "(node="
                  << (n_ >= w.n_nodes() ? osm_node_idx_t{to_idx(n_)}
                                        : w.node_to_osm_[n_])
-                 << (n_ >= w.n_nodes() ? "*" : "")
-                 << ", level=" << lvl_.to_float()
+                 << (n_ >= w.n_nodes() ? "*" : "") << ", level=" << lvl_
                  << ", type=" << node_type_to_str(type_) << ")";
     }
 
