@@ -25,7 +25,7 @@ TEST(extract, wa) {
   osr::extract(false, "test/map.osm", "/tmp/osr_test");
 
   auto w = osr::ways{"/tmp/osr_test", cista::mmap::protection::READ};
-  auto l = osr::lookup{w};
+  auto l = osr::lookup{w, "/tmp/osr_test", cista::mmap::protection::READ};
 
   auto const n = w.find_node_idx(osm_node_idx_t{528944});
   auto const rhoenring = w.find_way(osm_way_idx_t{120682496});
