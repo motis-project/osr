@@ -508,17 +508,11 @@ void extract(bool const with_platforms,
   {  // Extract streets, places, and areas.
     pt->status("Load OSM / Ways").in_high(file_size).out_bounds(20, 50);
 
-    auto const thread_count = std::max(2U, std::thread::hardware_concurrency());
-
-    // pool must be destructed before handlers!
-    auto pool =
-        osmium::thread::Pool{static_cast<int>(thread_count), thread_count * 8U};
-
     auto h = way_handler{w, pl.get(), rel_ways, elevator_nodes};
-    auto reader = osm_io::Reader{input_file, pool, osm_eb::way,
-                                 osmium::io::read_meta::no};
+    auto reader =
+        osm_io::Reader{input_file, osm_eb::way, osmium::io::read_meta::no};
     oneapi::tbb::parallel_pipeline(
-        thread_count * 4U,
+        std::thread::hardware_concurrency() * 4U,
         oneapi::tbb::make_filter<void, osm_mem::Buffer>(
             oneapi::tbb::filter_mode::serial_in_order,
             [&](oneapi::tbb::flow_control& fc) {
@@ -549,13 +543,11 @@ void extract(bool const with_platforms,
     pt->status("Load OSM / Node Properties")
         .in_high(file_size)
         .out_bounds(90, 100);
-    auto const thread_count = std::max(2U, std::thread::hardware_concurrency());
-
     auto reader = osm_io::Reader{input_file, osm_eb::node | osm_eb::relation,
                                  osmium::io::read_meta::no};
     auto h = node_handler{w, pl.get(), r, elevator_nodes};
     oneapi::tbb::parallel_pipeline(
-        thread_count * 4U,
+        std::thread::hardware_concurrency() * 4U,
         oneapi::tbb::make_filter<void, osm_mem::Buffer>(
             oneapi::tbb::filter_mode::serial_in_order,
             [&](oneapi::tbb::flow_control& fc) {
