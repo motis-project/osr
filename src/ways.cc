@@ -158,7 +158,7 @@ cista::wrapped<ways::routing> ways::routing::read(
   return cista::read<ways::routing>(p / "routing.bin");
 }
 
-void ways::routing::write(std::filesystem::path const& p) {
+void ways::routing::write(std::filesystem::path const& p) const {
   return cista::write(p / "routing.bin", *this);
 }
 

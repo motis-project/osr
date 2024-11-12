@@ -233,7 +233,7 @@ struct ways {
     }
 
     static cista::wrapped<routing> read(std::filesystem::path const&);
-    void write(std::filesystem::path const&);
+    void write(std::filesystem::path const&) const;
 
     vec_map<node_idx_t, node_properties> node_properties_;
     vec_map<way_idx_t, way_properties> way_properties_;

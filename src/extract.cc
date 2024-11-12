@@ -11,6 +11,8 @@
 #include "fmt/core.h"
 #include "fmt/std.h"
 
+#include "oneapi/tbb/parallel_pipeline.h"
+
 #include "osmium/area/assembler.hpp"
 #include "osmium/area/multipolygon_manager.hpp"
 #include "osmium/handler/node_locations_for_ways.hpp"
@@ -25,7 +27,6 @@
 
 #include "tiles/osm/hybrid_node_idx.h"
 #include "tiles/osm/tmp_file.h"
-#include "tiles/util_parallel.h"
 
 #include "osr/extract/tags.h"
 #include "osr/lookup.h"
@@ -154,11 +155,11 @@ struct way_handler : public osm::handler::Handler {
   struct strings_equals {
     using is_transparent = void;
 
-    cista::hash_t operator()(string_idx_t const a, string_idx_t const b) const {
+    bool operator()(string_idx_t const a, string_idx_t const b) const {
       return a == b;
     }
 
-    cista::hash_t operator()(std::string_view a, string_idx_t const b) const {
+    bool operator()(std::string_view a, string_idx_t const b) const {
       return a == (*strings_)[b].view();
     }
 
@@ -513,54 +514,28 @@ void extract(bool const with_platforms,
     auto pool =
         osmium::thread::Pool{static_cast<int>(thread_count), thread_count * 8U};
 
+    auto h = way_handler{w, pl.get(), rel_ways, elevator_nodes};
     auto reader = osm_io::Reader{input_file, pool, osm_eb::way,
                                  osmium::io::read_meta::no};
-    auto seq_reader = tiles::sequential_until_finish<osm_mem::Buffer>{[&] {
-      pt->update(reader.offset());
-      return reader.read();
-    }};
-    auto has_exception = std::atomic_bool{false};
-    auto workers = std::vector<std::future<void>>{};
-    workers.reserve(thread_count / 2U);
-    auto h = way_handler{w, pl.get(), rel_ways, elevator_nodes};
-    auto queue = tiles::in_order_queue<osm_mem::Buffer>{};
-    for (auto i = 0U; i < thread_count / 2U; ++i) {
-      workers.emplace_back(pool.submit([&] {
-        try {
-          while (true) {
-            auto opt = seq_reader.process();
-            if (!opt.has_value()) {
-              break;
-            }
+    oneapi::tbb::parallel_pipeline(
+        thread_count * 4U,
+        oneapi::tbb::make_filter<void, osm_mem::Buffer>(
+            oneapi::tbb::filter_mode::serial_in_order,
+            [&](oneapi::tbb::flow_control& fc) {
+              auto buf = reader.read();
+              pt->update(reader.offset());
+              if (!buf) {
+                fc.stop();
+              }
+              return buf;
+            }) &
+            oneapi::tbb::make_filter<osm_mem::Buffer, void>(
+                oneapi::tbb::filter_mode::parallel, [&](osm_mem::Buffer&& buf) {
+                  update_locations(node_idx, buf);
+                  osm::apply(buf, h);
+                }));
 
-            auto& [idx, buf] = *opt;
-            tiles::update_locations(node_idx, buf);
-
-            queue.process_in_order(idx, std::move(buf),
-                                   [&](auto buf2) { osm::apply(buf2, h); });
-          }
-        } catch (std::exception const& e) {
-          fmt::print(std::clog, "EXCEPTION CAUGHT: {} {}\n",
-                     std::this_thread::get_id(), e.what());
-          has_exception = true;
-        } catch (...) {
-          fmt::print(std::clog, "UNKNOWN EXCEPTION CAUGHT: {} \n",
-                     std::this_thread::get_id());
-          has_exception = true;
-        }
-      }));
-    }
-
-    utl::verify(!workers.empty(), "have no workers");
-    for (auto& worker : workers) {
-      worker.wait();
-    }
-
-    utl::verify(!has_exception, "load_osm: exception caught!");
-
-    reader.close();
     pt->update(pt->in_high_);
-
     reader.close();
   }
 
@@ -576,56 +551,27 @@ void extract(bool const with_platforms,
         .out_bounds(90, 100);
     auto const thread_count = std::max(2U, std::thread::hardware_concurrency());
 
-    // pool must be destructed before handlers!
-    auto pool =
-        osmium::thread::Pool{static_cast<int>(thread_count), thread_count * 8U};
-
-    auto reader =
-        osm_io::Reader{input_file, pool, osm_eb::node | osm_eb::relation,
-                       osmium::io::read_meta::no};
-    auto seq_reader = tiles::sequential_until_finish<osm_mem::Buffer>{[&] {
-      pt->update(reader.offset());
-      return reader.read();
-    }};
+    auto reader = osm_io::Reader{input_file, osm_eb::node | osm_eb::relation,
+                                 osmium::io::read_meta::no};
     auto h = node_handler{w, pl.get(), r, elevator_nodes};
-    auto has_exception = std::atomic_bool{false};
-    auto workers = std::vector<std::future<void>>{};
-    workers.reserve(thread_count / 2U);
-    for (auto i = 0U; i < thread_count / 2U; ++i) {
-      workers.emplace_back(pool.submit([&] {
-        try {
-          while (true) {
-            auto opt = seq_reader.process();
-            if (!opt.has_value()) {
-              break;
-            }
-
-            auto& [idx, buf] = *opt;
-            osm::apply(buf, h);
-          }
-        } catch (std::exception const& e) {
-          fmt::print(std::clog, "EXCEPTION CAUGHT: {} {}\n",
-                     std::this_thread::get_id(), e.what());
-          has_exception = true;
-        } catch (...) {
-          fmt::print(std::clog, "UNKNOWN EXCEPTION CAUGHT: {} \n",
-                     std::this_thread::get_id());
-          has_exception = true;
-        }
-      }));
-    }
-
-    utl::verify(!workers.empty(), "have no workers");
-    for (auto& worker : workers) {
-      worker.wait();
-    }
-
-    utl::verify(!has_exception, "load_osm: exception caught!");
+    oneapi::tbb::parallel_pipeline(
+        thread_count * 4U,
+        oneapi::tbb::make_filter<void, osm_mem::Buffer>(
+            oneapi::tbb::filter_mode::serial_in_order,
+            [&](oneapi::tbb::flow_control& fc) {
+              auto buf = reader.read();
+              pt->update(reader.offset());
+              if (!buf) {
+                fc.stop();
+              }
+              return buf;
+            }) &
+            oneapi::tbb::make_filter<osm_mem::Buffer, void>(
+                oneapi::tbb::filter_mode::parallel,
+                [&](osm_mem::Buffer&& buf) { osm::apply(buf, h); }));
 
     reader.close();
     pt->update(pt->in_high_);
-
-    reader.close();
   }
 
   w.add_restriction(r);
