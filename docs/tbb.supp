@@ -1,0 +1,8 @@
+{
+   Intel oneTBB thread initialization leak
+   Memcheck:Leak
+   match-leak-kinds: possible
+   fun:_ZN3tbb6detail2r13rml14private_worker14thread_routineEPv
+   fun:start_thread
+   fun:clone
+}

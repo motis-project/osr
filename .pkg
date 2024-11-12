@@ -13,11 +13,11 @@
 [geo]
   url=git@github.com:motis-project/geo.git
   branch=master
-  commit=de5a3586871b8b76a487d42fcc673c9487a1e233
+  commit=5d99aeb10674a41a82d7c78f850abfd9605bf6e1
 [cista]
   url=git@github.com:felixguendling/cista.git
   branch=master
-  commit=52577def055e4bdf90eaa461872fc1f7b5b1131d
+  commit=847b27100b7e730370b810ce62206a66b0bf2d79
 [googletest]
   url=git@github.com:motis-project/googletest.git
   branch=master
@@ -37,7 +37,7 @@
 [tiles]
   url=git@github.com:motis-project/tiles.git
   branch=master
-  commit=f7208d4e05661abbf09e4f284de0112a445f6b0a
+  commit=6513820682dda589594f705b0ac7007d7bc7cdad
 [mimalloc]
   url=git@github.com:motis-project/mimalloc.git
   branch=master
