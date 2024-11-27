@@ -42,9 +42,10 @@ TEST(extract, wa) {
   auto const from = location{w.get_node_pos(*n), kNoLevel};
   auto const to = location{w.get_node_pos(*n2), kNoLevel};
   // auto const profile = osr::search_profile::kCar;
-  auto const profile = osr::search_profile::kBike;
-  auto const max = cost_t{3600};
-  auto const p2 = route(w, l, profile, from, to, max, direction::kForward, 100);
+  constexpr auto const kMaxCost = cost_t{3600};
+  constexpr auto const kMaxMatchDistance = 100;
+  auto const p2 = route(w, l, search_profile::kFoot, from, to, kMaxCost,
+                        direction::kForward, kMaxMatchDistance);
 
   auto const is_restricted = w.r_->is_restricted<osr::direction::kForward>(
       n.value(), w.r_->get_way_pos(n.value(), rhoenring.value()),
@@ -52,12 +53,20 @@ TEST(extract, wa) {
   EXPECT_TRUE(is_restricted);
 
   ASSERT_TRUE(p2.has_value());
+  ASSERT_TRUE(std::abs(p2->dist_ - 163.0) < 2.0);
+  // EXPECT_DOUBLE_EQ(5, p2->elevation_up());
+  // EXPECT_DOUBLE_EQ(4, p2->elevation_down());
   std::cout << "Distance: " << p2->dist_ << "\n";
   for (auto const& segment : p2->segments_) {
     std::cout << "Segment: " << segment.cost_ << "  (";
-    std::cout << (segment.from_ != node_idx_t::invalid() ? location{w.get_node_pos(segment.from_), segment.from_level_} : location{{0, 0}, kNoLevel});
+    std::cout << (segment.from_ != node_idx_t::invalid()
+                      ? location{w.get_node_pos(segment.from_),
+                                 segment.from_level_}
+                      : location{{0, 0}, kNoLevel});
     std::cout << " -> ";
-    std::cout << (segment.to_!= node_idx_t::invalid() ? location{w.get_node_pos(segment.to_), segment.to_level_} : location{{0, 0}, kNoLevel});
+    std::cout << (segment.to_ != node_idx_t::invalid()
+                      ? location{w.get_node_pos(segment.to_), segment.to_level_}
+                      : location{{0, 0}, kNoLevel});
     std::cout << ")  (" << segment.dist_ << ")\n";
   }
 }
