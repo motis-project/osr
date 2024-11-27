@@ -1,5 +1,6 @@
 #include <cmath>
 #include <fstream>
+#include <filesystem>
 #include <functional>
 #include <iostream>
 #include <limits>
@@ -7,8 +8,10 @@
 #include <unordered_map>
 
 #include "boost/algorithm/string/case_conv.hpp"
-#include "boost/filesystem.hpp"
+// #include "boost/filesystem.hpp"
 #include "boost/iostreams/device/mapped_file.hpp"
+
+#include "cista/mmap.h"
 
 #include "osr/preprocessing/elevation/dem_grid.h"
 
@@ -17,8 +20,9 @@
 // http://downloads.esri.com/support/whitepapers/other_/eximgav.pdf
 // http://desktop.arcgis.com/en/arcmap/10.3/manage-data/raster-and-images/bil-bip-and-bsq-raster-files.htm
 
-namespace fs = boost::filesystem;
-namespace ios = boost::iostreams;
+// namespace fs = boost::filesystem;
+namespace fs = std::filesystem;
+// namespace ios = boost::iostreams;
 
 namespace osr::preprocessing::elevation {
 
@@ -192,10 +196,10 @@ struct dem_grid::impl {
   }
 
   void ensure_file_mapped() {
-    if (!mapped_file_.is_open()) {
-      // std::clog << "Using DEM grid file: " << data_file_ << std::endl;
-      mapped_file_.open(data_file_);
-    }
+    // if (!mapped_file_.is_open()) {
+    //   // std::clog << "Using DEM grid file: " << data_file_ << std::endl;
+    //   mapped_file_.open(data_file_);
+    // }
   }
 
   unsigned rows_{0};
@@ -212,7 +216,8 @@ struct dem_grid::impl {
   pixel_value nodata_{};
 
   std::string data_file_;
-  ios::mapped_file_source mapped_file_;
+  // ios::mapped_file_source mapped_file_;
+  cista::mmap mapped_file_;
 };
 
 dem_grid::dem_grid(std::string const& filename)

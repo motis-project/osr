@@ -37,6 +37,8 @@ struct path {
   double dist_{0.0};
   std::vector<segment> segments_{};
   bool uses_elevator_{false};
+  double elevation_up_{0.0};
+  double elevation_down_{0.0};
 };
 
 template <typename Profile>

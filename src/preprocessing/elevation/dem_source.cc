@@ -43,7 +43,17 @@ struct dem_source::impl {
   std::vector<dem_grid> grids_;
 };
 
-dem_source::dem_source() : impl_(std::make_unique<impl>()) {}
+dem_source::dem_source(std::filesystem::path const& p)
+    : impl_(std::make_unique<impl>()) {
+  if (std::filesystem::is_directory(p)) {
+    for (auto const& file : std::filesystem::recursive_directory_iterator(p)) {
+      auto const& path = file.path();
+      if (file.is_regular_file() && path.extension().string() == ".hdr") {
+        impl_->add_grid_file(path);
+      }
+    }
+  }
+}
 
 dem_source::~dem_source() = default;
 

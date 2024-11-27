@@ -26,7 +26,7 @@ TEST(extract, wa) {
   fs::remove_all(p, ec);
   fs::create_directories(p, ec);
 
-  osr::extract(false, "test/map.osm", "/tmp/osr_test");
+  osr::extract(false, "test/map.osm", "/tmp/osr_test", "test/restriction_test_elevation/");
 
   auto w = osr::ways{"/tmp/osr_test", cista::mmap::protection::READ};
   auto l = osr::lookup{w, "/tmp/osr_test", cista::mmap::protection::READ};
@@ -54,8 +54,9 @@ TEST(extract, wa) {
 
   ASSERT_TRUE(p2.has_value());
   ASSERT_TRUE(std::abs(p2->dist_ - 163.0) < 2.0);
-  // EXPECT_DOUBLE_EQ(5, p2->elevation_up());
-  // EXPECT_DOUBLE_EQ(4, p2->elevation_down());
+  // EXPECT_DOUBLE_EQ(163, p2->dist_);
+  EXPECT_DOUBLE_EQ(5, p2->elevation_up_);
+  // EXPECT_DOUBLE_EQ(4, p2->elevation_down_);
   std::cout << "Distance: " << p2->dist_ << "\n";
   for (auto const& segment : p2->segments_) {
     std::cout << "Segment: " << segment.cost_ << "  (";

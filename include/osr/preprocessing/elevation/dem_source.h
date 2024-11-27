@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <filesystem>
 #include <memory>
 #include <string>
 
@@ -10,7 +11,7 @@
 namespace osr::preprocessing::elevation {
 
 struct dem_source {
-  dem_source();
+  dem_source(std::filesystem::path const&);
   ~dem_source();
   dem_source(dem_source const&) = delete;
   dem_source& operator=(dem_source const&) = delete;
