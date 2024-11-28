@@ -66,6 +66,7 @@ struct tags {
             is_platform_ = true;
           }
           break;
+        case cista::hash("indoor:level"): [[fallthrough]];
         case cista::hash("level"):
           has_level_ = true;
           add_levels(t, level_bits_);
