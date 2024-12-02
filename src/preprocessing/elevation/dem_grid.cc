@@ -86,7 +86,7 @@ double get_double(str_map const& map, std::string const& key, double def) {
 }
 
 struct dem_grid::impl {
-  explicit impl(std::string const& filename) {
+  explicit impl(std::string const& filename) : mapped_file_{} {
     auto const path = fs::path{filename};
     auto const hdr_path =
         fs::path{path.parent_path() / fs::path(path.stem().string() + ".hdr")};
