@@ -573,7 +573,7 @@ void extract(bool const with_platforms,
   if (elevation_dir) {
     auto const dem = osr::preprocessing::elevation::dem_source{*elevation_dir};
     auto elevations = elevation{out, cista::mmap::protection::WRITE};
-    elevations.set_elevations(dem);
+    elevations.set_elevations(w, dem);
   }
 
   utl::sort(w.r_->multi_level_elevators_);
