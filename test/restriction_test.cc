@@ -55,19 +55,6 @@ TEST(extract, wa) {
   ASSERT_TRUE(p2.has_value());
   ASSERT_TRUE(std::abs(p2->dist_ - 163.0) < 2.0);
   // EXPECT_DOUBLE_EQ(163, p2->dist_);
-  EXPECT_DOUBLE_EQ(5, p2->elevation_up_);
-  // EXPECT_DOUBLE_EQ(4, p2->elevation_down_);
-  std::cout << "Distance: " << p2->dist_ << "\n";
-  for (auto const& segment : p2->segments_) {
-    std::cout << "Segment: " << segment.cost_ << "  (";
-    std::cout << (segment.from_ != node_idx_t::invalid()
-                      ? location{w.get_node_pos(segment.from_),
-                                 segment.from_level_}
-                      : location{{0, 0}, kNoLevel});
-    std::cout << " -> ";
-    std::cout << (segment.to_ != node_idx_t::invalid()
-                      ? location{w.get_node_pos(segment.to_), segment.to_level_}
-                      : location{{0, 0}, kNoLevel});
-    std::cout << ")  (" << segment.dist_ << ")\n";
-  }
+  EXPECT_DOUBLE_EQ(3, p2->elevation_up_);
+  EXPECT_DOUBLE_EQ(5, p2->elevation_down_);
 }

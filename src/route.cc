@@ -1,6 +1,7 @@
 #include "osr/routing/route.h"
 
 #include <cstdint>
+#include <bits/ranges_algo.h>
 
 #include "boost/thread/tss.hpp"
 
@@ -53,12 +54,29 @@ connecting_way find_connecting_way(ways const& w,
           // conn = {way, a_idx, b_idx, is_loop, dist};
           // auto const elevation_up = static_cast<preprocessing::elevation::elevation_t>(std::abs(r.way_node_elevation_up_[way].at(a_idx) - r.way_node_elevation_up_[way].at(b_idx)));
           // auto const elevation_down = static_cast<preprocessing::elevation::elevation_t>(std::abs(r.way_node_elevation_down_[way].at(a_idx) - r.way_node_elevation_down_[way].at(b_idx)));
-          auto const elevation_up = r.way_node_elevation_up_[way].empty()
-            ? preprocessing::elevation::elevation_t{0}
-            : static_cast<preprocessing::elevation::elevation_t>(std::abs(r.way_node_elevation_up_[way].at(a_idx) - r.way_node_elevation_up_[way].at(b_idx)));
-          auto const elevation_down = r.way_node_elevation_down_[way].empty()
-            ? preprocessing::elevation::elevation_t{0}
-            : static_cast<preprocessing::elevation::elevation_t>(std::abs(r.way_node_elevation_down_[way].at(a_idx) - r.way_node_elevation_down_[way].at(b_idx)));
+          // auto const elevation_up = r.way_node_elevation_up_[way].empty()
+          //   ? preprocessing::elevation::elevation_t{0}
+          //   : static_cast<preprocessing::elevation::elevation_t>(std::abs(r.way_node_elevation_up_[way].at(a_idx) - r.way_node_elevation_up_[way].at(b_idx)));
+          // auto const elevation_down = r.way_node_elevation_down_[way].empty()
+          //   ? preprocessing::elevation::elevation_t{0}
+          //   : static_cast<preprocessing::elevation::elevation_t>(std::abs(r.way_node_elevation_down_[way].at(a_idx) - r.way_node_elevation_down_[way].at(b_idx)));
+          auto const [elevation_up, elevation_down] = a_idx <= b_idx
+            ? std::pair{
+              r.way_node_elevation_up_[way].empty()
+                ? preprocessing::elevation::elevation_t{0}
+                : static_cast<preprocessing::elevation::elevation_t>(r.way_node_elevation_up_[way].at(b_idx) - r.way_node_elevation_up_[way].at(a_idx)),
+              r.way_node_elevation_down_[way].empty()
+                ? preprocessing::elevation::elevation_t{0}
+                : static_cast<preprocessing::elevation::elevation_t>(r.way_node_elevation_down_[way].at(b_idx) - r.way_node_elevation_down_[way].at(a_idx)),
+            }
+            : std::pair{
+              r.way_node_elevation_down_[way].empty()
+                ? preprocessing::elevation::elevation_t{0}
+                : static_cast<preprocessing::elevation::elevation_t>(r.way_node_elevation_down_[way].at(a_idx) - r.way_node_elevation_down_[way].at(b_idx)),
+              r.way_node_elevation_up_[way].empty()
+                ? preprocessing::elevation::elevation_t{0}
+                : static_cast<preprocessing::elevation::elevation_t>(r.way_node_elevation_up_[way].at(a_idx) - r.way_node_elevation_up_[way].at(b_idx)),
+            };
           conn = {way, a_idx, b_idx, is_loop, dist, elevation_up, elevation_down};
         }
       });
@@ -117,6 +135,8 @@ double add_path(ways const& w,
   segment.way_ = way;
   segment.dist_ = distance;
   segment.cost_ = expected_cost;
+  segment.elevation_up_ = elevation_up;
+  segment.elevation_down_ = elevation_down;
   segment.mode_ = to.get_mode();
 
   if (way != way_idx_t::invalid()) {
@@ -210,6 +230,8 @@ path reconstruct(ways const& w,
   std::reverse(begin(segments), end(segments));
   auto p = path{.cost_ = cost,
                 .dist_ = start_node.dist_to_node_ + dist + dest.dist_to_node_,
+                .elevation_up_ = std::ranges::fold_left(segments, preprocessing::elevation::elevation_t{0}, [](auto const elevation, path::segment const& segment) { return static_cast<preprocessing::elevation::elevation_t>(elevation + segment.elevation_up_); }),
+                .elevation_down_ = std::ranges::fold_left(segments, preprocessing::elevation::elevation_t{0}, [](auto const elevation, path::segment const& segment) { return static_cast<preprocessing::elevation::elevation_t>(elevation + segment.elevation_down_); }),
                 .segments_ = segments};
   d.cost_.at(dest_node.get_key()).write(dest_node, p);
   return p;
