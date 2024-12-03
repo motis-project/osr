@@ -1,11 +1,14 @@
 #include "osr/routing/route.h"
 
+#include <cstdint>
+
 #include "boost/thread/tss.hpp"
 
 #include "utl/concat.h"
 #include "utl/to_vec.h"
 #include "utl/verify.h"
 
+#include "osr/preprocessing/elevation/elevation.h"
 #include "osr/routing/dijkstra.h"
 #include "osr/routing/profiles/bike.h"
 #include "osr/routing/profiles/bike_sharing.h"
@@ -25,6 +28,8 @@ struct connecting_way {
   std::uint16_t from_{}, to_{};
   bool is_loop_{};
   std::uint16_t distance_{};
+  preprocessing::elevation::elevation_t elevation_up_{};
+  preprocessing::elevation::elevation_t elevation_down_{};
 };
 
 template <direction SearchDir, bool WithBlocked, typename Profile>
@@ -45,7 +50,16 @@ connecting_way find_connecting_way(ways const& w,
           auto const is_loop = way != way_idx_t::invalid() && r.is_loop(way) &&
                                static_cast<unsigned>(std::abs(a_idx - b_idx)) ==
                                    r.way_nodes_[way].size() - 2U;
-          conn = {way, a_idx, b_idx, is_loop, dist};
+          // conn = {way, a_idx, b_idx, is_loop, dist};
+          // auto const elevation_up = static_cast<preprocessing::elevation::elevation_t>(std::abs(r.way_node_elevation_up_[way].at(a_idx) - r.way_node_elevation_up_[way].at(b_idx)));
+          // auto const elevation_down = static_cast<preprocessing::elevation::elevation_t>(std::abs(r.way_node_elevation_down_[way].at(a_idx) - r.way_node_elevation_down_[way].at(b_idx)));
+          auto const elevation_up = r.way_node_elevation_up_[way].empty()
+            ? preprocessing::elevation::elevation_t{0}
+            : static_cast<preprocessing::elevation::elevation_t>(std::abs(r.way_node_elevation_up_[way].at(a_idx) - r.way_node_elevation_up_[way].at(b_idx)));
+          auto const elevation_down = r.way_node_elevation_down_[way].empty()
+            ? preprocessing::elevation::elevation_t{0}
+            : static_cast<preprocessing::elevation::elevation_t>(std::abs(r.way_node_elevation_down_[way].at(a_idx) - r.way_node_elevation_down_[way].at(b_idx)));
+          conn = {way, a_idx, b_idx, is_loop, dist, elevation_up, elevation_down};
         }
       });
   utl::verify(
@@ -94,7 +108,7 @@ double add_path(ways const& w,
                 cost_t const expected_cost,
                 std::vector<path::segment>& path,
                 direction const dir) {
-  auto const& [way, from_idx, to_idx, is_loop, distance] =
+  auto const& [way, from_idx, to_idx, is_loop, distance, elevation_up, elevation_down] =
       find_connecting_way<Profile>(w, blocked, sharing, from, to, expected_cost,
                                    dir);
   auto j = 0U;

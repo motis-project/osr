@@ -1,12 +1,13 @@
+#include <filesystem>
 #include <vector>
 
 #include "boost/algorithm/string/case_conv.hpp"
-#include "boost/filesystem.hpp"
+// #include "boost/filesystem.hpp"
 
 #include "osr/preprocessing/elevation/dem_grid.h"
 #include "osr/preprocessing/elevation/dem_source.h"
 
-namespace fs = boost::filesystem;
+namespace fs = std::filesystem;
 
 namespace osr::preprocessing::elevation {
 
