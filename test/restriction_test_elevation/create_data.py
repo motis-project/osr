@@ -3,11 +3,14 @@
 
 import sys
 
+BYTE_ORDER = 'little'
+
 def main():
+    BASE = int.from_bytes(b'A_', byteorder=BYTE_ORDER, signed=True)
     (
-        Tile(tl=Point(8.65617, 49.8838761, ), br=Point(8.6575625, 49.8827837, ), size=Pos(10, 5), default=-100)
-        .set(Pos(9, 1), -98)
-        .set(Pos(9, 4), -95)
+        Tile(tl=Point(8.65617, 49.8838761, ), br=Point(8.6575625, 49.8827837, ), size=Pos(10, 5), default=BASE)
+        .set(Pos(9, 1), BASE + 2)
+        .set(Pos(9, 4), BASE + 5)
         .print()
         .save('elevations_1')
     )
@@ -59,7 +62,7 @@ class Grid(object):
         with open(path, 'wb') as f:
             for row in self.rows:
                 for value in row:
-                    f.write(value.to_bytes(length=2, byteorder='little', signed=True))
+                    f.write(value.to_bytes(length=2, byteorder=BYTE_ORDER, signed=True))
 
     def print(self):
         for row in self.rows:
