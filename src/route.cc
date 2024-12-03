@@ -51,32 +51,22 @@ connecting_way find_connecting_way(ways const& w,
           auto const is_loop = way != way_idx_t::invalid() && r.is_loop(way) &&
                                static_cast<unsigned>(std::abs(a_idx - b_idx)) ==
                                    r.way_nodes_[way].size() - 2U;
-          // conn = {way, a_idx, b_idx, is_loop, dist};
-          // auto const elevation_up = static_cast<preprocessing::elevation::elevation_t>(std::abs(r.way_node_elevation_up_[way].at(a_idx) - r.way_node_elevation_up_[way].at(b_idx)));
-          // auto const elevation_down = static_cast<preprocessing::elevation::elevation_t>(std::abs(r.way_node_elevation_down_[way].at(a_idx) - r.way_node_elevation_down_[way].at(b_idx)));
-          // auto const elevation_up = r.way_node_elevation_up_[way].empty()
-          //   ? preprocessing::elevation::elevation_t{0}
-          //   : static_cast<preprocessing::elevation::elevation_t>(std::abs(r.way_node_elevation_up_[way].at(a_idx) - r.way_node_elevation_up_[way].at(b_idx)));
-          // auto const elevation_down = r.way_node_elevation_down_[way].empty()
-          //   ? preprocessing::elevation::elevation_t{0}
-          //   : static_cast<preprocessing::elevation::elevation_t>(std::abs(r.way_node_elevation_down_[way].at(a_idx) - r.way_node_elevation_down_[way].at(b_idx)));
-          auto const [elevation_up, elevation_down] = a_idx <= b_idx
-            ? std::pair{
-              r.way_node_elevation_up_[way].empty()
+          auto const elevation_up = a_idx <= b_idx
+            ? r.way_node_elevation_up_[way].empty()
                 ? preprocessing::elevation::elevation_t{0}
-                : static_cast<preprocessing::elevation::elevation_t>(r.way_node_elevation_up_[way].at(b_idx) - r.way_node_elevation_up_[way].at(a_idx)),
-              r.way_node_elevation_down_[way].empty()
+                : static_cast<preprocessing::elevation::elevation_t>(r.way_node_elevation_up_[way].at(b_idx) - r.way_node_elevation_up_[way].at(a_idx))
+            : r.way_node_elevation_down_[way].empty()
                 ? preprocessing::elevation::elevation_t{0}
-                : static_cast<preprocessing::elevation::elevation_t>(r.way_node_elevation_down_[way].at(b_idx) - r.way_node_elevation_down_[way].at(a_idx)),
-            }
-            : std::pair{
-              r.way_node_elevation_down_[way].empty()
+                : static_cast<preprocessing::elevation::elevation_t>(r.way_node_elevation_down_[way].at(a_idx) - r.way_node_elevation_down_[way].at(b_idx))
+          ;
+          auto const elevation_down = a_idx <= b_idx
+            ? r.way_node_elevation_down_[way].empty()
                 ? preprocessing::elevation::elevation_t{0}
-                : static_cast<preprocessing::elevation::elevation_t>(r.way_node_elevation_down_[way].at(a_idx) - r.way_node_elevation_down_[way].at(b_idx)),
-              r.way_node_elevation_up_[way].empty()
+                : static_cast<preprocessing::elevation::elevation_t>(r.way_node_elevation_down_[way].at(b_idx) - r.way_node_elevation_down_[way].at(a_idx))
+            : r.way_node_elevation_up_[way].empty()
                 ? preprocessing::elevation::elevation_t{0}
-                : static_cast<preprocessing::elevation::elevation_t>(r.way_node_elevation_up_[way].at(a_idx) - r.way_node_elevation_up_[way].at(b_idx)),
-            };
+                : static_cast<preprocessing::elevation::elevation_t>(r.way_node_elevation_up_[way].at(a_idx) - r.way_node_elevation_up_[way].at(b_idx))
+          ;
           conn = {way, a_idx, b_idx, is_loop, dist, elevation_up, elevation_down};
         }
       });

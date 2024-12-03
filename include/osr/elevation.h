@@ -56,24 +56,6 @@ struct elevation {
       w.r_->way_node_elevation_up_.emplace_back(std::move(elevations_up));
       w.r_->way_node_elevation_down_.emplace_back(std::move(elevations_down));
     }
-    // for (auto way = way_idx_t{0U}; way < w.n_ways(); ++way) {
-    //   auto elevations = std::vector<preprocessing::elevation::elevation_t>{};
-    //   for (auto const& node : w.r_->way_nodes_[way]) {
-    //     auto const point = w.get_node_pos(node);
-    //     elevations.push_back(dem.get(preprocessing::elevation::location{point.lat_, point.lng_}));
-    //   }
-    //   auto const values = utl::all(elevations) | utl::remove_if([](auto const elevation) { return elevation == preprocessing::elevation::NO_ELEVATION_DATA; }) | utl::vec();
-    //   if (values.empty() || utl::all_of(values, [&](auto const elevation) { return elevation == values.front(); })) {
-    //     elevations.clear();
-    //   }
-    //   w.r_->way_node_elevation_.emplace_back(std::move(elevations));
-    // }
-    // for (auto const node_idx : std::views::iota<node_idx_t::value_t>(node_idx_t::value_t{0}, w.n_nodes())) {
-    // for (auto const node_idx : utl::iota(node_idx_t{0}, node_idx_t{w.n_nodes()})) {
-    // for (auto node_idx = node_idx_t{0}; node_idx < node_idx_t{w.n_nodes()}; ++node_idx) {
-    //   auto const point = w.get_node_pos(node_idx);
-    //   w.r_->node_elevation_.push_back(dem.get(preprocessing::elevation::location{point.lat_, point.lng_}));
-    // }
   }
 
   std::filesystem::path p_;
