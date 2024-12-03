@@ -5,8 +5,8 @@ import sys
 
 def main():
     (
-        Tile(tl=Point(8.656339, 49.883796, ), br=Point(8.657444, 49.882826, ), size=Pos(3, 2), default=-100)
-        .set(Pos(2, 1), -95)
+        Tile(tl=Point(8.65617, 49.8838761, ), br=Point(8.6575625, 49.8827837, ), size=Pos(10, 5), default=-100)
+        .set(Pos(9, 4), -95)
         .print()
         .save('elevations_1')
     )
@@ -40,7 +40,7 @@ class Grid(object):
         if not (0 < width and 0 < height):
             print(f'Error: Invalid grid size {pos}', file=sys.stderr)
             sys.exit(1)
-        self.rows = [[default for w in range(width)] for h in range(height)]
+        self.rows = [[default for w in range(width + 1)] for h in range(height + 1)]
 
     def set(self, pos: Pos, value: int):
         if not (0 <= pos.x <= self.width() and 0 <= pos.y <= self.height()):
