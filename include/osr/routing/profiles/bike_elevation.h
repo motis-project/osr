@@ -136,9 +136,15 @@ struct bike_elevation {
         }
 
         auto const dist = w.way_node_dist_[way][std::min(from, to)];
+        auto const elevation_cost = [&]() {
+          auto const [elevation_up, elevation_down] =
+              get_elevations(w, way, from, to);
+          return static_cast<cost_t>(
+              ElevationUpCost *
+              (way_dir == direction::kForward ? elevation_up : elevation_down));
+        };
         auto const cost = way_cost(target_way_prop, way_dir, dist) +
-                          node_cost(target_node_prop) +
-                          elevation_cost(w, way, from, to, way_dir);
+                          node_cost(target_node_prop) + elevation_cost();
         fn(node{target_node}, static_cast<std::uint32_t>(cost), dist, way, from,
            to);
       };
@@ -150,11 +156,6 @@ struct bike_elevation {
         expand(flip<SearchDir>(direction::kForward), i, i + 1);
       }
     }
-  }
-
-  static constexpr auto elevation_cost(ways::routing const& w, way_idx_t const way, std::uint16_t const from, std::uint16_t const to, direction way_dir) {
-        auto const [elevation_up, elevation_down] = get_elevations(w, way, from, to);
-        return static_cast<cost_t>(ElevationUpCost * (way_dir == direction::kForward ? elevation_up : elevation_down));
   }
 
   static constexpr cost_t way_cost(way_properties const e,
