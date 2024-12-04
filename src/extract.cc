@@ -547,7 +547,7 @@ void extract(bool const with_platforms,
     auto const dem = osr::preprocessing::elevation::dem_source{*elevation_dir};
     if (dem.size() > 0) {
       auto elevations = elevation{out, cista::mmap::protection::WRITE};
-      elevations.set_elevations(w, dem);
+      elevations.set_elevations(w, dem, pt);
     }
   }
 

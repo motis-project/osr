@@ -4,6 +4,7 @@
 #include <functional>
 #include <iostream>
 #include <limits>
+#include <mutex>
 #include <stdexcept>
 #include <unordered_map>
 
@@ -192,6 +193,7 @@ struct dem_grid::impl {
   }
 
   void ensure_file_mapped() {
+    auto const lock = std::lock_guard{m_};
     if (!mapped_file_.has_value()) {
       std::clog << "Using DEM grid file: " << data_file_ << std::endl;
       mapped_file_ = cista::mmap{data_file_.data(), cista::mmap::protection::READ};
@@ -213,6 +215,7 @@ struct dem_grid::impl {
 
   std::string data_file_;
   std::optional<cista::mmap> mapped_file_;
+  std::mutex m_{};
 };
 
 dem_grid::dem_grid(std::string const& filename)
