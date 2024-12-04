@@ -99,4 +99,11 @@ std::vector<std::optional<path>> route(
       return false;
     });
 
+std::pair<preprocessing::elevation::elevation_t,
+          preprocessing::elevation::elevation_t>
+get_elevations(ways::routing const&,
+               way_idx_t const way,
+               std::uint16_t const from,
+               std::uint16_t const to);
+
 }  // namespace osr

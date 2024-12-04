@@ -12,6 +12,7 @@
 #include "osr/preprocessing/elevation/elevation.h"
 #include "osr/routing/dijkstra.h"
 #include "osr/routing/profiles/bike.h"
+#include "osr/routing/profiles/bike_elevation.h"
 #include "osr/routing/profiles/bike_sharing.h"
 #include "osr/routing/profiles/car.h"
 #include "osr/routing/profiles/car_parking.h"
@@ -51,22 +52,7 @@ connecting_way find_connecting_way(ways const& w,
           auto const is_loop = way != way_idx_t::invalid() && r.is_loop(way) &&
                                static_cast<unsigned>(std::abs(a_idx - b_idx)) ==
                                    r.way_nodes_[way].size() - 2U;
-          auto const elevation_up = a_idx <= b_idx
-            ? r.way_node_elevation_up_[way].empty()
-                ? preprocessing::elevation::elevation_t{0}
-                : static_cast<preprocessing::elevation::elevation_t>(r.way_node_elevation_up_[way].at(b_idx) - r.way_node_elevation_up_[way].at(a_idx))
-            : r.way_node_elevation_down_[way].empty()
-                ? preprocessing::elevation::elevation_t{0}
-                : static_cast<preprocessing::elevation::elevation_t>(r.way_node_elevation_down_[way].at(a_idx) - r.way_node_elevation_down_[way].at(b_idx))
-          ;
-          auto const elevation_down = a_idx <= b_idx
-            ? r.way_node_elevation_down_[way].empty()
-                ? preprocessing::elevation::elevation_t{0}
-                : static_cast<preprocessing::elevation::elevation_t>(r.way_node_elevation_down_[way].at(b_idx) - r.way_node_elevation_down_[way].at(a_idx))
-            : r.way_node_elevation_up_[way].empty()
-                ? preprocessing::elevation::elevation_t{0}
-                : static_cast<preprocessing::elevation::elevation_t>(r.way_node_elevation_up_[way].at(a_idx) - r.way_node_elevation_up_[way].at(b_idx))
-          ;
+          auto const [elevation_up, elevation_down] = get_elevations(r, way, a_idx, b_idx);
           conn = {way, a_idx, b_idx, is_loop, dist, elevation_up, elevation_down};
         }
       });
@@ -445,6 +431,7 @@ std::vector<std::optional<path>> route(
     case search_profile::kWheelchair:
       return r(get_dijkstra<foot<true, elevator_tracking>>());
     case search_profile::kBike: return r(get_dijkstra<bike>());
+    case search_profile::kBikeElevationLow: return r(get_dijkstra<bike_elevation<kElevationLow>>());
     case search_profile::kCar: return r(get_dijkstra<car>());
     case search_profile::kCarParking:
       return r(get_dijkstra<car_parking<false>>());
@@ -487,6 +474,8 @@ std::optional<path> route(ways const& w,
     case search_profile::kWheelchair:
       return r(get_dijkstra<foot<true, elevator_tracking>>());
     case search_profile::kBike: return r(get_dijkstra<bike>());
+    case search_profile::kBikeElevationLow:
+      return r(get_dijkstra<bike_elevation<kElevationLow>>());
     case search_profile::kCar: return r(get_dijkstra<car>());
     case search_profile::kCarParking:
       return r(get_dijkstra<car_parking<false>>());
@@ -526,6 +515,7 @@ std::vector<std::optional<path>> route(
     case search_profile::kWheelchair:
       return r(get_dijkstra<foot<true, elevator_tracking>>());
     case search_profile::kBike: return r(get_dijkstra<bike>());
+    case search_profile::kBikeElevationLow: return r(get_dijkstra<bike_elevation<kElevationLow>>());
     case search_profile::kCar: return r(get_dijkstra<car>());
     case search_profile::kCarParking:
       return r(get_dijkstra<car_parking<false>>());
@@ -563,6 +553,7 @@ std::optional<path> route(ways const& w,
     case search_profile::kWheelchair:
       return r(get_dijkstra<foot<true, elevator_tracking>>());
     case search_profile::kBike: return r(get_dijkstra<bike>());
+    case search_profile::kBikeElevationLow: return r(get_dijkstra<bike_elevation<kElevationLow>>());
     case search_profile::kCar: return r(get_dijkstra<car>());
     case search_profile::kCarParking:
       return r(get_dijkstra<car_parking<false>>());
@@ -588,5 +579,30 @@ get_dijkstra<foot<true, osr::noop_tracking>>();
 
 template dijkstra<foot<false, osr::noop_tracking>>&
 get_dijkstra<foot<false, osr::noop_tracking>>();
+
+std::pair<preprocessing::elevation::elevation_t,
+          preprocessing::elevation::elevation_t>
+get_elevations(ways::routing const& r,
+               way_idx_t const way,
+               std::uint16_t const from,
+               std::uint16_t const to) {
+          auto const elevation_up = from <= to
+            ? r.way_node_elevation_up_[way].empty()
+                ? preprocessing::elevation::elevation_t{0}
+                : static_cast<preprocessing::elevation::elevation_t>(r.way_node_elevation_up_[way].at(to) - r.way_node_elevation_up_[way].at(from))
+            : r.way_node_elevation_down_[way].empty()
+                ? preprocessing::elevation::elevation_t{0}
+                : static_cast<preprocessing::elevation::elevation_t>(r.way_node_elevation_down_[way].at(from) - r.way_node_elevation_down_[way].at(to))
+          ;
+          auto const elevation_down = from <= to
+            ? r.way_node_elevation_down_[way].empty()
+                ? preprocessing::elevation::elevation_t{0}
+                : static_cast<preprocessing::elevation::elevation_t>(r.way_node_elevation_down_[way].at(to) - r.way_node_elevation_down_[way].at(from))
+            : r.way_node_elevation_up_[way].empty()
+                ? preprocessing::elevation::elevation_t{0}
+                : static_cast<preprocessing::elevation::elevation_t>(r.way_node_elevation_up_[way].at(from) - r.way_node_elevation_up_[way].at(to))
+          ;
+          return std::pair{elevation_up, elevation_down};
+}
 
 }  // namespace osr
