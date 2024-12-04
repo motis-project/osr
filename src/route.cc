@@ -52,8 +52,10 @@ connecting_way find_connecting_way(ways const& w,
           auto const is_loop = way != way_idx_t::invalid() && r.is_loop(way) &&
                                static_cast<unsigned>(std::abs(a_idx - b_idx)) ==
                                    r.way_nodes_[way].size() - 2U;
-          auto const [elevation_up, elevation_down] = get_elevations(r, way, a_idx, b_idx);
-          conn = {way, a_idx, b_idx, is_loop, dist, elevation_up, elevation_down};
+          auto const [elevation_up, elevation_down] =
+              get_elevations(r, way, a_idx, b_idx);
+          conn = {way,  a_idx,        b_idx,         is_loop,
+                  dist, elevation_up, elevation_down};
         }
       });
   utl::verify(
@@ -102,7 +104,8 @@ double add_path(ways const& w,
                 cost_t const expected_cost,
                 std::vector<path::segment>& path,
                 direction const dir) {
-  auto const& [way, from_idx, to_idx, is_loop, distance, elevation_up, elevation_down] =
+  auto const& [way, from_idx, to_idx, is_loop, distance, elevation_up,
+               elevation_down] =
       find_connecting_way<Profile>(w, blocked, sharing, from, to, expected_cost,
                                    dir);
   auto j = 0U;
@@ -206,8 +209,18 @@ path reconstruct(ways const& w,
   std::reverse(begin(segments), end(segments));
   auto p = path{.cost_ = cost,
                 .dist_ = start_node.dist_to_node_ + dist + dest.dist_to_node_,
-                .elevation_up_ = std::ranges::fold_left(segments, preprocessing::elevation::elevation_t{0}, [](auto const elevation, path::segment const& segment) { return static_cast<preprocessing::elevation::elevation_t>(elevation + segment.elevation_up_); }),
-                .elevation_down_ = std::ranges::fold_left(segments, preprocessing::elevation::elevation_t{0}, [](auto const elevation, path::segment const& segment) { return static_cast<preprocessing::elevation::elevation_t>(elevation + segment.elevation_down_); }),
+                .elevation_up_ = std::ranges::fold_left(
+                    segments, preprocessing::elevation::elevation_t{0},
+                    [](auto const elevation, path::segment const& segment) {
+                      return static_cast<preprocessing::elevation::elevation_t>(
+                          elevation + segment.elevation_up_);
+                    }),
+                .elevation_down_ = std::ranges::fold_left(
+                    segments, preprocessing::elevation::elevation_t{0},
+                    [](auto const elevation, path::segment const& segment) {
+                      return static_cast<preprocessing::elevation::elevation_t>(
+                          elevation + segment.elevation_down_);
+                    }),
                 .segments_ = segments};
   d.cost_.at(dest_node.get_key()).write(dest_node, p);
   return p;
@@ -431,7 +444,8 @@ std::vector<std::optional<path>> route(
     case search_profile::kWheelchair:
       return r(get_dijkstra<foot<true, elevator_tracking>>());
     case search_profile::kBike: return r(get_dijkstra<bike>());
-    case search_profile::kBikeElevationLow: return r(get_dijkstra<bike_elevation<kElevationLow>>());
+    case search_profile::kBikeElevationLow:
+      return r(get_dijkstra<bike_elevation<kElevationLow>>());
     case search_profile::kCar: return r(get_dijkstra<car>());
     case search_profile::kCarParking:
       return r(get_dijkstra<car_parking<false>>());
@@ -515,7 +529,8 @@ std::vector<std::optional<path>> route(
     case search_profile::kWheelchair:
       return r(get_dijkstra<foot<true, elevator_tracking>>());
     case search_profile::kBike: return r(get_dijkstra<bike>());
-    case search_profile::kBikeElevationLow: return r(get_dijkstra<bike_elevation<kElevationLow>>());
+    case search_profile::kBikeElevationLow:
+      return r(get_dijkstra<bike_elevation<kElevationLow>>());
     case search_profile::kCar: return r(get_dijkstra<car>());
     case search_profile::kCarParking:
       return r(get_dijkstra<car_parking<false>>());
@@ -553,7 +568,8 @@ std::optional<path> route(ways const& w,
     case search_profile::kWheelchair:
       return r(get_dijkstra<foot<true, elevator_tracking>>());
     case search_profile::kBike: return r(get_dijkstra<bike>());
-    case search_profile::kBikeElevationLow: return r(get_dijkstra<bike_elevation<kElevationLow>>());
+    case search_profile::kBikeElevationLow:
+      return r(get_dijkstra<bike_elevation<kElevationLow>>());
     case search_profile::kCar: return r(get_dijkstra<car>());
     case search_profile::kCarParking:
       return r(get_dijkstra<car_parking<false>>());
@@ -586,23 +602,22 @@ get_elevations(ways::routing const& r,
                way_idx_t const way,
                std::uint16_t const from,
                std::uint16_t const to) {
-          auto const elevation_up = from <= to
-            ? r.way_node_elevation_up_[way].empty()
-                ? preprocessing::elevation::elevation_t{0}
-                : static_cast<preprocessing::elevation::elevation_t>(r.way_node_elevation_up_[way].at(to) - r.way_node_elevation_up_[way].at(from))
-            : r.way_node_elevation_down_[way].empty()
-                ? preprocessing::elevation::elevation_t{0}
-                : static_cast<preprocessing::elevation::elevation_t>(r.way_node_elevation_down_[way].at(from) - r.way_node_elevation_down_[way].at(to))
-          ;
-          auto const elevation_down = from <= to
-            ? r.way_node_elevation_down_[way].empty()
-                ? preprocessing::elevation::elevation_t{0}
-                : static_cast<preprocessing::elevation::elevation_t>(r.way_node_elevation_down_[way].at(to) - r.way_node_elevation_down_[way].at(from))
-            : r.way_node_elevation_up_[way].empty()
-                ? preprocessing::elevation::elevation_t{0}
-                : static_cast<preprocessing::elevation::elevation_t>(r.way_node_elevation_up_[way].at(from) - r.way_node_elevation_up_[way].at(to))
-          ;
-          return std::pair{elevation_up, elevation_down};
+  auto const& [f, t] = from <= to ? std::pair{from, to} : std::pair{to, from};
+  auto const& [up, down] = std::pair{
+      way >= r.way_node_elevation_up_.size() ||
+              r.way_node_elevation_up_[way].empty()
+          ? preprocessing::elevation::elevation_t{0}
+          : static_cast<preprocessing::elevation::elevation_t>(
+                r.way_node_elevation_up_[way].at(t) -
+                r.way_node_elevation_up_[way].at(f)),
+      way >= r.way_node_elevation_down_.size() ||
+              r.way_node_elevation_down_[way].empty()
+          ? preprocessing::elevation::elevation_t{0}
+          : static_cast<preprocessing::elevation::elevation_t>(
+                r.way_node_elevation_down_[way].at(t) -
+                r.way_node_elevation_down_[way].at(f)),
+  };
+  return from <= to ? std::pair{up, down} : std::pair{down, up};
 }
 
 }  // namespace osr
