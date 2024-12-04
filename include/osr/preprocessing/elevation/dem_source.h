@@ -18,8 +18,6 @@ struct dem_source {
   dem_source(dem_source&&) = delete;
   dem_source& operator=(dem_source&&) = delete;
 
-  void add_file(std::string const& filename);
-
   elevation_t get(location const& loc) const;
 
 private:
