@@ -131,17 +131,14 @@ struct bike_elevation {
         }
 
         auto const target_way_prop = w.way_properties_[way];
-        if (way_infeasible(target_way_prop, way_dir)) {
+        if (way_cost(target_way_prop, way_dir, 0U) == kInfeasible) {
           return;
         }
-        // if (way_cost(target_way_prop, way_dir, 0U) == kInfeasible) {
-        //   return;
-        // }
 
-        auto const [dist, cost] = way_cost(w, way, from, to, way_dir, node_cost(target_node_prop));
-        // auto const dist = w.way_node_dist_[way][std::min(from, to)];
-        // auto const cost = way_cost(target_way_prop, way_dir, dist) +
-        //                   node_cost(target_node_prop);
+        auto const dist = w.way_node_dist_[way][std::min(from, to)];
+        auto const cost = way_cost(target_way_prop, way_dir, dist) +
+                          node_cost(target_node_prop) +
+                          elevation_cost(w, way, from, to, way_dir);
         fn(node{target_node}, static_cast<std::uint32_t>(cost), dist, way, from,
            to);
       };
@@ -155,18 +152,9 @@ struct bike_elevation {
     }
   }
 
-  static constexpr bool way_infeasible(way_properties const e,
-                                   direction) {
-    return !e.is_bike_accessible();
-  }
-
-  static constexpr auto way_cost(ways::routing const& r, way_idx_t const way, std::uint16_t const from, std::uint16_t const to, [[maybe_unused]] direction way_dir, [[maybe_unused]] cost_t const node_cost) {
-        auto const dist = r.way_node_dist_[way][std::min(from, to)];
-        auto const [elevation_up, elevation_down] = get_elevations(r, way, from, to);
-        // std::cout << "Elevations: " << elevation_up << ", " << elevation_down << "\n";
-        auto const cost = static_cast<cost_t>(way_cost(r.way_properties_[way], way_dir, dist) + node_cost
-          + ElevationUpCost * (way_dir == direction::kForward ? elevation_up : elevation_down));
-        return std::pair{dist, cost};
+  static constexpr auto elevation_cost(ways::routing const& w, way_idx_t const way, std::uint16_t const from, std::uint16_t const to, direction way_dir) {
+        auto const [elevation_up, elevation_down] = get_elevations(w, way, from, to);
+        return static_cast<cost_t>(ElevationUpCost * (way_dir == direction::kForward ? elevation_up : elevation_down));
   }
 
   static constexpr cost_t way_cost(way_properties const e,
