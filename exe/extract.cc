@@ -45,5 +45,5 @@ int main(int ac, char const** av) {
   utl::activate_progress_tracker("osr");
   auto const silencer = utl::global_progress_bars{false};
 
-  extract(c.with_platforms_, c.in_, c.out_);
+  extract(c.with_platforms_, c.in_, c.out_, c.elevation_data_);
 }
