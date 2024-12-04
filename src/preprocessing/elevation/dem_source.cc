@@ -46,4 +46,6 @@ elevation_t dem_source::get(location const& loc) const {
   return impl_->get(loc);
 }
 
+std::size_t dem_source::size() const { return impl_->grids_.size(); }
+
 }  // namespace osr::preprocessing::elevation

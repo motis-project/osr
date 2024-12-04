@@ -19,6 +19,7 @@ struct dem_source {
   dem_source& operator=(dem_source&&) = delete;
 
   elevation_t get(location const& loc) const;
+  std::size_t size() const;
 
 private:
   struct impl;

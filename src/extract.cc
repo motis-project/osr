@@ -1,4 +1,3 @@
-#include "osr/elevation.h"
 #ifdef _WIN_32
 // Otherwise
 // winnt.h(169): fatal error C1189: #error:  "No Target Architecture"
@@ -30,6 +29,7 @@
 #include "tiles/osm/tmp_file.h"
 
 #include "osr/preprocessing/elevation/dem_source.h"
+#include "osr/elevation.h"
 #include "osr/extract/tags.h"
 #include "osr/lookup.h"
 #include "osr/platforms.h"
@@ -455,7 +455,7 @@ struct rel_ways_handler : public osm::handler::Handler {
 void extract(bool const with_platforms,
              fs::path const& in,
              fs::path const& out,
-             [[maybe_unused]] std::optional<fs::path> const& elevation_dir) {
+             std::optional<fs::path> const& elevation_dir) {
   auto ec = std::error_code{};
   fs::remove_all(out, ec);
   if (!fs::is_directory(out)) {
@@ -541,6 +541,16 @@ void extract(bool const with_platforms,
 
   w.connect_ways();
 
+  pt->status("Load elevation data")
+        .out_bounds(85, 90);
+  if (elevation_dir && !elevation_dir->empty()) {
+    auto const dem = osr::preprocessing::elevation::dem_source{*elevation_dir};
+    if (dem.size() > 0) {
+      auto elevations = elevation{out, cista::mmap::protection::WRITE};
+      elevations.set_elevations(w, dem);
+    }
+  }
+
   auto r = std::vector<resolved_restriction>{};
   {
     pt->status("Load OSM / Node Properties")
@@ -570,11 +580,6 @@ void extract(bool const with_platforms,
   }
 
   w.add_restriction(r);
-  if (elevation_dir) {
-    auto const dem = osr::preprocessing::elevation::dem_source{*elevation_dir};
-    auto elevations = elevation{out, cista::mmap::protection::WRITE};
-    elevations.set_elevations(w, dem);
-  }
 
   utl::sort(w.r_->multi_level_elevators_);
 
