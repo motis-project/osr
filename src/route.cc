@@ -456,7 +456,9 @@ one_to_many_result route(
       return r(get_dijkstra<foot<true, elevator_tracking>>());
     case search_profile::kBike: return r(get_dijkstra<bike>());
     case search_profile::kBikeElevationLow:
-      return r(get_dijkstra<bike_elevation<kElevationLow>>());
+      return r(get_dijkstra<bike_elevation<kElevationLowCost>>());
+    case search_profile::kBikeElevationHigh:
+      return r(get_dijkstra<bike_elevation<kElevationHighCost>>());
     case search_profile::kCar: return r(get_dijkstra<car>());
     case search_profile::kCarParking:
       return r(get_dijkstra<car_parking<false>>());
@@ -501,7 +503,9 @@ std::optional<path> route(ways const& w,
       return r(get_dijkstra<foot<true, elevator_tracking>>());
     case search_profile::kBike: return r(get_dijkstra<bike>());
     case search_profile::kBikeElevationLow:
-      return r(get_dijkstra<bike_elevation<kElevationLow>>());
+      return r(get_dijkstra<bike_elevation<kElevationLowCost>>());
+    case search_profile::kBikeElevationHigh:
+      return r(get_dijkstra<bike_elevation<kElevationHighCost>>());
     case search_profile::kCar: return r(get_dijkstra<car>());
     case search_profile::kCarParking:
       return r(get_dijkstra<car_parking<false>>());
@@ -543,7 +547,9 @@ std::vector<std::optional<path>> route(
       return r(get_dijkstra<foot<true, elevator_tracking>>());
     case search_profile::kBike: return r(get_dijkstra<bike>());
     case search_profile::kBikeElevationLow:
-      return r(get_dijkstra<bike_elevation<kElevationLow>>());
+      return r(get_dijkstra<bike_elevation<kElevationLowCost>>());
+    case search_profile::kBikeElevationHigh:
+      return r(get_dijkstra<bike_elevation<kElevationHighCost>>());
     case search_profile::kCar: return r(get_dijkstra<car>());
     case search_profile::kCarParking:
       return r(get_dijkstra<car_parking<false>>());
@@ -583,7 +589,9 @@ std::optional<path> route(ways const& w,
       return r(get_dijkstra<foot<true, elevator_tracking>>());
     case search_profile::kBike: return r(get_dijkstra<bike>());
     case search_profile::kBikeElevationLow:
-      return r(get_dijkstra<bike_elevation<kElevationLow>>());
+      return r(get_dijkstra<bike_elevation<kElevationLowCost>>());
+    case search_profile::kBikeElevationHigh:
+      return r(get_dijkstra<bike_elevation<kElevationHighCost>>());
     case search_profile::kCar: return r(get_dijkstra<car>());
     case search_profile::kCarParking:
       return r(get_dijkstra<car_parking<false>>());

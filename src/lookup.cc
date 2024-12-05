@@ -52,8 +52,11 @@ match_t lookup::match(location const& query,
       return match<bike>(query, reverse, search_dir, max_match_distance,
                          blocked);
     case search_profile::kBikeElevationLow:
-      return match<bike_elevation<kElevationLow>>(query, reverse, search_dir, max_match_distance,
-                         blocked);
+      return match<bike_elevation<kElevationLowCost>>(
+          query, reverse, search_dir, max_match_distance, blocked);
+    case search_profile::kBikeElevationHigh:
+      return match<bike_elevation<kElevationHighCost>>(
+          query, reverse, search_dir, max_match_distance, blocked);
     case search_profile::kCarParking:
       return match<car_parking<false>>(query, reverse, search_dir,
                                        max_match_distance, blocked);

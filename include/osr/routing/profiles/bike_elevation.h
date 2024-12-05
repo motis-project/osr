@@ -11,8 +11,8 @@ namespace osr {
 struct sharing_data;
 
 // TODO Adjust value
-constexpr auto const kElevationLow = 10U;
-// constexpr auto const kElevationLowCost = 200;
+constexpr auto const kElevationLowCost = 10U;
+constexpr auto const kElevationHighCost = 50U;
 
 template <int ElevationUpCost>
 struct bike_elevation {
