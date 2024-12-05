@@ -23,14 +23,20 @@ struct dem_source;
 
 struct elevation {
   elevation(std::filesystem::path const& p, cista::mmap::protection const mode);
+  static std::unique_ptr<elevation> try_open(std::filesystem::path const&);
   void set_elevations(ways& w,
                       preprocessing::elevation::dem_source const& dem,
                       std::shared_ptr<utl::progress_tracker>& pt);
+  std::pair<elevation_t, elevation_t> get_elevations(
+      way_idx_t const way,
+      std::uint16_t const from,
+      std::uint16_t const to) const;
+
   mm_vecvec<way_idx_t, int> elevation_up_m_;
   mm_vecvec<way_idx_t, int> elevation_down_m_;
 };
 
-std::pair<elevation_t, elevation_t> get_elevations(ways::routing const& r,
+std::pair<elevation_t, elevation_t> get_elevations(elevation const*,
                                                    way_idx_t const way,
                                                    std::uint16_t const from,
                                                    std::uint16_t const to);

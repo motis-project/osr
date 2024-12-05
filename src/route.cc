@@ -39,12 +39,13 @@ connecting_way find_connecting_way(ways const& w,
                                    ways::routing const& r,
                                    bitvec<node_idx_t> const* blocked,
                                    sharing_data const* sharing,
+                                   elevation const* elevation,
                                    typename Profile::node const from,
                                    typename Profile::node const to,
                                    cost_t const expected_cost) {
   auto conn = std::optional<connecting_way>{};
   Profile::template adjacent<SearchDir, WithBlocked>(
-      r, from, blocked, sharing,
+      r, from, blocked, sharing, elevation,
       [&](typename Profile::node const target, std::uint32_t const cost,
           distance_t const dist, way_idx_t const way, std::uint16_t const a_idx,
           std::uint16_t const b_idx) {
@@ -53,7 +54,7 @@ connecting_way find_connecting_way(ways const& w,
                                static_cast<unsigned>(std::abs(a_idx - b_idx)) ==
                                    r.way_nodes_[way].size() - 2U;
           auto const [elevation_up, elevation_down] =
-              get_elevations(r, way, a_idx, b_idx);
+              get_elevations(elevation, way, a_idx, b_idx);
           conn = {way,  a_idx,        b_idx,         is_loop,
                   dist, elevation_up, elevation_down};
         }
@@ -73,6 +74,7 @@ template <typename Profile>
 connecting_way find_connecting_way(ways const& w,
                                    bitvec<node_idx_t> const* blocked,
                                    sharing_data const* sharing,
+                                   elevation const* elevation,
                                    typename Profile::node const from,
                                    typename Profile::node const to,
                                    cost_t const expected_cost,
@@ -80,10 +82,10 @@ connecting_way find_connecting_way(ways const& w,
   auto const call = [&]<bool WithBlocked>() {
     if (dir == direction::kForward) {
       return find_connecting_way<direction::kForward, WithBlocked, Profile>(
-          w, *w.r_, blocked, sharing, from, to, expected_cost);
+          w, *w.r_, blocked, sharing, elevation, from, to, expected_cost);
     } else {
       return find_connecting_way<direction::kBackward, WithBlocked, Profile>(
-          w, *w.r_, blocked, sharing, from, to, expected_cost);
+          w, *w.r_, blocked, sharing, elevation, from, to, expected_cost);
     }
   };
 
@@ -99,6 +101,7 @@ double add_path(ways const& w,
                 ways::routing const& r,
                 bitvec<node_idx_t> const* blocked,
                 sharing_data const* sharing,
+                elevation const* elevation,
                 typename Profile::node const from,
                 typename Profile::node const to,
                 cost_t const expected_cost,
@@ -106,8 +109,8 @@ double add_path(ways const& w,
                 direction const dir) {
   auto const& [way, from_idx, to_idx, is_loop, distance, elevation_up,
                elevation_down] =
-      find_connecting_way<Profile>(w, blocked, sharing, from, to, expected_cost,
-                                   dir);
+      find_connecting_way<Profile>(w, blocked, sharing, elevation, from, to,
+                                   expected_cost, dir);
   auto j = 0U;
   auto active = false;
   auto& segment = path.emplace_back();
@@ -161,6 +164,7 @@ template <typename Profile>
 path reconstruct(ways const& w,
                  bitvec<node_idx_t> const* blocked,
                  sharing_data const* sharing,
+                 elevation const* elevation,
                  dijkstra<Profile> const& d,
                  way_candidate const& start,
                  node_candidate const& dest,
@@ -185,7 +189,7 @@ path reconstruct(ways const& w,
     if (pred.has_value()) {
       auto const expected_cost =
           static_cast<cost_t>(e.cost(n) - d.get_cost(*pred));
-      dist += add_path<Profile>(w, *w.r_, blocked, sharing, *pred, n,
+      dist += add_path<Profile>(w, *w.r_, blocked, sharing, elevation, *pred, n,
                                 expected_cost, segments, dir);
     } else {
       break;
@@ -207,21 +211,21 @@ path reconstruct(ways const& w,
        .dist_ = static_cast<distance_t>(start_node.dist_to_node_),
        .mode_ = n.get_mode()});
   std::reverse(begin(segments), end(segments));
-  auto p = path{
-      .cost_ = cost,
-      .dist_ = start_node.dist_to_node_ + dist + dest.dist_to_node_,
-      .elevation_up_ = std::ranges::fold_left(
-          segments, elevation_t{0},
-          [](auto const elevation, path::segment const& segment) {
-            return static_cast<elevation_t>(elevation + segment.elevation_up_);
-          }),
-      .elevation_down_ = std::ranges::fold_left(
-          segments, elevation_t{0},
-          [](auto const elevation, path::segment const& segment) {
-            return static_cast<elevation_t>(elevation +
-                                            segment.elevation_down_);
-          }),
-      .segments_ = segments};
+  auto p = path{.cost_ = cost,
+                .dist_ = start_node.dist_to_node_ + dist + dest.dist_to_node_,
+                .elevation_up_ = std::ranges::fold_left(
+                    segments, elevation_t{0},
+                    [](auto const elevation_sum, path::segment const& segment) {
+                      return static_cast<elevation_t>(elevation_sum +
+                                                      segment.elevation_up_);
+                    }),
+                .elevation_down_ = std::ranges::fold_left(
+                    segments, elevation_t{0},
+                    [](auto const elevation_sum, path::segment const& segment) {
+                      return static_cast<elevation_t>(elevation_sum +
+                                                      segment.elevation_down_);
+                    }),
+                .segments_ = segments};
   d.cost_.at(dest_node.get_key()).write(dest_node, p);
   return p;
 }
@@ -314,7 +318,8 @@ std::optional<path> route(ways const& w,
                           cost_t const max,
                           direction const dir,
                           bitvec<node_idx_t> const* blocked,
-                          sharing_data const* sharing) {
+                          sharing_data const* sharing,
+                          elevation const* elevation) {
   if (auto const direct = try_direct(from, to); direct.has_value()) {
     return *direct;
   }
@@ -334,13 +339,13 @@ std::optional<path> route(ways const& w,
       continue;
     }
 
-    d.run(w, *w.r_, max, blocked, sharing, dir);
+    d.run(w, *w.r_, max, blocked, sharing, elevation, dir);
 
     auto const c = best_candidate(w, d, to.lvl_, to_match, max, dir);
     if (c.has_value()) {
       auto const [nc, wc, node, p] = *c;
-      return reconstruct<Profile>(w, blocked, sharing, d, start, *nc, node,
-                                  p.cost_, dir);
+      return reconstruct<Profile>(w, blocked, sharing, elevation, d, start, *nc,
+                                  node, p.cost_, dir);
     }
   }
 
@@ -359,6 +364,7 @@ std::vector<std::optional<path>> route(
     direction const dir,
     bitvec<node_idx_t> const* blocked,
     sharing_data const* sharing,
+    elevation const* elevation,
     std::function<bool(path const&)> const& do_reconstruct) {
   auto result = std::vector<std::optional<path>>{};
   result.resize(to_match.size());
@@ -380,7 +386,7 @@ std::vector<std::optional<path>> route(
       }
     }
 
-    d.run(w, *w.r_, max, blocked, sharing, dir);
+    d.run(w, *w.r_, max, blocked, sharing, elevation, dir);
 
     auto found = 0U;
     for (auto const [m, t, r] : utl::zip(to_match, to, result)) {
@@ -394,8 +400,8 @@ std::vector<std::optional<path>> route(
           auto [nc, wc, n, p] = *c;
           d.cost_.at(n.get_key()).write(n, p);
           if (do_reconstruct(p)) {
-            p = reconstruct<Profile>(w, blocked, sharing, d, start, *nc, n,
-                                     p.cost_, dir);
+            p = reconstruct<Profile>(w, blocked, sharing, elevation, d, start,
+                                     *nc, n, p.cost_, dir);
             p.uses_elevator_ = true;
           }
           r = std::make_optional(p);
@@ -423,6 +429,7 @@ std::vector<std::optional<path>> route(
     double const max_match_distance,
     bitvec<node_idx_t> const* blocked,
     sharing_data const* sharing,
+    elevation const* elevation,
     std::function<bool(path const&)> const& do_reconstruct) {
   auto const r = [&]<typename Profile>(
                      dijkstra<Profile>& d) -> std::vector<std::optional<path>> {
@@ -435,7 +442,7 @@ std::vector<std::optional<path>> route(
       return l.match<Profile>(x, true, dir, max_match_distance, blocked);
     });
     return route(w, d, from, to, from_match, to_match, max, dir, blocked,
-                 sharing, do_reconstruct);
+                 sharing, elevation, do_reconstruct);
   };
 
   switch (profile) {
@@ -466,7 +473,8 @@ std::optional<path> route(ways const& w,
                           direction const dir,
                           double const max_match_distance,
                           bitvec<node_idx_t> const* blocked,
-                          sharing_data const* sharing) {
+                          sharing_data const* sharing,
+                          elevation const* elevation) {
   auto const r =
       [&]<typename Profile>(dijkstra<Profile>& d) -> std::optional<path> {
     auto const from_match =
@@ -479,7 +487,7 @@ std::optional<path> route(ways const& w,
     }
 
     return route(w, d, from, to, from_match, to_match, max, dir, blocked,
-                 sharing);
+                 sharing, elevation);
   };
 
   switch (profile) {
@@ -512,6 +520,7 @@ std::vector<std::optional<path>> route(
     direction const dir,
     bitvec<node_idx_t> const* blocked,
     sharing_data const* sharing,
+    elevation const* elevation,
     std::function<bool(path const&)> const& do_reconstruct) {
   if (from_match.empty()) {
     return std::vector<std::optional<path>>(to.size());
@@ -520,7 +529,7 @@ std::vector<std::optional<path>> route(
   auto const r = [&]<typename Profile>(
                      dijkstra<Profile>& d) -> std::vector<std::optional<path>> {
     return route(w, d, from, to, from_match, to_match, max, dir, blocked,
-                 sharing, do_reconstruct);
+                 sharing, elevation, do_reconstruct);
   };
 
   switch (profile) {
@@ -551,7 +560,8 @@ std::optional<path> route(ways const& w,
                           cost_t const max,
                           direction const dir,
                           bitvec<node_idx_t> const* blocked,
-                          sharing_data const* sharing) {
+                          sharing_data const* sharing,
+                          elevation const* elevation) {
   if (from_match.empty() || to_match.empty()) {
     return std::nullopt;
   }
@@ -559,7 +569,7 @@ std::optional<path> route(ways const& w,
   auto const r =
       [&]<typename Profile>(dijkstra<Profile>& d) -> std::optional<path> {
     return route(w, d, from, to, from_match, to_match, max, dir, blocked,
-                 sharing);
+                 sharing, elevation);
   };
 
   switch (profile) {

@@ -6,6 +6,8 @@
 
 #include <filesystem>
 
+#include "cista/mmap.h"
+
 #include "fmt/core.h"
 #include "fmt/ranges.h"
 
@@ -26,10 +28,14 @@ TEST(extract, wa) {
   fs::remove_all(p, ec);
   fs::create_directories(p, ec);
 
-  osr::extract(false, "test/map.osm", "/tmp/osr_test", "test/restriction_test_elevation/");
+  constexpr auto const kTestDir = "/tmp/osr_test";
+  osr::extract(false, "test/map.osm", kTestDir,
+               "test/restriction_test_elevation/");
 
   auto w = osr::ways{"/tmp/osr_test", cista::mmap::protection::READ};
   auto l = osr::lookup{w, "/tmp/osr_test", cista::mmap::protection::READ};
+  auto const elevations = elevation::try_open(kTestDir);
+  ASSERT_TRUE(elevations);
 
   auto const n = w.find_node_idx(osm_node_idx_t{528944});
   auto const rhoenring = w.find_way(osm_way_idx_t{120682496});
@@ -46,9 +52,11 @@ TEST(extract, wa) {
   constexpr auto const kMaxMatchDistance = 100;
   // auto const p2 = route(w, l, search_profile::kFoot, from, to, kMaxCost,
   auto const p2 = route(w, l, search_profile::kBike, from, to, kMaxCost,
-                        direction::kForward, kMaxMatchDistance);
-  auto const p3 = route(w, l, search_profile::kBikeElevationLow, from, to, kMaxCost,
-                        direction::kForward, kMaxMatchDistance);
+                        direction::kForward, kMaxMatchDistance, nullptr,
+                        nullptr, elevations.get());
+  auto const p3 = route(w, l, search_profile::kBikeElevationLow, from, to,
+                        kMaxCost, direction::kForward, kMaxMatchDistance,
+                        nullptr, nullptr, elevations.get());
 
   auto const is_restricted = w.r_->is_restricted<osr::direction::kForward>(
       n.value(), w.r_->get_way_pos(n.value(), rhoenring.value()),
@@ -62,15 +70,6 @@ TEST(extract, wa) {
   EXPECT_DOUBLE_EQ(5, p2->elevation_down_);
 
   ASSERT_TRUE(p3.has_value());
-  // std::cout << "DEBUG: " << p2->dist_ << " / " << p2->cost_ << "\n";
-  // std::cout << "DEBUG: " << p3->dist_ << " / " << p3->cost_ << "\n";
-  // for (auto const x : p3->segments_) std::cout << x.elevation_down_ << ", " << x.elevation_up_ << " / ";
-  // std::cout << "\n";
-  // for (auto const x : p2->segments_) std::cout << x.from_ << " -> " << x.to_ << " / ";
-  // std::cout << "\n";
-  // for (auto const x : p3->segments_) std::cout << x.from_ << " -> " << x.to_ << " / ";
-  // std::cout << "\n";
-  // std::cout << w.get_node_pos(node_idx_t{0}) << " / " << w.get_node_pos(node_idx_t{17}) << "\n";
   ASSERT_TRUE(p3->dist_ - kShortestDistance > 2.0);
   EXPECT_DOUBLE_EQ(1, p3->elevation_up_);
   EXPECT_DOUBLE_EQ(3, p3->elevation_down_);

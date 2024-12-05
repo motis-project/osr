@@ -71,7 +71,8 @@ std::optional<path> route(ways const&,
                           direction,
                           double max_match_distance,
                           bitvec<node_idx_t> const* blocked = nullptr,
-                          sharing_data const* sharing = nullptr);
+                          sharing_data const* sharing = nullptr,
+                          elevation const* = nullptr);
 
 std::optional<path> route(ways const&,
                           search_profile,
@@ -82,7 +83,8 @@ std::optional<path> route(ways const&,
                           cost_t const max,
                           direction,
                           bitvec<node_idx_t> const* blocked = nullptr,
-                          sharing_data const* sharing = nullptr);
+                          sharing_data const* sharing = nullptr,
+                          elevation const* = nullptr);
 
 std::vector<std::optional<path>> route(
     ways const&,
@@ -95,6 +97,7 @@ std::vector<std::optional<path>> route(
     direction const,
     bitvec<node_idx_t> const* blocked = nullptr,
     sharing_data const* sharing = nullptr,
+    elevation const* = nullptr,
     std::function<bool(path const&)> const& do_reconstruct = [](path const&) {
       return false;
     });

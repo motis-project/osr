@@ -1,6 +1,7 @@
 #pragma once
 
 #include "osr/routing/additional_edge.h"
+#include "osr/elevation.h"
 #include "osr/routing/dial.h"
 #include "osr/types.h"
 #include "osr/ways.h"
@@ -52,7 +53,8 @@ struct dijkstra {
            ways::routing const& r,
            cost_t const max,
            bitvec<node_idx_t> const* blocked,
-           sharing_data const* sharing) {
+           sharing_data const* sharing,
+           elevation const* elevation) {
     while (!pq_.empty()) {
       auto l = pq_.pop();
       if (get_cost(l.get_node()) < l.cost()) {
@@ -67,7 +69,7 @@ struct dijkstra {
 
       auto const curr = l.get_node();
       Profile::template adjacent<SearchDir, WithBlocked>(
-          r, curr, blocked, sharing,
+          r, curr, blocked, sharing, elevation,
           [&](node const neighbor, std::uint32_t const cost, distance_t,
               way_idx_t const way, std::uint16_t, std::uint16_t) {
             if constexpr (kDebug) {
@@ -100,15 +102,16 @@ struct dijkstra {
            cost_t const max,
            bitvec<node_idx_t> const* blocked,
            sharing_data const* sharing,
+           elevation const* elevation,
            direction const dir) {
     if (blocked == nullptr) {
       dir == direction::kForward
-          ? run<direction::kForward, false>(w, r, max, blocked, sharing)
-          : run<direction::kBackward, false>(w, r, max, blocked, sharing);
+          ? run<direction::kForward, false>(w, r, max, blocked, sharing, elevation)
+          : run<direction::kBackward, false>(w, r, max, blocked, sharing, elevation);
     } else {
       dir == direction::kForward
-          ? run<direction::kForward, true>(w, r, max, blocked, sharing)
-          : run<direction::kBackward, true>(w, r, max, blocked, sharing);
+          ? run<direction::kForward, true>(w, r, max, blocked, sharing, elevation)
+          : run<direction::kBackward, true>(w, r, max, blocked, sharing, elevation);
     }
   }
 

@@ -259,6 +259,7 @@ struct bike_sharing {
                        node const n,
                        bitvec<node_idx_t> const* blocked,
                        sharing_data const* sharing,
+                       elevation const* elevation,
                        Fn&& fn) {
     assert(sharing != nullptr);
 
@@ -274,7 +275,7 @@ struct bike_sharing {
                                        bool const include_additional_edges,
                                        cost_t const switch_penalty = 0) {
       footp::template adjacent<SearchDir, WithBlocked>(
-          w, to_foot(n), blocked, nullptr,
+          w, to_foot(n), blocked, nullptr, elevation,
           [&](footp::node const neighbor, std::uint32_t const cost,
               distance_t const dist, way_idx_t const way,
               std::uint16_t const from, std::uint16_t const to) {
@@ -299,7 +300,7 @@ struct bike_sharing {
     auto const& continue_on_bike = [&](bool const include_additional_edges,
                                        cost_t const switch_penalty = 0) {
       bike::adjacent<SearchDir, WithBlocked>(
-          w, to_bike(n), blocked, nullptr,
+          w, to_bike(n), blocked, nullptr, elevation,
           [&](bike::node const neighbor, std::uint32_t const cost,
               distance_t const dist, way_idx_t const way,
               std::uint16_t const from, std::uint16_t const to) {

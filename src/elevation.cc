@@ -1,8 +1,13 @@
 #include "osr/elevation.h"
 
+#include <array>
+#include <filesystem>
+#include <memory>
+
 #include "cista/mmap.h"
 
 #include "utl/enumerate.h"
+#include "utl/helpers/algorithm.h"
 #include "utl/parallel_for.h"
 
 #include "osr/preprocessing/elevation/dem_source.h"
@@ -15,13 +20,35 @@ cista::mmap mm(std::filesystem::path const& p,
   return cista::mmap{(p / file).generic_string().c_str(), mode};
 }
 
+constexpr auto const kUpDataName = "elevation_up_data.bin";
+constexpr auto const kUpIndexName = "elevation_up_idx.bin";
+constexpr auto const kDownDataName = "elevation_down_data.bin";
+constexpr auto const kDownIndexName = "elevation_down_idx.bin";
+
 elevation::elevation(std::filesystem::path const& p,
                      cista::mmap::protection const mode)
-    : elevation_up_m_{mm_vec<int>{mm(p, "elevation_up_data.bin", mode)},
-                      mm_vec<unsigned>(mm(p, "elevation_up_idx.bin", mode))},
-      elevation_down_m_{
-          mm_vec<int>{mm(p, "elevation_down_data.bin", mode)},
-          mm_vec<unsigned>(mm(p, "elevation_down_idx.bin", mode))} {}
+    : elevation_up_m_{mm_vec<int>{mm(p, kUpDataName, mode)},
+                      mm_vec<unsigned>(mm(p, kUpIndexName, mode))},
+      elevation_down_m_{mm_vec<int>{mm(p, kDownDataName, mode)},
+                        mm_vec<unsigned>(mm(p, kDownIndexName, mode))} {}
+
+std::unique_ptr<elevation> elevation::try_open(
+    std::filesystem::path const& path) {
+  if (utl::any_of(
+          std::array{kUpDataName, kUpIndexName, kDownDataName, kDownIndexName},
+          [&](char const* const filename) {
+            auto const full_path = path / filename;
+            if (std::filesystem::exists(full_path)) {
+              return false;
+            } else {
+              std::cout << full_path << " does not exist\n";
+              return true;
+            }
+          })) {
+    return {};
+  }
+  return std::make_unique<elevation>(path, cista::mmap::protection::READ);
+}
 
 void elevation::set_elevations(ways& w,
                                preprocessing::elevation::dem_source const& dem,
@@ -64,11 +91,9 @@ void elevation::set_elevations(ways& w,
       },
       pt->update_fn());
   // Insert elevations
-  for (auto& [source, destination] : std::vector{
-           std::pair{std::ref(elevations_up),
-                     std::ref(w.r_->way_node_elevation_up_)},
-           std::pair{std::ref(elevations_down),
-                     std::ref(w.r_->way_node_elevation_down_)},
+  for (auto& [source, destination] : std::array{
+           std::pair{std::ref(elevations_up), std::ref(elevation_up_m_)},
+           std::pair{std::ref(elevations_down), std::ref(elevation_down_m_)},
        }) {
     auto& target = destination.get();
     for (auto const [i, elevations] : utl::enumerate(source.get())) {
@@ -80,24 +105,30 @@ void elevation::set_elevations(ways& w,
   }
 }
 
-std::pair<elevation_t, elevation_t> get_elevations(ways::routing const& r,
+std::pair<elevation_t, elevation_t> elevation::get_elevations(
+    way_idx_t const way,
+    std::uint16_t const from,
+    std::uint16_t const to) const {
+  auto const& [f, t] = from <= to ? std::pair{from, to} : std::pair{to, from};
+  auto const& [up, down] = std::pair{
+      way >= elevation_up_m_.size() || elevation_up_m_[way].empty()
+          ? elevation_t{0}
+          : static_cast<elevation_t>(elevation_up_m_[way].at(t) -
+                                     elevation_up_m_[way].at(f)),
+      way >= elevation_down_m_.size() || elevation_down_m_[way].empty()
+          ? elevation_t{0}
+          : static_cast<elevation_t>(elevation_down_m_[way].at(t) -
+                                     elevation_down_m_[way].at(f)),
+  };
+  return from <= to ? std::pair{up, down} : std::pair{down, up};
+}
+
+std::pair<elevation_t, elevation_t> get_elevations(elevation const* elevation,
                                                    way_idx_t const way,
                                                    std::uint16_t const from,
                                                    std::uint16_t const to) {
-  auto const& [f, t] = from <= to ? std::pair{from, to} : std::pair{to, from};
-  auto const& [up, down] = std::pair{
-      way >= r.way_node_elevation_up_.size() ||
-              r.way_node_elevation_up_[way].empty()
-          ? elevation_t{0}
-          : static_cast<elevation_t>(r.way_node_elevation_up_[way].at(t) -
-                                     r.way_node_elevation_up_[way].at(f)),
-      way >= r.way_node_elevation_down_.size() ||
-              r.way_node_elevation_down_[way].empty()
-          ? elevation_t{0}
-          : static_cast<elevation_t>(r.way_node_elevation_down_[way].at(t) -
-                                     r.way_node_elevation_down_[way].at(f)),
-  };
-  return from <= to ? std::pair{up, down} : std::pair{down, up};
+  return elevation == nullptr ? std::pair{elevation_t{0}, elevation_t{0}}
+                              : elevation->get_elevations(way, from, to);
 }
 
 }  // namespace osr

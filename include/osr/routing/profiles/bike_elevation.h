@@ -113,6 +113,7 @@ struct bike_elevation {
                        node const n,
                        bitvec<node_idx_t> const* blocked,
                        sharing_data const*,
+                       elevation const* elevation,
                        Fn&& fn) {
     for (auto const [way, i] :
          utl::zip_unchecked(w.node_ways_[n.n_], w.node_in_way_idx_[n.n_])) {
@@ -138,7 +139,7 @@ struct bike_elevation {
         auto const dist = w.way_node_dist_[way][std::min(from, to)];
         auto const elevation_cost = [&]() {
           auto const [elevation_up, elevation_down] =
-              get_elevations(w, way, from, to);
+              get_elevations(elevation, way, from, to);
           return static_cast<cost_t>(
               ElevationUpCost *
               (way_dir == direction::kForward ? elevation_up : elevation_down));
