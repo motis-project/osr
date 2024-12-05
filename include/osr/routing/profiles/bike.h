@@ -1,5 +1,6 @@
 #pragma once
 
+#include "osr/elevation_storage.h"
 #include "osr/routing/mode.h"
 #include "osr/routing/route.h"
 #include "osr/ways.h"

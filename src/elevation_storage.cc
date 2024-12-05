@@ -1,10 +1,6 @@
 #include "osr/elevation_storage.h"
 
 #include <array>
-#include <filesystem>
-#include <memory>
-
-#include "cista/mmap.h"
 
 #include "utl/enumerate.h"
 #include "utl/helpers/algorithm.h"
@@ -17,7 +13,7 @@ namespace osr {
 cista::mmap mm(std::filesystem::path const& p,
                char const* file,
                cista::mmap::protection const mode) {
-  return cista::mmap{(p / file).generic_string().c_str(), mode};
+  return cista::mmap{(p / file).string().data(), mode};
 }
 
 namespace elevation_files {
@@ -29,10 +25,10 @@ constexpr auto const kDownIndexName = "elevation_down_idx.bin";
 
 elevation_storage::elevation_storage(std::filesystem::path const& p,
                                      cista::mmap::protection const mode)
-    : elevation_up_m_{mm_vec<int>{mm(p, elevation_files::kUpDataName, mode)},
-                      mm_vec<unsigned>(
-                          mm(p, elevation_files::kUpIndexName, mode))},
-      elevation_down_m_{
+    : elevation_up_{mm_vec<int>{mm(p, elevation_files::kUpDataName, mode)},
+                    mm_vec<unsigned>(
+                        mm(p, elevation_files::kUpIndexName, mode))},
+      elevation_down_{
           mm_vec<int>{mm(p, elevation_files::kDownDataName, mode)},
           mm_vec<unsigned>(mm(p, elevation_files::kDownIndexName, mode))} {}
 
@@ -78,8 +74,7 @@ void elevation_storage::set_elevations(
           if (elevation != NO_ELEVATION_DATA) {
             if (last_elevation == NO_ELEVATION_DATA) {
               last_elevation = elevation;
-            }
-            if (elevation > last_elevation) {
+            } else if (elevation > last_elevation) {
               total_up += elevation - last_elevation;
             } else {
               total_down += last_elevation - elevation;
@@ -99,8 +94,8 @@ void elevation_storage::set_elevations(
       pt->update_fn());
   // Insert elevations
   for (auto& [source, destination] : std::array{
-           std::pair{std::ref(elevations_up), std::ref(elevation_up_m_)},
-           std::pair{std::ref(elevations_down), std::ref(elevation_down_m_)},
+           std::pair{std::ref(elevations_up), std::ref(elevation_up_)},
+           std::pair{std::ref(elevations_down), std::ref(elevation_down_)},
        }) {
     auto& target = destination.get();
     for (auto const [i, elevations] : utl::enumerate(source.get())) {
@@ -118,14 +113,14 @@ std::pair<elevation_t, elevation_t> elevation_storage::get_elevations(
     std::uint16_t const to) const {
   auto const& [f, t] = from <= to ? std::pair{from, to} : std::pair{to, from};
   auto const& [up, down] = std::pair{
-      way >= elevation_up_m_.size() || elevation_up_m_[way].empty()
+      way >= elevation_up_.size() || elevation_up_[way].empty()
           ? elevation_t{0}
-          : static_cast<elevation_t>(elevation_up_m_[way].at(t) -
-                                     elevation_up_m_[way].at(f)),
-      way >= elevation_down_m_.size() || elevation_down_m_[way].empty()
+          : static_cast<elevation_t>(elevation_up_[way].at(t) -
+                                     elevation_up_[way].at(f)),
+      way >= elevation_down_.size() || elevation_down_[way].empty()
           ? elevation_t{0}
-          : static_cast<elevation_t>(elevation_down_m_[way].at(t) -
-                                     elevation_down_m_[way].at(f)),
+          : static_cast<elevation_t>(elevation_down_[way].at(t) -
+                                     elevation_down_[way].at(f)),
   };
   return from <= to ? std::pair{up, down} : std::pair{down, up};
 }

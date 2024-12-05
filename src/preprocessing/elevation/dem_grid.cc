@@ -12,6 +12,7 @@
 
 #include "cista/mmap.h"
 
+#include "osr/elevation_storage.h"
 #include "osr/preprocessing/elevation/dem_grid.h"
 
 // EHdr / BIL File Format:
@@ -146,7 +147,7 @@ struct dem_grid::impl {
 
     switch (pixel_type_) {
       case pixel_type::int16:
-        nodata_.int16_ = static_cast<int16_t>(get_int(hdr, "NODATA", 0));
+        nodata_.int16_ = static_cast<std::int16_t>(get_int(hdr, "NODATA", 0));
         break;
       case pixel_type::float32:
         nodata_.float32_ = static_cast<float>(get_double(hdr, "NODATA", 0));
@@ -182,7 +183,7 @@ struct dem_grid::impl {
 
     switch (pixel_type_) {
       case pixel_type::int16:
-        val.int16_ = *reinterpret_cast<int16_t const*>(byte_ptr);
+        val.int16_ = *reinterpret_cast<std::int16_t const*>(byte_ptr);
         break;
       case pixel_type::float32:
         val.float32_ = *reinterpret_cast<float const*>(byte_ptr);

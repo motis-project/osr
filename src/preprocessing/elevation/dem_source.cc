@@ -1,8 +1,10 @@
+#include "osr/preprocessing/elevation/dem_source.h"
+
 #include <filesystem>
 #include <vector>
 
+#include "osr/elevation_storage.h"
 #include "osr/preprocessing/elevation/dem_grid.h"
-#include "osr/preprocessing/elevation/dem_source.h"
 
 namespace fs = std::filesystem;
 

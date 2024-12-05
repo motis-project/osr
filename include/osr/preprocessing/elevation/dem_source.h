@@ -2,7 +2,8 @@
 
 #include <filesystem>
 
-#include "osr/elevation_storage.h"
+#include "osr/point.h"
+#include "osr/types.h"
 
 namespace osr::preprocessing::elevation {
 

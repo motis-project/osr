@@ -1,5 +1,6 @@
 #pragma once
 
+#include "osr/elevation_storage.h"
 #include "osr/routing/mode.h"
 #include "osr/routing/route.h"
 #include "osr/types.h"
@@ -163,7 +164,7 @@ struct bike_elevation {
                                    direction,
                                    std::uint16_t const dist) {
     if (e.is_bike_accessible()) {
-      return static_cast<cost_t>(std::round(dist / 2.8F));
+      return static_cast<cost_t>(std::round(dist / 4.F));
     } else {
       return kInfeasible;
     }

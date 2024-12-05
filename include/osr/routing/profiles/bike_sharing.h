@@ -9,6 +9,7 @@
 
 #include "utl/helpers/algorithm.h"
 
+#include "osr/elevation_storage.h"
 #include "osr/routing/additional_edge.h"
 #include "osr/routing/mode.h"
 #include "osr/routing/profiles/bike.h"

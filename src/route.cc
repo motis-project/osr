@@ -1,7 +1,6 @@
 #include "osr/routing/route.h"
 
 #include <cstdint>
-#include <ranges>
 
 #include "boost/thread/tss.hpp"
 

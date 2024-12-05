@@ -2,6 +2,7 @@
 
 #include "utl/for_each_bit_set.h"
 
+#include "osr/elevation_storage.h"
 #include "osr/routing/mode.h"
 #include "osr/routing/tracking.h"
 #include "osr/ways.h"

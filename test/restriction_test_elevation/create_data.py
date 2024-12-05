@@ -8,10 +8,13 @@ BYTE_ORDER = 'little'
 def main():
     BASE = int.from_bytes(b'A_', byteorder=BYTE_ORDER, signed=True)
     (
-        Tile(tl=Point(8.65617, 49.8838761, ), br=Point(8.6575625, 49.8827837, ), size=Pos(10, 5), default=BASE)
-        .set(Pos(8, 1), BASE + 3)
-        .set(Pos(9, 1), BASE + 2)
-        .set(Pos(9, 4), BASE + 5)
+        Tile(tl=Point(8.65617, 49.8838761, ), br=Point(8.6575625, 49.8827837, ), size=Pos(7, 5), default=BASE)
+        # Start point
+        .set(Pos(6, 1), BASE + 2)
+        # Shorter path with higher elevation
+        .set(Pos(6, 4), BASE + 5)
+        # Longer path with lower elevation
+        .set(Pos(0, 0), BASE + 3)  # TODO Move on way
         .print()
         .save('elevations_1')
     )

@@ -4,15 +4,15 @@
 #include <memory>
 #include <string>
 
-#include "osr/elevation_storage.h"
 #include "osr/point.h"
+#include "osr/types.h"
 
 namespace osr::preprocessing::elevation {
 
-enum class pixel_type : uint8_t { int16, float32 };
+enum class pixel_type : std::uint8_t { int16, float32 };
 
 union pixel_value {
-  int16_t int16_;
+  std::int16_t int16_;
   float float32_;
 };
 
