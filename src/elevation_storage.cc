@@ -20,30 +20,36 @@ cista::mmap mm(std::filesystem::path const& p,
   return cista::mmap{(p / file).generic_string().c_str(), mode};
 }
 
+namespace elevation_files {
 constexpr auto const kUpDataName = "elevation_up_data.bin";
 constexpr auto const kUpIndexName = "elevation_up_idx.bin";
 constexpr auto const kDownDataName = "elevation_down_data.bin";
 constexpr auto const kDownIndexName = "elevation_down_idx.bin";
+};  // namespace elevation_files
 
 elevation_storage::elevation_storage(std::filesystem::path const& p,
                                      cista::mmap::protection const mode)
-    : elevation_up_m_{mm_vec<int>{mm(p, kUpDataName, mode)},
-                      mm_vec<unsigned>(mm(p, kUpIndexName, mode))},
-      elevation_down_m_{mm_vec<int>{mm(p, kDownDataName, mode)},
-                        mm_vec<unsigned>(mm(p, kDownIndexName, mode))} {}
+    : elevation_up_m_{mm_vec<int>{mm(p, elevation_files::kUpDataName, mode)},
+                      mm_vec<unsigned>(
+                          mm(p, elevation_files::kUpIndexName, mode))},
+      elevation_down_m_{
+          mm_vec<int>{mm(p, elevation_files::kDownDataName, mode)},
+          mm_vec<unsigned>(mm(p, elevation_files::kDownIndexName, mode))} {}
 
 std::unique_ptr<elevation_storage> elevation_storage::try_open(
     std::filesystem::path const& path) {
-  if (utl::all_of(
-          std::array{kUpDataName, kUpIndexName, kDownDataName, kDownIndexName},
-          [&](char const* const filename) {
-            auto const full_path = path / filename;
-            auto const exists = std::filesystem::exists(full_path);
-            if (!exists) {
-              std::cout << full_path << " does not exist\n";
-            }
-            return exists;
-          })) {
+  if (utl::all_of(std::array{elevation_files::kUpDataName,
+                             elevation_files::kUpIndexName,
+                             elevation_files::kDownDataName,
+                             elevation_files::kDownIndexName},
+                  [&](char const* const filename) {
+                    auto const full_path = path / filename;
+                    auto const exists = std::filesystem::exists(full_path);
+                    if (!exists) {
+                      std::cout << full_path << " does not exist\n";
+                    }
+                    return exists;
+                  })) {
     return std::make_unique<elevation_storage>(path,
                                                cista::mmap::protection::READ);
   }
