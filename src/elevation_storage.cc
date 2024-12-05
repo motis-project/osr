@@ -34,21 +34,20 @@ elevation_storage::elevation_storage(std::filesystem::path const& p,
 
 std::unique_ptr<elevation_storage> elevation_storage::try_open(
     std::filesystem::path const& path) {
-  if (utl::any_of(
+  if (utl::all_of(
           std::array{kUpDataName, kUpIndexName, kDownDataName, kDownIndexName},
           [&](char const* const filename) {
             auto const full_path = path / filename;
-            if (std::filesystem::exists(full_path)) {
-              return false;
-            } else {
+            auto const exists = std::filesystem::exists(full_path);
+            if (!exists) {
               std::cout << full_path << " does not exist\n";
-              return true;
             }
+            return exists;
           })) {
-    return {};
+    return std::make_unique<elevation_storage>(path,
+                                               cista::mmap::protection::READ);
   }
-  return std::make_unique<elevation_storage>(path,
-                                             cista::mmap::protection::READ);
+  return {};
 }
 
 void elevation_storage::set_elevations(
