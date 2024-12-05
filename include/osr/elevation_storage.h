@@ -21,9 +21,11 @@ namespace preprocessing::elevation {
 struct dem_source;
 }
 
-struct elevation {
-  elevation(std::filesystem::path const& p, cista::mmap::protection const mode);
-  static std::unique_ptr<elevation> try_open(std::filesystem::path const&);
+struct elevation_storage {
+  elevation_storage(std::filesystem::path const& p,
+                    cista::mmap::protection const mode);
+  static std::unique_ptr<elevation_storage> try_open(
+      std::filesystem::path const&);
   void set_elevations(ways& w,
                       preprocessing::elevation::dem_source const& dem,
                       std::shared_ptr<utl::progress_tracker>& pt);
@@ -36,7 +38,7 @@ struct elevation {
   mm_vecvec<way_idx_t, int> elevation_down_m_;
 };
 
-std::pair<elevation_t, elevation_t> get_elevations(elevation const*,
+std::pair<elevation_t, elevation_t> get_elevations(elevation_storage const*,
                                                    way_idx_t const way,
                                                    std::uint16_t const from,
                                                    std::uint16_t const to);

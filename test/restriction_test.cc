@@ -34,7 +34,7 @@ TEST(extract, wa) {
 
   auto w = osr::ways{"/tmp/osr_test", cista::mmap::protection::READ};
   auto l = osr::lookup{w, "/tmp/osr_test", cista::mmap::protection::READ};
-  auto const elevations = elevation::try_open(kTestDir);
+  auto const elevations = elevation_storage::try_open(kTestDir);
   ASSERT_TRUE(elevations);
 
   auto const n = w.find_node_idx(osm_node_idx_t{528944});

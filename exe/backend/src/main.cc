@@ -89,14 +89,14 @@ int main(int argc, char const* argv[]) {
   if (pl != nullptr) {
     pl->build_rtree(w);
   }
-  auto const elevation = elevation::try_open(opt.data_dir_);
+  auto const elevations = elevation_storage::try_open(opt.data_dir_);
 
   auto const l = lookup{w, opt.data_dir_, cista::mmap::protection::READ};
 
   auto ioc = boost::asio::io_context{};
   auto pool = boost::asio::io_context{};
   auto server = http_server{
-      ioc, pool, w, l, pl.get(), elevation.get(), opt.static_file_path_};
+      ioc, pool, w, l, pl.get(), elevations.get(), opt.static_file_path_};
 
   auto work_guard = boost::asio::make_work_guard(pool);
   auto threads = std::vector<std::thread>(std::max(1U, opt.threads_));

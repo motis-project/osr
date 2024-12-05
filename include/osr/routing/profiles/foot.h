@@ -149,7 +149,7 @@ struct foot {
                        node const n,
                        bitvec<node_idx_t> const* blocked,
                        sharing_data const*,
-                       elevation const*,
+                       elevation_storage const*,
                        Fn&& fn) {
     for (auto const [way, i] :
          utl::zip_unchecked(w.node_ways_[n.n_], w.node_in_way_idx_[n.n_])) {

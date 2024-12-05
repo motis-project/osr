@@ -5,7 +5,7 @@
 
 #include "geo/polyline.h"
 
-#include "osr/elevation.h"
+#include "osr/elevation_storage.h"
 #include "osr/location.h"
 #include "osr/lookup.h"
 #include "osr/routing/mode.h"
@@ -72,7 +72,7 @@ std::optional<path> route(ways const&,
                           double max_match_distance,
                           bitvec<node_idx_t> const* blocked = nullptr,
                           sharing_data const* sharing = nullptr,
-                          elevation const* = nullptr);
+                          elevation_storage const* = nullptr);
 
 std::optional<path> route(ways const&,
                           search_profile,
@@ -84,7 +84,7 @@ std::optional<path> route(ways const&,
                           direction,
                           bitvec<node_idx_t> const* blocked = nullptr,
                           sharing_data const* sharing = nullptr,
-                          elevation const* = nullptr);
+                          elevation_storage const* = nullptr);
 
 std::vector<std::optional<path>> route(
     ways const&,
@@ -97,7 +97,7 @@ std::vector<std::optional<path>> route(
     direction const,
     bitvec<node_idx_t> const* blocked = nullptr,
     sharing_data const* sharing = nullptr,
-    elevation const* = nullptr,
+    elevation_storage const* = nullptr,
     std::function<bool(path const&)> const& do_reconstruct = [](path const&) {
       return false;
     });

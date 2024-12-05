@@ -4,7 +4,7 @@
 #include <memory>
 #include <string>
 
-#include "osr/elevation.h"
+#include "osr/elevation_storage.h"
 #include "osr/point.h"
 
 namespace osr::preprocessing::elevation {
@@ -24,7 +24,7 @@ struct dem_grid {
   dem_grid& operator=(dem_grid const&) = delete;
   dem_grid& operator=(dem_grid&&) = delete;
 
-  elevation_t get(::osr::point const&) const;
+  ::osr::elevation_t get(::osr::point const&) const;
 
   pixel_value get_raw(::osr::point const&) const;
   pixel_type get_pixel_type() const;

@@ -164,7 +164,7 @@ struct car {
                        node const n,
                        bitvec<node_idx_t> const* blocked,
                        sharing_data const*,
-                       elevation const*,
+                       elevation_storage const*,
                        Fn&& fn) {
     auto way_pos = way_pos_t{0U};
     for (auto const [way, i] :

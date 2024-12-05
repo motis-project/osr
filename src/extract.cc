@@ -29,7 +29,7 @@
 #include "tiles/osm/tmp_file.h"
 
 #include "osr/preprocessing/elevation/dem_source.h"
-#include "osr/elevation.h"
+#include "osr/elevation_storage.h"
 #include "osr/extract/tags.h"
 #include "osr/lookup.h"
 #include "osr/platforms.h"
@@ -546,7 +546,7 @@ void extract(bool const with_platforms,
   if (elevation_dir && !elevation_dir->empty()) {
     auto const dem = osr::preprocessing::elevation::dem_source{*elevation_dir};
     if (dem.size() > 0) {
-      auto elevations = elevation{out, cista::mmap::protection::WRITE};
+      auto elevations = elevation_storage{out, cista::mmap::protection::WRITE};
       elevations.set_elevations(w, dem, pt);
     }
   }

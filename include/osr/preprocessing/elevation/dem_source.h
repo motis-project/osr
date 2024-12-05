@@ -1,9 +1,8 @@
 #pragma once
 
 #include <filesystem>
-#include <memory>
 
-#include "osr/elevation.h"
+#include "osr/elevation_storage.h"
 
 namespace osr::preprocessing::elevation {
 

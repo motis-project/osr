@@ -76,14 +76,14 @@ struct http_server::impl {
        ways const& g,
        lookup const& l,
        platforms const* pl,
-       elevation const* elevation,
+       elevation_storage const* elevations,
        std::string const& static_file_path)
       : ioc_{ios},
         thread_pool_{thread_pool},
         w_{g},
         l_{l},
         pl_{pl},
-        elevation_{elevation},
+        elevations_{elevations},
         server_{ioc_} {
     try {
       if (!static_file_path.empty() && fs::is_directory(static_file_path)) {
@@ -118,7 +118,7 @@ struct http_server::impl {
     auto const max = static_cast<cost_t>(
         max_it == q.end() ? 3600 : max_it->value().as_int64());
     auto const p = route(w_, l_, profile, from, to, max, dir, 100, nullptr,
-                         nullptr, elevation_);
+                         nullptr, elevations_);
     if (!p.has_value()) {
       cb(json_response(req, "could not find a valid path",
                        http::status::not_found));
@@ -355,7 +355,7 @@ private:
   ways const& w_;
   lookup const& l_;
   platforms const* pl_;
-  elevation const* elevation_;
+  elevation_storage const* elevations_;
   web_server server_;
   bool serve_static_files_{false};
   std::string static_file_path_;
@@ -366,7 +366,7 @@ http_server::http_server(boost::asio::io_context& ioc,
                          ways const& w,
                          lookup const& l,
                          platforms const* pl,
-                         elevation const* elevation,
+                         elevation_storage const* elevation,
                          std::string const& static_file_path)
     : impl_(new impl(ioc, thread_pool, w, l, pl, elevation, static_file_path)) {
 }

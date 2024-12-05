@@ -42,7 +42,7 @@ dem_source::dem_source(std::filesystem::path const& p)
 
 dem_source::~dem_source() = default;
 
-elevation_t dem_source::get(::osr::point const& p) const {
+::osr::elevation_t dem_source::get(::osr::point const& p) const {
   return impl_->get(p);
 }
 

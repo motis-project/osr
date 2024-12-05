@@ -1,4 +1,4 @@
-#include "osr/elevation.h"
+#include "osr/elevation_storage.h"
 
 #include <array>
 #include <filesystem>
@@ -25,14 +25,14 @@ constexpr auto const kUpIndexName = "elevation_up_idx.bin";
 constexpr auto const kDownDataName = "elevation_down_data.bin";
 constexpr auto const kDownIndexName = "elevation_down_idx.bin";
 
-elevation::elevation(std::filesystem::path const& p,
-                     cista::mmap::protection const mode)
+elevation_storage::elevation_storage(std::filesystem::path const& p,
+                                     cista::mmap::protection const mode)
     : elevation_up_m_{mm_vec<int>{mm(p, kUpDataName, mode)},
                       mm_vec<unsigned>(mm(p, kUpIndexName, mode))},
       elevation_down_m_{mm_vec<int>{mm(p, kDownDataName, mode)},
                         mm_vec<unsigned>(mm(p, kDownIndexName, mode))} {}
 
-std::unique_ptr<elevation> elevation::try_open(
+std::unique_ptr<elevation_storage> elevation_storage::try_open(
     std::filesystem::path const& path) {
   if (utl::any_of(
           std::array{kUpDataName, kUpIndexName, kDownDataName, kDownIndexName},
@@ -47,12 +47,14 @@ std::unique_ptr<elevation> elevation::try_open(
           })) {
     return {};
   }
-  return std::make_unique<elevation>(path, cista::mmap::protection::READ);
+  return std::make_unique<elevation_storage>(path,
+                                             cista::mmap::protection::READ);
 }
 
-void elevation::set_elevations(ways& w,
-                               preprocessing::elevation::dem_source const& dem,
-                               std::shared_ptr<utl::progress_tracker>& pt) {
+void elevation_storage::set_elevations(
+    ways& w,
+    preprocessing::elevation::dem_source const& dem,
+    std::shared_ptr<utl::progress_tracker>& pt) {
   pt->in_high(w.n_ways());
   auto elevations_up = std::vector<std::vector<elevation_t>>{};
   auto elevations_down = std::vector<std::vector<elevation_t>>{};
@@ -105,7 +107,7 @@ void elevation::set_elevations(ways& w,
   }
 }
 
-std::pair<elevation_t, elevation_t> elevation::get_elevations(
+std::pair<elevation_t, elevation_t> elevation_storage::get_elevations(
     way_idx_t const way,
     std::uint16_t const from,
     std::uint16_t const to) const {
@@ -123,12 +125,13 @@ std::pair<elevation_t, elevation_t> elevation::get_elevations(
   return from <= to ? std::pair{up, down} : std::pair{down, up};
 }
 
-std::pair<elevation_t, elevation_t> get_elevations(elevation const* elevation,
-                                                   way_idx_t const way,
-                                                   std::uint16_t const from,
-                                                   std::uint16_t const to) {
-  return elevation == nullptr ? std::pair{elevation_t{0}, elevation_t{0}}
-                              : elevation->get_elevations(way, from, to);
+std::pair<elevation_t, elevation_t> get_elevations(
+    elevation_storage const* elevations,
+    way_idx_t const way,
+    std::uint16_t const from,
+    std::uint16_t const to) {
+  return elevations == nullptr ? std::pair{elevation_t{0}, elevation_t{0}}
+                               : elevations->get_elevations(way, from, to);
 }
 
 }  // namespace osr

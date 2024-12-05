@@ -233,13 +233,13 @@ dem_grid::~dem_grid() = default;
       if (val.int16_ == impl_->nodata_.int16_) {
         return NO_ELEVATION_DATA;
       } else {
-        return static_cast<elevation_t>(val.int16_);
+        return static_cast<::osr::elevation_t>(val.int16_);
       }
     case pixel_type::float32:
       if (std::equal_to<>()(val.float32_, impl_->nodata_.float32_)) {
         return NO_ELEVATION_DATA;
       } else {
-        return static_cast<elevation_t>(std::round(val.float32_));
+        return static_cast<::osr::elevation_t>(std::round(val.float32_));
       }
   }
   throw std::runtime_error{"dem_grid: invalid pixel type"};
