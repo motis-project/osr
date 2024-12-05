@@ -211,21 +211,20 @@ path reconstruct(ways const& w,
        .dist_ = static_cast<distance_t>(start_node.dist_to_node_),
        .mode_ = n.get_mode()});
   std::reverse(begin(segments), end(segments));
-  auto p = path{.cost_ = cost,
-                .dist_ = start_node.dist_to_node_ + dist + dest.dist_to_node_,
-                .elevation_up_ = std::ranges::fold_left(
-                    segments, elevation_t{0},
-                    [](auto const elevation_sum, path::segment const& segment) {
-                      return static_cast<elevation_t>(elevation_sum +
-                                                      segment.elevation_up_);
-                    }),
-                .elevation_down_ = std::ranges::fold_left(
-                    segments, elevation_t{0},
-                    [](auto const elevation_sum, path::segment const& segment) {
-                      return static_cast<elevation_t>(elevation_sum +
-                                                      segment.elevation_down_);
-                    }),
-                .segments_ = segments};
+  auto p =
+      path{.cost_ = cost,
+           .dist_ = start_node.dist_to_node_ + dist + dest.dist_to_node_,
+           .elevation_up_ = std::ranges::fold_left(
+               segments, elevation_t{0},
+               [](auto const sum, path::segment const& segment) {
+                 return static_cast<elevation_t>(sum + segment.elevation_up_);
+               }),
+           .elevation_down_ = std::ranges::fold_left(
+               segments, elevation_t{0},
+               [](auto const sum, path::segment const& segment) {
+                 return static_cast<elevation_t>(sum + segment.elevation_down_);
+               }),
+           .segments_ = segments};
   d.cost_.at(dest_node.get_key()).write(dest_node, p);
   return p;
 }
