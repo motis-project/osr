@@ -5,9 +5,9 @@
 
 #include "geo/polyline.h"
 
+#include "osr/elevation.h"
 #include "osr/location.h"
 #include "osr/lookup.h"
-#include "osr/preprocessing/elevation/elevation.h"
 #include "osr/routing/mode.h"
 #include "osr/routing/profile.h"
 #include "osr/types.h"
@@ -31,15 +31,15 @@ struct path {
     way_idx_t way_{way_idx_t::invalid()};
     cost_t cost_{kInfeasible};
     distance_t dist_{0};
-    preprocessing::elevation::elevation_t elevation_up_{0};
-    preprocessing::elevation::elevation_t elevation_down_{0};
+    elevation_t elevation_up_{0};
+    elevation_t elevation_down_{0};
     mode mode_{mode::kFoot};
   };
 
   cost_t cost_{kInfeasible};
   double dist_{0.0};
-  preprocessing::elevation::elevation_t elevation_up_{0};
-  preprocessing::elevation::elevation_t elevation_down_{0};
+  elevation_t elevation_up_{0};
+  elevation_t elevation_down_{0};
   std::vector<segment> segments_{};
   bool uses_elevator_{false};
 };
@@ -98,12 +98,5 @@ std::vector<std::optional<path>> route(
     std::function<bool(path const&)> const& do_reconstruct = [](path const&) {
       return false;
     });
-
-std::pair<preprocessing::elevation::elevation_t,
-          preprocessing::elevation::elevation_t>
-get_elevations(ways::routing const&,
-               way_idx_t const way,
-               std::uint16_t const from,
-               std::uint16_t const to);
 
 }  // namespace osr

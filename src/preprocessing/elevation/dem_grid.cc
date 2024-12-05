@@ -1,6 +1,6 @@
 #include <cmath>
-#include <fstream>
 #include <filesystem>
+#include <fstream>
 #include <functional>
 #include <iostream>
 #include <limits>
@@ -196,7 +196,8 @@ struct dem_grid::impl {
     auto const lock = std::lock_guard{m_};
     if (!mapped_file_.has_value()) {
       std::clog << "Using DEM grid file: " << data_file_ << std::endl;
-      mapped_file_ = cista::mmap{data_file_.data(), cista::mmap::protection::READ};
+      mapped_file_ =
+          cista::mmap{data_file_.data(), cista::mmap::protection::READ};
     }
   }
 
@@ -225,7 +226,7 @@ dem_grid::dem_grid(dem_grid&& grid) noexcept : impl_(std::move(grid.impl_)) {}
 
 dem_grid::~dem_grid() = default;
 
-elevation_t dem_grid::get(location const& loc) const {
+::osr::elevation_t dem_grid::get(location const& loc) const {
   auto const val = get_raw(loc);
   switch (impl_->pixel_type_) {
     case pixel_type::int16:

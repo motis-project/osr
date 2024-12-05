@@ -9,7 +9,7 @@
 #include "utl/to_vec.h"
 #include "utl/verify.h"
 
-#include "osr/preprocessing/elevation/elevation.h"
+#include "osr/elevation.h"
 #include "osr/routing/dijkstra.h"
 #include "osr/routing/profiles/bike.h"
 #include "osr/routing/profiles/bike_elevation.h"
@@ -30,8 +30,8 @@ struct connecting_way {
   std::uint16_t from_{}, to_{};
   bool is_loop_{};
   std::uint16_t distance_{};
-  preprocessing::elevation::elevation_t elevation_up_{};
-  preprocessing::elevation::elevation_t elevation_down_{};
+  elevation_t elevation_up_{};
+  elevation_t elevation_down_{};
 };
 
 template <direction SearchDir, bool WithBlocked, typename Profile>
@@ -207,21 +207,21 @@ path reconstruct(ways const& w,
        .dist_ = static_cast<distance_t>(start_node.dist_to_node_),
        .mode_ = n.get_mode()});
   std::reverse(begin(segments), end(segments));
-  auto p = path{.cost_ = cost,
-                .dist_ = start_node.dist_to_node_ + dist + dest.dist_to_node_,
-                .elevation_up_ = std::ranges::fold_left(
-                    segments, preprocessing::elevation::elevation_t{0},
-                    [](auto const elevation, path::segment const& segment) {
-                      return static_cast<preprocessing::elevation::elevation_t>(
-                          elevation + segment.elevation_up_);
-                    }),
-                .elevation_down_ = std::ranges::fold_left(
-                    segments, preprocessing::elevation::elevation_t{0},
-                    [](auto const elevation, path::segment const& segment) {
-                      return static_cast<preprocessing::elevation::elevation_t>(
-                          elevation + segment.elevation_down_);
-                    }),
-                .segments_ = segments};
+  auto p = path{
+      .cost_ = cost,
+      .dist_ = start_node.dist_to_node_ + dist + dest.dist_to_node_,
+      .elevation_up_ = std::ranges::fold_left(
+          segments, elevation_t{0},
+          [](auto const elevation, path::segment const& segment) {
+            return static_cast<elevation_t>(elevation + segment.elevation_up_);
+          }),
+      .elevation_down_ = std::ranges::fold_left(
+          segments, elevation_t{0},
+          [](auto const elevation, path::segment const& segment) {
+            return static_cast<elevation_t>(elevation +
+                                            segment.elevation_down_);
+          }),
+      .segments_ = segments};
   d.cost_.at(dest_node.get_key()).write(dest_node, p);
   return p;
 }
@@ -595,29 +595,5 @@ get_dijkstra<foot<true, osr::noop_tracking>>();
 
 template dijkstra<foot<false, osr::noop_tracking>>&
 get_dijkstra<foot<false, osr::noop_tracking>>();
-
-std::pair<preprocessing::elevation::elevation_t,
-          preprocessing::elevation::elevation_t>
-get_elevations(ways::routing const& r,
-               way_idx_t const way,
-               std::uint16_t const from,
-               std::uint16_t const to) {
-  auto const& [f, t] = from <= to ? std::pair{from, to} : std::pair{to, from};
-  auto const& [up, down] = std::pair{
-      way >= r.way_node_elevation_up_.size() ||
-              r.way_node_elevation_up_[way].empty()
-          ? preprocessing::elevation::elevation_t{0}
-          : static_cast<preprocessing::elevation::elevation_t>(
-                r.way_node_elevation_up_[way].at(t) -
-                r.way_node_elevation_up_[way].at(f)),
-      way >= r.way_node_elevation_down_.size() ||
-              r.way_node_elevation_down_[way].empty()
-          ? preprocessing::elevation::elevation_t{0}
-          : static_cast<preprocessing::elevation::elevation_t>(
-                r.way_node_elevation_down_[way].at(t) -
-                r.way_node_elevation_down_[way].at(f)),
-  };
-  return from <= to ? std::pair{up, down} : std::pair{down, up};
-}
 
 }  // namespace osr

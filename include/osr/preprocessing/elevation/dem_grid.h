@@ -4,7 +4,7 @@
 #include <memory>
 #include <string>
 
-#include "osr/preprocessing/elevation/elevation.h"
+#include "osr/elevation.h"
 #include "osr/preprocessing/elevation/location.h"
 
 namespace osr::preprocessing::elevation {
