@@ -6,6 +6,7 @@
 #include "boost/thread/tss.hpp"
 
 #include "utl/concat.h"
+#include "utl/timing.h"
 #include "utl/to_vec.h"
 #include "utl/verify.h"
 
@@ -417,7 +418,7 @@ std::vector<std::optional<path>> route(
   return result;
 }
 
-std::vector<std::optional<path>> route(
+one_to_many_result route(
     ways const& w,
     lookup const& l,
     search_profile const profile,
@@ -430,8 +431,9 @@ std::vector<std::optional<path>> route(
     sharing_data const* sharing,
     elevation_storage const* elevations,
     std::function<bool(path const&)> const& do_reconstruct) {
-  auto const r = [&]<typename Profile>(
-                     dijkstra<Profile>& d) -> std::vector<std::optional<path>> {
+  auto const r =
+      [&]<typename Profile>(dijkstra<Profile>& d) -> one_to_many_result {
+    UTL_START_TIMING(lookup);
     auto const from_match =
         l.match<Profile>(from, false, dir, max_match_distance, blocked);
     if (from_match.empty()) {
@@ -440,8 +442,12 @@ std::vector<std::optional<path>> route(
     auto const to_match = utl::to_vec(to, [&](auto&& x) {
       return l.match<Profile>(x, true, dir, max_match_distance, blocked);
     });
-    return route(w, d, from, to, from_match, to_match, max, dir, blocked,
-                 sharing, elevations, do_reconstruct);
+    UTL_STOP_TIMING(lookup);
+    return one_to_many_result{
+        std::chrono::duration_cast<std::chrono::milliseconds>(lookup_stop -
+                                                              lookup_start),
+        route(w, d, from, to, from_match, to_match, max, dir, blocked, sharing,
+              elevations, do_reconstruct)};
   };
 
   switch (profile) {

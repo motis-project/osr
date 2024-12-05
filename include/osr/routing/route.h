@@ -47,7 +47,19 @@ struct path {
 template <typename Profile>
 dijkstra<Profile>& get_dijkstra();
 
-std::vector<std::optional<path>> route(
+struct one_to_many_result {
+  one_to_many_result(std::chrono::milliseconds&& lookup_time,
+                     std::vector<std::optional<path>>&& paths)
+      : lookup_time_{lookup_time}, paths_{std::move(paths)} {}
+
+  one_to_many_result(std::vector<std::optional<path>>&& paths)
+      : paths_{std::move(paths)} {}
+
+  std::chrono::milliseconds lookup_time_{};
+  std::vector<std::optional<path>> paths_;
+};
+
+one_to_many_result route(
     ways const&,
     lookup const&,
     search_profile,
