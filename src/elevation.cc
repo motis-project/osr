@@ -6,7 +6,6 @@
 #include "utl/parallel_for.h"
 
 #include "osr/preprocessing/elevation/dem_source.h"
-#include "osr/preprocessing/elevation/location.h"
 
 namespace osr {
 
@@ -41,10 +40,7 @@ void elevation::set_elevations(ways& w,
         auto& up = elevations_up[way_idx];
         auto& down = elevations_down[way_idx];
         for (auto const& node : w.r_->way_nodes_[way_idx_t{way_idx}]) {
-          auto const point = w.get_node_pos(node);
-          // TODO get(point)
-          auto const elevation = dem.get(
-              preprocessing::elevation::location{point.lat_, point.lng_});
+          auto const elevation = dem.get(w.get_node_pos(node));
           if (elevation != NO_ELEVATION_DATA) {
             if (last_elevation == NO_ELEVATION_DATA) {
               last_elevation = elevation;

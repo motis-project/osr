@@ -160,15 +160,15 @@ struct dem_grid::impl {
     }
   }
 
-  pixel_value get(location const& loc) {
-    auto const lon = loc.lon();
-    auto const lat = loc.lat();
+  pixel_value get(::osr::point const& p) {
+    auto const lng = p.lng();
+    auto const lat = p.lat();
 
-    if (lon < ulx_ || lat > uly_ || lon > brx_ || lat < bry_) {
+    if (lng < ulx_ || lat > uly_ || lng > brx_ || lat < bry_) {
       return nodata_;
     }
 
-    auto const pix_x = static_cast<unsigned>((lon - ulx_) / xdim_);
+    auto const pix_x = static_cast<unsigned>((lng - ulx_) / xdim_);
     auto const pix_y = static_cast<unsigned>((uly_ - lat) / ydim_);
     assert(pix_x < cols_);
     assert(pix_y < rows_);
@@ -226,8 +226,8 @@ dem_grid::dem_grid(dem_grid&& grid) noexcept : impl_(std::move(grid.impl_)) {}
 
 dem_grid::~dem_grid() = default;
 
-::osr::elevation_t dem_grid::get(location const& loc) const {
-  auto const val = get_raw(loc);
+::osr::elevation_t dem_grid::get(::osr::point const& p) const {
+  auto const val = get_raw(p);
   switch (impl_->pixel_type_) {
     case pixel_type::int16:
       if (val.int16_ == impl_->nodata_.int16_) {
@@ -245,8 +245,8 @@ dem_grid::~dem_grid() = default;
   throw std::runtime_error{"dem_grid: invalid pixel type"};
 }
 
-pixel_value dem_grid::get_raw(location const& loc) const {
-  return impl_->get(loc);
+pixel_value dem_grid::get_raw(::osr::point const& p) const {
+  return impl_->get(p);
 }
 
 pixel_type dem_grid::get_pixel_type() const { return impl_->pixel_type_; }

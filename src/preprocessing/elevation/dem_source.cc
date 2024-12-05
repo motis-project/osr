@@ -15,9 +15,9 @@ struct dem_source::impl {
     grids_.emplace_back(path.string());
   }
 
-  elevation_t get(location const& loc) {
+  elevation_t get(::osr::point const& p) {
     for (auto const& grid : grids_) {
-      auto const data = grid.get(loc);
+      auto const data = grid.get(p);
       if (data != NO_ELEVATION_DATA) {
         return data;
       }
@@ -42,8 +42,8 @@ dem_source::dem_source(std::filesystem::path const& p)
 
 dem_source::~dem_source() = default;
 
-elevation_t dem_source::get(location const& loc) const {
-  return impl_->get(loc);
+elevation_t dem_source::get(::osr::point const& p) const {
+  return impl_->get(p);
 }
 
 std::size_t dem_source::size() const { return impl_->grids_.size(); }
