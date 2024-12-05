@@ -112,7 +112,7 @@ std::pair<elevation_t, elevation_t> elevation_storage::get_elevations(
     std::uint16_t const from,
     std::uint16_t const to) const {
   auto const& [f, t] = from <= to ? std::pair{from, to} : std::pair{to, from};
-  auto const& [up, down] = std::pair{
+  auto const [up, down] = std::pair{
       way >= elevation_up_.size() || elevation_up_[way].empty()
           ? elevation_t{0}
           : static_cast<elevation_t>(elevation_up_[way].at(t) -
