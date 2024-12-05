@@ -240,14 +240,9 @@ struct ways {
 
     vecvec<way_idx_t, node_idx_t> way_nodes_;
     vecvec<way_idx_t, std::uint16_t> way_node_dist_;
-    // vecvec<way_idx_t, std::uint16_t> way_node_elevation_;
-    // vecvec<way_idx_t, std::uint16_t> way_node_incline_;
-    vecvec<way_idx_t, std::uint16_t> way_node_elevation_up_;
-    vecvec<way_idx_t, std::uint16_t> way_node_elevation_down_;
 
     vecvec<node_idx_t, way_idx_t> node_ways_;
     vecvec<node_idx_t, std::uint16_t> node_in_way_idx_;
-    // vec_map<node_idx_t, std::int16_t> node_elevation_;
 
     bitvec<node_idx_t> node_is_restricted_;
     vecvec<node_idx_t, restriction> node_restrictions_;
