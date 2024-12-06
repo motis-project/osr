@@ -54,6 +54,24 @@ std::unique_ptr<elevation_storage> elevation_storage::try_open(
   return {};
 }
 
+std::pair<elevation_t, elevation_t> get_way_elevation(
+    preprocessing::elevation::dem_source const& dem,
+    point const& from,
+    point const& to) {
+  auto elevation_up = elevation_t{0};
+  auto elevation_down = elevation_t{0};
+  auto a = dem.get(from);
+  auto const b = dem.get(to);
+  if (a != NO_ELEVATION_DATA && b != NO_ELEVATION_DATA) {
+    if (a < b) {
+      elevation_up += b - a;
+    } else {
+      elevation_down += a - b;
+    }
+  }
+  return {elevation_up, elevation_down};
+}
+
 void elevation_storage::set_elevations(
     ways& w,
     preprocessing::elevation::dem_source const& dem,
@@ -70,22 +88,16 @@ void elevation_storage::set_elevations(
         auto& way_elevations_down = elevations_down[way_idx];
         auto total_elevation_up = elevation_t{0};
         auto total_elevation_down = elevation_t{0};
-        for (auto const [elevation_from, elevation_to] :
+        for (auto const [from, to] :
              w.r_->way_nodes_[way_idx_t{way_idx}]  //
                  | std::views::transform([&](node_idx_t const node) {
-                     return dem.get(w.get_node_pos(node));
+                     return w.get_node_pos(node);
                    })  //
                  | std::views::pairwise) {
-          if (elevation_from != NO_ELEVATION_DATA &&
-              elevation_to != NO_ELEVATION_DATA) {
-            if (elevation_from > elevation_to) {
-              total_elevation_down += elevation_from - elevation_to;
-            } else {
-              total_elevation_up += elevation_to - elevation_from;
-            }
-          }
-          way_elevations_up.push_back(total_elevation_up);
-          way_elevations_down.push_back(total_elevation_down);
+          auto const [elevation_up, elevation_down] =
+              get_way_elevation(dem, from, to);
+          way_elevations_up.push_back(total_elevation_up += elevation_up);
+          way_elevations_down.push_back(total_elevation_down += elevation_down);
         }
         if (total_elevation_up == elevation_t{0}) {
           way_elevations_up.clear();
