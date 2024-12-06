@@ -192,7 +192,15 @@ struct http_server::impl {
       case search_profile::kWheelchair:
         send_graph_response<foot<true, elevator_tracking>>(req, cb, gj);
         break;
-      case search_profile::kBike: send_graph_response<bike>(req, cb, gj); break;
+      case search_profile::kBike:
+        send_graph_response<bike<kElevationNoCost>>(req, cb, gj);
+        break;
+      case search_profile::kBikeElevationLow:
+        send_graph_response<bike<kElevationLowCost>>(req, cb, gj);
+        break;
+      case search_profile::kBikeElevationHigh:
+        send_graph_response<bike<kElevationHighCost>>(req, cb, gj);
+        break;
       case search_profile::kCar: send_graph_response<car>(req, cb, gj); break;
       case search_profile::kCarParking:
         send_graph_response<car_parking<false>>(req, cb, gj);

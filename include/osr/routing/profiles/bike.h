@@ -3,12 +3,19 @@
 #include "osr/elevation_storage.h"
 #include "osr/routing/mode.h"
 #include "osr/routing/route.h"
+#include "osr/types.h"
 #include "osr/ways.h"
 
 namespace osr {
 
 struct sharing_data;
 
+constexpr auto const kElevationNoCost = 0;
+// TODO Adjust value
+constexpr auto const kElevationLowCost = 10;
+constexpr auto const kElevationHighCost = 50;
+
+template <int ElevationUpCost>
 struct bike {
   static constexpr auto const kMaxMatchDistance = 100U;
   static constexpr auto const kOffroadPenalty = 1U;
@@ -108,7 +115,7 @@ struct bike {
                        node const n,
                        bitvec<node_idx_t> const* blocked,
                        sharing_data const*,
-                       elevation_storage const*,
+                       elevation_storage const* elevations,
                        Fn&& fn) {
     for (auto const [way, i] :
          utl::zip_unchecked(w.node_ways_[n.n_], w.node_in_way_idx_[n.n_])) {
@@ -132,8 +139,20 @@ struct bike {
         }
 
         auto const dist = w.way_node_dist_[way][std::min(from, to)];
+        auto const elevation_cost = [&]() {
+          if constexpr (ElevationUpCost == 0) {
+            return cost_t{0};
+          } else {
+            auto const [elevation_up, elevation_down] =
+                get_elevations(elevations, way, from, to);
+            return static_cast<cost_t>(ElevationUpCost *
+                                       (way_dir == direction::kForward
+                                            ? elevation_up
+                                            : elevation_down));
+          }
+        };
         auto const cost = way_cost(target_way_prop, way_dir, dist) +
-                          node_cost(target_node_prop);
+                          node_cost(target_node_prop) + elevation_cost();
         fn(node{target_node}, static_cast<std::uint32_t>(cost), dist, way, from,
            to);
       };
