@@ -32,8 +32,8 @@ struct elevation_storage {
       std::uint16_t const from,
       std::uint16_t const to) const;
 
-  mm_vecvec<way_idx_t, int> elevation_up_;
-  mm_vecvec<way_idx_t, int> elevation_down_;
+  mm_vecvec<way_idx_t, elevation_t> elevation_up_;
+  mm_vecvec<way_idx_t, elevation_t> elevation_down_;
 };
 
 std::pair<elevation_t, elevation_t> get_elevations(elevation_storage const*,
