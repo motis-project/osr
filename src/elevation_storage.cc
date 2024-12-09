@@ -3,13 +3,13 @@
 #include <array>
 #include <ranges>
 
-#include "osr/point.h"
-#include "osr/preprocessing/elevation/step_size.h"
 #include "utl/enumerate.h"
 #include "utl/helpers/algorithm.h"
 #include "utl/parallel_for.h"
 
+#include "osr/point.h"
 #include "osr/preprocessing/elevation/dem_source.h"
+#include "osr/preprocessing/elevation/step_size.h"
 
 namespace osr {
 
