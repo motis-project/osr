@@ -12,8 +12,8 @@ struct sharing_data;
 
 constexpr auto const kElevationNoCost = 0;
 // TODO Adjust value
-constexpr auto const kElevationLowCost = 10;
-constexpr auto const kElevationHighCost = 50;
+constexpr auto const kElevationLowCost = 2;
+constexpr auto const kElevationHighCost = 10;
 
 template <int ElevationUpCost>
 struct bike {
