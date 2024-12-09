@@ -40,17 +40,15 @@ TEST(extract, wa) {
   auto const n = w.find_node_idx(osm_node_idx_t{528944});
   auto const rhoenring = w.find_way(osm_way_idx_t{120682496});
   auto const arheilger = w.find_way(osm_way_idx_t{1068971150});
-  // Node Eckhardt / Barkhaus
+  // Crossing Eckhardt / Barkhaus
   auto const n2 = w.find_node_idx(osm_node_idx_t{586157});
 
   ASSERT_TRUE(n.has_value());
   ASSERT_TRUE(n2.has_value());
   auto const from = location{w.get_node_pos(*n), kNoLevel};
   auto const to = location{w.get_node_pos(*n2), kNoLevel};
-  // auto const profile = osr::search_profile::kCar;
   constexpr auto const kMaxCost = cost_t{3600};
   constexpr auto const kMaxMatchDistance = 100;
-  // auto const p2 = route(w, l, search_profile::kFoot, from, to, kMaxCost,
   auto const p2 = route(w, l, search_profile::kBike, from, to, kMaxCost,
                         direction::kForward, kMaxMatchDistance, nullptr,
                         nullptr, elevations.get());
