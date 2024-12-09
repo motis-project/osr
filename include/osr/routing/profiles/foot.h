@@ -2,6 +2,7 @@
 
 #include "utl/for_each_bit_set.h"
 
+#include "osr/elevation_storage.h"
 #include "osr/routing/mode.h"
 #include "osr/routing/tracking.h"
 #include "osr/ways.h"
@@ -149,6 +150,7 @@ struct foot {
                        node const n,
                        bitvec<node_idx_t> const* blocked,
                        sharing_data const*,
+                       elevation_storage const*,
                        Fn&& fn) {
     for (auto const [way, i] :
          utl::zip_unchecked(w.node_ways_[n.n_], w.node_in_way_idx_[n.n_])) {

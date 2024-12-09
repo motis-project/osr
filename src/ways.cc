@@ -74,7 +74,7 @@ void ways::connect_ways() {
   {
     pt->status("Connect ways")
         .in_high(way_osm_nodes_.size())
-        .out_bounds(60, 90);
+        .out_bounds(60, 85);
     auto node_ways = mm_paged_vecvec<node_idx_t, way_idx_t>{
         cista::paged<mm_vec32<way_idx_t>>{
             mm_vec32<way_idx_t>{mm("tmp_node_ways_data.bin")}},

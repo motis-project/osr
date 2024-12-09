@@ -23,6 +23,11 @@ struct point {
     return {l.x(), l.y()};
   }
 
+  static point from_latlng(double lat, double lng) {
+    auto const l = osmium::Location(lng, lat);
+    return point{l.x(), l.y()};
+  }
+
   osmium::Location as_location() const { return osmium::Location{lat_, lng_}; }
 
   geo::latlng as_latlng() const {
