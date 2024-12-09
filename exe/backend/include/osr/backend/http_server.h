@@ -5,6 +5,7 @@
 
 #include "boost/asio/io_context.hpp"
 
+#include "osr/elevation_storage.h"
 #include "osr/lookup.h"
 #include "osr/platforms.h"
 #include "osr/ways.h"
