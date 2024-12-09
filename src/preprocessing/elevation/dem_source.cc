@@ -1,5 +1,6 @@
 #include "osr/preprocessing/elevation/dem_source.h"
 
+#include <algorithm>
 #include <filesystem>
 #include <limits>
 #include <ranges>
