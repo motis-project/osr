@@ -76,7 +76,7 @@ int main(int argc, char const* argv[]) {
         d.add_start(w,
                     car::label{car::node{start, 0, direction::kBackward}, 0U});
         d.run<direction::kForward, false>(w, *w.r_, opt.max_dist_, nullptr,
-                                          nullptr);
+                                          nullptr, nullptr);
       }
     });
   }
