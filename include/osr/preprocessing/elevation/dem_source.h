@@ -3,6 +3,7 @@
 #include <filesystem>
 
 #include "osr/point.h"
+#include "osr/preprocessing/elevation/step_size.h"
 #include "osr/types.h"
 
 namespace osr::preprocessing::elevation {
@@ -17,6 +18,7 @@ struct dem_source {
 
   ::osr::elevation_t get(::osr::point const&) const;
   std::size_t size() const;
+  step_size get_step_size() const;
 
 private:
   struct impl;

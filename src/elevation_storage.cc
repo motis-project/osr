@@ -3,6 +3,8 @@
 #include <array>
 #include <ranges>
 
+#include "osr/point.h"
+#include "osr/preprocessing/elevation/step_size.h"
 #include "utl/enumerate.h"
 #include "utl/helpers/algorithm.h"
 #include "utl/parallel_for.h"
@@ -57,12 +59,40 @@ std::unique_ptr<elevation_storage> elevation_storage::try_open(
 std::pair<elevation_t, elevation_t> get_way_elevation(
     preprocessing::elevation::dem_source const& dem,
     point const& from,
-    point const& to) {
+    point const& to,
+    preprocessing::elevation::step_size const& max_step_size) {
   auto elevation_up = elevation_t{0};
   auto elevation_down = elevation_t{0};
   auto a = dem.get(from);
   auto const b = dem.get(to);
   if (a != NO_ELEVATION_DATA && b != NO_ELEVATION_DATA) {
+    // TODO Approximation only for short ways
+    // Value should be larger to not skip intermediate values
+    auto const steps =
+        2 * static_cast<int>(std::max(
+                std::ceil(std::abs(to.lat() - from.lat()) / max_step_size.x_),
+                std::ceil(std::abs(to.lng() - from.lng()) / max_step_size.y_)));
+    if (steps > 0) {
+      auto const from_lat = from.lat();
+      auto const from_lng = from.lng();
+      auto const step_size = preprocessing::elevation::step_size{
+          .x_ = (to.lat() - from.lat()) / steps,
+          .y_ = (to.lng() - from.lng()) / steps};
+      for (auto const mid :
+           std::views::iota(1, steps) |
+               std::views::transform([&](const auto i) -> point {
+                 return point::from_latlng(from_lat + i * step_size.x_,
+                                           from_lng + i * step_size.y_);
+               })) {
+        auto const m = dem.get(mid);
+        if (a < m) {
+          elevation_up += m - a;
+        } else {
+          elevation_down += a - m;
+        }
+        a = m;
+      }
+    }
     if (a < b) {
       elevation_up += b - a;
     } else {
@@ -77,6 +107,7 @@ void elevation_storage::set_elevations(
     preprocessing::elevation::dem_source const& dem,
     std::shared_ptr<utl::progress_tracker>& pt) {
   pt->in_high(w.n_ways());
+  auto const max_step_size = dem.get_step_size();
   auto elevations_up = std::vector<std::vector<elevation_t>>{};
   auto elevations_down = std::vector<std::vector<elevation_t>>{};
   elevations_up.resize(w.n_ways());
@@ -95,7 +126,7 @@ void elevation_storage::set_elevations(
                    })  //
                  | std::views::pairwise) {
           auto const [elevation_up, elevation_down] =
-              get_way_elevation(dem, from, to);
+              get_way_elevation(dem, from, to, max_step_size);
           way_elevations_up.push_back(total_elevation_up += elevation_up);
           way_elevations_down.push_back(total_elevation_down += elevation_down);
         }

@@ -12,9 +12,12 @@ def main():
         # Start point
         .set(Pos(6, 1), BASE + 2)
         # Shorter path with higher elevation
+        .set(Pos(6, 2), BASE + 2)
+        .set(Pos(6, 3), BASE + 3)
         .set(Pos(6, 4), BASE + 5)
         # Longer path with lower elevation
-        .set(Pos(0, 0), BASE + 3)  # TODO Move on way
+        .set(Pos(5, 1), BASE + 2)  # Value might be skipped if steps is too low
+        .set(Pos(4, 1), BASE + 3)
         .print()
         .save('elevations_1')
     )

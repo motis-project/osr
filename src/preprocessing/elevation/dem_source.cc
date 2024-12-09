@@ -1,10 +1,13 @@
 #include "osr/preprocessing/elevation/dem_source.h"
 
 #include <filesystem>
+#include <limits>
+#include <ranges>
 #include <vector>
 
 #include "osr/elevation_storage.h"
 #include "osr/preprocessing/elevation/dem_grid.h"
+#include "osr/preprocessing/elevation/step_size.h"
 
 namespace fs = std::filesystem;
 
@@ -49,5 +52,20 @@ dem_source::~dem_source() = default;
 }
 
 std::size_t dem_source::size() const { return impl_->grids_.size(); }
+
+step_size dem_source::get_step_size() const {
+  return std::ranges::fold_left_first(
+             impl_->grids_ | std::views::transform([](dem_grid const& grid) {
+               return grid.get_step_size();
+             }),
+             [](step_size&& lhs, step_size&& rhs) -> step_size {
+               return {
+                   .x_ = std::min(lhs.x_, rhs.x_),
+                   .y_ = std::min(lhs.y_, rhs.y_),
+               };
+             })
+      .value_or(step_size{.x_ = std::numeric_limits<double>::quiet_NaN(),
+                          .y_ = std::numeric_limits<double>::quiet_NaN()});
+}
 
 }  // namespace osr::preprocessing::elevation

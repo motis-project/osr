@@ -5,6 +5,7 @@
 #include <string>
 
 #include "osr/point.h"
+#include "osr/preprocessing/elevation/step_size.h"
 #include "osr/types.h"
 
 namespace osr::preprocessing::elevation {
@@ -28,6 +29,7 @@ struct dem_grid {
 
   pixel_value get_raw(::osr::point const&) const;
   pixel_type get_pixel_type() const;
+  step_size get_step_size() const;
 
 private:
   struct impl;

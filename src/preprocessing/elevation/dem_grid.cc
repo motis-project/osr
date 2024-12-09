@@ -252,4 +252,8 @@ pixel_value dem_grid::get_raw(::osr::point const& p) const {
 
 pixel_type dem_grid::get_pixel_type() const { return impl_->pixel_type_; }
 
+step_size dem_grid::get_step_size() const {
+  return {.x_ = impl_->xdim_, .y_ = impl_->ydim_};
+}
+
 }  // namespace osr::preprocessing::elevation
