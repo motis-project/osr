@@ -28,11 +28,11 @@
 #include "tiles/osm/hybrid_node_idx.h"
 #include "tiles/osm/tmp_file.h"
 
-#include "osr/preprocessing/elevation/dem_source.h"
 #include "osr/elevation_storage.h"
 #include "osr/extract/tags.h"
 #include "osr/lookup.h"
 #include "osr/platforms.h"
+#include "osr/preprocessing/elevation/dem_source.h"
 #include "osr/ways.h"
 
 namespace osm = osmium;
@@ -541,8 +541,7 @@ void extract(bool const with_platforms,
 
   w.connect_ways();
 
-  pt->status("Load elevation data")
-        .out_bounds(85, 90);
+  pt->status("Load elevation data").out_bounds(85, 90);
   if (elevation_dir && !elevation_dir->empty()) {
     auto const dem = osr::preprocessing::elevation::dem_source{*elevation_dir};
     if (dem.size() > 0) {
