@@ -56,7 +56,7 @@ std::unique_ptr<elevation_storage> elevation_storage::try_open(
   return {};
 }
 
-std::pair<elevation_t, elevation_t> get_way_elevation(
+elevation_storage::elevation get_way_elevation(
     preprocessing::elevation::dem_source const& dem,
     point const& from,
     point const& to,
@@ -68,10 +68,9 @@ std::pair<elevation_t, elevation_t> get_way_elevation(
   if (a != NO_ELEVATION_DATA && b != NO_ELEVATION_DATA) {
     // TODO Approximation only for short ways
     // Value should be larger to not skip intermediate values
-    auto const steps =
-        2 * static_cast<int>(std::max(
-                std::ceil(std::abs(to.lat() - from.lat()) / max_step_size.x_),
-                std::ceil(std::abs(to.lng() - from.lng()) / max_step_size.y_)));
+    auto const steps = static_cast<int>(std::max(
+        std::ceil(2 * std::abs(to.lat() - from.lat()) / max_step_size.x_),
+        std::ceil(2 * std::abs(to.lng() - from.lng()) / max_step_size.y_)));
     if (steps > 0) {
       auto const from_lat = from.lat();
       auto const from_lng = from.lng();
@@ -85,12 +84,14 @@ std::pair<elevation_t, elevation_t> get_way_elevation(
                                            from_lng + i * step_size.y_);
                })) {
         auto const m = dem.get(mid);
-        if (a < m) {
-          elevation_up += m - a;
-        } else {
-          elevation_down += a - m;
+        if (m != NO_ELEVATION_DATA) {
+          if (a < m) {
+            elevation_up += m - a;
+          } else {
+            elevation_down += a - m;
+          }
+          a = m;
         }
-        a = m;
       }
     }
     if (a < b) {
@@ -125,10 +126,11 @@ void elevation_storage::set_elevations(
                      return w.get_node_pos(node);
                    })  //
                  | std::views::pairwise) {
-          auto const [elevation_up, elevation_down] =
+          auto const elevation =
               get_way_elevation(dem, from, to, max_step_size);
-          way_elevations_up.push_back(total_elevation_up += elevation_up);
-          way_elevations_down.push_back(total_elevation_down += elevation_down);
+          way_elevations_up.push_back(total_elevation_up += elevation.up_);
+          way_elevations_down.push_back(total_elevation_down +=
+                                        elevation.down_);
         }
         if (total_elevation_up == elevation_t{0}) {
           way_elevations_up.clear();
@@ -140,8 +142,8 @@ void elevation_storage::set_elevations(
       pt->update_fn());
   // Insert elevations
   for (auto& [source, destination] : std::array{
-           std::pair{std::ref(elevations_up), std::ref(elevations_up_)},
-           std::pair{std::ref(elevations_down), std::ref(elevations_down_)},
+           std::pair{std::cref(elevations_up), std::ref(elevations_up_)},
+           std::pair{std::cref(elevations_down), std::ref(elevations_down_)},
        }) {
     auto& target = destination.get();
     for (auto const [i, elevations] : utl::enumerate(source.get())) {
@@ -167,13 +169,13 @@ elevation_storage::elevation elevation_storage::get_elevations(
     std::uint16_t const from,
     std::uint16_t const to) const {
   auto const [f, t] = from <= to ? std::pair{from, to} : std::pair{to, from};
-  auto const [up, down] = std::pair<elevation_t, elevation_t>{
-      elevation_at(elevations_up_, way, t) -
-          elevation_at(elevations_up_, way, f),
-      elevation_at(elevations_down_, way, t) -
-          elevation_at(elevations_down_, way, f),
+  auto const elevations = elevation_storage::elevation{
+      static_cast<elevation_t>(elevation_at(elevations_up_, way, t) -
+                               elevation_at(elevations_up_, way, f)),
+      static_cast<elevation_t>(elevation_at(elevations_down_, way, t) -
+                               elevation_at(elevations_down_, way, f)),
   };
-  return from <= to ? elevation{up, down} : elevation{down, up};
+  return from <= to ? elevations : elevation{elevations.down_, elevations.up_};
 }
 
 elevation_storage::elevation get_elevations(elevation_storage const* elevations,
