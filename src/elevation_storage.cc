@@ -28,11 +28,11 @@ constexpr auto const kDownIndexName = "elevation_down_idx.bin";
 
 elevation_storage::elevation_storage(std::filesystem::path const& p,
                                      cista::mmap::protection const mode)
-    : elevation_up_{mm_vec<elevation_t>{
-                        mm(p, elevation_files::kUpDataName, mode)},
-                    mm_vec<unsigned>(
-                        mm(p, elevation_files::kUpIndexName, mode))},
-      elevation_down_{
+    : elevations_up_{mm_vec<elevation_t>{
+                         mm(p, elevation_files::kUpDataName, mode)},
+                     mm_vec<unsigned>(
+                         mm(p, elevation_files::kUpIndexName, mode))},
+      elevations_down_{
           mm_vec<elevation_t>{mm(p, elevation_files::kDownDataName, mode)},
           mm_vec<unsigned>(mm(p, elevation_files::kDownIndexName, mode))} {}
 
@@ -140,8 +140,8 @@ void elevation_storage::set_elevations(
       pt->update_fn());
   // Insert elevations
   for (auto& [source, destination] : std::array{
-           std::pair{std::ref(elevations_up), std::ref(elevation_up_)},
-           std::pair{std::ref(elevations_down), std::ref(elevation_down_)},
+           std::pair{std::ref(elevations_up), std::ref(elevations_up_)},
+           std::pair{std::ref(elevations_down), std::ref(elevations_down_)},
        }) {
     auto& target = destination.get();
     for (auto const [i, elevations] : utl::enumerate(source.get())) {
@@ -168,9 +168,10 @@ elevation_storage::elevation elevation_storage::get_elevations(
     std::uint16_t const to) const {
   auto const [f, t] = from <= to ? std::pair{from, to} : std::pair{to, from};
   auto const [up, down] = std::pair<elevation_t, elevation_t>{
-      elevation_at(elevation_up_, way, t) - elevation_at(elevation_up_, way, f),
-      elevation_at(elevation_down_, way, t) -
-          elevation_at(elevation_down_, way, f),
+      elevation_at(elevations_up_, way, t) -
+          elevation_at(elevations_up_, way, f),
+      elevation_at(elevations_down_, way, t) -
+          elevation_at(elevations_down_, way, f),
   };
   return from <= to ? elevation{up, down} : elevation{down, up};
 }
