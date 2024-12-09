@@ -15,6 +15,9 @@ def main():
         .set(Pos(6, 2), BASE + 2)
         .set(Pos(6, 3), BASE + 3)
         .set(Pos(6, 4), BASE + 5)
+        .set(Pos(5, 4), BASE + 2)
+        .set(Pos(4, 4), BASE + 0)
+        .set(Pos(3, 4), BASE + 1)
         # Longer path with lower elevation
         .set(Pos(5, 1), BASE + 2)  # Value might be skipped if steps is too low
         .set(Pos(4, 1), BASE + 3)
