@@ -1,3 +1,5 @@
+#include "osr/preprocessing/elevation/dem_grid.h"
+
 #include <cmath>
 #include <filesystem>
 #include <fstream>
@@ -13,7 +15,6 @@
 #include "cista/mmap.h"
 
 #include "osr/elevation_storage.h"
-#include "osr/preprocessing/elevation/dem_grid.h"
 
 // EHdr / BIL File Format:
 // http://www.gdal.org/frmt_various.html#EHdr
@@ -165,7 +166,7 @@ struct dem_grid::impl {
     auto const lng = p.lng();
     auto const lat = p.lat();
 
-    if (lng < ulx_ || lat > uly_ || lng > brx_ || lat < bry_) {
+    if (lng < ulx_ || lat > uly_ || lng >= brx_ || lat <= bry_) {
       return nodata_;
     }
 
