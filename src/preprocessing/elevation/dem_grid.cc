@@ -59,29 +59,17 @@ std::string get_string(str_map const& map,
 
 int get_int(str_map const& map, std::string const& key, int def) {
   auto const str = get_string(map, key);
-  if (str.empty()) {
-    return def;
-  } else {
-    return std::stoi(str);
-  }
+  return str.empty() ? def : std::stoi(str);
 }
 
 unsigned get_uint(str_map const& map, std::string const& key, unsigned def) {
   auto const str = get_string(map, key);
-  if (str.empty()) {
-    return def;
-  } else {
-    return static_cast<unsigned>(std::stoul(str));
-  }
+  return str.empty() ? def : static_cast<unsigned>(std::stoul(str));
 }
 
 double get_double(str_map const& map, std::string const& key, double def) {
   auto const str = get_string(map, key);
-  if (str.empty()) {
-    return def;
-  } else {
-    return std::stod(str);
-  }
+  return str.empty() ? def : std::stod(str);
 }
 
 struct dem_grid::impl {
