@@ -20,6 +20,10 @@ struct dem_source;
 }
 
 struct elevation_storage {
+  struct elevation {
+    elevation_t up_;
+    elevation_t down_;
+  };
   elevation_storage(std::filesystem::path const&,
                     cista::mmap::protection const mode);
   static std::unique_ptr<elevation_storage> try_open(
@@ -27,18 +31,17 @@ struct elevation_storage {
   void set_elevations(ways&,
                       preprocessing::elevation::dem_source const&,
                       std::shared_ptr<utl::progress_tracker>&);
-  std::pair<elevation_t, elevation_t> get_elevations(
-      way_idx_t const way,
-      std::uint16_t const from,
-      std::uint16_t const to) const;
+  elevation get_elevations(way_idx_t const way,
+                           std::uint16_t const from,
+                           std::uint16_t const to) const;
 
   mm_vecvec<way_idx_t, elevation_t> elevation_up_;
   mm_vecvec<way_idx_t, elevation_t> elevation_down_;
 };
 
-std::pair<elevation_t, elevation_t> get_elevations(elevation_storage const*,
-                                                   way_idx_t const way,
-                                                   std::uint16_t const from,
-                                                   std::uint16_t const to);
+elevation_storage::elevation get_elevations(elevation_storage const*,
+                                            way_idx_t const way,
+                                            std::uint16_t const from,
+                                            std::uint16_t const to);
 
 }  // namespace osr

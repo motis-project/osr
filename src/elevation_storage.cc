@@ -162,26 +162,26 @@ elevation_t elevation_at(mm_vecvec<way_idx_t, elevation_t> const& elevations,
              : elevations[way_idx].at(idx - 1U);
 }
 
-std::pair<elevation_t, elevation_t> elevation_storage::get_elevations(
+elevation_storage::elevation elevation_storage::get_elevations(
     way_idx_t const way,
     std::uint16_t const from,
     std::uint16_t const to) const {
   auto const [f, t] = from <= to ? std::pair{from, to} : std::pair{to, from};
-  auto const [up, down] = std::pair{
+  auto const [up, down] = std::pair<elevation_t, elevation_t>{
       elevation_at(elevation_up_, way, t) - elevation_at(elevation_up_, way, f),
       elevation_at(elevation_down_, way, t) -
           elevation_at(elevation_down_, way, f),
   };
-  return from <= to ? std::pair{up, down} : std::pair{down, up};
+  return from <= to ? elevation{up, down} : elevation{down, up};
 }
 
-std::pair<elevation_t, elevation_t> get_elevations(
-    elevation_storage const* elevations,
-    way_idx_t const way,
-    std::uint16_t const from,
-    std::uint16_t const to) {
-  return elevations == nullptr ? std::pair{elevation_t{0}, elevation_t{0}}
-                               : elevations->get_elevations(way, from, to);
+elevation_storage::elevation get_elevations(elevation_storage const* elevations,
+                                            way_idx_t const way,
+                                            std::uint16_t const from,
+                                            std::uint16_t const to) {
+  return elevations == nullptr
+             ? elevation_storage::elevation{elevation_t{0}, elevation_t{0}}
+             : elevations->get_elevations(way, from, to);
 }
 
 }  // namespace osr

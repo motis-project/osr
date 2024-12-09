@@ -52,10 +52,9 @@ connecting_way find_connecting_way(ways const& w,
           auto const is_loop = way != way_idx_t::invalid() && r.is_loop(way) &&
                                static_cast<unsigned>(std::abs(a_idx - b_idx)) ==
                                    r.way_nodes_[way].size() - 2U;
-          auto const [elevation_up, elevation_down] =
-              get_elevations(elevations, way, a_idx, b_idx);
-          conn = {way,  a_idx,        b_idx,         is_loop,
-                  dist, elevation_up, elevation_down};
+          auto const elevation = get_elevations(elevations, way, a_idx, b_idx);
+          conn = {way,  a_idx,         b_idx,          is_loop,
+                  dist, elevation.up_, elevation.down_};
         }
       });
   utl::verify(
