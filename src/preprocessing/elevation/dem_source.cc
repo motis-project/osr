@@ -8,11 +8,14 @@
 
 #include "osr/elevation_storage.h"
 #include "osr/preprocessing/elevation/dem_grid.h"
+#include "osr/preprocessing/elevation/hgt.h"
 #include "osr/preprocessing/elevation/step_size.h"
 
 namespace fs = std::filesystem;
 
 namespace osr::preprocessing::elevation {
+
+using raster_driver = std::variant<dem_grid, hgt<3601U>, hgt<1201U>>;
 
 struct dem_source::impl {
   impl() = default;
