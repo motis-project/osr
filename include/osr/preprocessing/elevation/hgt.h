@@ -22,6 +22,11 @@ struct hgt {
 
   step_size get_step_size() const;
 
+  static constexpr std::size_t file_size() {
+    constexpr auto const kBytesPerPixel = std::size_t{2U};
+    return RasterSize * RasterSize * kBytesPerPixel;
+  }
+
 private:
   struct impl;
   std::unique_ptr<impl> impl_;

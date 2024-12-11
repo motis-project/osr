@@ -3,6 +3,7 @@
 #include "osr/preprocessing/elevation/hgt.h"
 
 #include <cstdint>
+#include <bit>
 #include <filesystem>
 #include <sstream>
 
@@ -30,6 +31,9 @@ namespace fs = std::filesystem;
 
 namespace osr::preprocessing::elevation {
 
+// Void value is used in version 1.0 and 2.1 only
+constexpr auto const kVoidValue = -32786;
+
 template <std::size_t RasterSize>
 struct hgt<RasterSize>::hgt::impl {
   constexpr static auto kStepWidth = double{1. / (RasterSize - 1U)};
@@ -45,13 +49,18 @@ struct hgt<RasterSize>::hgt::impl {
   elevation_t get(::osr::point const& p) {
     auto const lat = p.lat();
     auto const lng = p.lng();
-    if (blx_ <= lng && lng < urx_ && bly_ <= lat < ury_) {
+    if (blx_ <= lng && lng < urx_ && bly_ <= lat && lat < ury_) {
       auto const column =
           static_cast<std::size_t>(std::floor((lng - blx_) / kStepWidth));
       auto const row =
           static_cast<std::size_t>(std::floor((lat - bly_) / kStepWidth));
       auto const offset = kPixelSize * (RasterSize * row + column);
-      return get(offset);
+      auto const v_native = get(offset);
+      // Byte stored in big-endian
+      auto const v = (std::endian::native == std::endian::big)
+                         ? v_native
+                         : std::byteswap(v_native);
+      return v == kVoidValue ? ::osr::NO_ELEVATION_DATA : v;
     }
     return ::osr::NO_ELEVATION_DATA;
   }
@@ -61,6 +70,7 @@ struct hgt<RasterSize>::hgt::impl {
     {
       auto const l = std::lock_guard{m_};
       if (!file_) {
+        std::cout << "Using HGT file " << filename_ << "\n";
         file_ = std::make_optional(
             cista::mmap{filename_.data(), cista::mmap::protection::READ});
       }
@@ -74,8 +84,8 @@ struct hgt<RasterSize>::hgt::impl {
   }
 
   std::string filename_;
-  std::optional<cista::mmap> file_;
-  std::mutex m_;
+  std::optional<cista::mmap> file_{};
+  std::mutex m_{};
   // bottom left point
   double blx_;
   double bly_;
