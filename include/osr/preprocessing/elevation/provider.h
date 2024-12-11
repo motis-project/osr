@@ -8,13 +8,13 @@
 
 namespace osr::preprocessing::elevation {
 
-struct dem_source {
-  dem_source(std::filesystem::path const&);
-  ~dem_source();
-  dem_source(dem_source const&) = delete;
-  dem_source& operator=(dem_source const&) = delete;
-  dem_source(dem_source&&) = delete;
-  dem_source& operator=(dem_source&&) = delete;
+struct provider {
+  provider(std::filesystem::path const&);
+  ~provider();
+  provider(provider const&) = delete;
+  provider& operator=(provider const&) = delete;
+  provider(provider&&) = delete;
+  provider& operator=(provider&&) = delete;
 
   ::osr::elevation_t get(::osr::point const&) const;
   std::size_t size() const;

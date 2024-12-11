@@ -8,7 +8,7 @@
 #include "utl/parallel_for.h"
 
 #include "osr/point.h"
-#include "osr/preprocessing/elevation/dem_source.h"
+#include "osr/preprocessing/elevation/provider.h"
 #include "osr/preprocessing/elevation/step_size.h"
 
 namespace osr {
@@ -57,7 +57,7 @@ std::unique_ptr<elevation_storage> elevation_storage::try_open(
 }
 
 elevation_storage::elevation get_way_elevation(
-    preprocessing::elevation::dem_source const& dem,
+    preprocessing::elevation::provider const& dem,
     point const& from,
     point const& to,
     preprocessing::elevation::step_size const& max_step_size) {
@@ -105,7 +105,7 @@ elevation_storage::elevation get_way_elevation(
 
 void elevation_storage::set_elevations(
     ways& w,
-    preprocessing::elevation::dem_source const& dem,
+    preprocessing::elevation::provider const& dem,
     std::shared_ptr<utl::progress_tracker>& pt) {
   pt->in_high(w.n_ways());
   auto const max_step_size = dem.get_step_size();

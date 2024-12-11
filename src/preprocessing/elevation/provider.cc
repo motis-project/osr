@@ -1,4 +1,4 @@
-#include "osr/preprocessing/elevation/dem_source.h"
+#include "osr/preprocessing/elevation/provider.h"
 
 #include <algorithm>
 #include <filesystem>
@@ -19,7 +19,7 @@ namespace osr::preprocessing::elevation {
 
 using raster_driver = std::variant<dem_grid, hgt<3601U>, hgt<1201U>>;
 
-struct dem_source::impl {
+struct provider::impl {
   impl() = default;
 
   void add_grid_file(fs::path const& path) {
@@ -54,7 +54,7 @@ struct dem_source::impl {
   std::vector<raster_driver> drivers;
 };
 
-dem_source::dem_source(std::filesystem::path const& p)
+provider::provider(std::filesystem::path const& p)
     : impl_(std::make_unique<impl>()) {
   if (std::filesystem::is_directory(p)) {
     for (auto const& file : std::filesystem::recursive_directory_iterator(p)) {
@@ -71,15 +71,15 @@ dem_source::dem_source(std::filesystem::path const& p)
   }
 }
 
-dem_source::~dem_source() = default;
+provider::~provider() = default;
 
-::osr::elevation_t dem_source::get(::osr::point const& p) const {
+::osr::elevation_t provider::get(::osr::point const& p) const {
   return impl_->get(p);
 }
 
-std::size_t dem_source::size() const { return impl_->drivers.size(); }
+std::size_t provider::size() const { return impl_->drivers.size(); }
 
-step_size dem_source::get_step_size() const {
+step_size provider::get_step_size() const {
   return std::ranges::fold_left_first(
              impl_->drivers |
                  std::views::transform([](raster_driver const& grid) {

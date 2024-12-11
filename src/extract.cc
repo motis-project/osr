@@ -32,7 +32,7 @@
 #include "osr/extract/tags.h"
 #include "osr/lookup.h"
 #include "osr/platforms.h"
-#include "osr/preprocessing/elevation/dem_source.h"
+#include "osr/preprocessing/elevation/provider.h"
 #include "osr/ways.h"
 
 namespace osm = osmium;
@@ -543,7 +543,7 @@ void extract(bool const with_platforms,
 
   pt->status("Load elevation data").out_bounds(85, 90);
   if (elevation_dir && !elevation_dir->empty()) {
-    auto const dem = osr::preprocessing::elevation::dem_source{*elevation_dir};
+    auto const dem = osr::preprocessing::elevation::provider{*elevation_dir};
     if (dem.size() > 0) {
       auto elevations = elevation_storage{out, cista::mmap::protection::WRITE};
       elevations.set_elevations(w, dem, pt);
