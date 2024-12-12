@@ -39,14 +39,16 @@ struct hgt<RasterSize>::hgt::impl {
   constexpr static auto kStepWidth = double{1. / (RasterSize - 1U)};
   constexpr static auto kPixelSize = 2U;
 
-  impl(std::string const& filename, point const& bl)
+  impl(std::string const& filename,
+       std::int8_t const lat,
+       std::int16_t const lng)
       : filename_{filename},
-        sw_lat_(bl.lat()),
-        sw_lng_(bl.lng()),
-        blx_{bl.lng() - kStepWidth / 2},
-        bly_{bl.lat() - kStepWidth / 2},
-        urx_{bl.lng() + 1 + kStepWidth / 2},
-        ury_{bl.lat() + 1 + kStepWidth / 2} {}
+        sw_lat_(lat),
+        sw_lng_(lng),
+        blx_{lng - kStepWidth / 2},
+        bly_{lat - kStepWidth / 2},
+        urx_{lng + 1 + kStepWidth / 2},
+        ury_{lat + 1 + kStepWidth / 2} {}
 
   elevation_t get(::osr::point const& p) {
     auto const lat = p.lat();
@@ -119,8 +121,10 @@ inline point get_bottom_left(fs::path const& path) {
 }
 
 template <std::size_t RasterSize>
-hgt<RasterSize>::hgt(std::string const& filename)
-    : impl_{std::make_unique<impl>(filename, get_bottom_left(filename))} {}
+hgt<RasterSize>::hgt(std::string const& filename,
+                     std::int8_t const lat,
+                     std::int16_t const lng)
+    : impl_{std::make_unique<impl>(filename, lat, lng)} {}
 
 template <std::size_t RasterSize>
 hgt<RasterSize>::~hgt() = default;

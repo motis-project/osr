@@ -3,6 +3,8 @@
 #include <algorithm>
 #include <filesystem>
 #include <limits>
+#include <memory>
+#include <optional>
 #include <ranges>
 #include <stdexcept>
 #include <utility>
@@ -21,7 +23,7 @@ namespace osr::preprocessing::elevation {
 static_assert(IsRasterDriver<dem_grid>);
 static_assert(IsRasterDriver<hgt_raster>);
 
-using raster_driver = std::variant<dem_grid, hgt<3601U>, hgt<1201U>>;
+using raster_driver = std::variant<dem_grid, hgt_raster>;
 
 struct provider::impl {
   impl() = default;
@@ -30,18 +32,8 @@ struct provider::impl {
     drivers.emplace_back(std::in_place_type<dem_grid>, path.string());
   }
 
-  void add_hgt_file(fs::path const& path) {
-    auto const file_size = fs::file_size(path);
-    switch (file_size) {
-      case hgt<3601>::file_size():
-        drivers.emplace_back(std::in_place_type<hgt<3601>>, path.string());
-        break;
-      case hgt<1201>::file_size():
-        drivers.emplace_back(std::in_place_type<hgt<1201>>, path.string());
-        break;
-      default:
-        std::runtime_error{std::format("Unsupported file size {}", file_size)};
-    }
+  void add_driver(hgt_raster&& driver) {
+    drivers.emplace_back(std::move(driver));
   }
 
   elevation_t get(::osr::point const& p) {
@@ -61,6 +53,7 @@ struct provider::impl {
 provider::provider(std::filesystem::path const& p)
     : impl_(std::make_unique<impl>()) {
   if (std::filesystem::is_directory(p)) {
+    auto hgt_tiles = std::vector<hgt_raster::hgt_tile>{};
     for (auto const& file : std::filesystem::recursive_directory_iterator(p)) {
       if (file.is_regular_file()) {
         auto const& path = file.path();
@@ -68,9 +61,15 @@ provider::provider(std::filesystem::path const& p)
         if (ext == ".hdr") {
           impl_->add_grid_file(path);
         } else if (ext == ".hgt") {
-          impl_->add_hgt_file(path);
+          auto tile = hgt_raster::open(path);
+          if (tile.has_value()) {
+            hgt_tiles.push_back(std::move(tile).value());
+          }
         }
       }
+    }
+    if (!hgt_tiles.empty()) {
+      impl_->add_driver(hgt_raster(std::move(hgt_tiles)));
     }
   }
 }

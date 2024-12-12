@@ -1,11 +1,39 @@
 #include "osr/preprocessing/elevation/hgt_raster.h"
 
 #include <cstddef>
+#include <sstream>
+
+#include "utl/verify.h"
 
 #include <algorithm>
 #include <ranges>
 
 namespace osr::preprocessing::elevation {
+
+struct grid_point {
+  explicit grid_point(std::string filename) {
+    auto lat_dir = char{};
+    auto lng_dir = char{};
+    auto lat = int{};
+    auto lng = int{};
+
+    auto s = std::stringstream{std::move(filename)};
+    s >> lat_dir >> lat >> lng_dir >> lng;
+
+    utl::verify(lat_dir == 'S' || lat_dir == 'N', "Invalid direction '{}'",
+                lat_dir);
+    utl::verify(lng_dir == 'W' || lng_dir == 'E', "Invalid direction '{}'",
+                lng_dir);
+    utl::verify(-180 <= lng && lng < 180, "Invalid longitude '{}'", lng);
+    utl::verify(-90 <= lat && lat < 90, "Invalid latitude '{}'", lat);
+
+    lat_ = static_cast<std::int8_t>((lat_dir == 'N') ? lat : -lat);
+    lng_ = static_cast<std::int16_t>((lng_dir == 'E') ? lng : -lng);
+  }
+
+  std::int8_t lat_;
+  std::int16_t lng_;
+};
 
 hgt_raster::hgt_raster(std::vector<hgt_tile>&& tiles) : tiles_{} {
   if (tiles.empty()) {
@@ -62,8 +90,17 @@ step_size hgt_raster::get_step_size() const {
   return {};
 }
 
-std::optional<hgt_raster::hgt_tile> hgt_raster::open(fs::path const&) {
-  return {};
+std::optional<hgt_raster::hgt_tile> hgt_raster::open(fs::path const& path) {
+  auto const filename = path.filename();
+  auto sw = grid_point{path.filename()};
+  auto const file_size = fs::file_size(path);
+  switch (file_size) {
+    case hgt<3601>::file_size():
+      return hgt<3601>{path.string(), sw.lat_, sw.lng_};
+    case hgt<1201>::file_size():
+      return hgt<1201>{path.string(), sw.lat_, sw.lng_};
+    default: return {};
+  }
 }
 
 std::size_t hgt_raster::get_tile_offset(int lat, int lng) const {

@@ -12,7 +12,9 @@ namespace osr::preprocessing::elevation {
 
 template <std::size_t RasterSize>
 struct hgt {
-  explicit hgt(std::string const& filename);
+  explicit hgt(std::string const& filename,
+               std::int8_t const lat,
+               std::int16_t const lng);
   ~hgt();
   hgt(hgt&& grid) noexcept;
   hgt(hgt const&) = delete;
