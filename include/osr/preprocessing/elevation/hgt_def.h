@@ -41,6 +41,8 @@ struct hgt<RasterSize>::hgt::impl {
 
   impl(std::string const& filename, point const& bl)
       : filename_{filename},
+        sw_lat_(bl.lat()),
+        sw_lng_(bl.lng()),
         blx_{bl.lng() - kStepWidth / 2},
         bly_{bl.lat() - kStepWidth / 2},
         urx_{bl.lng() + 1 + kStepWidth / 2},
@@ -86,6 +88,9 @@ struct hgt<RasterSize>::hgt::impl {
   std::string filename_;
   std::optional<cista::mmap> file_{};
   std::mutex m_{};
+  // south west
+  std::int8_t sw_lat_;
+  std::int16_t sw_lng_;
   // bottom left point
   double blx_;
   double bly_;
@@ -131,6 +136,16 @@ template <std::size_t RasterSize>
 template <std::size_t RasterSize>
 step_size hgt<RasterSize>::get_step_size() const {
   return impl_->get_step_size();
+}
+
+template <std::size_t RasterSize>
+std::int8_t hgt<RasterSize>::lat() const {
+  return impl_->sw_lat_;
+}
+
+template <std::size_t RasterSize>
+std::int16_t hgt<RasterSize>::lng() const {
+  return impl_->sw_lng_;
 }
 
 }  // namespace osr::preprocessing::elevation

@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstdint>
 #include <memory>
 #include <string>
 
@@ -21,6 +22,9 @@ struct hgt {
   ::osr::elevation_t get(::osr::point const&) const;
 
   step_size get_step_size() const;
+
+  std::int8_t lat() const;
+  std::int16_t lng() const;
 
   static constexpr std::size_t file_size() {
     constexpr auto const kBytesPerPixel = std::size_t{2U};
