@@ -1,4 +1,5 @@
 #include "osr/preprocessing/elevation/hgt_raster.h"
+
 #include <cstddef>
 
 #include <algorithm>
@@ -40,7 +41,7 @@ hgt_raster::hgt_raster(std::vector<hgt_tile>&& tiles) : tiles_{} {
   }
 }
 
-::osr::elevation_t hgt_raster::get(::osr::point const& point) {
+::osr::elevation_t hgt_raster::get(::osr::point const& point) const {
   auto const offset = get_tile_offset(point.lat(), point.lng());
   assert(offset < tiles_.size());
   return tiles_[offset].has_value()
