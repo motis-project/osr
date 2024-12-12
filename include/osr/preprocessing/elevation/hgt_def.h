@@ -42,7 +42,7 @@ struct hgt<RasterSize>::hgt::impl {
   impl(std::string const& filename,
        std::int8_t const lat,
        std::int16_t const lng)
-      : filename_{filename},
+      : file_{cista::mmap{filename.data(), cista::mmap::protection::READ}},
         sw_lat_(lat),
         sw_lng_(lng),
         blx_{lng - kStepWidth / 2},
@@ -71,15 +71,7 @@ struct hgt<RasterSize>::hgt::impl {
 
   elevation_t get(std::size_t const offset) {
     assert(0 <= offset && offset < RasterSize * RasterSize);
-    {
-      auto const l = std::lock_guard{m_};
-      if (!file_) {
-        std::cout << "Using HGT file " << filename_ << "\n";
-        file_ = std::make_optional(
-            cista::mmap{filename_.data(), cista::mmap::protection::READ});
-      }
-    }
-    auto const byte_ptr = file_->data() + offset;
+    auto const byte_ptr = file_.data() + offset;
     return *reinterpret_cast<std::int16_t const*>(byte_ptr);
   }
 
@@ -87,9 +79,7 @@ struct hgt<RasterSize>::hgt::impl {
     return {.x_ = kStepWidth, .y_ = kStepWidth};
   }
 
-  std::string filename_;
-  std::optional<cista::mmap> file_{};
-  std::mutex m_{};
+  cista::mmap file_{};
   // south west
   std::int8_t sw_lat_;
   std::int16_t sw_lng_;
