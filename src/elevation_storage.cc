@@ -109,49 +109,33 @@ void elevation_storage::set_elevations(
     std::shared_ptr<utl::progress_tracker>& pt) {
   pt->in_high(w.n_ways());
   auto const max_step_size = dem.get_step_size();
-  auto elevations_up = std::vector<std::vector<elevation_t>>{};
-  auto elevations_down = std::vector<std::vector<elevation_t>>{};
-  elevations_up.resize(w.n_ways());
-  elevations_down.resize(w.n_ways());
-  utl::parallel_for_run(
-      w.n_ways(),
-      [&](auto const way_idx) {
-        auto& way_elevations_up = elevations_up[way_idx];
-        auto& way_elevations_down = elevations_down[way_idx];
-        auto total_elevation_up = elevation_t{0};
-        auto total_elevation_down = elevation_t{0};
-        for (auto const [from, to] :
-             w.r_->way_nodes_[way_idx_t{way_idx}]  //
-                 | std::views::transform([&](node_idx_t const node) {
-                     return w.get_node_pos(node);
-                   })  //
-                 | std::views::pairwise) {
-          auto const elevation =
-              get_way_elevation(dem, from, to, max_step_size);
-          way_elevations_up.push_back(total_elevation_up += elevation.up_);
-          way_elevations_down.push_back(total_elevation_down +=
-                                        elevation.down_);
-        }
-        if (total_elevation_up == elevation_t{0}) {
-          way_elevations_up.clear();
-        }
-        if (total_elevation_down == elevation_t{0}) {
-          way_elevations_down.clear();
-        }
-      },
-      pt->update_fn());
-  // Insert elevations
-  for (auto& [source, destination] : std::array{
-           std::pair{std::cref(elevations_up), std::ref(elevations_up_)},
-           std::pair{std::cref(elevations_down), std::ref(elevations_down_)},
-       }) {
-    auto& target = destination.get();
-    for (auto const [i, elevations] : utl::enumerate(source.get())) {
-      if (!elevations.empty()) {
-        target.resize(i);
-        target.emplace_back(elevations);
-      }
+  auto elevations_up = std::vector<elevation_t>{};
+  auto elevations_down = std::vector<elevation_t>{};
+  for (auto const nodes : w.r_->way_nodes_) {
+    elevations_up.clear();
+    elevations_down.clear();
+    auto total_elevation_up = elevation_t{0};
+    auto total_elevation_down = elevation_t{0};
+    for (auto const [from, to] :
+         nodes  //
+             | std::views::transform([&](node_idx_t const node) {
+                 return w.get_node_pos(node);
+               })  //
+             | std::views::pairwise) {
+      auto const elevation = get_way_elevation(dem, from, to, max_step_size);
+      elevations_up.push_back(total_elevation_up += elevation.up_);
+      elevations_down.push_back(total_elevation_down += elevation.down_);
     }
+    if (total_elevation_up == elevation_t{0}) {
+      elevations_up.clear();
+    }
+    if (total_elevation_down == elevation_t{0}) {
+      elevations_down.clear();
+    }
+    elevations_up_.emplace_back(elevations_up);
+    elevations_down_.emplace_back(elevations_down);
+
+    pt->increment();
   }
 }
 
