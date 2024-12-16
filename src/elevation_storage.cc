@@ -109,21 +109,27 @@ void elevation_storage::set_elevations(
   for (auto nodes : w.r_->way_nodes_) {
     elevations_up.clear();
     elevations_down.clear();
-    auto total_elevation_up = elevation_t{0};
-    auto total_elevation_down = elevation_t{0};
     points.clear();
     for (auto const& node : nodes) {
       points.emplace_back(w.get_node_pos(node));
     }
+    auto has_elevation_up = false;
+    auto has_elevation_down = false;
     for (auto const [from, to] : utl::pairwise(points)) {
       auto const elevation = get_way_elevation(dem, from, to, max_step_size);
-      elevations_up.push_back(total_elevation_up += elevation.up_);
-      elevations_down.push_back(total_elevation_down += elevation.down_);
+      elevations_up.push_back(elevation.up_);
+      elevations_down.push_back(elevation.down_);
+      if (elevation.up_ > elevation_t{0}) {
+        has_elevation_up = true;
+      }
+      if (elevation.down_ > elevation_t{0}) {
+        has_elevation_down = true;
+      }
     }
-    if (total_elevation_up == elevation_t{0}) {
+    if (!has_elevation_up) {
       elevations_up.clear();
     }
-    if (total_elevation_down == elevation_t{0}) {
+    if (!has_elevation_down) {
       elevations_down.clear();
     }
     elevations_up_.emplace_back(elevations_up);
@@ -136,24 +142,19 @@ void elevation_storage::set_elevations(
 elevation_t elevation_at(mm_vecvec<way_idx_t, elevation_t> const& elevations,
                          way_idx_t const way_idx,
                          std::uint16_t const idx) {
-  return idx == 0U || way_idx >= elevations.size() ||
-                 elevations[way_idx].empty()
-             ? elevation_t{0}
-             : elevations[way_idx].at(idx - 1U);
+  return way_idx < elevations.size() && idx < elevations[way_idx].size()
+             ? elevations[way_idx].at(idx)
+             : elevation_t{0};
 }
 
 elevation_storage::elevation elevation_storage::get_elevations(
     way_idx_t const way,
     std::uint16_t const from,
     std::uint16_t const to) const {
-  auto const [f, t] = from <= to ? std::pair{from, to} : std::pair{to, from};
-  auto const elevations = elevation_storage::elevation{
-      static_cast<elevation_t>(elevation_at(elevations_up_, way, t) -
-                               elevation_at(elevations_up_, way, f)),
-      static_cast<elevation_t>(elevation_at(elevations_down_, way, t) -
-                               elevation_at(elevations_down_, way, f)),
-  };
-  return from <= to ? elevations : elevation{elevations.down_, elevations.up_};
+  return (from < to) ? elevation{elevation_at(elevations_up_, way, from),
+                                 elevation_at(elevations_down_, way, from)}
+                     : elevation{elevation_at(elevations_down_, way, to),
+                                 elevation_at(elevations_up_, way, to)};
 }
 
 elevation_storage::elevation get_elevations(elevation_storage const* elevations,
