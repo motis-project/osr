@@ -1,11 +1,11 @@
 #include "osr/preprocessing/elevation/hgt_raster.h"
 
 #include <cstddef>
-#include <ranges>
 #include <sstream>
 
 #include "osr/elevation_storage.h"
 
+#include "utl/enumerate.h"
 #include "utl/verify.h"
 
 namespace osr::preprocessing::elevation {
@@ -44,7 +44,7 @@ hgt_raster::hgt_raster(std::vector<hgt_tile>&& tiles)
     return std::visit([](auto const& t) { return t.lng(); }, tile);
   };
 
-  for (auto [idx, tile] : std::views::enumerate(tiles_)) {
+  for (auto [idx, tile] : utl::enumerate(tiles_)) {
     auto const lat = static_cast<float>(get_lat(tile));
     auto const lng = static_cast<float>(get_lng(tile));
     auto const min = decltype(rtree_)::coord_t{lat, lng};

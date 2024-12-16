@@ -83,23 +83,19 @@ provider::~provider() = default;
 std::size_t provider::size() const { return impl_->drivers.size(); }
 
 step_size provider::get_step_size() const {
-  return std::ranges::fold_left_first(
-             impl_->drivers |
-                 std::views::transform([](raster_driver const& grid) {
-                   return std::visit(
-                       [](auto const& driver) {
-                         return driver.get_step_size();
-                       },
-                       grid);
-                 }),
-             [](step_size&& lhs, step_size&& rhs) -> step_size {
-               return {
-                   .x_ = std::min(lhs.x_, rhs.x_),
-                   .y_ = std::min(lhs.y_, rhs.y_),
-               };
-             })
-      .value_or(step_size{.x_ = std::numeric_limits<double>::quiet_NaN(),
-                          .y_ = std::numeric_limits<double>::quiet_NaN()});
+  auto steps = step_size{.x_ = std::numeric_limits<double>::quiet_NaN(),
+                         .y_ = std::numeric_limits<double>::quiet_NaN()};
+  for (auto const& driver : impl_->drivers) {
+    auto const s =
+        std::visit([](auto const& d) { return d.get_step_size(); }, driver);
+    if (std::isnan(steps.x_) || s.x_ < steps.x_) {
+      steps.x_ = s.x_;
+    }
+    if (std::isnan(steps.y_) || s.y_ < steps.y_) {
+      steps.y_ = s.y_;
+    }
+  }
+  return steps;
 }
 
 }  // namespace osr::preprocessing::elevation

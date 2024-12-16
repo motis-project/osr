@@ -1,11 +1,9 @@
 #include "osr/elevation_storage.h"
 
 #include <array>
-#include <ranges>
 
-#include "utl/enumerate.h"
 #include "utl/helpers/algorithm.h"
-#include "utl/parallel_for.h"
+#include "utl/pairwise.h"
 
 #include "osr/point.h"
 #include "osr/preprocessing/elevation/provider.h"
@@ -77,13 +75,9 @@ elevation_storage::elevation get_way_elevation(
       auto const step_size = preprocessing::elevation::step_size{
           .x_ = (to.lat() - from.lat()) / steps,
           .y_ = (to.lng() - from.lng()) / steps};
-      for (auto const mid :
-           std::views::iota(1, steps) |
-               std::views::transform([&](const auto i) -> point {
-                 return point::from_latlng(from_lat + i * step_size.x_,
-                                           from_lng + i * step_size.y_);
-               })) {
-        auto const m = dem.get(mid);
+      for (auto s = 1; s < steps; ++s) {
+        auto const m = dem.get(point::from_latlng(from_lat + s * step_size.x_,
+                                                  from_lng + s * step_size.y_));
         if (m != NO_ELEVATION_DATA) {
           if (a < m) {
             elevation_up += m - a;
@@ -111,17 +105,17 @@ void elevation_storage::set_elevations(
   auto const max_step_size = dem.get_step_size();
   auto elevations_up = std::vector<elevation_t>{};
   auto elevations_down = std::vector<elevation_t>{};
-  for (auto const nodes : w.r_->way_nodes_) {
+  auto points = std::vector<point>{};
+  for (auto nodes : w.r_->way_nodes_) {
     elevations_up.clear();
     elevations_down.clear();
     auto total_elevation_up = elevation_t{0};
     auto total_elevation_down = elevation_t{0};
-    for (auto const [from, to] :
-         nodes  //
-             | std::views::transform([&](node_idx_t const node) {
-                 return w.get_node_pos(node);
-               })  //
-             | std::views::pairwise) {
+    points.clear();
+    for (auto const& node : nodes) {
+      points.emplace_back(w.get_node_pos(node));
+    }
+    for (auto const [from, to] : utl::pairwise(points)) {
       auto const elevation = get_way_elevation(dem, from, to, max_step_size);
       elevations_up.push_back(total_elevation_up += elevation.up_);
       elevations_down.push_back(total_elevation_down += elevation.down_);
