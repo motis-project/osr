@@ -113,24 +113,18 @@ void elevation_storage::set_elevations(
     for (auto const& node : nodes) {
       points.emplace_back(w.get_node_pos(node));
     }
-    auto has_elevation_up = false;
-    auto has_elevation_down = false;
+    auto idx = std::size_t{0U};
     for (auto const [from, to] : utl::pairwise(points)) {
       auto const elevation = get_way_elevation(dem, from, to, max_step_size);
-      elevations_up.push_back(elevation.up_);
-      elevations_down.push_back(elevation.down_);
       if (elevation.up_ > elevation_t{0}) {
-        has_elevation_up = true;
+        elevations_up.resize(idx);
+        elevations_up.push_back(elevation.up_);
       }
       if (elevation.down_ > elevation_t{0}) {
-        has_elevation_down = true;
+        elevations_down.resize(idx);
+        elevations_down.push_back(elevation.down_);
       }
-    }
-    if (!has_elevation_up) {
-      elevations_up.clear();
-    }
-    if (!has_elevation_down) {
-      elevations_down.clear();
+      ++idx;
     }
     elevations_up_.emplace_back(elevations_up);
     elevations_down_.emplace_back(elevations_down);
