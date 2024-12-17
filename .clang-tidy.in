@@ -83,7 +83,6 @@ Checks: "*,\
 -bugprone-switch-missing-default-case"
 WarningsAsErrors: '*'
 HeaderFilterRegex: '^${RELATIVE_SOURCE_DIR}(base|modules|test)/'
-AnalyzeTemporaryDtors: false
 UseColor: true
 User:            root
 CheckOptions:
