@@ -36,6 +36,7 @@ Checks: "*,\
 -fuchsia-default-arguments,\
 -hicpp-vararg,\
 -clang-analyzer-optin.cplusplus.VirtualCall,\
+-clang-analyzer-optin.core.EnumCastOutOfRange,\
 -cppcoreguidelines-owning-memory,\
 -hicpp-no-array-decay,\
 -*-magic-numbers,\
@@ -70,6 +71,7 @@ Checks: "*,\
 -google-readability-avoid-underscore-in-googletest-name,\
 -readability-function-cognitive-complexity,\
 -readability-avoid-const-params-in-decls,\
+-readability-avoid-return-with-void-value,\
 -cppcoreguidelines-avoid-const-or-ref-data-members,\
 -cppcoreguidelines-avoid-do-while,\
 -altera-struct-pack-align,\

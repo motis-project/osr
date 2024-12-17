@@ -247,7 +247,6 @@ struct http_server::impl {
     cb(json_response(req, gj.string()));
   }
 
-  // NOLINTBEGIN(readability-avoid-return-with-void-value)
   void handle_request(web_server::http_req_t const& req,
                       web_server::http_res_cb_t const& cb) {
     std::cout << "[" << req.method_string() << "] " << req.target() << '\n';
@@ -344,7 +343,6 @@ struct http_server::impl {
     }
     server_.run();
   }
-  // NOLINTEND(readability-avoid-return-with-void-value)
 
   void stop() { server_.stop(); }
 

@@ -8,7 +8,6 @@
 
 namespace osr {
 
-// NOLINTBEGIN(clang-analyzer-optin.core.EnumCastOutOfRange)
 lookup::lookup(ways const& ways,
                std::filesystem::path p,
                cista::mmap::protection mode)
@@ -75,6 +74,5 @@ hash_set<node_idx_t> lookup::find_elevators(geo::box const& b) const {
   });
   return elevators;
 }
-// NOLINTEND(clang-analyzer-optin.core.EnumCastOutOfRange)
 
 }  // namespace osr

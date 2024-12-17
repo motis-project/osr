@@ -42,7 +42,6 @@ using namespace std::string_view_literals;
 
 namespace osr {
 
-// NOLINTBEGIN(clang-analyzer-optin.core.EnumCastOutOfRange)
 struct osm_restriction {
   bool valid() const {
     return from_ != osm_way_idx_t::invalid() &&
@@ -582,6 +581,5 @@ void extract(bool const with_platforms,
 
   lookup{w, out, cista::mmap::protection::WRITE}.build_rtree();
 }
-// NOLINTEND(clang-analyzer-optin.core.EnumCastOutOfRange)
 
 }  // namespace osr
