@@ -230,7 +230,8 @@ struct way_handler : public osm::handler::Handler {
       platforms_->way(way_idx, w);
     }
 
-    if (it != end(rel_ways_) && it->second.pl_ != platform_idx_t::invalid()) {
+    if (platforms_ != nullptr && it != end(rel_ways_) &&
+        it->second.pl_ != platform_idx_t::invalid()) {
       platforms_->platform_ref_[it->second.pl_].push_back(to_value(way_idx));
     }
 
@@ -524,6 +525,7 @@ void extract(bool const with_platforms,
               return buf;
             }) &
             oneapi::tbb::make_filter<osm_mem::Buffer, void>(
+                // NOLINTNEXTLINE(cppcoreguidelines-rvalue-reference-param-not-moved)
                 oneapi::tbb::filter_mode::parallel, [&](osm_mem::Buffer&& buf) {
                   update_locations(node_idx, buf);
                   osm::apply(buf, h);
@@ -560,7 +562,7 @@ void extract(bool const with_platforms,
             }) &
             oneapi::tbb::make_filter<osm_mem::Buffer, void>(
                 oneapi::tbb::filter_mode::parallel,
-                [&](osm_mem::Buffer&& buf) { osm::apply(buf, h); }));
+                [&](osm_mem::Buffer const& buf) { osm::apply(buf, h); }));
 
     reader.close();
     pt->update(pt->in_high_);

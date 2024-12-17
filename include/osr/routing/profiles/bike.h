@@ -35,7 +35,7 @@ struct bike {
   using key = node;
 
   struct label {
-    label(node const n, cost_t const c) : n_{n.n_}, cost_{c} {}
+    label(node const n, cost_t const c) : n_{n.n_}, lvl_{}, cost_{c} {}
 
     constexpr node get_node() const noexcept { return {n_}; }
     constexpr cost_t cost() const noexcept { return cost_; }
