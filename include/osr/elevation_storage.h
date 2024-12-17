@@ -29,8 +29,7 @@ struct elevation_storage {
   static std::unique_ptr<elevation_storage> try_open(
       std::filesystem::path const&);
   void set_elevations(ways&,
-                      preprocessing::elevation::provider const&,
-                      std::shared_ptr<utl::progress_tracker>&);
+                      preprocessing::elevation::provider const&);
   elevation get_elevations(way_idx_t const way,
                            std::uint16_t const from,
                            std::uint16_t const to) const;

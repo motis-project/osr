@@ -541,12 +541,11 @@ void extract(bool const with_platforms,
 
   w.connect_ways();
 
-  pt->status("Load elevation data").out_bounds(85, 90);
   if (elevation_dir && !elevation_dir->empty()) {
     auto const dem = osr::preprocessing::elevation::provider{*elevation_dir};
     if (dem.size() > 0) {
       auto elevations = elevation_storage{out, cista::mmap::protection::WRITE};
-      elevations.set_elevations(w, dem, pt);
+      elevations.set_elevations(w, dem);
     }
   }
 

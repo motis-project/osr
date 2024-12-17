@@ -98,10 +98,9 @@ elevation_storage::elevation get_way_elevation(
 }
 
 void elevation_storage::set_elevations(
-    ways& w,
-    preprocessing::elevation::provider const& dem,
-    std::shared_ptr<utl::progress_tracker>& pt) {
-  pt->in_high(w.n_ways());
+    ways& w, preprocessing::elevation::provider const& dem) {
+  auto pt = utl::get_active_progress_tracker_or_activate("osr");
+  pt->status("Load elevation data").out_bounds(85, 90).in_high(w.n_ways());
   auto const max_step_size = dem.get_step_size();
   auto elevations_up = std::vector<elevation_t>{};
   auto elevations_down = std::vector<elevation_t>{};
