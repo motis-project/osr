@@ -4,6 +4,7 @@
 
 namespace osr {
 
+// NOLINTBEGIN(clang-analyzer-optin.core.EnumCastOutOfRange)
 ways::ways(std::filesystem::path p, cista::mmap::protection const mode)
     : p_{std::move(p)},
       mode_{mode},
@@ -161,5 +162,6 @@ cista::wrapped<ways::routing> ways::routing::read(
 void ways::routing::write(std::filesystem::path const& p) const {
   cista::write(p / "routing.bin", *this);
 }
+// NOLINTEND(clang-analyzer-optin.core.EnumCastOutOfRange)
 
 }  // namespace osr

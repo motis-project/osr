@@ -42,6 +42,7 @@ using namespace std::string_view_literals;
 
 namespace osr {
 
+// NOLINTBEGIN(clang-analyzer-optin.core.EnumCastOutOfRange)
 struct osm_restriction {
   bool valid() const {
     return from_ != osm_way_idx_t::invalid() &&
@@ -525,6 +526,7 @@ void extract(bool const with_platforms,
               return buf;
             }) &
             oneapi::tbb::make_filter<osm_mem::Buffer, void>(
+                // NOLINTNEXTLINE(cppcoreguidelines-rvalue-reference-param-not-moved)
                 oneapi::tbb::filter_mode::parallel, [&](osm_mem::Buffer&& buf) {
                   update_locations(node_idx, buf);
                   osm::apply(buf, h);
@@ -580,5 +582,6 @@ void extract(bool const with_platforms,
 
   lookup{w, out, cista::mmap::protection::WRITE}.build_rtree();
 }
+// NOLINTEND(clang-analyzer-optin.core.EnumCastOutOfRange)
 
 }  // namespace osr
