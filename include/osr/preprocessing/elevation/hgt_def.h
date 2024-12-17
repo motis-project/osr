@@ -70,7 +70,7 @@ struct hgt<RasterSize>::hgt::impl {
   }
 
   elevation_t get(std::size_t const offset) {
-    assert(0 <= offset && offset < RasterSize * RasterSize);
+    assert(offset < RasterSize * RasterSize);
     auto const byte_ptr = file_.data() + offset;
     return *reinterpret_cast<std::int16_t const*>(byte_ptr);
   }
