@@ -292,7 +292,7 @@ std::optional<path> route(ways const& w,
                           bitvec<node_idx_t> const* blocked,
                           sharing_data const* sharing) {
   if (auto const direct = try_direct(from, to); direct.has_value()) {
-    return *direct;
+    return direct;
   }
 
   d.reset(max);
