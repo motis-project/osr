@@ -64,11 +64,13 @@ TEST(extract, wa) {
   constexpr auto const kShortestDistance = 163.0;
   ASSERT_TRUE(p2.has_value());
   EXPECT_TRUE(std::abs(p2->dist_ - kShortestDistance) < 2.0);
-  EXPECT_DOUBLE_EQ(4, p2->elevation_up_);
-  EXPECT_DOUBLE_EQ(6, p2->elevation_down_);
+  // Upper bounds for elevations on each segment
+  EXPECT_DOUBLE_EQ(4 + 1, p2->elevation_up_);
+  EXPECT_DOUBLE_EQ(0 + 6, p2->elevation_down_);
 
   ASSERT_TRUE(p3.has_value());
   EXPECT_TRUE(p3->dist_ - kShortestDistance > 2.0);
-  EXPECT_DOUBLE_EQ(1, p3->elevation_up_);
-  EXPECT_DOUBLE_EQ(3, p3->elevation_down_);
+  // Upper bounds for elevations on each segment
+  EXPECT_DOUBLE_EQ(1 + 0, p3->elevation_up_);
+  EXPECT_DOUBLE_EQ(4 + 0, p3->elevation_down_);
 }

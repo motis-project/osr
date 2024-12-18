@@ -128,14 +128,13 @@ elevation_storage::elevation elevation_storage::get_elevations(
     std::uint16_t const from,
     std::uint16_t const to) const {
   auto const idx = (from < to) ? from : to;
-  auto const elev = (way < elevations_.size() && idx < elevations_[way].size())
-                        ? elevations_[way][idx]
-                        : compressed_elevation{0U, 0U};
-  return (from < to)
-             ? elevation{.up_ = compressed_elevation::decode(elev.up_),
-                         .down_ = compressed_elevation::decode(elev.down_)}
-             : elevation{.up_ = compressed_elevation::decode(elev.down_),
-                         .down_ = compressed_elevation::decode(elev.up_)};
+  auto const e = (way < elevations_.size() && idx < elevations_[way].size())
+                     ? elevations_[way][idx]
+                     : compressed_elevation{0U, 0U};
+  return (from < to) ? elevation{.up_ = compressed_elevation::decode(e.up_),
+                                 .down_ = compressed_elevation::decode(e.down_)}
+                     : elevation{.up_ = compressed_elevation::decode(e.down_),
+                                 .down_ = compressed_elevation::decode(e.up_)};
 }
 
 elevation_storage::elevation get_elevations(elevation_storage const* elevations,
@@ -148,8 +147,7 @@ elevation_storage::elevation get_elevations(elevation_storage const* elevations,
 }
 
 constexpr auto const kCompressedValues = std::array<elevation_t, 16>{
-    // 0, 1, 2, 4, 6, 8, 11, 14, 17, 21, 25, 29, 34, 38, 43, 48};
-    0, 1, 2, 3, 4, 5, 6, 7, 17, 21, 25, 29, 34, 38, 43, 48};
+    0, 1, 2, 4, 6, 8, 11, 14, 17, 21, 25, 29, 34, 38, 43, 48};
 
 elevation_storage::compressed_elevation::coding
 elevation_storage::compressed_elevation::encode(elevation_t const e) {
