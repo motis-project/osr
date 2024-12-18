@@ -35,7 +35,7 @@ namespace osr::preprocessing::elevation {
 constexpr auto const kVoidValue = -32786;
 
 template <std::size_t RasterSize>
-struct hgt<RasterSize>::hgt::impl {
+struct hgt<RasterSize>::hgt<RasterSize>::impl {
   constexpr static auto kStepWidth = double{1. / (RasterSize - 1U)};
   constexpr static auto kPixelSize = 2U;
 

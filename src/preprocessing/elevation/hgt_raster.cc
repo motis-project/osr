@@ -11,7 +11,7 @@
 namespace osr::preprocessing::elevation {
 
 struct grid_point {
-  explicit grid_point(std::string filename) {
+  explicit grid_point(std::string const& filename) {
     auto lat_dir = char{};
     auto lng_dir = char{};
     auto lat = int{};
@@ -76,7 +76,7 @@ step_size hgt_raster::get_step_size() const {
 
 std::optional<hgt_raster::hgt_tile> hgt_raster::open(fs::path const& path) {
   auto const filename = path.filename();
-  auto sw = grid_point{path.filename()};
+  auto sw = grid_point{path.filename().string()};
   auto const file_size = fs::file_size(path);
   switch (file_size) {
     case hgt<3601>::file_size():

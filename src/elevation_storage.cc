@@ -152,7 +152,8 @@ constexpr auto const kCompressedValues = std::array<elevation_t, 16>{
 elevation_storage::encoding::coding encode(elevation_t const e) {
   auto const c = std::ranges::lower_bound(kCompressedValues, e);
   return (c == end(kCompressedValues))
-             ? kCompressedValues.size() - 1
+             ? static_cast<elevation_storage::encoding::coding>(
+                   kCompressedValues.size() - 1)
              : static_cast<elevation_storage::encoding::coding>(
                    c - begin(kCompressedValues));
 }
