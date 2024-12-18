@@ -144,10 +144,7 @@ struct bike {
             return cost_t{0};
           } else {
             auto const elevation = get_elevations(elevations, way, from, to);
-            return static_cast<cost_t>(ElevationUpCost *
-                                       (way_dir == direction::kForward
-                                            ? elevation.up_
-                                            : elevation.down_));
+            return static_cast<cost_t>(ElevationUpCost * elevation.up_);
           }
         };
         auto const cost = way_cost(target_way_prop, way_dir, dist) +
