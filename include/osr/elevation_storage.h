@@ -36,7 +36,7 @@ struct elevation_storage {
                     cista::mmap::protection const mode);
   static std::unique_ptr<elevation_storage> try_open(
       std::filesystem::path const&);
-  void set_elevations(ways&, preprocessing::elevation::provider const&);
+  void set_elevations(ways const&, preprocessing::elevation::provider const&);
   elevation get_elevations(way_idx_t const way,
                            std::uint16_t const from,
                            std::uint16_t const to) const;
