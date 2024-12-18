@@ -4,8 +4,6 @@
 
 #include <cstdint>
 #include <bit>
-#include <filesystem>
-#include <sstream>
 
 #include "cista/mmap.h"
 
@@ -27,8 +25,6 @@
 // the WGS84/EGM96 geoid (NGA, 1997;Lemoine, 1998)
 //
 
-namespace fs = std::filesystem;
-
 namespace osr::preprocessing::elevation {
 
 // Void value is used in version 1.0 and 2.1 only
@@ -36,35 +32,37 @@ constexpr auto const kVoidValue = -32786;
 
 template <std::size_t RasterSize>
 struct hgt<RasterSize>::hgt<RasterSize>::impl {
+
   constexpr static auto kStepWidth = double{1. / (RasterSize - 1U)};
-  constexpr static auto kPixelSize = 2U;
+  constexpr static auto kCenterOffset = kStepWidth / 2.;
 
   impl(std::string const& filename,
        std::int8_t const lat,
        std::int16_t const lng)
       : file_{cista::mmap{filename.data(), cista::mmap::protection::READ}},
         sw_lat_(lat),
-        sw_lng_(lng),
-        blx_{lng - kStepWidth / 2},
-        bly_{lat - kStepWidth / 2},
-        urx_{lng + 1 + kStepWidth / 2},
-        ury_{lat + 1 + kStepWidth / 2} {}
+        sw_lng_(lng) {}
 
   elevation_t get(::osr::point const& p) {
     auto const lat = p.lat();
     auto const lng = p.lng();
-    if (blx_ <= lng && lng < urx_ && bly_ <= lat && lat < ury_) {
-      auto const column =
-          static_cast<std::size_t>(std::floor((lng - blx_) / kStepWidth));
-      auto const row =
-          static_cast<std::size_t>(std::floor((lat - bly_) / kStepWidth));
-      auto const offset = kPixelSize * (RasterSize * row + column);
+    if (sw_lng_ - kCenterOffset <= lng && lng < sw_lng_ + 1 + kCenterOffset &&
+        sw_lat_ - kCenterOffset <= lat && lat < sw_lat_ + 1 + kCenterOffset) {
+      auto const column = std::clamp(
+          static_cast<std::size_t>(
+              std::floor((lng - kCenterOffset - sw_lng_) * (RasterSize - 1U))),
+          std::size_t{0U}, RasterSize - 1U);
+      auto const row = std::clamp(
+          static_cast<std::size_t>(
+              std::floor((lat - kCenterOffset - sw_lat_) * (RasterSize - 1U))),
+          std::size_t{0U}, RasterSize - 1);
+      auto const offset = kBytesPerPixel * (RasterSize * row + column);
       auto const v_native = get(offset);
-      // Byte stored in big-endian
+      // Byte is stored in big-endian
       auto const v = (std::endian::native == std::endian::big)
                          ? v_native
                          : std::byteswap(v_native);
-      return v == kVoidValue ? ::osr::NO_ELEVATION_DATA : v;
+      return (v == kVoidValue) ? ::osr::NO_ELEVATION_DATA : v;
     }
     return ::osr::NO_ELEVATION_DATA;
   }
@@ -80,35 +78,10 @@ struct hgt<RasterSize>::hgt<RasterSize>::impl {
   }
 
   cista::mmap file_{};
-  // south west
+  // south west coordinate
   std::int8_t sw_lat_;
   std::int16_t sw_lng_;
-  // bottom left point
-  double blx_;
-  double bly_;
-  // upper right point
-  double urx_;
-  double ury_;
 };
-
-inline point get_bottom_left(fs::path const& path) {
-  auto lat_dir = char{};
-  auto lng_dir = char{};
-  auto lat = int{};
-  auto lng = int{};
-  auto s = std::stringstream{path.filename().string()};
-  s >> lat_dir >> lat >> lng_dir >> lng;
-
-  utl::verify(lat_dir == 'S' || lat_dir == 'N', "Invalid direction '{}'",
-              lat_dir);
-  utl::verify(lng_dir == 'W' || lng_dir == 'E', "Invalid direction '{}'",
-              lng_dir);
-  utl::verify(-180 <= lng && lng < 180, "Invalid longitude '{}'", lng);
-  utl::verify(-90 <= lat && lat < 90, "Invalid latitude '{}'", lat);
-
-  return point::from_latlng(lat_dir == 'N' ? lat : -lat,
-                            lng_dir == 'E' ? lng : -lng);
-}
 
 template <std::size_t RasterSize>
 hgt<RasterSize>::hgt(std::string const& filename,

@@ -12,6 +12,8 @@ namespace osr::preprocessing::elevation {
 
 template <std::size_t RasterSize>
 struct hgt {
+  constexpr static auto const kBytesPerPixel = std::size_t{2U};
+
   explicit hgt(std::string const& filename,
                std::int8_t const lat,
                std::int16_t const lng);
@@ -29,7 +31,6 @@ struct hgt {
   std::int16_t lng() const;
 
   static constexpr std::size_t file_size() {
-    constexpr auto const kBytesPerPixel = std::size_t{2U};
     return RasterSize * RasterSize * kBytesPerPixel;
   }
 
