@@ -52,8 +52,7 @@ elevation_storage::elevation get_way_elevation(
     point const& from,
     point const& to,
     preprocessing::elevation::step_size const& max_step_size) {
-  auto elevation_up = elevation_t{0};
-  auto elevation_down = elevation_t{0};
+  auto elevation = elevation_storage::elevation{};
   auto a = dem.get(from);
   auto const b = dem.get(to);
   if (a != NO_ELEVATION_DATA && b != NO_ELEVATION_DATA) {
@@ -73,21 +72,21 @@ elevation_storage::elevation get_way_elevation(
                                                   from_lng + s * step_size.y_));
         if (m != NO_ELEVATION_DATA) {
           if (a < m) {
-            elevation_up += m - a;
+            elevation.up_ += m - a;
           } else {
-            elevation_down += a - m;
+            elevation.down_ += a - m;
           }
           a = m;
         }
       }
     }
     if (a < b) {
-      elevation_up += b - a;
+      elevation.up_ += b - a;
     } else {
-      elevation_down += a - b;
+      elevation.down_ += a - b;
     }
   }
-  return {elevation_up, elevation_down};
+  return elevation;
 }
 
 void elevation_storage::set_elevations(
@@ -137,6 +136,13 @@ elevation_storage::elevation get_elevations(elevation_storage const* elevations,
   return elevations == nullptr
              ? elevation_storage::elevation{elevation_t{0}, elevation_t{0}}
              : elevations->get_elevations(way, from, to);
+}
+
+elevation_storage::elevation& elevation_storage::elevation::operator+=(
+    elevation const& other) {
+  up_ += other.up_;
+  down_ += other.down_;
+  return *this;
 }
 
 elevation_storage::elevation elevation_storage::elevation::swap() const {

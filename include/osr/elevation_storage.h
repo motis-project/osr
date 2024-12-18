@@ -19,6 +19,7 @@ struct provider;
 
 struct elevation_storage {
   struct elevation {
+    elevation& operator+=(elevation const&);
     elevation swap() const;
     elevation_t up_;
     elevation_t down_;

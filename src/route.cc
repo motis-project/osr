@@ -30,8 +30,7 @@ struct connecting_way {
   std::uint16_t from_{}, to_{};
   bool is_loop_{};
   std::uint16_t distance_{};
-  elevation_t elevation_up_{};
-  elevation_t elevation_down_{};
+  elevation_storage::elevation elevation_;
 };
 
 template <direction SearchDir, bool WithBlocked, typename Profile>
@@ -53,9 +52,9 @@ connecting_way find_connecting_way(ways const& w,
           auto const is_loop = way != way_idx_t::invalid() && r.is_loop(way) &&
                                static_cast<unsigned>(std::abs(a_idx - b_idx)) ==
                                    r.way_nodes_[way].size() - 2U;
-          auto const elevation = get_elevations(elevations, way, a_idx, b_idx);
-          conn = {way,  a_idx,         b_idx,          is_loop,
-                  dist, elevation.up_, elevation.down_};
+          conn = {way,   a_idx,
+                  b_idx, is_loop,
+                  dist,  get_elevations(elevations, way, a_idx, b_idx)};
         }
       });
   utl::verify(
@@ -106,8 +105,7 @@ double add_path(ways const& w,
                 cost_t const expected_cost,
                 std::vector<path::segment>& path,
                 direction const dir) {
-  auto const& [way, from_idx, to_idx, is_loop, distance, elevation_up,
-               elevation_down] =
+  auto const& [way, from_idx, to_idx, is_loop, distance, elevation] =
       find_connecting_way<Profile>(w, blocked, sharing, elevations, from, to,
                                    expected_cost, dir);
   auto j = 0U;
@@ -116,8 +114,7 @@ double add_path(ways const& w,
   segment.way_ = way;
   segment.dist_ = distance;
   segment.cost_ = expected_cost;
-  segment.elevation_up_ = elevation_up;
-  segment.elevation_down_ = elevation_down;
+  segment.elevation_ = elevation;
   segment.mode_ = to.get_mode();
 
   if (way != way_idx_t::invalid()) {
@@ -212,13 +209,11 @@ path reconstruct(ways const& w,
   std::reverse(begin(segments), end(segments));
   auto path_elevation = elevation_storage::elevation{};
   for (auto const& segment : segments) {
-    path_elevation.up_ += segment.elevation_up_;
-    path_elevation.down_ += segment.elevation_down_;
+    path_elevation += segment.elevation_;
   }
   auto p = path{.cost_ = cost,
                 .dist_ = start_node.dist_to_node_ + dist + dest.dist_to_node_,
-                .elevation_up_ = path_elevation.up_,
-                .elevation_down_ = path_elevation.down_,
+                .elevation_ = path_elevation,
                 .segments_ = segments};
   d.cost_.at(dest_node.get_key()).write(dest_node, p);
   return p;
