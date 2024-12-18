@@ -12,6 +12,7 @@
 
 #include "utl/timer.h"
 
+#include "osr/elevation_storage.h"
 #include "osr/lookup.h"
 #include "osr/routing/dijkstra.h"
 #include "osr/routing/profiles/car.h"
@@ -58,6 +59,7 @@ int main(int argc, char const* argv[]) {
   }
 
   auto const w = ways{opt.data_dir_, cista::mmap::protection::READ};
+  auto const elevations = elevation_storage::try_open(opt.data_dir_);
 
   auto timer = utl::scoped_timer{"timer"};
   auto threads = std::vector<std::thread>(std::max(1U, opt.threads_));
@@ -76,7 +78,7 @@ int main(int argc, char const* argv[]) {
         d.add_start(w,
                     car::label{car::node{start, 0, direction::kBackward}, 0U});
         d.run<direction::kForward, false>(w, *w.r_, opt.max_dist_, nullptr,
-                                          nullptr, nullptr);
+                                          nullptr, elevations.get());
       }
     });
   }

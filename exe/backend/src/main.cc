@@ -13,6 +13,7 @@
 #include "net/stop_handler.h"
 
 #include "osr/backend/http_server.h"
+#include "osr/elevation_storage.h"
 #include "osr/lookup.h"
 #include "osr/platforms.h"
 #include "osr/ways.h"
