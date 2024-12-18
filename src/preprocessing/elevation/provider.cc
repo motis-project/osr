@@ -80,7 +80,7 @@ provider::~provider() = default;
   return impl_->get(p);
 }
 
-std::size_t provider::size() const { return impl_->drivers.size(); }
+std::size_t provider::driver_count() const { return impl_->drivers.size(); }
 
 step_size provider::get_step_size() const {
   auto steps = step_size{.x_ = std::numeric_limits<double>::quiet_NaN(),
