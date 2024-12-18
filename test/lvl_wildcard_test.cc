@@ -30,7 +30,7 @@ TEST(routing, no_lvl_wildcard) {
   fs::remove_all(kTestFolder, ec);
   fs::create_directories(kTestFolder, ec);
 
-  extract(false, "test/stuttgart.osm.pbf", kTestFolder);
+  extract(false, "test/stuttgart.osm.pbf", kTestFolder, {});
 
   auto w = osr::ways{kTestFolder, cista::mmap::protection::READ};
   auto l = osr::lookup{w, kTestFolder, cista::mmap::protection::READ};

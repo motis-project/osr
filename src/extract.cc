@@ -455,7 +455,7 @@ struct rel_ways_handler : public osm::handler::Handler {
 void extract(bool const with_platforms,
              fs::path const& in,
              fs::path const& out,
-             std::optional<fs::path> const& elevation_dir) {
+             fs::path const& elevation_dir) {
   auto ec = std::error_code{};
   fs::remove_all(out, ec);
   if (!fs::is_directory(out)) {
@@ -541,8 +541,8 @@ void extract(bool const with_platforms,
 
   w.connect_ways();
 
-  if (elevation_dir && !elevation_dir->empty()) {
-    auto const dem = osr::preprocessing::elevation::provider{*elevation_dir};
+  if (!elevation_dir.empty()) {
+    auto const dem = osr::preprocessing::elevation::provider{elevation_dir};
     if (dem.size() > 0) {
       auto elevations = elevation_storage{out, cista::mmap::protection::WRITE};
       elevations.set_elevations(w, dem);
