@@ -17,7 +17,7 @@ struct grid_point {
     auto lat = int{};
     auto lng = int{};
 
-    auto s = std::stringstream{std::move(filename)};
+    auto s = std::stringstream{filename};
     s >> lat_dir >> lat >> lng_dir >> lng;
 
     utl::verify(lat_dir == 'S' || lat_dir == 'N', "Invalid direction '{}'",
