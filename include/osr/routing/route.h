@@ -68,6 +68,7 @@ one_to_many_result route(
     double max_match_distance,
     bitvec<node_idx_t> const* blocked = nullptr,
     sharing_data const* sharing = nullptr,
+    elevation_storage const* = nullptr,
     std::function<bool(path const&)> const& do_reconstruct = [](path const&) {
       return false;
     });
