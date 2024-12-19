@@ -28,9 +28,11 @@
 #include "tiles/osm/hybrid_node_idx.h"
 #include "tiles/osm/tmp_file.h"
 
+#include "osr/elevation_storage.h"
 #include "osr/extract/tags.h"
 #include "osr/lookup.h"
 #include "osr/platforms.h"
+#include "osr/preprocessing/elevation/provider.h"
 #include "osr/ways.h"
 
 namespace osm = osmium;
@@ -452,7 +454,8 @@ struct rel_ways_handler : public osm::handler::Handler {
 
 void extract(bool const with_platforms,
              fs::path const& in,
-             fs::path const& out) {
+             fs::path const& out,
+             fs::path const& elevation_dir) {
   auto ec = std::error_code{};
   fs::remove_all(out, ec);
   if (!fs::is_directory(out)) {
@@ -537,6 +540,15 @@ void extract(bool const with_platforms,
   w.sync();
 
   w.connect_ways();
+
+  if (!elevation_dir.empty()) {
+    auto const provider =
+        osr::preprocessing::elevation::provider{elevation_dir};
+    if (provider.driver_count() > 0) {
+      auto elevations = elevation_storage{out, cista::mmap::protection::WRITE};
+      elevations.set_elevations(w, provider);
+    }
+  }
 
   auto r = std::vector<resolved_restriction>{};
   {

@@ -6,6 +6,7 @@
 
 #include "utl/helpers/algorithm.h"
 
+#include "osr/elevation_storage.h"
 #include "osr/routing/mode.h"
 #include "osr/routing/route.h"
 #include "osr/ways.h"
@@ -164,6 +165,7 @@ struct car {
                        node const n,
                        bitvec<node_idx_t> const* blocked,
                        sharing_data const*,
+                       elevation_storage const*,
                        Fn&& fn) {
     auto way_pos = way_pos_t{0U};
     for (auto const [way, i] :
