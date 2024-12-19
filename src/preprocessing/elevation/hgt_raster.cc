@@ -3,10 +3,10 @@
 #include <cstddef>
 #include <sstream>
 
-#include "osr/elevation_storage.h"
-
 #include "utl/enumerate.h"
 #include "utl/verify.h"
+
+#include "osr/elevation_storage.h"
 
 namespace osr::preprocessing::elevation {
 
