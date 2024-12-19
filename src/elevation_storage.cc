@@ -3,7 +3,6 @@
 #include <algorithm>
 #include <array>
 
-#include "utl/helpers/algorithm.h"
 #include "utl/pairwise.h"
 #include "utl/progress_tracker.h"
 
@@ -31,20 +30,17 @@ elevation_storage::elevation_storage(std::filesystem::path const& p,
 
 std::unique_ptr<elevation_storage> elevation_storage::try_open(
     std::filesystem::path const& path) {
-  if (utl::all_of(
-          std::array{elevation_files::kDataName, elevation_files::kIndexName},
-          [&](char const* const filename) {
-            auto const full_path = path / filename;
-            auto const exists = std::filesystem::exists(full_path);
-            if (!exists) {
-              std::cout << full_path << " does not exist\n";
-            }
-            return exists;
-          })) {
-    return std::make_unique<elevation_storage>(path,
-                                               cista::mmap::protection::READ);
+  for (auto const& filename :
+       {elevation_files::kDataName, elevation_files::kIndexName}) {
+    auto const full_path = path / filename;
+    auto const exists = std::filesystem::exists(full_path);
+    if (!exists) {
+      std::cout << full_path << " does not exist\n";
+      return nullptr;
+    }
   }
-  return {};
+  return std::make_unique<elevation_storage>(path,
+                                             cista::mmap::protection::READ);
 }
 
 elevation_storage::elevation get_way_elevation(
