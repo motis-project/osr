@@ -77,37 +77,6 @@ struct lookup {
     return cista::mmap{(p_ / file).generic_string().c_str(), mode_};
   }
 
-  match_t get_raw_match(location const& query,
-                        double const max_match_distance) {
-    auto way_candidates = std::vector<way_candidate>{};
-    find(geo::box{query.pos_, max_match_distance}, [&](way_idx_t const way) {
-      auto d = geo::distance_to_polyline<way_candidate>(
-          query.pos_, ways_.way_polylines_[way]);
-      if (d.dist_to_way_ < max_match_distance) {
-        d.way_ = way;
-        way_candidates.emplace_back(d);
-      }
-    });
-    utl::sort(way_candidates);
-    return way_candidates;
-  }
-
-  template <typename Profile>
-  match_t complete_match(match_t match,
-                         bool reverse,
-                         direction const search_dir,
-                         bitvec<node_idx_t>& blocked) {
-    for (auto& wc : match) {
-      wc.left_ =
-          find_next_node<Profile>(wc, wc.query_, direction::kBackward,
-                                  wc.query_.lvl_, reverse, search_dir, blocked);
-      wc.right_ =
-          find_next_node<Profile>(wc, wc.query_, direction::kForward,
-                                  wc.query_.lvl_, reverse, search_dir, blocked);
-    }
-    return match;
-  }
-
   match_t match(location const& query,
                 bool const reverse,
                 direction const search_dir,
@@ -159,6 +128,7 @@ private:
           query.pos_, ways_.way_polylines_[way]);
       if (d.dist_to_way_ < max_match_distance) {
         auto& wc = way_candidates.emplace_back(std::move(d));
+        wc.query_ = query;
         wc.way_ = way;
         wc.left_ =
             find_next_node<Profile>(wc, query, direction::kBackward, query.lvl_,
