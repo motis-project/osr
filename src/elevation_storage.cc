@@ -44,13 +44,13 @@ std::unique_ptr<elevation_storage> elevation_storage::try_open(
 }
 
 elevation_storage::elevation get_way_elevation(
-    preprocessing::elevation::provider const& dem,
+    preprocessing::elevation::provider const& provider,
     point const& from,
     point const& to,
     preprocessing::elevation::step_size const& max_step_size) {
   auto elevation = elevation_storage::elevation{};
-  auto a = dem.get(from);
-  auto const b = dem.get(to);
+  auto a = provider.get(from);
+  auto const b = provider.get(to);
   if (a != NO_ELEVATION_DATA && b != NO_ELEVATION_DATA) {
     // TODO Approximation only for short ways
     // Value should be larger to not skip intermediate values
@@ -64,8 +64,8 @@ elevation_storage::elevation get_way_elevation(
           .x_ = (to.lat() - from.lat()) / steps,
           .y_ = (to.lng() - from.lng()) / steps};
       for (auto s = 1; s < steps; ++s) {
-        auto const m = dem.get(point::from_latlng(from_lat + s * step_size.x_,
-                                                  from_lng + s * step_size.y_));
+        auto const m = provider.get(point::from_latlng(
+            from_lat + s * step_size.x_, from_lng + s * step_size.y_));
         if (m != NO_ELEVATION_DATA) {
           if (a < m) {
             elevation.up_ += m - a;
@@ -86,10 +86,10 @@ elevation_storage::elevation get_way_elevation(
 }
 
 void elevation_storage::set_elevations(
-    ways const& w, preprocessing::elevation::provider const& dem) {
+    ways const& w, preprocessing::elevation::provider const& provider) {
   auto pt = utl::get_active_progress_tracker_or_activate("osr");
   pt->status("Load elevation data").out_bounds(85, 90).in_high(w.n_ways());
-  auto const max_step_size = dem.get_step_size();
+  auto const max_step_size = provider.get_step_size();
   auto elevations = std::vector<encoding>{};
   auto points = std::vector<point>{};
   for (auto nodes : w.r_->way_nodes_) {
@@ -101,7 +101,7 @@ void elevation_storage::set_elevations(
     auto idx = std::size_t{0U};
     for (auto const [from, to] : utl::pairwise(points)) {
       auto const elevation =
-          encoding{get_way_elevation(dem, from, to, max_step_size)};
+          encoding{get_way_elevation(provider, from, to, max_step_size)};
       if (elevation) {
         elevations.resize(idx);
         elevations.push_back(elevation);

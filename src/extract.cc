@@ -542,10 +542,11 @@ void extract(bool const with_platforms,
   w.connect_ways();
 
   if (!elevation_dir.empty()) {
-    auto const dem = osr::preprocessing::elevation::provider{elevation_dir};
-    if (dem.driver_count() > 0) {
+    auto const provider =
+        osr::preprocessing::elevation::provider{elevation_dir};
+    if (provider.driver_count() > 0) {
       auto elevations = elevation_storage{out, cista::mmap::protection::WRITE};
-      elevations.set_elevations(w, dem);
+      elevations.set_elevations(w, provider);
     }
   }
 
