@@ -68,10 +68,19 @@ hgt_raster::hgt_raster(std::vector<hgt_tile>&& tiles)
 }
 
 step_size hgt_raster::get_step_size() const {
-  return tiles_.empty()
-             ? step_size{}
-             : std::visit([](auto const& t) { return t.get_step_size(); },
-                          tiles_.front());
+  auto steps = step_size{.x_ = std::numeric_limits<double>::quiet_NaN(),
+                         .y_ = std::numeric_limits<double>::quiet_NaN()};
+  for (auto const& tile : tiles_) {
+    auto const s =
+        std::visit([](auto const& t) { return t.get_step_size(); }, tile);
+    if (std::isnan(steps.x_) || s.x_ < steps.x_) {
+      steps.x_ = s.x_;
+    }
+    if (std::isnan(steps.y_) || s.y_ < steps.y_) {
+      steps.y_ = s.y_;
+    }
+  }
+  return steps;
 }
 
 std::optional<hgt_raster::hgt_tile> hgt_raster::open(fs::path const& path) {
