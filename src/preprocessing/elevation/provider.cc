@@ -1,22 +1,15 @@
 #include "osr/preprocessing/elevation/provider.h"
 
-#include <algorithm>
 #include <filesystem>
 #include <limits>
 #include <memory>
-#include <optional>
-#include <ranges>
-#include <stdexcept>
 #include <utility>
 #include <vector>
 
 #include "osr/elevation_storage.h"
 #include "osr/preprocessing/elevation/dem_grid.h"
-#include "osr/preprocessing/elevation/hgt.h"
 #include "osr/preprocessing/elevation/hgt_raster.h"
 #include "osr/preprocessing/elevation/step_size.h"
-
-namespace fs = std::filesystem;
 
 namespace osr::preprocessing::elevation {
 
