@@ -13,6 +13,7 @@
 #include "net/stop_handler.h"
 
 #include "osr/backend/http_server.h"
+#include "osr/elevation_storage.h"
 #include "osr/lookup.h"
 #include "osr/platforms.h"
 #include "osr/ways.h"
@@ -89,12 +90,14 @@ int main(int argc, char const* argv[]) {
   if (pl != nullptr) {
     pl->build_rtree(w);
   }
+  auto const elevations = elevation_storage::try_open(opt.data_dir_);
 
   auto const l = lookup{w, opt.data_dir_, cista::mmap::protection::READ};
 
   auto ioc = boost::asio::io_context{};
   auto pool = boost::asio::io_context{};
-  auto server = http_server{ioc, pool, w, l, pl.get(), opt.static_file_path_};
+  auto server = http_server{
+      ioc, pool, w, l, pl.get(), elevations.get(), opt.static_file_path_};
 
   auto work_guard = boost::asio::make_work_guard(pool);
   auto threads = std::vector<std::thread>(std::max(1U, opt.threads_));
