@@ -101,47 +101,6 @@ void set_start<car>(dijkstra<car>& d, ways const& w, node_idx_t const start) {
   d.add_start(w, car::label{car::node{start, 0, direction::kBackward}, 0U});
 };
 
-template <typename T>
-void run_benchmark(ways const& w, settings const& opt, const char* profile) {
-  auto threads = std::vector<std::thread>(std::max(1U, opt.threads_));
-  auto results = std::vector<benchmark_result>{};
-  results.reserve(opt.n_queries_);
-  auto i = std::atomic_size_t{0U};
-  auto m = std::mutex{};
-  for (auto& t : threads) {
-    t = std::thread([&]() {
-      auto d = dijkstra<T>{};
-      auto h = cista::BASE_HASH;
-      auto n = 0U;
-      while (i.fetch_add(1U) < opt.n_queries_) {
-        auto const start_time = std::chrono::steady_clock::now();
-        auto const start =
-            node_idx_t{cista::hash_combine(h, ++n, i.load()) % w.n_nodes()};
-        d.reset(opt.max_dist_);
-        set_start<T>(d, w, start);
-        d.template run<direction::kForward, false>(w, *w.r_, opt.max_dist_,
-                                                   nullptr, nullptr);
-        auto const end_time = std::chrono::steady_clock::now();
-        {
-          auto const guard = std::lock_guard{m};
-          results.emplace_back(
-              std::chrono::duration_cast<decltype(benchmark_result::duration_)>(
-                  end_time - start_time));
-        }
-      }
-    });
-  }
-
-  for (auto& t : threads) {
-    t.join();
-  }
-
-  std::ranges::sort(results, std::less<>{},
-                    [](benchmark_result const& res) { return res.duration_; });
-
-  print_result(results, profile);
-}
-
 int main(int argc, char const* argv[]) {
   auto opt = settings{};
   auto parser = conf::options_parser({&opt});
@@ -165,6 +124,49 @@ int main(int argc, char const* argv[]) {
 
   auto const w = ways{opt.data_dir_, cista::mmap::protection::READ};
 
-  run_benchmark<car>(w, opt, "car");
-  run_benchmark<bike>(w, opt, "bike");
+  auto threads = std::vector<std::thread>(std::max(1U, opt.threads_));
+  auto results = std::vector<benchmark_result>{};
+  results.reserve(opt.n_queries_);
+
+  auto const run_benchmark = [&]<typename T>(const char* profile) {
+    results.clear();
+    auto i = std::atomic_size_t{0U};
+    auto m = std::mutex{};
+    for (auto& t : threads) {
+      t = std::thread([&]() {
+        auto d = dijkstra<T>{};
+        auto h = cista::BASE_HASH;
+        auto n = 0U;
+        while (i.fetch_add(1U) < opt.n_queries_) {
+          auto const start_time = std::chrono::steady_clock::now();
+          auto const start =
+              node_idx_t{cista::hash_combine(h, ++n, i.load()) % w.n_nodes()};
+          d.reset(opt.max_dist_);
+          set_start<T>(d, w, start);
+          d.template run<direction::kForward, false>(w, *w.r_, opt.max_dist_,
+                                                     nullptr, nullptr);
+          auto const end_time = std::chrono::steady_clock::now();
+          {
+            auto const guard = std::lock_guard{m};
+            results.emplace_back(std::chrono::duration_cast<
+                                 decltype(benchmark_result::duration_)>(
+                end_time - start_time));
+          }
+        }
+      });
+    }
+
+    for (auto& t : threads) {
+      t.join();
+    }
+
+    std::ranges::sort(results, std::less<>{}, [](benchmark_result const& res) {
+      return res.duration_;
+    });
+
+    print_result(results, profile);
+  };
+
+  run_benchmark.template operator()<car>("car");
+  run_benchmark.template operator()<bike>("bike");
 }
