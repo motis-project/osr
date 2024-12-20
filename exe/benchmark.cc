@@ -1,5 +1,6 @@
 #include <chrono>
 #include <filesystem>
+#include <memory>
 #include <mutex>
 #include <numeric>
 #include <thread>
@@ -13,10 +14,13 @@
 
 #include "conf/options_parser.h"
 
+#include "osr/routing/profile.h"
+#include "osr/types.h"
 #include "utl/timer.h"
 
 #include "osr/lookup.h"
 #include "osr/routing/dijkstra.h"
+#include "osr/routing/profiles/bike.h"
 #include "osr/routing/profiles/car.h"
 #include "osr/routing/route.h"
 #include "osr/ways.h"
@@ -63,14 +67,15 @@ benchmark_result quantile(std::vector<benchmark_result> const& v, double q) {
 }
 
 void print_result(std::vector<benchmark_result> const& var,
-                  std::string const& var_name) {
+                  std::string const& profile) {
   auto const avg = benchmark_result{
       std::accumulate(var.begin(), var.end(), std::chrono::microseconds{0U},
                       [](auto&& sum, auto const& res) {
                         return std::move(sum) + res.duration_;
                       }) /
       var.size()};
-  std::cout << "\n--- " << var_name << " --- (n = " << var.size() << ")"
+  std::cout << "\n--- duration (" << profile << ") --- (n = " << var.size()
+            << ")"
             << "\n  max: " << var.back() << "\n  avg: " << avg << "\n----------"
             << "\n  10%: " << quantile(var, 0.1)
             << "\n  20%: " << quantile(var, 0.2)
@@ -84,6 +89,58 @@ void print_result(std::vector<benchmark_result> const& var,
             << "\n  99%: " << quantile(var, 0.99)
             << "\n99.9%: " << quantile(var, 0.999)
             << "\n-----------------------------\n";
+}
+
+template <typename T>
+void set_start(dijkstra<T>& d, ways const& w, node_idx_t const start) {
+  d.add_start(w, typename T::label{typename T::node{start}, 0U});
+}
+
+template <>
+void set_start<car>(dijkstra<car>& d, ways const& w, node_idx_t const start) {
+  d.add_start(w, car::label{car::node{start, 0, direction::kForward}, 0U});
+  d.add_start(w, car::label{car::node{start, 0, direction::kBackward}, 0U});
+};
+
+template <typename T>
+void run_benchmark(ways const& w, settings const& opt, const char* profile) {
+  auto threads = std::vector<std::thread>(std::max(1U, opt.threads_));
+  auto results = std::vector<benchmark_result>{};
+  results.reserve(opt.n_queries_);
+  auto i = std::atomic_size_t{0U};
+  auto m = std::mutex{};
+  for (auto& t : threads) {
+    t = std::thread([&]() {
+      auto d = dijkstra<T>{};
+      auto h = cista::BASE_HASH;
+      auto n = 0U;
+      while (i.fetch_add(1U) < opt.n_queries_) {
+        auto const start_time = std::chrono::steady_clock::now();
+        auto const start =
+            node_idx_t{cista::hash_combine(h, ++n, i.load()) % w.n_nodes()};
+        d.reset(opt.max_dist_);
+        set_start<T>(d, w, start);
+        d.template run<direction::kForward, false>(w, *w.r_, opt.max_dist_,
+                                                   nullptr, nullptr);
+        auto const end_time = std::chrono::steady_clock::now();
+        {
+          auto const guard = std::lock_guard{m};
+          results.emplace_back(
+              std::chrono::duration_cast<decltype(benchmark_result::duration_)>(
+                  end_time - start_time));
+        }
+      }
+    });
+  }
+
+  for (auto& t : threads) {
+    t.join();
+  }
+
+  std::ranges::sort(results, std::less<>{},
+                    [](benchmark_result const& res) { return res.duration_; });
+
+  print_result(results, profile);
 }
 
 int main(int argc, char const* argv[]) {
@@ -109,44 +166,6 @@ int main(int argc, char const* argv[]) {
 
   auto const w = ways{opt.data_dir_, cista::mmap::protection::READ};
 
-  auto threads = std::vector<std::thread>(std::max(1U, opt.threads_));
-  auto results = std::vector<benchmark_result>{};
-  results.reserve(opt.n_queries_);
-  auto i = std::atomic_size_t{0U};
-  auto m = std::mutex{};
-  for (auto& t : threads) {
-    t = std::thread([&]() {
-      auto d = dijkstra<car>{};
-      auto h = cista::BASE_HASH;
-      auto n = 0U;
-      while (i.fetch_add(1U) < opt.n_queries_) {
-        auto const start_time = std::chrono::steady_clock::now();
-        auto const start =
-            node_idx_t{cista::hash_combine(h, ++n, i.load()) % w.n_nodes()};
-        d.reset(opt.max_dist_);
-        d.add_start(w,
-                    car::label{car::node{start, 0, direction::kForward}, 0U});
-        d.add_start(w,
-                    car::label{car::node{start, 0, direction::kBackward}, 0U});
-        d.run<direction::kForward, false>(w, *w.r_, opt.max_dist_, nullptr,
-                                          nullptr);
-        auto const end_time = std::chrono::steady_clock::now();
-        {
-          auto const guard = std::lock_guard{m};
-          results.emplace_back(
-              std::chrono::duration_cast<decltype(benchmark_result::duration_)>(
-                  end_time - start_time));
-        }
-      }
-    });
-  }
-
-  for (auto& t : threads) {
-    t.join();
-  }
-
-  std::ranges::sort(results, std::less<>{},
-                    [](benchmark_result const& res) { return res.duration_; });
-
-  print_result(results, "duration");
+  run_benchmark<car>(w, opt, "car");
+  run_benchmark<bike>(w, opt, "bike");
 }
