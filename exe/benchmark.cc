@@ -149,9 +149,8 @@ int main(int argc, char const* argv[]) {
           auto const end_time = std::chrono::steady_clock::now();
           {
             auto const guard = std::lock_guard{m};
-            results.emplace_back(std::chrono::duration_cast<
-                                 decltype(benchmark_result::duration_)>(
-                end_time - start_time));
+            results.emplace_back(benchmark_result{std::chrono::duration_cast<
+                decltype(benchmark_result::duration_)>(end_time - start_time)});
           }
         }
       });
