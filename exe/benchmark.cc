@@ -50,7 +50,8 @@ struct benchmark_result {
         std::chrono::duration<double, std::ratio<1, 1000>>;
     out << "(duration: " << std::fixed << std::setprecision(3) << std::setw(10)
         << std::chrono::duration_cast<double_milliseconds_t>(br.duration_)
-        << ")";
+               .count()
+        << "ms)";
     return out;
   }
 
