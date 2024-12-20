@@ -1,6 +1,7 @@
 #include <chrono>
 #include <filesystem>
 #include <mutex>
+#include <numeric>
 #include <thread>
 #include <vector>
 
@@ -63,7 +64,14 @@ benchmark_result quantile(std::vector<benchmark_result> const& v, double q) {
 
 void print_result(std::vector<benchmark_result> const& var,
                   std::string const& var_name) {
+  auto const avg = benchmark_result{
+      std::accumulate(var.begin(), var.end(), std::chrono::microseconds{0U},
+                      [](auto&& sum, auto const& res) {
+                        return std::move(sum) + res.duration_;
+                      }) /
+      var.size()};
   std::cout << "\n--- " << var_name << " --- (n = " << var.size() << ")"
+            << "\n  max: " << var.back() << "\n  avg: " << avg << "\n----------"
             << "\n  10%: " << quantile(var, 0.1)
             << "\n  20%: " << quantile(var, 0.2)
             << "\n  30%: " << quantile(var, 0.3)
@@ -74,7 +82,7 @@ void print_result(std::vector<benchmark_result> const& var,
             << "\n  80%: " << quantile(var, 0.8)
             << "\n  90%: " << quantile(var, 0.9)
             << "\n  99%: " << quantile(var, 0.99)
-            << "\n99.9%: " << quantile(var, 0.999) << "\n  max: " << var.back()
+            << "\n99.9%: " << quantile(var, 0.999)
             << "\n-----------------------------\n";
 }
 
