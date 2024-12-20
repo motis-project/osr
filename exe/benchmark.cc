@@ -74,8 +74,7 @@ void print_result(std::vector<benchmark_result> const& var,
                         return std::move(sum) + res.duration_;
                       }) /
       var.size()};
-  std::cout << "\n--- duration (" << profile << ") --- (n = " << var.size()
-            << ")"
+  std::cout << "\n--- profile: " << profile << " --- (n = " << var.size() << ")"
             << "\n  max: " << var.back() << "\n  avg: " << avg << "\n----------"
             << "\n  10%: " << quantile(var, 0.1)
             << "\n  20%: " << quantile(var, 0.2)
