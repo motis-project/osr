@@ -24,11 +24,14 @@ struct grid_point {
                 lat_dir);
     utl::verify(lng_dir == 'W' || lng_dir == 'E', "Invalid direction '{}'",
                 lng_dir);
-    utl::verify(-180 <= lng && lng < 180, "Invalid longitude '{}'", lng);
-    utl::verify(-90 <= lat && lat < 90, "Invalid latitude '{}'", lat);
+    utl::verify(-180 <= lng && lng <= 180, "Invalid longitude '{}'", lng);
+    utl::verify(-90 <= lat && lat <= 90, "Invalid latitude '{}'", lat);
 
     lat_ = static_cast<std::int8_t>((lat_dir == 'N') ? lat : -lat);
     lng_ = static_cast<std::int16_t>((lng_dir == 'E') ? lng : -lng);
+
+    utl::verify(-180 <= lng_ && lng_ < 180, "Invalid longitude '{}'", lng);
+    utl::verify(-90 <= lat_ && lat_ < 90, "Invalid latitude '{}'", lat);
   }
 
   std::int8_t lat_;
