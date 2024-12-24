@@ -28,11 +28,10 @@ struct hgt_raster {
 private:
   std::size_t get_tile_offset(int lat, int lng) const;
   std::vector<std::optional<hgt_tile>> tiles_;
-  std::int8_t sw_lat_{0};
-  std::int16_t sw_lng_{0};
-  std::int8_t ne_lat_{0};
-  std::int16_t ne_lng_{0};
-  std::int16_t width_;
+  std::int8_t sw_lat_;
+  std::int16_t sw_lng_;
+  std::size_t width_;
+  std::size_t height_;
 };
 
 }  // namespace osr::preprocessing::elevation

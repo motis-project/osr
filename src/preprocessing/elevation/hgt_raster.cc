@@ -58,12 +58,10 @@ hgt_raster::hgt_raster(std::vector<hgt_tile>&& tiles) : tiles_{} {
 
   sw_lat_ = lat_range.min;
   sw_lng_ = lng_range.min;
-  ne_lat_ = lat_range.max + 1;
-  ne_lng_ = lng_range.max + 1;
-  width_ = ne_lng_ - sw_lng_;
+  width_ = static_cast<std::size_t>(lng_range.max - sw_lng_ + 1);
+  height_ = static_cast<std::size_t>(lat_range.max - sw_lat_ + 1);
 
-  tiles_.resize(static_cast<std::size_t>(ne_lat_ - sw_lat_) *
-                static_cast<std::size_t>(ne_lng_ - sw_lng_));
+  tiles_.resize(static_cast<std::size_t>(width_ * height_));
 
   for (auto&& tile : std::move(tiles)) {
     tiles_[get_tile_offset(get_lat(tile), get_lng(tile))].emplace(
@@ -73,7 +71,6 @@ hgt_raster::hgt_raster(std::vector<hgt_tile>&& tiles) : tiles_{} {
 
 ::osr::elevation_t hgt_raster::get(::osr::point const& point) const {
   auto const offset = get_tile_offset(point.lat(), point.lng());
-  assert(offset < tiles_.size());
   return tiles_[offset].has_value()
              ? std::visit(
                    [&](auto const& t) -> ::osr::elevation_t {
@@ -116,7 +113,11 @@ std::optional<hgt_raster::hgt_tile> hgt_raster::open(fs::path const& path) {
 }
 
 std::size_t hgt_raster::get_tile_offset(int lat, int lng) const {
-  return static_cast<std::size_t>((lat - sw_lat_) * width_ + (lng - sw_lng_));
+  auto const row = std::clamp(static_cast<std::size_t>(lat - sw_lat_),
+                              std::size_t{0U}, height_);
+  auto const column = std::clamp(static_cast<std::size_t>(lng - sw_lng_),
+                                 std::size_t{0U}, width_);
+  return static_cast<std::size_t>(row * width_ + column);
 }
 
 }  // namespace osr::preprocessing::elevation
