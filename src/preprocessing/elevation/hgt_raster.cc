@@ -1,12 +1,11 @@
 #include "osr/preprocessing/elevation/hgt_raster.h"
 
 #include <cstddef>
+#include <algorithm>
+#include <ranges>
 #include <sstream>
 
-#include "utl/enumerate.h"
 #include "utl/verify.h"
-
-#include "osr/elevation_storage.h"
 
 namespace osr::preprocessing::elevation {
 
@@ -38,8 +37,11 @@ struct grid_point {
   std::int16_t lng_;
 };
 
-hgt_raster::hgt_raster(std::vector<hgt_tile>&& tiles)
-    : rtree_{}, tiles_{std::move(tiles)} {
+hgt_raster::hgt_raster(std::vector<hgt_tile>&& tiles) : tiles_{} {
+  if (tiles.empty()) {
+    return;
+  }
+
   auto const get_lat = [](hgt_tile const& tile) {
     return std::visit([](auto const& t) { return t.lat(); }, tile);
   };
@@ -47,35 +49,49 @@ hgt_raster::hgt_raster(std::vector<hgt_tile>&& tiles)
     return std::visit([](auto const& t) { return t.lng(); }, tile);
   };
 
-  for (auto [idx, tile] : utl::enumerate(tiles_)) {
-    auto const lat = static_cast<float>(get_lat(tile));
-    auto const lng = static_cast<float>(get_lng(tile));
-    auto const min = decltype(rtree_)::coord_t{lat, lng};
-    auto const max = decltype(rtree_)::coord_t{lat + 1.F, lng + 1.F};
-    rtree_.insert(min, max, static_cast<std::size_t>(idx));
+  auto const lat_range = std::ranges::minmax(
+      tiles | std::views::transform(
+                  [&](hgt_tile const& tile) { return get_lat(tile); }));
+  auto const lng_range = std::ranges::minmax(
+      tiles | std::views::transform(
+                  [&](hgt_tile const& tile) { return get_lng(tile); }));
+
+  sw_lat_ = lat_range.min;
+  sw_lng_ = lng_range.min;
+  ne_lat_ = lat_range.max + 1;
+  ne_lng_ = lng_range.max + 1;
+  width_ = ne_lng_ - sw_lng_;
+
+  tiles_.resize(static_cast<std::size_t>(ne_lat_ - sw_lat_) *
+                static_cast<std::size_t>(ne_lng_ - sw_lng_));
+
+  for (auto&& tile : std::move(tiles)) {
+    tiles_[get_tile_offset(get_lat(tile), get_lng(tile))].emplace(
+        std::move(tile));
   }
 }
 
 ::osr::elevation_t hgt_raster::get(::osr::point const& point) const {
-  auto const p = decltype(rtree_)::coord_t{static_cast<float>(point.lat()),
-                                           static_cast<float>(point.lng())};
-  auto elevation = NO_ELEVATION_DATA;
-  rtree_.search(
-      p, p, [&](auto const&, auto const&, std::size_t const& tile_idx) {
-        elevation = std::visit(
-            [&](auto const& t) -> ::osr::elevation_t { return t.get(point); },
-            tiles_[tile_idx]);
-        return true;
-      });
-  return elevation;
+  auto const offset = get_tile_offset(point.lat(), point.lng());
+  assert(offset < tiles_.size());
+  return tiles_[offset].has_value()
+             ? std::visit(
+                   [&](auto const& t) -> ::osr::elevation_t {
+                     return t.get(point);
+                   },
+                   *tiles_[offset])
+             : ::osr::elevation_t{};
 }
 
 step_size hgt_raster::get_step_size() const {
   auto steps = step_size{.x_ = std::numeric_limits<double>::quiet_NaN(),
                          .y_ = std::numeric_limits<double>::quiet_NaN()};
   for (auto const& tile : tiles_) {
+    if (!tile.has_value()) {
+      continue;
+    }
     auto const s =
-        std::visit([](auto const& t) { return t.get_step_size(); }, tile);
+        std::visit([](auto const& t) { return t.get_step_size(); }, *tile);
     if (std::isnan(steps.x_) || s.x_ < steps.x_) {
       steps.x_ = s.x_;
     }
@@ -97,6 +113,10 @@ std::optional<hgt_raster::hgt_tile> hgt_raster::open(fs::path const& path) {
       return hgt<1201>{path.string(), sw.lat_, sw.lng_};
     default: return {};
   }
+}
+
+std::size_t hgt_raster::get_tile_offset(int lat, int lng) const {
+  return static_cast<std::size_t>((lat - sw_lat_) * width_ + (lng - sw_lng_));
 }
 
 }  // namespace osr::preprocessing::elevation
