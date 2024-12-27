@@ -7,6 +7,8 @@
 
 #include "utl/verify.h"
 
+#include "osr/elevation_storage.h"
+
 namespace osr::preprocessing::elevation {
 
 struct grid_point {
@@ -77,7 +79,7 @@ hgt_raster::hgt_raster(std::vector<hgt_tile>&& tiles) : tiles_{} {
                      return t.get(point);
                    },
                    *tiles_[offset])
-             : ::osr::elevation_t{};
+             : NO_ELEVATION_DATA;
 }
 
 step_size hgt_raster::get_step_size() const {
