@@ -112,11 +112,13 @@ std::optional<hgt_raster::hgt_tile> hgt_raster::open(fs::path const& path) {
   }
 }
 
-std::size_t hgt_raster::get_tile_offset(int lat, int lng) const {
-  auto const row = std::clamp(static_cast<std::size_t>(lat - sw_lat_),
-                              std::size_t{0U}, height_);
-  auto const column = std::clamp(static_cast<std::size_t>(lng - sw_lng_),
-                                 std::size_t{0U}, width_);
+std::size_t hgt_raster::get_tile_offset(double lat, double lng) const {
+  auto const row = std::clamp(
+      static_cast<std::size_t>(static_cast<int>(std::floor(lat)) - sw_lat_),
+      std::size_t{0U}, height_ - 1);
+  auto const column = std::clamp(
+      static_cast<std::size_t>(static_cast<int>(std::floor(lng)) - sw_lng_),
+      std::size_t{0U}, width_ - 1);
   return static_cast<std::size_t>(row * width_ + column);
 }
 

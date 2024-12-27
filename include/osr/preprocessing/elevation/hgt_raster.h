@@ -26,7 +26,7 @@ struct hgt_raster {
   static std::optional<hgt_tile> open(fs::path const&);
 
 private:
-  std::size_t get_tile_offset(int lat, int lng) const;
+  std::size_t get_tile_offset(double lat, double lng) const;
   std::vector<std::optional<hgt_tile>> tiles_;
   std::int8_t sw_lat_;
   std::int16_t sw_lng_;
