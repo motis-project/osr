@@ -52,11 +52,14 @@ elevation_storage::elevation get_way_elevation(
   auto const b = provider.get(to);
   if (a != NO_ELEVATION_DATA && b != NO_ELEVATION_DATA) {
     // TODO Approximation only for short ways
-    // TODO Incorrect for corner cases
-    // Value should be larger to not skip intermediate values
-    auto const steps = static_cast<int>(std::max(
-        std::ceil(2 * std::abs(to.lat() - from.lat()) / max_step_size.x_),
-        std::ceil(2 * std::abs(to.lng() - from.lng()) / max_step_size.y_)));
+    // Use slightly larger value to not skip intermediate values
+    constexpr auto const kSafetyFactor = 1.000001;
+    auto const min_lng_diff =
+        std::abs(180 - std::abs((to.lng() - from.lng()) - 180));
+    auto const lat_diff = std::abs(to.lat() - from.lat());
+    auto const steps = static_cast<int>(
+        std::max(std::ceil(kSafetyFactor * lat_diff / max_step_size.y_),
+                 std::ceil(kSafetyFactor * min_lng_diff / max_step_size.x_)));
     if (steps > 1) {
       auto const from_lat = from.lat();
       auto const from_lng = from.lng();
