@@ -329,10 +329,6 @@ struct foot {
   static constexpr cost_t heuristic(double dist) {
     return dist / to_meters_per_second(speed_limit::kmh_10);
   }
-
-  static constexpr int get_static_buffer() { return 500; }
-
-  static constexpr int get_dynamic_buffer() { return 2; }
 };
 
 }  // namespace osr

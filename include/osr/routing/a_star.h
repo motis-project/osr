@@ -10,8 +10,6 @@ namespace osr {
 
 struct sharing_data;
 
-constexpr auto const kDebug = false;
-
 template <typename Profile>
 struct a_star{
   using profile_t = Profile;
@@ -21,6 +19,7 @@ struct a_star{
   using entry = typename Profile::entry;
   using hash = typename Profile::hash;
 
+  constexpr static auto const kDebug = false;
 
   void add_start(ways const& w, label const l) {
     if (cost_[l.get_node().get_key()].update(l, l.get_node(), l.cost(),
@@ -30,7 +29,7 @@ struct a_star{
         l.get_node().print(std::cout, w);
         std::cout << "\n";
       }
-      pq_.push(l);
+      pq_.push(node_h{l, 0, heuristic(l, w)});
     }
   }
 
@@ -39,7 +38,11 @@ struct a_star{
     end_loc_ = w.get_node_pos(l.n_);
   }
 
-  // run? reset?
+  void reset(cost_t const max) {
+    pq_.clear();
+    pq_.n_buckets(max + 1U);
+    cost_.clear();
+  }
 
   struct node_h{
     cost_t priority() const {
@@ -58,8 +61,9 @@ struct a_star{
 
   cost_t heuristic(label const l, ways const& w) {
     auto const start_coord = geo::latlng_to_merc(w.get_node_pos(l.n_).as_latlng());
-    auto const dx = start_coord.x_ - end_node_label.x_;
-    auto const dy = start_coord.y_ - end_node_label.y_;
+    auto const end_coord = geo::latlng_to_merc(end_loc_.as_latlng());
+    auto const dx = end_coord.x_ - start_coord.x_;
+    auto const dy = end_coord.y_ - start_coord.y_;
     auto const dist = std::sqrt(dx * dx + dy * dy);
 
     return Profile::heuristic(dist);
@@ -76,9 +80,72 @@ struct a_star{
     return it != end(cost_) ? it->second.cost(n) : kInfeasible;
   }
 
+  template <direction SearchDir, bool WithBlocked>
+  void run(ways const& w,
+           ways::routing const& r,
+           cost_t const max,
+           bitvec<node_idx_t> const* blocked,
+           sharing_data const* sharing) {
+        while (!pq_.empty()) {
+          auto curr_node_h = pq_.pop();
+          auto l = curr_node_h.l;
+
+          if (get_cost(l.get_node()) < l.cost()) {
+            continue;
+          }
+
+          if constexpr (kDebug) {
+            std::cout << "EXTRACT ";
+            l.get_node().print(std::cout, w);
+            std::cout << "\n";
+          }
+
+          auto const curr = l.get_node();
+
+          Profile::template adjacent<SearchDir, WithBlocked>(
+              r, curr, blocked, sharing,
+              [&](node const neighbor, std::uint32_t const cost, distance_t,
+                  way_idx_t const way, std::uint16_t, std::uint16_t) {
+                if constexpr (kDebug) {
+                  std::cout << "  NEIGHBOR ";
+                  neighbor.print(std::cout, w);
+                }
+
+                auto const total = l.cost() + cost;
+                if (total <= max &&
+                    cost_[neighbor.get_key()].update(
+                        l, neighbor, static_cast<cost_t>(total), curr)) {
+                  auto next = label{neighbor, static_cast<cost_t>(total)};
+                  next.track(l, r, way, neighbor.get_node());
+                  node_h next_h = node_h{next, next.cost_, heuristic(next, w)};
+                  if(next_h.cost  + next_h.heuristic < max) {
+                    pq_.push(next_h);
+                  }
+                }
+              });
+        }
+  }
+
+  void run(ways const& w,
+           ways::routing const& r,
+           cost_t const max,
+           bitvec<node_idx_t> const* blocked,
+           sharing_data const* sharing,
+           direction const dir) {
+    if (blocked == nullptr) {
+      dir == direction::kForward
+          ? run<direction::kForward, false>(w, r, max, blocked, sharing)
+          : run<direction::kBackward, false>(w, r, max, blocked, sharing);
+    } else {
+      dir == direction::kForward
+          ? run<direction::kForward, true>(w, r, max, blocked, sharing)
+          : run<direction::kBackward, true>(w, r, max, blocked, sharing);
+    }
+  }
+
   dial<node_h, get_bucket> pq_{get_bucket{}};
-  label end_node_label;
-  location end_loc_;
+  std::optional<label> end_node_label;
+  point end_loc_;
   ankerl::unordered_dense::map<key, entry, hash> cost_;
 };
 

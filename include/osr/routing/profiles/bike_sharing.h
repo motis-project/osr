@@ -414,9 +414,6 @@ struct bike_sharing {
     return dist / to_meters_per_second(speed_limit::kmh_30);
   }
 
-  static constexpr int get_static_buffer() { return 800; }
-  static constexpr int get_dynamic_buffer() { return 2; }
-
 };
 
 }  // namespace osr

@@ -317,9 +317,6 @@ struct car_parking {
   static constexpr cost_t heuristic(double dist) {
     return car::heuristic(dist);
   }
-
-  static constexpr int get_static_buffer() { return 2300; }
-  static constexpr int get_dynamic_buffer() { return 3; }
 };
 
 }  // namespace osr

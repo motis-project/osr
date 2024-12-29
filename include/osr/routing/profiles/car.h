@@ -249,9 +249,6 @@ struct car {
   static constexpr cost_t heuristic(double dist) {
     return dist / to_meters_per_second(speed_limit::kmh_120);
   }
-
-  static constexpr int get_static_buffer() { return 2300; }
-  static constexpr int get_dynamic_buffer() { return 3; }
 };
 
 }  // namespace osr
