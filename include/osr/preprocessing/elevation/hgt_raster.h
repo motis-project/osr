@@ -4,6 +4,8 @@
 #include <variant>
 #include <vector>
 
+#include "cista/containers/rtree.h"
+
 #include "osr/point.h"
 #include "osr/preprocessing/elevation/hgt.h"
 #include "osr/preprocessing/elevation/provider.h"
@@ -25,13 +27,8 @@ struct hgt_raster {
   step_size get_step_size() const;
   static std::optional<hgt_tile> open(fs::path const&);
 
-private:
-  std::size_t get_tile_offset(double lat, double lng) const;
-  std::vector<std::optional<hgt_tile>> tiles_;
-  std::int8_t sw_lat_;
-  std::int16_t sw_lng_;
-  std::size_t width_;
-  std::size_t height_;
+  cista::raw::rtree<std::size_t> rtree_;
+  std::vector<hgt_tile> tiles_;
 };
 
 }  // namespace osr::preprocessing::elevation
