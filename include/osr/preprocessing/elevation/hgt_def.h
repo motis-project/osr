@@ -3,6 +3,7 @@
 #include "osr/preprocessing/elevation/hgt.h"
 
 #include <cstdint>
+#include <algorithm>
 #include <bit>
 
 #include "cista/mmap.h"
@@ -23,6 +24,13 @@
 // and all edge pixels of the tile are centered on whole-degree lines of
 // latitude and / or longitude. The unit of elevation is meters as referenced to
 // the WGS84/EGM96 geoid (NGA, 1997;Lemoine, 1998)
+//
+// Height files have the extension. HGT, and the DEM is provided as two-byte
+// (16-bit) binary signed integer raster data. Two-byte signed integers can
+// range from - 32,767 to 32,767m and can encompass the range of the Earth’s
+// elevations. Header or trailer bytes are not embedded in the file. The data
+// are stored in row major order, meaning all the data for the northernmost row,
+// row 1, are followed by all the data for row 2, and so on .
 //
 
 namespace osr::preprocessing::elevation {
@@ -49,21 +57,17 @@ struct hgt<RasterSize>::hgt<RasterSize>::impl {
     auto const box = get_coord_box();
     if (box.min_lng_ <= lng && lng < box.max_lng_ &&  //
         box.min_lat_ <= lat && lat < box.max_lat_) {
-      auto const column = std::clamp(
-          static_cast<std::size_t>(
-              std::floor((lng - kCenterOffset - sw_lng_) * (RasterSize - 1U))),
-          std::size_t{0U}, RasterSize - 1U);
-      auto const row = std::clamp(
-          static_cast<std::size_t>(
-              std::floor((lat - kCenterOffset - sw_lat_) * (RasterSize - 1U))),
-          std::size_t{0U}, RasterSize - 1);
+      auto const column =
+          std::clamp(static_cast<std::size_t>(
+                         std::floor((lng - box.min_lng_) * (RasterSize - 1U))),
+                     std::size_t{0U}, RasterSize - 1U);
+      auto const row =
+          std::clamp(static_cast<std::size_t>(
+                         std::floor((box.max_lat_ - lat) * (RasterSize - 1U))),
+                     std::size_t{0U}, RasterSize - 1);
       auto const offset = kBytesPerPixel * (RasterSize * row + column);
-      auto const v_native = get(offset);
-      // Byte is stored in big-endian
-      auto const v = (std::endian::native == std::endian::big)
-                         ? v_native
-                         : std::byteswap(v_native);
-      return (v == kVoidValue) ? ::osr::NO_ELEVATION_DATA : v;
+      auto const value = get(offset);
+      return (value == kVoidValue) ? ::osr::NO_ELEVATION_DATA : value;
     }
     return ::osr::NO_ELEVATION_DATA;
   }
@@ -71,7 +75,10 @@ struct hgt<RasterSize>::hgt<RasterSize>::impl {
   elevation_t get(std::size_t const offset) {
     assert(offset < kBytesPerPixel * RasterSize * RasterSize);
     auto const byte_ptr = file_.data() + offset;
-    return *reinterpret_cast<std::int16_t const*>(byte_ptr);
+    auto const raw_value = *reinterpret_cast<std::int16_t const*>(byte_ptr);
+    // Byte is stored in big-endian
+    return std::endian::native == std::endian::big ? raw_value
+                                                   : std::byteswap(raw_value);
   }
 
   coord_box get_coord_box() const {
