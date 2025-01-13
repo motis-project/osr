@@ -10,6 +10,13 @@
 
 namespace osr::preprocessing::elevation {
 
+struct coord_box {
+  float min_lat_;
+  float min_lng_;
+  float max_lat_;
+  float max_lng_;
+};
+
 template <std::size_t RasterSize>
 struct hgt {
   constexpr static auto const kBytesPerPixel = std::size_t{2U};
@@ -27,8 +34,7 @@ struct hgt {
 
   step_size get_step_size() const;
 
-  std::int8_t lat() const;
-  std::int16_t lng() const;
+  coord_box get_coord_box() const;
 
   static constexpr std::size_t file_size() {
     return RasterSize * RasterSize * kBytesPerPixel;

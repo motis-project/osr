@@ -46,8 +46,9 @@ struct hgt<RasterSize>::hgt<RasterSize>::impl {
   elevation_t get(::osr::point const& p) {
     auto const lat = p.lat();
     auto const lng = p.lng();
-    if (sw_lng_ - kCenterOffset <= lng && lng < sw_lng_ + 1 + kCenterOffset &&
-        sw_lat_ - kCenterOffset <= lat && lat < sw_lat_ + 1 + kCenterOffset) {
+    auto const box = get_coord_box();
+    if (box.min_lng_ <= lng && lng < box.max_lng_ &&  //
+        box.min_lat_ <= lat && lat < box.max_lat_) {
       auto const column = std::clamp(
           static_cast<std::size_t>(
               std::floor((lng - kCenterOffset - sw_lng_) * (RasterSize - 1U))),
@@ -71,6 +72,15 @@ struct hgt<RasterSize>::hgt<RasterSize>::impl {
     assert(offset < kBytesPerPixel * RasterSize * RasterSize);
     auto const byte_ptr = file_.data() + offset;
     return *reinterpret_cast<std::int16_t const*>(byte_ptr);
+  }
+
+  coord_box get_coord_box() const {
+    return {
+        .min_lat_ = static_cast<float>(sw_lat_ - kCenterOffset),
+        .min_lng_ = static_cast<float>(sw_lng_ - kCenterOffset),
+        .max_lat_ = static_cast<float>(sw_lat_ + 1.F + kCenterOffset),
+        .max_lng_ = static_cast<float>(sw_lng_ + 1.F + kCenterOffset),
+    };
   }
 
   constexpr step_size get_step_size() const {
@@ -105,14 +115,9 @@ step_size hgt<RasterSize>::get_step_size() const {
   return impl_->get_step_size();
 }
 
-template <std::size_t RasterSize>
-std::int8_t hgt<RasterSize>::lat() const {
-  return impl_->sw_lat_;
-}
-
-template <std::size_t RasterSize>
-std::int16_t hgt<RasterSize>::lng() const {
-  return impl_->sw_lng_;
+template <size_t RasterSize>
+coord_box hgt<RasterSize>::get_coord_box() const {
+  return impl_->get_coord_box();
 }
 
 }  // namespace osr::preprocessing::elevation

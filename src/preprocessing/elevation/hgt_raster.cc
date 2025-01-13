@@ -40,18 +40,14 @@ struct grid_point {
 
 hgt_raster::hgt_raster(std::vector<hgt_tile>&& tiles)
     : rtree_{}, tiles_{std::move(tiles)} {
-  auto const get_lat = [](hgt_tile const& tile) {
-    return std::visit([](auto const& t) { return t.lat(); }, tile);
-  };
-  auto const get_lng = [](hgt_tile const& tile) {
-    return std::visit([](auto const& t) { return t.lng(); }, tile);
+  auto const get_coord_box = [](hgt_tile const& tile) {
+    return std::visit([](auto const& t) { return t.get_coord_box(); }, tile);
   };
 
   for (auto [idx, tile] : utl::enumerate(tiles_)) {
-    auto const lat = static_cast<float>(get_lat(tile));
-    auto const lng = static_cast<float>(get_lng(tile));
-    auto const min = decltype(rtree_)::coord_t{lat, lng};
-    auto const max = decltype(rtree_)::coord_t{lat + 1.F, lng + 1.F};
+    auto const box = get_coord_box(tile);
+    auto const min = decltype(rtree_)::coord_t{box.min_lat_, box.min_lng_};
+    auto const max = decltype(rtree_)::coord_t{box.max_lat_, box.max_lng_};
     rtree_.insert(min, max, static_cast<std::size_t>(idx));
   }
 }
@@ -65,7 +61,7 @@ hgt_raster::hgt_raster(std::vector<hgt_tile>&& tiles)
         elevation = std::visit(
             [&](auto const& t) -> ::osr::elevation_t { return t.get(point); },
             tiles_[tile_idx]);
-        return true;
+        return elevation != NO_ELEVATION_DATA;
       });
   return elevation;
 }
