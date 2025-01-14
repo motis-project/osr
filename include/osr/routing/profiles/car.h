@@ -201,7 +201,7 @@ struct car {
         auto const cost = way_cost(target_way_prop, way_dir, dist) +
                           node_cost(target_node_prop) +
                           (is_u_turn ? kUturnPenalty : 0U);
-        fn(target, cost, dist, way, from, to);
+        fn(target, cost, dist, way, from, to, elevation_storage::elevation{});
       };
 
       if (i != 0U) {

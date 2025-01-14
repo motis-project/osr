@@ -181,7 +181,8 @@ struct foot {
                 auto const cost = way_cost(target_way_prop, way_dir, dist) +
                                   node_cost(target_node_prop);
                 fn(node{target_node, target_lvl},
-                   static_cast<std::uint32_t>(cost), dist, way, from, to);
+                   static_cast<std::uint32_t>(cost), dist, way, from, to,
+                   elevation_storage::elevation{});
               });
         } else {
           auto const target_lvl = get_target_level(w, n.n_, n.lvl_, way);
@@ -193,7 +194,7 @@ struct foot {
           auto const cost = way_cost(target_way_prop, way_dir, dist) +
                             node_cost(target_node_prop);
           fn(node{target_node, *target_lvl}, static_cast<std::uint32_t>(cost),
-             dist, way, from, to);
+             dist, way, from, to, elevation_storage::elevation{});
         }
       };
 

@@ -139,23 +139,21 @@ struct bike {
         }
 
         auto const dist = w.way_node_dist_[way][std::min(from, to)];
-        auto elevation = [&]() {
+        auto const elevation = [&]() {
           if constexpr (ElevationUpCost == 0) {
             return elevation_storage::elevation{};
           } else {
-            auto const e = get_elevations(elevations, way, from, to);
-            return (way_dir == direction::kForward) ? e : e.swap();
+            auto const e = (from < to) ? get_elevations(elevations, way, from)
+                                       : get_elevations(elevations, way, to);
+            auto const in_direction =
+                (way_dir == direction::kForward) == (from < to);
+            return in_direction ? e : e.swap();
           }
         }();
-        auto const elevation_cost = [&]() {
-          if constexpr (ElevationUpCost == 0) {
-            return cost_t{0};
-          } else {
-            return static_cast<cost_t>(ElevationUpCost * elevation.up_);
-          }
-        };
+        auto const elevation_cost =
+            static_cast<cost_t>(ElevationUpCost * elevation.up_);
         auto const cost = way_cost(target_way_prop, way_dir, dist) +
-                          node_cost(target_node_prop) + elevation_cost();
+                          node_cost(target_node_prop) + elevation_cost;
         fn(node{target_node}, static_cast<std::uint32_t>(cost), dist, way, from,
            to, std::move(elevation));
       };

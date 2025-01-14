@@ -132,14 +132,6 @@ elevation_storage::elevation get_elevations(elevation_storage const* elevations,
              : elevations->get_elevations(way, segment);
 }
 
-elevation_storage::elevation get_elevations(elevation_storage const* elevations,
-                                            way_idx_t const way,
-                                            std::uint16_t const from,
-                                            std::uint16_t const to) {
-  return from < to ? get_elevations(elevations, way, from)
-                   : get_elevations(elevations, way, to).swap();
-}
-
 elevation_storage::elevation& elevation_storage::elevation::operator+=(
     elevation const& other) {
   up_ += other.up_;

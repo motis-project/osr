@@ -47,9 +47,5 @@ struct elevation_storage {
 elevation_storage::elevation get_elevations(elevation_storage const*,
                                             way_idx_t const way,
                                             std::uint16_t const segment);
-elevation_storage::elevation get_elevations(elevation_storage const*,
-                                            way_idx_t const way,
-                                            std::uint16_t const from,
-                                            std::uint16_t const to);
 
 }  // namespace osr

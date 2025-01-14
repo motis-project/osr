@@ -47,7 +47,7 @@ connecting_way find_connecting_way(ways const& w,
       [&](typename Profile::node const target, std::uint32_t const cost,
           distance_t const dist, way_idx_t const way, std::uint16_t const a_idx,
           std::uint16_t const b_idx,
-          elevation_storage::elevation&& elevation = {}) {
+          elevation_storage::elevation const elevation) {
         if (target == to && cost == expected_cost) {
           auto const is_loop = way != way_idx_t::invalid() && r.is_loop(way) &&
                                static_cast<unsigned>(std::abs(a_idx - b_idx)) ==

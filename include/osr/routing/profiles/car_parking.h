@@ -253,10 +253,11 @@ struct car_parking {
           w, to_foot(n), blocked, nullptr, elevations,
           [&](footp::node const neighbor, std::uint32_t const cost,
               distance_t const dist, way_idx_t const way,
-              std::uint16_t const from, std::uint16_t const to) {
+              std::uint16_t const from, std::uint16_t const to,
+              elevation_storage::elevation const elevation) {
             fn(to_node(neighbor),
                cost + (n.is_foot_node() ? 0 : kSwitchPenalty), dist, way, from,
-               to);
+               to, elevation);
           });
     }
 
@@ -265,11 +266,12 @@ struct car_parking {
           w, to_car(n), blocked, nullptr, elevations,
           [&](car::node const neighbor, std::uint32_t const cost,
               distance_t const dist, way_idx_t const way,
-              std::uint16_t const from, std::uint16_t const to) {
+              std::uint16_t const from, std::uint16_t const to,
+              elevation_storage::elevation const elevation) {
             auto const way_prop = w.way_properties_[way];
             fn(to_node(neighbor, way_prop.from_level()),
                cost + (n.is_car_node() ? 0 : kSwitchPenalty), dist, way, from,
-               to);
+               to, elevation);
           });
     }
   }

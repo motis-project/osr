@@ -271,7 +271,8 @@ struct bike_sharing {
           fn(node{.n_ = ae.node_,
                   .type_ = nt,
                   .lvl_ = nt == node_type::kBike ? kNoLevel : n.lvl_},
-             cost, ae.distance_, way_idx_t::invalid(), 0, 1);
+             cost, ae.distance_, way_idx_t::invalid(), 0, 1,
+             elevation_storage::elevation{});
         };
 
     auto const& continue_on_foot = [&](node_type const nt,
@@ -281,7 +282,8 @@ struct bike_sharing {
           w, to_foot(n), blocked, nullptr, elevations,
           [&](footp::node const neighbor, std::uint32_t const cost,
               distance_t const dist, way_idx_t const way,
-              std::uint16_t const from, std::uint16_t const to, elevation_storage::elevation&& elevation={}) {
+              std::uint16_t const from, std::uint16_t const to,
+              elevation_storage::elevation const elevation) {
             fn(to_node(neighbor, nt), cost + switch_penalty, dist, way, from,
                to, std::move(elevation));
           });
@@ -307,7 +309,8 @@ struct bike_sharing {
           [&](bike<kElevationNoCost>::node const neighbor,
               std::uint32_t const cost, distance_t const dist,
               way_idx_t const way, std::uint16_t const from,
-              std::uint16_t const to, elevation_storage::elevation&& elevation={}) {
+              std::uint16_t const to,
+              elevation_storage::elevation const elevation) {
             fn(to_node(neighbor, kNoLevel), cost + switch_penalty, dist, way,
                from, to, std::move(elevation));
           });
