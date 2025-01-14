@@ -98,10 +98,6 @@ struct a_star{
 
           if(l.get_node().get_node() == end_node_.value().get_node()){
             found_node_ = l.get_node();
-            std::cout << "Reached end node" << std::endl;
-            std::cout << "End cost in map: " << get_cost(l.get_node())
-                      << " node_id: " << static_cast<std::uint32_t>(l.get_node().n_)
-                      << std::endl;
             return;
           }
           if (get_cost(l.get_node()) < l.cost()) {
