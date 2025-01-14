@@ -1,5 +1,6 @@
 #pragma once
 
+#include <unordered_set>
 #include "geo/webmercator.h"
 #include "osr/lookup.h"
 #include "osr/routing/dial.h"
@@ -33,9 +34,9 @@ struct a_star{
     }
   }
 
-  void add_end(ways const& w, label const l) {
-    end_node_label = l;
-    end_loc_ = w.get_node_pos(l.n_);
+  void add_end(ways const& w, node const lf) {
+    end_node_ = lf;
+    end_loc_ = w.get_node_pos(lf.n_);
   }
 
   void reset(cost_t const max) {
@@ -77,7 +78,12 @@ struct a_star{
 
   cost_t get_cost(node const n) const {
     auto const it = cost_.find(n.get_key());
-    return it != end(cost_) ? it->second.cost(n) : kInfeasible;
+    if (it != end(cost_))
+      return it->second.cost(n);
+    else{
+      std::cout << "Not found in a" << std::endl;
+      return kInfeasible;
+    }
   }
 
   template <direction SearchDir, bool WithBlocked>
@@ -90,6 +96,14 @@ struct a_star{
           auto curr_node_h = pq_.pop();
           auto l = curr_node_h.l;
 
+          if(l.get_node().get_node() == end_node_.value().get_node()){
+            found_node_ = l.get_node();
+            std::cout << "Reached end node" << std::endl;
+            std::cout << "End cost in map: " << get_cost(l.get_node())
+                      << " node_id: " << static_cast<std::uint32_t>(l.get_node().n_)
+                      << std::endl;
+            return;
+          }
           if (get_cost(l.get_node()) < l.cost()) {
             continue;
           }
@@ -101,7 +115,6 @@ struct a_star{
           }
 
           auto const curr = l.get_node();
-
           Profile::template adjacent<SearchDir, WithBlocked>(
               r, curr, blocked, sharing,
               [&](node const neighbor, std::uint32_t const cost, distance_t,
@@ -118,12 +131,35 @@ struct a_star{
                   auto next = label{neighbor, static_cast<cost_t>(total)};
                   next.track(l, r, way, neighbor.get_node());
                   node_h next_h = node_h{next, next.cost_, heuristic(next, w)};
-                  if(next_h.cost  + next_h.heuristic < max) {
-                    pq_.push(next_h);
+                  if (next_h.cost + next_h.heuristic < max) {
+                    pq_.push(std::move(next_h));
+                  }
+                  /*else if (next_h.cost > 1180 && next_h.cost < 1200 && next_h.heuristic == 0){
+                    std::cout << " total: " << next_h.cost + next_h.heuristic
+                              << "cost: " << next_h.cost
+                              << " heuristic: " << next_h.heuristic
+                              << " node_id " << neighbor.get_key()
+                              << std::endl;
+                  }*/
+                  if constexpr (kDebug) {
+                    std::cout << " -> PUSH\n";
+                  }
+                } else {
+                  if constexpr (kDebug) {
+                    std::cout << " -> DOMINATED\n";
                   }
                 }
               });
+
+          /*if(l.n_ == end_node_.value().n_){
+            std::cout << "Reached end node" << std::endl;
+            std::cout << "End cost in map: " << get_cost(l.get_node())
+                      << " node_id: " << static_cast<std::uint32_t>(l.get_node().n_)
+                      << std::endl;
+            return;
+          }*/
         }
+        //std::cout << "No path found" << std::endl;
   }
 
   void run(ways const& w,
@@ -144,10 +180,10 @@ struct a_star{
   }
 
   dial<node_h, get_bucket> pq_{get_bucket{}};
-  std::optional<label> end_node_label;
+  std::optional<node> end_node_;
+  std::optional<node> found_node_;
   point end_loc_;
   ankerl::unordered_dense::map<key, entry, hash> cost_;
 };
 
 }
-

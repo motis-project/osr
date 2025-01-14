@@ -247,7 +247,7 @@ struct car {
   }
 
   static constexpr cost_t heuristic(double dist) {
-    return dist / to_meters_per_second(speed_limit::kmh_120);
+    return dist / (150U/3.6);
   }
 };
 

@@ -98,49 +98,35 @@ int main(int argc, char const* argv[]) {
       while (i.fetch_add(1U) < opt.n_queries_) {
         auto it = d.cost_.begin();
         std::advance(it, random_numbers[i]);
-        auto const end = it->first;
-        // Add end first for heuristic calculation
-        auto end_lf = car::label{car::node{end, 0, direction::kForward}, 0U};
-        auto end_lb = car::label{car::node{end, 0, direction::kBackward}, 0U};
-        if (it->second.cost_.empty()) {
-          std::cerr << "Cost is infeasible \n";
-        }
-        if ((it->second.cost(end_lf.get_node()) == std::numeric_limits<std::uint16_t>::max() &&
-            it->second.cost(end_lb.get_node()) == std::numeric_limits<std::uint16_t>::max()) ||(
-            it->second.cost(end_lf.get_node()) == kInfeasible &&
-            it->second.cost(end_lb.get_node()) == kInfeasible)) {
-          std::cout << "Cost is infeasible \n";
+        auto const end_idx = it->first;
+        auto end_lf = car::label{car::node{end_idx, 0, direction::kForward}, 0U};
+        //auto end_lb = car::label{car::node{end_idx, 0, direction::kBackward}, 0U};
+
+        if (it->second.cost(end_lf.get_node()) == kInfeasible){
           continue;
         }
-        // route to n random nodes with a_star
         auto a = a_star<car>{};
         auto h_a = cista::BASE_HASH;
         auto n_a = 0U;
         a.reset(opt.max_dist_);
 
-        a.add_end(w, end_lf);
-        a.add_end(w, end_lb);
+        a.add_end(w, end_lf.get_node());
         a.add_start(w, start_lf);
         a.add_start(w, start_lb);
         a.run<direction::kForward, false>(w, *w.r_, opt.max_dist_, nullptr,
                                           nullptr);
 
-
-        // compare the cost of the nodes from dijkstra and a_star
-        auto found = a.cost_.find(end);
-        //std::cout << "Dijkstra cost: " << it->second.cost(end_nf.get_node()) <<
-                     //", A* cost: " << found->second.cost(end_nf.get_node()) << "\n";
-
-        if (found == a.cost_.end()) {
-          std::cout << "Element " << end << " not found in a.cost_.\n";
+        auto end_node = a.found_node_.value();
+        auto it_a = a.cost_.find(end_idx);
+        if (it_a == a.cost_.end()) {
+          std::cout << "Element " << end_idx << " not found in a.cost_.\n";
           std::cout << it->second.cost(end_lf.get_node()) << std::endl;
-          std::cout << it->second.cost(end_lb.get_node()) << std::endl;
-          // handle error or continue
-        } else if (it->second.cost(end_lf.get_node()) != found->second.cost(end_lf.get_node())
-                   && it->second.cost(end_lb.get_node()) == std::numeric_limits<std::uint16_t>::max()) {
-          std::cout << "Dijkstra cost: " << it->second.cost(end_lf.get_node())
-                    << " A* cost: " << found->second.cost(end_lf.get_node()) << "\n";
-          throw std::runtime_error("Costs are not equal");
+        } else if (d.get_cost(end_node) != a.get_cost(end_node)) {
+          std::cout << "Dijkstra end cost: " << d.get_cost(end_lf.get_node())
+                    << " A* end cost: " << a.get_cost(end_lf.get_node())
+                    << " end_idx: " << static_cast<std::uint32_t>(end_idx)
+                    << " end_lf index: " << static_cast<std::uint32_t>(end_lf.n_) << std::endl;
+          std::cout << "Costs are not equal" << std::endl;
         }
       }
     });
@@ -148,7 +134,6 @@ int main(int argc, char const* argv[]) {
   for (auto& t : threads) {
     t.join();
   }
-  // print success if costs are equal
   std::cout << "Success: Costs are equal \n";
 }
 
