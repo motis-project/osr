@@ -39,12 +39,14 @@ struct elevation_storage {
       std::filesystem::path const&);
   void set_elevations(ways const&, preprocessing::elevation::provider const&);
   elevation get_elevations(way_idx_t const way,
-                           std::uint16_t const from,
-                           std::uint16_t const to) const;
+                           std::uint16_t const segment) const;
 
   mm_vecvec<way_idx_t, encoding> elevations_;
 };
 
+elevation_storage::elevation get_elevations(elevation_storage const*,
+                                            way_idx_t const way,
+                                            std::uint16_t const segment);
 elevation_storage::elevation get_elevations(elevation_storage const*,
                                             way_idx_t const way,
                                             std::uint16_t const from,

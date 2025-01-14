@@ -118,23 +118,26 @@ void elevation_storage::set_elevations(
 }
 
 elevation_storage::elevation elevation_storage::get_elevations(
-    way_idx_t const way,
-    std::uint16_t const from,
-    std::uint16_t const to) const {
-  auto const idx = (from < to) ? from : to;
-  auto const e = (way < elevations_.size() && idx < elevations_[way].size())
-                     ? elevations_[way][idx].decode()
-                     : elevation{0U, 0U};
-  return (from < to) ? e : e.swap();
+    way_idx_t const way, std::uint16_t const segment) const {
+  return (way < elevations_.size() && segment < elevations_[way].size())
+             ? elevations_[way][segment].decode()
+             : elevation{0U, 0U};
+}
+
+elevation_storage::elevation get_elevations(elevation_storage const* elevations,
+                                            way_idx_t const way,
+                                            std::uint16_t const segment) {
+  return elevations == nullptr
+             ? elevation_storage::elevation{elevation_t{0}, elevation_t{0}}
+             : elevations->get_elevations(way, segment);
 }
 
 elevation_storage::elevation get_elevations(elevation_storage const* elevations,
                                             way_idx_t const way,
                                             std::uint16_t const from,
                                             std::uint16_t const to) {
-  return elevations == nullptr
-             ? elevation_storage::elevation{elevation_t{0}, elevation_t{0}}
-             : elevations->get_elevations(way, from, to);
+  return from < to ? get_elevations(elevations, way, from)
+                   : get_elevations(elevations, way, to).swap();
 }
 
 elevation_storage::elevation& elevation_storage::elevation::operator+=(

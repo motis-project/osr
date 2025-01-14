@@ -71,7 +71,7 @@ struct dijkstra {
       Profile::template adjacent<SearchDir, WithBlocked>(
           r, curr, blocked, sharing, elevations,
           [&](node const neighbor, std::uint32_t const cost, distance_t,
-              way_idx_t const way, std::uint16_t, std::uint16_t) {
+              way_idx_t const way, std::uint16_t, std::uint16_t, elevation_storage::elevation const={}) {
             if constexpr (kDebug) {
               std::cout << "  NEIGHBOR ";
               neighbor.print(std::cout, w);
