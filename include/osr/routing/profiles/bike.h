@@ -146,7 +146,7 @@ struct bike {
             auto const e = (from < to) ? get_elevations(elevations, way, from)
                                        : get_elevations(elevations, way, to);
             auto const in_direction =
-                (way_dir == direction::kForward) == (from < to);
+                (SearchDir == direction::kForward) == (from < to);
             return in_direction ? e : e.swap();
           }
         }();
