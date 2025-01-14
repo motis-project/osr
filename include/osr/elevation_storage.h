@@ -41,7 +41,7 @@ struct elevation_storage {
   elevation get_elevations(way_idx_t const way,
                            std::uint16_t const segment) const;
 
-  mm_vecvec<way_idx_t, encoding> elevations_;
+  mm_paged_vecvec<way_idx_t, encoding> elevations_;
 };
 
 elevation_storage::elevation get_elevations(elevation_storage const*,

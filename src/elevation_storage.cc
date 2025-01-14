@@ -25,8 +25,10 @@ constexpr auto const kIndexName = "elevation_idx.bin";
 
 elevation_storage::elevation_storage(std::filesystem::path const& p,
                                      cista::mmap::protection const mode)
-    : elevations_{mm_vec<encoding>{mm(p, elevation_files::kDataName, mode)},
-                  mm_vec<unsigned>(mm(p, elevation_files::kIndexName, mode))} {}
+    : elevations_{cista::paged<mm_vec32<encoding>>{mm_vec32<encoding>{
+                      mm(p, elevation_files::kDataName, mode)}},
+                  mm_vec<cista::page<std::uint32_t, std::uint16_t>>{
+                      mm(p, elevation_files::kIndexName, mode)}} {}
 
 std::unique_ptr<elevation_storage> elevation_storage::try_open(
     std::filesystem::path const& path) {
