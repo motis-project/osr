@@ -1,6 +1,5 @@
 #pragma once
 
-#include <concepts>
 #include <filesystem>
 
 #include "osr/point.h"
@@ -8,14 +7,6 @@
 #include "osr/types.h"
 
 namespace osr::preprocessing::elevation {
-
-template <typename Driver>
-concept IsRasterDriver = requires(Driver driver) {
-  {
-    std::as_const(driver).get(std::declval<::osr::point>())
-  } -> std::same_as<::osr::elevation_t>;
-  { std::as_const(driver).get_step_size() } -> std::same_as<step_size>;
-};
 
 struct provider {
   provider(std::filesystem::path const&);

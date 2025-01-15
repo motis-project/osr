@@ -6,16 +6,10 @@
 
 #include "osr/point.h"
 #include "osr/preprocessing/elevation/step_size.h"
+#include "osr/preprocessing/elevation/shared.h"
 #include "osr/types.h"
 
 namespace osr::preprocessing::elevation {
-
-struct coord_box {
-  float min_lat_;
-  float min_lng_;
-  float max_lat_;
-  float max_lng_;
-};
 
 template <std::size_t RasterSize>
 struct hgt {

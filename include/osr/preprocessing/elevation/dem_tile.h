@@ -6,6 +6,7 @@
 
 #include "osr/point.h"
 #include "osr/preprocessing/elevation/step_size.h"
+#include "osr/preprocessing/elevation/shared.h"
 #include "osr/types.h"
 
 namespace osr::preprocessing::elevation {
@@ -17,15 +18,16 @@ union pixel_value {
   float float32_;
 };
 
-struct dem_grid {
-  explicit dem_grid(std::string const& filename);
-  ~dem_grid();
-  dem_grid(dem_grid&& grid) noexcept;
-  dem_grid(dem_grid const&) = delete;
-  dem_grid& operator=(dem_grid const&) = delete;
-  dem_grid& operator=(dem_grid&&) = delete;
+struct dem_tile {
+  explicit dem_tile(std::string const& filename);
+  ~dem_tile();
+  dem_tile(dem_tile&& grid) noexcept;
+  dem_tile(dem_tile const&) = delete;
+  dem_tile& operator=(dem_tile const&) = delete;
+  dem_tile& operator=(dem_tile&&) = delete;
 
   ::osr::elevation_t get(::osr::point const&) const;
+  coord_box get_coord_box() const;
 
   pixel_value get_raw(::osr::point const&) const;
   pixel_type get_pixel_type() const;

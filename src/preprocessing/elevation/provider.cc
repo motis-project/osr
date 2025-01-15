@@ -7,25 +7,25 @@
 #include <vector>
 
 #include "osr/elevation_storage.h"
-#include "osr/preprocessing/elevation/dem_grid.h"
-#include "osr/preprocessing/elevation/hgt_raster.h"
-#include "osr/preprocessing/elevation/step_size.h"
+#include "osr/preprocessing/elevation/dem_driver.h"
+#include "osr/preprocessing/elevation/hgt_driver.h"
+#include "osr/preprocessing/elevation/shared.h"
 
 namespace osr::preprocessing::elevation {
 
-static_assert(IsRasterDriver<dem_grid>);
-static_assert(IsRasterDriver<hgt_raster>);
+static_assert(IsDriver<dem_driver>);
+static_assert(IsDriver<hgt_driver>);
 
-using raster_driver = std::variant<dem_grid, hgt_raster>;
+using raster_driver = std::variant<dem_driver, hgt_driver>;
 
 struct provider::impl {
   impl() = default;
 
-  void add_grid_file(fs::path const& path) {
-    drivers.emplace_back(std::in_place_type<dem_grid>, path.string());
+  void add_driver(dem_driver&& driver) {
+    drivers.emplace_back(std::move(driver));
   }
 
-  void add_driver(hgt_raster&& driver) {
+  void add_driver(hgt_driver&& driver) {
     drivers.emplace_back(std::move(driver));
   }
 
@@ -46,23 +46,27 @@ struct provider::impl {
 provider::provider(std::filesystem::path const& p)
     : impl_(std::make_unique<impl>()) {
   if (std::filesystem::is_directory(p)) {
-    auto hgt_tiles = std::vector<hgt_raster::hgt_tile>{};
+    auto dem = dem_driver{};
+    auto hgt = hgt_driver{};
     for (auto const& file : std::filesystem::recursive_directory_iterator(p)) {
-      if (file.is_regular_file()) {
-        auto const& path = file.path();
-        auto const ext = path.extension().string();
-        if (ext == ".hdr") {
-          impl_->add_grid_file(path);
-        } else if (ext == ".hgt") {
-          auto tile = hgt_raster::open(path);
-          if (tile.has_value()) {
-            hgt_tiles.push_back(std::move(tile).value());
-          }
+      [&]() {
+        if (!file.is_regular_file()) {
+          return;
         }
-      }
+        auto const& path = file.path();
+        if (dem.add_tile(path)) {
+          return;
+        }
+        if (hgt.add_tile(path)) {
+          return;
+        }
+      }();
     }
-    if (!hgt_tiles.empty()) {
-      impl_->add_driver(hgt_raster(std::move(hgt_tiles)));
+    if (dem.n_tiles() > 0U) {
+      impl_->add_driver(std::move(dem));
+    }
+    if (hgt.n_tiles() > 0U) {
+      impl_->add_driver(std::move(hgt));
     }
   }
 }

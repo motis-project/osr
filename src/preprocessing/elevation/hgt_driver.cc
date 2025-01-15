@@ -1,12 +1,13 @@
-#include "osr/preprocessing/elevation/hgt_raster.h"
+#include "osr/preprocessing/elevation/hgt_driver.h"
 
 #include <cstddef>
 #include <sstream>
 
-#include "utl/enumerate.h"
 #include "utl/verify.h"
 
 #include "osr/elevation_storage.h"
+
+namespace fs = std::filesystem;
 
 namespace osr::preprocessing::elevation {
 
@@ -38,21 +39,26 @@ struct grid_point {
   std::int16_t lng_;
 };
 
-hgt_raster::hgt_raster(std::vector<hgt_tile>&& tiles)
-    : rtree_{}, tiles_{std::move(tiles)} {
-  auto const get_coord_box = [](hgt_tile const& tile) {
-    return std::visit([](auto const& t) { return t.get_coord_box(); }, tile);
-  };
-
-  for (auto [idx, tile] : utl::enumerate(tiles_)) {
-    auto const box = get_coord_box(tile);
+bool hgt_driver::add_tile(fs::path const& path) {
+  auto const ext = path.extension().string();
+  if (ext != ".hgt") {
+    return false;
+  }
+  auto tile = open(path);
+  if (tile.has_value()) {
+    auto const box =
+        std::visit([](auto const& t) { return t.get_coord_box(); }, *tile);
     auto const min = decltype(rtree_)::coord_t{box.min_lat_, box.min_lng_};
     auto const max = decltype(rtree_)::coord_t{box.max_lat_, box.max_lng_};
-    rtree_.insert(min, max, static_cast<std::size_t>(idx));
+    rtree_.insert(min, max, static_cast<std::size_t>(tiles_.size()));
+    tiles_.emplace_back(std::move(tile.value()));
+    return true;
+  } else {
+    return false;
   }
 }
 
-::osr::elevation_t hgt_raster::get(::osr::point const& point) const {
+::osr::elevation_t hgt_driver::get(::osr::point const& point) const {
   auto const p = decltype(rtree_)::coord_t{static_cast<float>(point.lat()),
                                            static_cast<float>(point.lng())};
   auto elevation = NO_ELEVATION_DATA;
@@ -66,7 +72,7 @@ hgt_raster::hgt_raster(std::vector<hgt_tile>&& tiles)
   return elevation;
 }
 
-step_size hgt_raster::get_step_size() const {
+step_size hgt_driver::get_step_size() const {
   auto steps = step_size{.x_ = std::numeric_limits<double>::quiet_NaN(),
                          .y_ = std::numeric_limits<double>::quiet_NaN()};
   for (auto const& tile : tiles_) {
@@ -82,7 +88,21 @@ step_size hgt_raster::get_step_size() const {
   return steps;
 }
 
-std::optional<hgt_raster::hgt_tile> hgt_raster::open(fs::path const& path) {
+std::size_t hgt_driver::get_tile_idx(::osr::point const& point) const {
+  auto const p = decltype(rtree_)::coord_t{static_cast<float>(point.lat()),
+                                           static_cast<float>(point.lng())};
+  auto idx = std::numeric_limits<std::size_t>::max();
+  rtree_.search(p, p,
+                [&](auto const&, auto const&, std::size_t const& tile_idx) {
+                  idx = tile_idx;
+                  return idx < std::numeric_limits<std::size_t>::max();
+                });
+  return idx;
+}
+
+std::size_t hgt_driver::n_tiles() const { return tiles_.size(); }
+
+std::optional<hgt_driver::hgt_tile> hgt_driver::open(fs::path const& path) {
   auto const filename = path.filename();
   auto sw = grid_point{path.filename().string()};
   auto const file_size = fs::file_size(path);

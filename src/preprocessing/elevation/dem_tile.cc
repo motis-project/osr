@@ -1,4 +1,4 @@
-#include "osr/preprocessing/elevation/dem_grid.h"
+#include "osr/preprocessing/elevation/dem_tile.h"
 
 #include <cmath>
 #include <filesystem>
@@ -72,7 +72,7 @@ double get_double(str_map const& map, std::string const& key, double def) {
   return str.empty() ? def : std::stod(str);
 }
 
-struct dem_grid::impl {
+struct dem_tile::impl {
   explicit impl(std::string const& filename) : mapped_file_{} {
     auto const path = fs::path{filename};
     auto const hdr_path =
@@ -209,14 +209,14 @@ struct dem_grid::impl {
   std::mutex m_{};
 };
 
-dem_grid::dem_grid(std::string const& filename)
+dem_tile::dem_tile(std::string const& filename)
     : impl_(std::make_unique<impl>(filename)) {}
 
-dem_grid::dem_grid(dem_grid&& grid) noexcept : impl_(std::move(grid.impl_)) {}
+dem_tile::dem_tile(dem_tile&& grid) noexcept : impl_(std::move(grid.impl_)) {}
 
-dem_grid::~dem_grid() = default;
+dem_tile::~dem_tile() = default;
 
-::osr::elevation_t dem_grid::get(::osr::point const& p) const {
+::osr::elevation_t dem_tile::get(::osr::point const& p) const {
   auto const val = get_raw(p);
   switch (impl_->pixel_type_) {
     case pixel_type::int16:
@@ -235,13 +235,22 @@ dem_grid::~dem_grid() = default;
   throw std::runtime_error{"dem_grid: invalid pixel type"};
 }
 
-pixel_value dem_grid::get_raw(::osr::point const& p) const {
+coord_box dem_tile::get_coord_box() const {
+  return {
+    .min_lat_ = static_cast<float>(impl_->bry_),
+    .min_lng_ = static_cast<float>(impl_->ulx_),
+    .max_lat_ = static_cast<float>(impl_->uly_),
+    .max_lng_ = static_cast<float>(impl_->brx_),
+  };
+}
+
+pixel_value dem_tile::get_raw(::osr::point const& p) const {
   return impl_->get(p);
 }
 
-pixel_type dem_grid::get_pixel_type() const { return impl_->pixel_type_; }
+pixel_type dem_tile::get_pixel_type() const { return impl_->pixel_type_; }
 
-step_size dem_grid::get_step_size() const {
+step_size dem_tile::get_step_size() const {
   return {.x_ = impl_->xdim_, .y_ = impl_->ydim_};
 }
 
