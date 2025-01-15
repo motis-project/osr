@@ -18,7 +18,7 @@ struct dem_driver {
   bool add_tile(fs::path const&);
   ::osr::elevation_t get(::osr::point const&) const;
   step_size get_step_size() const;
-  std::size_t get_tile_idx(point const&) const;
+  elevation_tile_idx_t get_tile_idx(point const&) const;
   std::size_t n_tiles() const;
 
   cista::raw::rtree<std::size_t> rtree_{};

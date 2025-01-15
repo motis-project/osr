@@ -95,4 +95,23 @@ step_size provider::get_step_size() const {
   return steps;
 }
 
+provider::point_idx provider::get_point_idx(::osr::point const& point) const {
+  for (auto const [driver_idx, driver] :
+       std::views::enumerate(impl_->drivers_)) {
+    auto const tile_idx = std::visit(
+        [&](auto const& d) { return d.get_tile_idx(point); }, driver);
+    if (tile_idx != elevation_tile_idx_t::invalid()) {
+      return {
+          .driver_idx_ =
+              elevation_driver_idx_t{static_cast<std::uint8_t>(driver_idx)},
+          .tile_idx_ = tile_idx,
+      };
+    }
+  }
+  return {
+      .driver_idx_ = elevation_driver_idx_t::invalid(),
+      .tile_idx_ = elevation_tile_idx_t::invalid(),
+  };
+}
+
 }  // namespace osr::preprocessing::elevation

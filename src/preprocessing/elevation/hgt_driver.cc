@@ -88,14 +88,14 @@ step_size hgt_driver::get_step_size() const {
   return steps;
 }
 
-std::size_t hgt_driver::get_tile_idx(::osr::point const& point) const {
+elevation_tile_idx_t hgt_driver::get_tile_idx(::osr::point const& point) const {
   auto const p = decltype(rtree_)::coord_t{static_cast<float>(point.lat()),
                                            static_cast<float>(point.lng())};
-  auto idx = std::numeric_limits<std::size_t>::max();
+  auto idx = elevation_tile_idx_t::invalid();
   rtree_.search(p, p,
                 [&](auto const&, auto const&, std::size_t const& tile_idx) {
-                  idx = tile_idx;
-                  return idx < std::numeric_limits<std::size_t>::max();
+                  idx = elevation_tile_idx_t{tile_idx};
+                  return idx != elevation_tile_idx_t::invalid();
                 });
   return idx;
 }

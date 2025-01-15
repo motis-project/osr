@@ -2,8 +2,11 @@
 
 #include <algorithm>
 #include <array>
+#include <execution>
 #include <mutex>
+#include <ranges>
 
+#include "utl/enumerate.h"
 #include "utl/pairwise.h"
 #include "utl/parallel_for.h"
 #include "utl/progress_tracker.h"
@@ -103,6 +106,21 @@ void elevation_storage::set_elevations(
   auto const max_step_size = provider.get_step_size();
   auto m = std::mutex{};
 
+  auto sorted_way_indices = std::vector<
+      std::pair<preprocessing::elevation::provider::point_idx, way_idx_t>>{};
+  sorted_way_indices.reserve(size);
+  for (auto const [way_idx, way] : utl::enumerate(w.r_->way_nodes_)) {
+    auto const p = w.get_node_pos(way.front());
+    auto const start_idx = provider.get_point_idx(p);
+    sorted_way_indices.emplace_back(
+        std::pair{std::move(start_idx), way_idx_t{way_idx}});
+  }
+  std::sort(std::execution::par_unseq, begin(sorted_way_indices),
+            end(sorted_way_indices), [](auto const& lhs, auto const& rhs) {
+              return (lhs.first < rhs.first) ||
+                     ((lhs.first == rhs.first) && (lhs.second < rhs.second));
+            });
+
   utl::parallel_for_run(
       std::move(size),
       [&](std::size_t const idx) {
@@ -111,7 +129,7 @@ void elevation_storage::set_elevations(
         elevations.clear();
         points.clear();
 
-        auto const way_idx = way_idx_t{idx};
+        auto const way_idx = sorted_way_indices[idx].second;
         auto const& nodes = w.r_->way_nodes_[way_idx];
 
         for (auto const& node : nodes) {
