@@ -130,13 +130,6 @@ struct a_star{
                   if (next_h.cost + next_h.heuristic < max) {
                     pq_.push(std::move(next_h));
                   }
-                  /*else if (next_h.cost > 1180 && next_h.cost < 1200 && next_h.heuristic == 0){
-                    std::cout << " total: " << next_h.cost + next_h.heuristic
-                              << "cost: " << next_h.cost
-                              << " heuristic: " << next_h.heuristic
-                              << " node_id " << neighbor.get_key()
-                              << std::endl;
-                  }*/
                   if constexpr (kDebug) {
                     std::cout << " -> PUSH\n";
                   }
@@ -147,15 +140,7 @@ struct a_star{
                 }
               });
 
-          /*if(l.n_ == end_node_.value().n_){
-            std::cout << "Reached end node" << std::endl;
-            std::cout << "End cost in map: " << get_cost(l.get_node())
-                      << " node_id: " << static_cast<std::uint32_t>(l.get_node().n_)
-                      << std::endl;
-            return;
-          }*/
         }
-        //std::cout << "No path found" << std::endl;
   }
 
   void run(ways const& w,
@@ -182,4 +167,4 @@ struct a_star{
   ankerl::unordered_dense::map<key, entry, hash> cost_;
 };
 
-}
+}  // namespace osr

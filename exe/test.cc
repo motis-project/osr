@@ -121,12 +121,13 @@ int main(int argc, char const* argv[]) {
         if (it_a == a.cost_.end()) {
           std::cout << "Element " << end_idx << " not found in a.cost_.\n";
           std::cout << it->second.cost(end_lf.get_node()) << std::endl;
+          throw std::runtime_error("Element not found in a.cost_");
         } else if (d.get_cost(end_node) != a.get_cost(end_node)) {
           std::cout << "Dijkstra end cost: " << d.get_cost(end_lf.get_node())
                     << " A* end cost: " << a.get_cost(end_lf.get_node())
                     << " end_idx: " << static_cast<std::uint32_t>(end_idx)
                     << " end_lf index: " << static_cast<std::uint32_t>(end_lf.n_) << std::endl;
-          std::cout << "Costs are not equal" << std::endl;
+                throw std::runtime_error("Costs are not equal");
         }
       }
     });
