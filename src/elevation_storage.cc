@@ -110,10 +110,16 @@ void elevation_storage::set_elevations(
       std::pair<preprocessing::elevation::provider::point_idx, way_idx_t>>{};
   sorted_way_indices.reserve(size);
   for (auto const [way_idx, way] : utl::enumerate(w.r_->way_nodes_)) {
-    auto const p = w.get_node_pos(way.front());
-    auto const start_idx = provider.get_point_idx(p);
-    sorted_way_indices.emplace_back(
-        std::pair{std::move(start_idx), way_idx_t{way_idx}});
+    if (way.empty()) {
+      sorted_way_indices.emplace_back(std::pair{
+          preprocessing::elevation::provider::point_idx{}, way_idx_t{way_idx}});
+
+    } else {
+      auto const p = w.get_node_pos(way.front());
+      auto const start_idx = provider.get_point_idx(p);
+      sorted_way_indices.emplace_back(
+          std::pair{std::move(start_idx), way_idx_t{way_idx}});
+    }
   }
   std::sort(
 #if __cpp_lib_execution
