@@ -22,15 +22,15 @@ struct provider::impl {
   impl() = default;
 
   void add_driver(dem_driver&& driver) {
-    drivers.emplace_back(std::move(driver));
+    drivers_.emplace_back(std::move(driver));
   }
 
   void add_driver(hgt_driver&& driver) {
-    drivers.emplace_back(std::move(driver));
+    drivers_.emplace_back(std::move(driver));
   }
 
   elevation_t get(::osr::point const& p) {
-    for (auto const& grid : drivers) {
+    for (auto const& grid : drivers_) {
       auto const data =
           std::visit([&](auto const& driver) { return driver.get(p); }, grid);
       if (data != NO_ELEVATION_DATA) {
@@ -40,7 +40,7 @@ struct provider::impl {
     return NO_ELEVATION_DATA;
   }
 
-  std::vector<raster_driver> drivers;
+  std::vector<raster_driver> drivers_;
 };
 
 provider::provider(std::filesystem::path const& p)
@@ -77,12 +77,12 @@ provider::~provider() = default;
   return impl_->get(p);
 }
 
-std::size_t provider::driver_count() const { return impl_->drivers.size(); }
+std::size_t provider::driver_count() const { return impl_->drivers_.size(); }
 
 step_size provider::get_step_size() const {
   auto steps = step_size{.x_ = std::numeric_limits<double>::quiet_NaN(),
                          .y_ = std::numeric_limits<double>::quiet_NaN()};
-  for (auto const& driver : impl_->drivers) {
+  for (auto const& driver : impl_->drivers_) {
     auto const s =
         std::visit([](auto const& d) { return d.get_step_size(); }, driver);
     if (std::isnan(steps.x_) || s.x_ < steps.x_) {
