@@ -2,8 +2,10 @@
 
 #include <algorithm>
 #include <array>
+#include <mutex>
 
 #include "utl/pairwise.h"
+#include "utl/parallel_for.h"
 #include "utl/progress_tracker.h"
 
 #include "osr/point.h"
@@ -92,31 +94,48 @@ elevation_storage::elevation get_way_elevation(
 
 void elevation_storage::set_elevations(
     ways const& w, preprocessing::elevation::provider const& provider) {
-  auto pt = utl::get_active_progress_tracker_or_activate("osr");
-  pt->status("Load elevation data").out_bounds(85, 90).in_high(w.n_ways());
-  auto const max_step_size = provider.get_step_size();
-  auto elevations = std::vector<encoding>{};
-  auto points = std::vector<point>{};
-  for (auto nodes : w.r_->way_nodes_) {
-    elevations.clear();
-    points.clear();
-    for (auto const& node : nodes) {
-      points.emplace_back(w.get_node_pos(node));
-    }
-    auto idx = std::size_t{0U};
-    for (auto const [from, to] : utl::pairwise(points)) {
-      auto const elevation =
-          encoding{get_way_elevation(provider, from, to, max_step_size)};
-      if (elevation) {
-        elevations.resize(idx);
-        elevations.push_back(elevation);
-      }
-      ++idx;
-    }
-    elevations_.emplace_back(elevations);
+  auto const size = w.n_ways();
 
-    pt->increment();
-  }
+  auto pt = utl::get_active_progress_tracker_or_activate("osr");
+  pt->status("Load elevation data").out_bounds(85, 90).in_high(size);
+
+  elevations_.resize(size);
+  auto const max_step_size = provider.get_step_size();
+  auto m = std::mutex{};
+
+  utl::parallel_for_run(
+      std::move(size),
+      [&](std::size_t const idx) {
+        thread_local auto elevations = std::vector<encoding>{};
+        thread_local auto points = std::vector<point>{};
+        elevations.clear();
+        points.clear();
+
+        auto const way_idx = way_idx_t{idx};
+        auto const& nodes = w.r_->way_nodes_[way_idx];
+
+        for (auto const& node : nodes) {
+          points.emplace_back(w.get_node_pos(node));
+        }
+        auto elevations_idx = std::size_t{0U};
+        for (auto const [from, to] : utl::pairwise(points)) {
+          auto const elevation =
+              encoding{get_way_elevation(provider, from, to, max_step_size)};
+          if (elevation) {
+            elevations.resize(elevations_idx);
+            elevations.push_back(std::move(elevation));
+          }
+          ++elevations_idx;
+        }
+        {
+          auto const guard = std::lock_guard{m};
+          auto bucket = elevations_[way_idx];
+          for (auto const e : elevations) {
+            bucket.push_back(e);
+          }
+        }
+      },
+      pt->update_fn());
 }
 
 elevation_storage::elevation elevation_storage::get_elevations(
