@@ -6,6 +6,8 @@
 #include <utility>
 #include <vector>
 
+#include "utl/enumerate.h"
+
 #include "osr/elevation_storage.h"
 #include "osr/preprocessing/elevation/dem_driver.h"
 #include "osr/preprocessing/elevation/hgt_driver.h"
@@ -96,8 +98,7 @@ step_size provider::get_step_size() const {
 }
 
 provider::point_idx provider::get_point_idx(::osr::point const& point) const {
-  for (auto const [driver_idx, driver] :
-       std::views::enumerate(impl_->drivers_)) {
+  for (auto const [driver_idx, driver] : utl::enumerate(impl_->drivers_)) {
     auto const tile_idx = std::visit(
         [&](auto const& d) { return d.get_tile_idx(point); }, driver);
     if (tile_idx != elevation_tile_idx_t::invalid()) {

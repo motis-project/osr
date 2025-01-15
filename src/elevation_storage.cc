@@ -115,11 +115,15 @@ void elevation_storage::set_elevations(
     sorted_way_indices.emplace_back(
         std::pair{std::move(start_idx), way_idx_t{way_idx}});
   }
-  std::sort(std::execution::par_unseq, begin(sorted_way_indices),
-            end(sorted_way_indices), [](auto const& lhs, auto const& rhs) {
-              return (lhs.first < rhs.first) ||
-                     ((lhs.first == rhs.first) && (lhs.second < rhs.second));
-            });
+  std::sort(
+#if __cpp_lib_execution
+      std::execution::par_unseq,
+#endif
+      begin(sorted_way_indices), end(sorted_way_indices),
+      [](auto const& lhs, auto const& rhs) {
+        return (lhs.first < rhs.first) ||
+               ((lhs.first == rhs.first) && (lhs.second < rhs.second));
+      });
 
   utl::parallel_for_run(
       std::move(size),
