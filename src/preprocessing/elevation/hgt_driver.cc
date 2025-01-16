@@ -46,8 +46,8 @@ bool hgt_driver::add_tile(fs::path const& path) {
   }
   auto tile = open(path);
   if (tile.has_value()) {
-    auto const box =
-        std::visit([](auto const& t) { return t.get_coord_box(); }, *tile);
+    auto const box = std::visit(
+        [](IsTile auto const& t) { return t.get_coord_box(); }, *tile);
     auto const min = decltype(rtree_)::coord_t{box.min_lat_, box.min_lng_};
     auto const max = decltype(rtree_)::coord_t{box.max_lat_, box.max_lng_};
     rtree_.insert(min, max, static_cast<std::size_t>(tiles_.size()));
@@ -62,13 +62,15 @@ bool hgt_driver::add_tile(fs::path const& path) {
   auto const p = decltype(rtree_)::coord_t{static_cast<float>(point.lat()),
                                            static_cast<float>(point.lng())};
   auto elevation = NO_ELEVATION_DATA;
-  rtree_.search(
-      p, p, [&](auto const&, auto const&, std::size_t const& tile_idx) {
-        elevation = std::visit(
-            [&](auto const& t) -> ::osr::elevation_t { return t.get(point); },
-            tiles_[tile_idx]);
-        return elevation != NO_ELEVATION_DATA;
-      });
+  rtree_.search(p, p,
+                [&](auto const&, auto const&, std::size_t const& tile_idx) {
+                  elevation = std::visit(
+                      [&](IsTile auto const& t) -> ::osr::elevation_t {
+                        return t.get(point);
+                      },
+                      tiles_[tile_idx]);
+                  return elevation != NO_ELEVATION_DATA;
+                });
   return elevation;
 }
 
@@ -76,8 +78,8 @@ step_size hgt_driver::get_step_size() const {
   auto steps = step_size{.x_ = std::numeric_limits<double>::quiet_NaN(),
                          .y_ = std::numeric_limits<double>::quiet_NaN()};
   for (auto const& tile : tiles_) {
-    auto const s =
-        std::visit([](auto const& t) { return t.get_step_size(); }, tile);
+    auto const s = std::visit(
+        [](IsTile auto const& t) { return t.get_step_size(); }, tile);
     if (std::isnan(steps.x_) || s.x_ < steps.x_) {
       steps.x_ = s.x_;
     }

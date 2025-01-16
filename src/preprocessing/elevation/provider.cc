@@ -33,8 +33,8 @@ struct provider::impl {
 
   elevation_t get(::osr::point const& p) {
     for (auto const& grid : drivers_) {
-      auto const data =
-          std::visit([&](auto const& driver) { return driver.get(p); }, grid);
+      auto const data = std::visit(
+          [&](IsDriver auto const& driver) { return driver.get(p); }, grid);
       if (data != NO_ELEVATION_DATA) {
         return data;
       }
@@ -85,8 +85,8 @@ step_size provider::get_step_size() const {
   auto steps = step_size{.x_ = std::numeric_limits<double>::quiet_NaN(),
                          .y_ = std::numeric_limits<double>::quiet_NaN()};
   for (auto const& driver : impl_->drivers_) {
-    auto const s =
-        std::visit([](auto const& d) { return d.get_step_size(); }, driver);
+    auto const s = std::visit(
+        [](IsDriver auto const& d) { return d.get_step_size(); }, driver);
     if (std::isnan(steps.x_) || s.x_ < steps.x_) {
       steps.x_ = s.x_;
     }
@@ -100,7 +100,7 @@ step_size provider::get_step_size() const {
 provider::point_idx provider::get_point_idx(::osr::point const& point) const {
   for (auto const [driver_idx, driver] : utl::enumerate(impl_->drivers_)) {
     auto const tile_idx = std::visit(
-        [&](auto const& d) { return d.get_tile_idx(point); }, driver);
+        [&](IsDriver auto const& d) { return d.get_tile_idx(point); }, driver);
     if (tile_idx != elevation_tile_idx_t::invalid()) {
       return {
           .driver_idx_ =
