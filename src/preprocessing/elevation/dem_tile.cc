@@ -31,7 +31,7 @@ using dem_exception = std::runtime_error;
 str_map read_hdr_file(fs::path const& filename) {
   str_map map;
 
-  std::ifstream f(filename);
+  auto f = std::ifstream{filename};
   while (f.good()) {
     std::string key, value;
     f >> key >> value;
@@ -73,8 +73,8 @@ double get_double(str_map const& map, std::string const& key, double def) {
 }
 
 struct dem_tile::impl {
-  explicit impl(std::string const& filename) : mapped_file_{} {
-    auto const path = fs::path{filename};
+  explicit impl(fs::path const& filename) : mapped_file_{} {
+    auto const path = filename;
     auto const hdr_path =
         fs::path{path.parent_path() / fs::path(path.stem().string() + ".hdr")};
     auto const bil_path =
@@ -85,7 +85,7 @@ struct dem_tile::impl {
     if (!fs::exists(bil_path)) {
       throw dem_exception("Missing bil file: " + bil_path.string());
     }
-    auto const hdr = read_hdr_file(hdr_path.string());
+    auto const hdr = read_hdr_file(hdr_path);
     init_hdr(hdr);
     data_file_ = bil_path.string();
   }
