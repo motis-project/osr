@@ -72,22 +72,15 @@ double get_double(str_map const& map, std::string const& key, double def) {
   return str.empty() ? def : std::stod(str);
 }
 
-struct dem_tile::impl {
-  explicit impl(fs::path const& filename) : mapped_file_{} {
-    auto const path = filename;
-    auto const hdr_path =
-        fs::path{path.parent_path() / fs::path(path.stem().string() + ".hdr")};
-    auto const bil_path =
-        fs::path{path.parent_path() / fs::path(path.stem().string() + ".bil")};
+struct bil_header {
+  explicit bil_header(fs::path const& bil_path) {
+    auto const hdr_path = fs::path{bil_path.parent_path() /
+                                   fs::path(bil_path.stem().string() + ".hdr")};
     if (!fs::exists(hdr_path)) {
       throw dem_exception("Missing hdr file: " + hdr_path.string());
     }
-    if (!fs::exists(bil_path)) {
-      throw dem_exception("Missing bil file: " + bil_path.string());
-    }
     auto const hdr = read_hdr_file(hdr_path);
     init_hdr(hdr);
-    data_file_ = bil_path.string();
   }
 
   void init_hdr(str_map const& hdr) {
@@ -150,47 +143,6 @@ struct dem_tile::impl {
     }
   }
 
-  pixel_value get(::osr::point const& p) {
-    auto const lng = p.lng();
-    auto const lat = p.lat();
-
-    if (lng < ulx_ || lat > uly_ || lng >= brx_ || lat <= bry_) {
-      return nodata_;
-    }
-
-    auto const pix_x = static_cast<unsigned>((lng - ulx_) / xdim_);
-    auto const pix_y = static_cast<unsigned>((uly_ - lat) / ydim_);
-    assert(pix_x < cols_);
-    assert(pix_y < rows_);
-    auto const byte_pos = row_size_ * pix_y + pixel_size_ * pix_x;
-
-    ensure_file_mapped();
-    assert(byte_pos < mapped_file_->size());
-    auto const* byte_ptr = mapped_file_->data() + byte_pos;
-
-    pixel_value val{};
-
-    switch (pixel_type_) {
-      case pixel_type::int16:
-        val.int16_ = *reinterpret_cast<std::int16_t const*>(byte_ptr);
-        break;
-      case pixel_type::float32:
-        val.float32_ = *reinterpret_cast<float const*>(byte_ptr);
-        break;
-    }
-
-    return val;
-  }
-
-  void ensure_file_mapped() {
-    auto const lock = std::lock_guard{m_};
-    if (!mapped_file_.has_value()) {
-      std::clog << "Using DEM grid file: " << data_file_ << std::endl;
-      mapped_file_ =
-          cista::mmap{data_file_.data(), cista::mmap::protection::READ};
-    }
-  }
-
   unsigned rows_{0};
   unsigned cols_{0};
   double ulx_{0};  // upper left lon
@@ -203,10 +155,59 @@ struct dem_tile::impl {
   unsigned row_size_{0};  // bytes per row
   pixel_type pixel_type_{pixel_type::int16};
   pixel_value nodata_{};
+};
 
-  std::string data_file_;
-  std::optional<cista::mmap> mapped_file_;
-  std::mutex m_{};
+fs::path get_bil_path(fs::path const& path) {
+  auto const bil_path =
+      fs::path{path.parent_path() / fs::path(path.stem().string() + ".bil")};
+  if (!fs::exists(bil_path)) {
+    throw dem_exception("Missing bil file: " + bil_path.string());
+  }
+  return bil_path;
+}
+
+struct dem_tile::impl {
+  explicit impl(fs::path const& path)
+      : data_file_{get_bil_path(path)},
+        hdr_{data_file_},
+        mapped_file_{cista::mmap{data_file_.string().data(),
+                                 cista::mmap::protection::READ}} {}
+
+  pixel_value get(::osr::point const& p) {
+    auto const lng = p.lng();
+    auto const lat = p.lat();
+
+    if (lng < hdr_.ulx_ || lat > hdr_.uly_ || lng >= hdr_.brx_ ||
+        lat <= hdr_.bry_) {
+      return hdr_.nodata_;
+    }
+
+    auto const pix_x = static_cast<unsigned>((lng - hdr_.ulx_) / hdr_.xdim_);
+    auto const pix_y = static_cast<unsigned>((hdr_.uly_ - lat) / hdr_.ydim_);
+    assert(pix_x < meta_.cols_);
+    assert(pix_y < meta_.rows_);
+    auto const byte_pos = hdr_.row_size_ * pix_y + hdr_.pixel_size_ * pix_x;
+
+    assert(byte_pos < mapped_file_.size());
+    auto const* byte_ptr = mapped_file_.data() + byte_pos;
+
+    pixel_value val{};
+
+    switch (hdr_.pixel_type_) {
+      case pixel_type::int16:
+        val.int16_ = *reinterpret_cast<std::int16_t const*>(byte_ptr);
+        break;
+      case pixel_type::float32:
+        val.float32_ = *reinterpret_cast<float const*>(byte_ptr);
+        break;
+    }
+
+    return val;
+  }
+
+  fs::path data_file_;
+  bil_header hdr_;
+  cista::mmap mapped_file_;
 };
 
 dem_tile::dem_tile(fs::path const& filename)
@@ -218,15 +219,15 @@ dem_tile::~dem_tile() = default;
 
 ::osr::elevation_t dem_tile::get(::osr::point const& p) const {
   auto const val = get_raw(p);
-  switch (impl_->pixel_type_) {
+  switch (impl_->hdr_.pixel_type_) {
     case pixel_type::int16:
-      if (val.int16_ == impl_->nodata_.int16_) {
+      if (val.int16_ == impl_->hdr_.nodata_.int16_) {
         return NO_ELEVATION_DATA;
       } else {
         return static_cast<::osr::elevation_t>(val.int16_);
       }
     case pixel_type::float32:
-      if (std::equal_to<>()(val.float32_, impl_->nodata_.float32_)) {
+      if (std::equal_to<>()(val.float32_, impl_->hdr_.nodata_.float32_)) {
         return NO_ELEVATION_DATA;
       } else {
         return static_cast<::osr::elevation_t>(std::round(val.float32_));
@@ -237,10 +238,10 @@ dem_tile::~dem_tile() = default;
 
 coord_box dem_tile::get_coord_box() const {
   return {
-      .min_lat_ = static_cast<float>(impl_->bry_),
-      .min_lng_ = static_cast<float>(impl_->ulx_),
-      .max_lat_ = static_cast<float>(impl_->uly_),
-      .max_lng_ = static_cast<float>(impl_->brx_),
+      .min_lat_ = static_cast<float>(impl_->hdr_.bry_),
+      .min_lng_ = static_cast<float>(impl_->hdr_.ulx_),
+      .max_lat_ = static_cast<float>(impl_->hdr_.uly_),
+      .max_lng_ = static_cast<float>(impl_->hdr_.brx_),
   };
 }
 
@@ -248,10 +249,10 @@ pixel_value dem_tile::get_raw(::osr::point const& p) const {
   return impl_->get(p);
 }
 
-pixel_type dem_tile::get_pixel_type() const { return impl_->pixel_type_; }
+pixel_type dem_tile::get_pixel_type() const { return impl_->hdr_.pixel_type_; }
 
 step_size dem_tile::get_step_size() const {
-  return {.x_ = impl_->xdim_, .y_ = impl_->ydim_};
+  return {.x_ = impl_->hdr_.xdim_, .y_ = impl_->hdr_.ydim_};
 }
 
 }  // namespace osr::preprocessing::elevation
