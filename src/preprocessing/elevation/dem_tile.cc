@@ -184,8 +184,8 @@ struct dem_tile::impl {
 
     auto const pix_x = static_cast<unsigned>((lng - hdr_.ulx_) / hdr_.xdim_);
     auto const pix_y = static_cast<unsigned>((hdr_.uly_ - lat) / hdr_.ydim_);
-    assert(pix_x < meta_.cols_);
-    assert(pix_y < meta_.rows_);
+    assert(pix_x < hdr_.cols_);
+    assert(pix_y < hdr_.rows_);
     auto const byte_pos = hdr_.row_size_ * pix_y + hdr_.pixel_size_ * pix_x;
 
     assert(byte_pos < mapped_file_.size());
