@@ -1,13 +1,15 @@
 #pragma once
 
 #include <cstdint>
+#include <filesystem>
 #include <memory>
-#include <string>
 
 #include "osr/point.h"
 #include "osr/preprocessing/elevation/shared.h"
 #include "osr/preprocessing/elevation/step_size.h"
 #include "osr/types.h"
+
+namespace fs = std::filesystem;
 
 namespace osr::preprocessing::elevation {
 
@@ -19,7 +21,7 @@ union pixel_value {
 };
 
 struct dem_tile {
-  explicit dem_tile(std::string const& filename);
+  explicit dem_tile(fs::path const& filename);
   ~dem_tile();
   dem_tile(dem_tile&& grid) noexcept;
   dem_tile(dem_tile const&) = delete;

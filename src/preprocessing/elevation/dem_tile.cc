@@ -28,7 +28,7 @@ namespace osr::preprocessing::elevation {
 using str_map = std::unordered_map<std::string, std::string>;
 using dem_exception = std::runtime_error;
 
-str_map read_hdr_file(std::string const& filename) {
+str_map read_hdr_file(fs::path const& filename) {
   str_map map;
 
   std::ifstream f(filename);
@@ -209,7 +209,7 @@ struct dem_tile::impl {
   std::mutex m_{};
 };
 
-dem_tile::dem_tile(std::string const& filename)
+dem_tile::dem_tile(fs::path const& filename)
     : impl_(std::make_unique<impl>(filename)) {}
 
 dem_tile::dem_tile(dem_tile&& grid) noexcept : impl_(std::move(grid.impl_)) {}
