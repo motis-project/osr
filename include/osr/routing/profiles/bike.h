@@ -140,15 +140,11 @@ struct bike {
 
         auto const dist = w.way_node_dist_[way][std::min(from, to)];
         auto const elevation = [&]() {
-          if constexpr (ElevationUpCost == 0) {
-            return elevation_storage::elevation{};
-          } else {
-            auto const e = (from < to) ? get_elevations(elevations, way, from)
-                                       : get_elevations(elevations, way, to);
-            auto const in_direction =
-                (SearchDir == direction::kForward) == (from < to);
-            return in_direction ? e : e.swap();
-          }
+          auto const e = (from < to) ? get_elevations(elevations, way, from)
+                                     : get_elevations(elevations, way, to);
+          auto const in_direction =
+              (SearchDir == direction::kForward) == (from < to);
+          return in_direction ? e : e.swap();
         }();
         auto const elevation_cost =
             static_cast<cost_t>(ElevationUpCost * elevation.up_);
