@@ -102,15 +102,15 @@ elevation_tile_idx_t hgt_driver::get_tile_idx(::osr::point const& point) const {
 
 std::size_t hgt_driver::n_tiles() const { return tiles_.size(); }
 
-std::optional<hgt_driver::hgt_tile> hgt_driver::open(fs::path const& path) {
+std::optional<hgt_driver::hgt_tile_t> hgt_driver::open(fs::path const& path) {
   auto const filename = path.filename();
   auto sw = grid_point{path.filename().string()};
   auto const file_size = fs::file_size(path);
   switch (file_size) {
-    case hgt<3601>::file_size():
-      return hgt<3601>{path.string(), sw.lat_, sw.lng_};
-    case hgt<1201>::file_size():
-      return hgt<1201>{path.string(), sw.lat_, sw.lng_};
+    case hgt_tile<3601>::file_size():
+      return hgt_tile<3601>{path.string(), sw.lat_, sw.lng_};
+    case hgt_tile<1201>::file_size():
+      return hgt_tile<1201>{path.string(), sw.lat_, sw.lng_};
     default: return {};
   }
 }

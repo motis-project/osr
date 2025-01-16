@@ -1,6 +1,6 @@
 #pragma once
 
-#include "osr/preprocessing/elevation/hgt.h"
+#include "osr/preprocessing/elevation/hgt_tile.h"
 
 #include <cstdint>
 #include <algorithm>
@@ -39,7 +39,7 @@ namespace osr::preprocessing::elevation {
 constexpr auto const kVoidValue = -32786;
 
 template <std::size_t RasterSize>
-struct hgt<RasterSize>::hgt<RasterSize>::impl {
+struct hgt_tile<RasterSize>::hgt_tile<RasterSize>::impl {
 
   constexpr static auto kStepWidth = double{1. / (RasterSize - 1U)};
   constexpr static auto kCenterOffset = kStepWidth / 2.;
@@ -101,29 +101,29 @@ struct hgt<RasterSize>::hgt<RasterSize>::impl {
 };
 
 template <std::size_t RasterSize>
-hgt<RasterSize>::hgt(std::string const& filename,
-                     std::int8_t const lat,
-                     std::int16_t const lng)
+hgt_tile<RasterSize>::hgt_tile(std::string const& filename,
+                               std::int8_t const lat,
+                               std::int16_t const lng)
     : impl_{std::make_unique<impl>(filename, lat, lng)} {}
 
 template <std::size_t RasterSize>
-hgt<RasterSize>::~hgt() = default;
+hgt_tile<RasterSize>::~hgt_tile() = default;
 
 template <std::size_t RasterSize>
-hgt<RasterSize>::hgt(hgt&& grid) noexcept = default;
+hgt_tile<RasterSize>::hgt_tile(hgt_tile&& grid) noexcept = default;
 
 template <std::size_t RasterSize>
-::osr::elevation_t hgt<RasterSize>::get(::osr::point const& p) const {
+::osr::elevation_t hgt_tile<RasterSize>::get(::osr::point const& p) const {
   return impl_->get(p);
 }
 
 template <std::size_t RasterSize>
-step_size hgt<RasterSize>::get_step_size() const {
+step_size hgt_tile<RasterSize>::get_step_size() const {
   return impl_->get_step_size();
 }
 
 template <size_t RasterSize>
-coord_box hgt<RasterSize>::get_coord_box() const {
+coord_box hgt_tile<RasterSize>::get_coord_box() const {
   return impl_->get_coord_box();
 }
 

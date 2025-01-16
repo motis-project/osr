@@ -12,17 +12,17 @@
 namespace osr::preprocessing::elevation {
 
 template <std::size_t RasterSize>
-struct hgt {
+struct hgt_tile {
   constexpr static auto const kBytesPerPixel = std::size_t{2U};
 
-  explicit hgt(std::string const& filename,
-               std::int8_t const lat,
-               std::int16_t const lng);
-  ~hgt();
-  hgt(hgt&& grid) noexcept;
-  hgt(hgt const&) = delete;
-  hgt& operator=(hgt const&) = delete;
-  hgt& operator=(hgt&&) = delete;
+  explicit hgt_tile(std::string const& filename,
+                    std::int8_t const lat,
+                    std::int16_t const lng);
+  ~hgt_tile();
+  hgt_tile(hgt_tile&& grid) noexcept;
+  hgt_tile(hgt_tile const&) = delete;
+  hgt_tile& operator=(hgt_tile const&) = delete;
+  hgt_tile& operator=(hgt_tile&&) = delete;
 
   ::osr::elevation_t get(::osr::point const&) const;
 
@@ -39,7 +39,7 @@ private:
   std::unique_ptr<impl> impl_;
 };
 
-extern template struct hgt<3601U>;
-extern template struct hgt<1201U>;
+extern template struct hgt_tile<3601U>;
+extern template struct hgt_tile<1201U>;
 
 }  // namespace osr::preprocessing::elevation
