@@ -5,8 +5,8 @@
 #include <string>
 
 #include "osr/point.h"
-#include "osr/preprocessing/elevation/step_size.h"
 #include "osr/preprocessing/elevation/shared.h"
+#include "osr/preprocessing/elevation/step_size.h"
 #include "osr/types.h"
 
 namespace osr::preprocessing::elevation {

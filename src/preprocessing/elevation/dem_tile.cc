@@ -237,10 +237,10 @@ dem_tile::~dem_tile() = default;
 
 coord_box dem_tile::get_coord_box() const {
   return {
-    .min_lat_ = static_cast<float>(impl_->bry_),
-    .min_lng_ = static_cast<float>(impl_->ulx_),
-    .max_lat_ = static_cast<float>(impl_->uly_),
-    .max_lng_ = static_cast<float>(impl_->brx_),
+      .min_lat_ = static_cast<float>(impl_->bry_),
+      .min_lng_ = static_cast<float>(impl_->ulx_),
+      .max_lat_ = static_cast<float>(impl_->uly_),
+      .max_lng_ = static_cast<float>(impl_->brx_),
   };
 }
 
