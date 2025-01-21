@@ -2,14 +2,19 @@
 
 #include <algorithm>
 #include <array>
+#include <bits/ranges_algo.h>
 #include <execution>
+#include <filesystem>
 #include <mutex>
+#include <numeric>
 #include <ranges>
 
 #include "utl/enumerate.h"
 #include "utl/pairwise.h"
 #include "utl/parallel_for.h"
 #include "utl/progress_tracker.h"
+
+#include "cista/strong.h"
 
 #include "osr/point.h"
 #include "osr/preprocessing/elevation/provider.h"
@@ -95,6 +100,8 @@ elevation_storage::elevation get_way_elevation(
   return elevation;
 }
 
+#include <chrono>
+
 void elevation_storage::set_elevations(
     ways const& w, preprocessing::elevation::provider const& provider) {
   auto const size = w.n_ways();
@@ -105,20 +112,85 @@ void elevation_storage::set_elevations(
   elevations_.resize(size);
   auto const max_step_size = provider.get_step_size();
   auto m = std::mutex{};
+  auto const x = sizeof(
+      cista::pair<preprocessing::elevation::provider::point_idx, way_idx_t>);
+  std::cout << "\n\nSizes: " << size << ", " << x << ", " << size * x
+            << std::endl;
 
-  auto sorted_way_indices = std::vector<
-      std::pair<preprocessing::elevation::provider::point_idx, way_idx_t>>{};
-  sorted_way_indices.reserve(size);
+  auto const t1 = std::chrono::high_resolution_clock::now();
+
+  // : elevations_{cista::paged<mm_vec32<encoding>>{mm_vec32<encoding>{
+  //                   mm(p, elevation_files::kDataName, mode)}},
+  //               mm_vec<cista::page<std::uint32_t, std::uint16_t>>{
+  //                   mm(p, elevation_files::kIndexName, mode)}} {}
+  // auto way_buckets = mm_paged_vecvec<elevation_bucket_idx_t, way_idx_t>{
+  //     cista::paged<mm_vec32<way_idx_t>>{mm_vec32<way_idx_t>{
+  //         mm(std::filesystem::temp_directory_path(),
+  //            "temp_osr_sorted_ways_data", cista::mmap::protection::WRITE)}},
+  //     mm_vec<cista::page<cista::base_t<elevation_bucket_idx_t>,
+  //     std::uint16_t>>{
+  //         mm(std::filesystem::temp_directory_path(),
+  //         "temp_osr_sorted_ways_idx",
+  //            cista::mmap::protection::WRITE)}};
+  // way_buckets.resize(provider.get_bucket_count());
+  {
+    // TODO Write entries for Debug only
+    auto sorted_way_indices =
+        mm_vec<cista::pair<way_idx_t, elevation_bucket_idx_t>>{
+            // mm(std::filesystem::temp_directory_path(), "temp_osr_sorted_ways",
+            mm(".", "debug-data__sorted_ways",
+               cista::mmap::protection::WRITE)};
+    std::cout << "Vector created" << std::endl;
+    sorted_way_indices.reserve(size);
+    std::cout << "Vector reserved: " << size << ", " << sorted_way_indices.size() << std::endl;
+
+    for (auto const [way_idx, way] : utl::enumerate(w.r_->way_nodes_)) {
+      if (!way.empty()) {
+        auto const p = w.get_node_pos(way.front());
+        auto const idx = provider.get_bucket_idx(p);
+        if (idx != elevation_bucket_idx_t::invalid()) {
+          sorted_way_indices.emplace_back(way_idx_t{way_idx}, idx);
+        }
+      }
+    }
+    auto const tx = std::chrono::high_resolution_clock::now();
+    std::cout << "\n\nEntries created!! "
+              << std::chrono::duration_cast<std::chrono::milliseconds>(tx - t1)
+              << "\n\n"
+              << std::endl;
+  }
+  auto way_buckets = std::vector<std::vector<way_idx_t>>{};
+  way_buckets.resize(provider.get_bucket_count());
+
   for (auto const [way_idx, way] : utl::enumerate(w.r_->way_nodes_)) {
-    if (way.empty()) {
-      sorted_way_indices.emplace_back(std::pair{
+    if (!way.empty()) {
+      auto const p = w.get_node_pos(way.front());
+      auto const idx = provider.get_bucket_idx(p);
+      if (idx != elevation_bucket_idx_t::invalid()) {
+        way_buckets[to_idx(idx)].push_back(way_idx_t{way_idx});
+        // way_buckets[idx].push_back(way_idx_t{way_idx});
+      }
+    }
+  }
+  /*
+  auto sorted_way_indices = mm_vec<
+      cista::pair<preprocessing::elevation::provider::point_idx, way_idx_t>>{
+      mm(std::filesystem::temp_directory_path(), "temp_osr_sorted_ways",
+         cista::mmap::protection::WRITE)};
+  // auto sorted_way_indices = std::vector<
+  //     std::pair<preprocessing::elevation::provider::point_idx, way_idx_t>>{};
+  sorted_way_indices.reserve(size);
+  std::cout << sizeof(sorted_way_indices) << ", " << sorted_way_indices.size()
+<< ", " << sorted_way_indices.used_size_ << "\n" << std::endl; for (auto const
+[way_idx, way] : utl::enumerate(w.r_->way_nodes_)) { if (way.empty()) {
+      sorted_way_indices.emplace_back(cista::pair{
           preprocessing::elevation::provider::point_idx{}, way_idx_t{way_idx}});
 
     } else {
       auto const p = w.get_node_pos(way.front());
       auto const start_idx = provider.get_point_idx(p);
       sorted_way_indices.emplace_back(
-          std::pair{std::move(start_idx), way_idx_t{way_idx}});
+          cista::pair{std::move(start_idx), way_idx_t{way_idx}});
     }
   }
   std::sort(
@@ -126,20 +198,45 @@ void elevation_storage::set_elevations(
       std::execution::par_unseq,
 #endif
       begin(sorted_way_indices), end(sorted_way_indices),
-      [](auto const& lhs, auto const& rhs) {
-        return (lhs.first < rhs.first) ||
-               ((lhs.first == rhs.first) && (lhs.second < rhs.second));
-      });
+      [](auto const& lhs, auto const& rhs) { return lhs.first < rhs.first; });
+  */
 
-  utl::parallel_for_run(
-      std::move(size),
-      [&](std::size_t const idx) {
+  auto const t2 = std::chrono::high_resolution_clock::now();
+  auto const total = std::accumulate(
+      begin(way_buckets), end(way_buckets), 0U,
+      [](auto const sum, auto bucket) { return sum + bucket.size(); });
+  auto sorted_way_indices = std::vector<way_idx_t>{};
+  sorted_way_indices.reserve(total);
+  for (auto const& bucket : way_buckets) {
+    for (auto const way_idx : bucket) {
+      sorted_way_indices.emplace_back(way_idx);
+    }
+  }
+  auto const t2a = std::chrono::high_resolution_clock::now();
+  std::cout << sizeof(way_buckets) << ", " << total << "\n";
+  // std::cout << sizeof(sorted_way_indices) << ", " <<
+  // sorted_way_indices.size()
+  //           << ", " << sorted_way_indices.used_size_ << "\n"
+  //           << std::endl;
+  std::cout << "\n\nSorting by tile done in: "
+            << std::chrono::duration_cast<std::chrono::milliseconds>(t2 - t1)
+            << " + "
+            << std::chrono::duration_cast<std::chrono::milliseconds>(t2a - t2)
+            << " = "
+            << std::chrono::duration_cast<std::chrono::milliseconds>(t2a - t1)
+            << "\n\n\n"
+            << std::endl;
+  auto const t3 = std::chrono::high_resolution_clock::now();
+
+  utl::parallel_for(
+      sorted_way_indices,
+      // [&](std::size_t const idx) {
+      [&](way_idx_t const way_idx) {
         thread_local auto elevations = std::vector<encoding>{};
         thread_local auto points = std::vector<point>{};
         elevations.clear();
         points.clear();
 
-        auto const way_idx = sorted_way_indices[idx].second;
         auto const& nodes = w.r_->way_nodes_[way_idx];
 
         for (auto const& node : nodes) {
@@ -164,6 +261,45 @@ void elevation_storage::set_elevations(
         }
       },
       pt->update_fn());
+  // utl::parallel_for_run(
+  //     std::move(size),
+  //     [&](std::size_t const idx) {
+  //       thread_local auto elevations = std::vector<encoding>{};
+  //       thread_local auto points = std::vector<point>{};
+  //       elevations.clear();
+  //       points.clear();
+
+  //       auto const way_idx = sorted_way_indices[idx].second;
+  //       auto const& nodes = w.r_->way_nodes_[way_idx];
+
+  //       for (auto const& node : nodes) {
+  //         points.emplace_back(w.get_node_pos(node));
+  //       }
+  //       auto elevations_idx = std::size_t{0U};
+  //       for (auto const [from, to] : utl::pairwise(points)) {
+  //         auto const elevation =
+  //             encoding{get_way_elevation(provider, from, to, max_step_size)};
+  //         if (elevation) {
+  //           elevations.resize(elevations_idx);
+  //           elevations.push_back(std::move(elevation));
+  //         }
+  //         ++elevations_idx;
+  //       }
+  //       {
+  //         auto const guard = std::lock_guard{m};
+  //         auto bucket = elevations_[way_idx];
+  //         for (auto const e : elevations) {
+  //           bucket.push_back(e);
+  //         }
+  //       }
+  //     },
+  //     pt->update_fn());
+
+  auto const t4 = std::chrono::high_resolution_clock::now();
+  std::cout << "\n\nCalculating elevations done in: "
+            << std::chrono::duration_cast<std::chrono::milliseconds>(t4 - t3)
+            << "\n\n\n"
+            << std::endl;
 }
 
 elevation_storage::elevation elevation_storage::get_elevations(

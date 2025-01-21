@@ -92,7 +92,9 @@ using multi_level_elevator_idx_t =
 using elevation_driver_idx_t =
     cista::strong<std::uint8_t, struct elevation_driver_idx_>;
 using elevation_tile_idx_t =
-    cista::strong<std::size_t, struct elevation_tile_idx_>;
+    cista::strong<std::uint16_t, struct elevation_tile_idx_>;
+using elevation_bucket_idx_t =
+    cista::strong<std::uint32_t, struct elevation_bucket_idx_>;
 
 using distance_t = std::uint16_t;
 using elevation_t = std::int16_t;

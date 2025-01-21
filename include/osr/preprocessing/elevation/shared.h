@@ -34,6 +34,7 @@ concept IsDriver = IsProvider<Driver> && requires(Driver driver) {
   {
     std::as_const(driver).get_tile_idx(std::declval<point const&>())
   } -> std::same_as<elevation_tile_idx_t>;
+  { std::as_const(driver).n_tiles() } -> std::same_as<std::size_t>;
 };
 
 }  // namespace osr::preprocessing::elevation

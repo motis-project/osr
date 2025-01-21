@@ -8,6 +8,8 @@
 
 #include "utl/enumerate.h"
 
+#include "cista/strong.h"
+
 #include "osr/elevation_storage.h"
 #include "osr/preprocessing/elevation/dem_driver.h"
 #include "osr/preprocessing/elevation/hgt_driver.h"
@@ -23,11 +25,11 @@ using raster_driver = std::variant<dem_driver, hgt_driver>;
 struct provider::impl {
   impl() = default;
 
-  void add_driver(dem_driver&& driver) {
-    drivers_.emplace_back(std::move(driver));
-  }
-
-  void add_driver(hgt_driver&& driver) {
+  void add_driver(IsDriver auto&& driver) {
+    auto const old_count = cusum_drivers_.empty() ? elevation_bucket_idx_t{0}
+                                                  : cusum_drivers_.back();
+    cusum_drivers_.emplace_back(old_count +
+                                elevation_bucket_idx_t{driver.n_tiles()});
     drivers_.emplace_back(std::move(driver));
   }
 
@@ -43,6 +45,7 @@ struct provider::impl {
   }
 
   std::vector<raster_driver> drivers_;
+  std::vector<elevation_bucket_idx_t> cusum_drivers_;
 };
 
 provider::provider(std::filesystem::path const& p)
@@ -113,6 +116,26 @@ provider::point_idx provider::get_point_idx(::osr::point const& point) const {
       .driver_idx_ = elevation_driver_idx_t::invalid(),
       .tile_idx_ = elevation_tile_idx_t::invalid(),
   };
+}
+
+unsigned int provider::get_bucket_count() const {
+  return impl_->cusum_drivers_.empty()
+             ? 0U
+             : cista::to_idx(impl_->cusum_drivers_.back());
+}
+
+elevation_bucket_idx_t provider::get_bucket_idx(
+    ::osr::point const& point) const {
+  for (auto const [driver_idx, driver] : utl::enumerate(impl_->drivers_)) {
+    auto const tile_idx = std::visit(
+        [&](IsDriver auto const& d) { return d.get_tile_idx(point); }, driver);
+    if (tile_idx != elevation_tile_idx_t::invalid()) {
+      return driver_idx == 0U ? elevation_bucket_idx_t{cista::to_idx(tile_idx)}
+                              : impl_->cusum_drivers_[driver_idx - 1U] +
+                                    cista::to_idx(tile_idx);
+    }
+  }
+  return elevation_bucket_idx_t::invalid();
 }
 
 }  // namespace osr::preprocessing::elevation

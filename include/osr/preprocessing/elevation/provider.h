@@ -34,6 +34,8 @@ struct provider {
   std::size_t driver_count() const;
   step_size get_step_size() const;
   point_idx get_point_idx(::osr::point const&) const;
+  unsigned int get_bucket_count() const;
+  elevation_bucket_idx_t get_bucket_idx(::osr::point const&) const;
 
 private:
   struct impl;
