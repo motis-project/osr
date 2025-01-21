@@ -40,7 +40,8 @@ struct bike_sharing {
                      .from_level_ = 0,
                      .to_level_ = 0,
                      .is_platform_ = 0,
-                     .is_parking_ = 0};
+                     .is_parking_ = 0,
+                     .is_ramp_ = 0};
 
   static constexpr auto const kAdditionalNodeProperties =
       node_properties{.from_level_ = 0,
