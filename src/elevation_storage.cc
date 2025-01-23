@@ -107,11 +107,16 @@ void elevation_storage::set_elevations(
   auto m = std::mutex{};
 
   auto const t1 = std::chrono::high_resolution_clock::now();
-  std::cout << "Calculating tile buckets ..." << std::endl;
+  std::cout << "\nCalculating tile buckets ...\n" << std::endl;
 
   pt->status("Calculating tile buckets").out_bounds(85, 86).in_high(size);
-  using element_t = cista::pair<osr::way_idx_t, osr::elevation_bucket_idx_t>;
-  auto sorted_ways = osr::mm_vec<element_t>{
+  struct way_bucket_idx_t {
+    osr::way_idx_t way_idx_;
+    osr::elevation_bucket_idx_t bucket_idx_;
+  };
+  // using element_t = cista::pair<osr::way_idx_t, osr::elevation_bucket_idx_t>;
+  // auto sorted_ways = osr::mm_vec<element_t>{
+  auto sorted_ways = osr::mm_vec<way_bucket_idx_t>{
       mm(std::filesystem::temp_directory_path(), "temp_osr_extract_sorted_ways",
          cista::mmap::protection::WRITE)};
   sorted_ways.reserve(size);
@@ -131,7 +136,7 @@ void elevation_storage::set_elevations(
   std::cout << "\nDone: "
             << std::chrono::duration_cast<std::chrono::milliseconds>(t2 - t1)
             << "\n\n";
-  std::cout << "Grouping by tile buckets ..." << std::endl;
+  std::cout << "\nGrouping by tile buckets ...\n" << std::endl;
 
   pt->status("Grouping by tile buckets")
       .out_bounds(86, 87)
@@ -141,29 +146,48 @@ void elevation_storage::set_elevations(
       std::execution::par_unseq,
 #endif
       begin(sorted_ways), end(sorted_ways),
-      [](auto const& a, auto const& b) { return a.second < b.second; });
+      [](way_bucket_idx_t const& a, way_bucket_idx_t const& b) {
+        return a.bucket_idx_ < b.bucket_idx_;
+      });
 
   auto const t3 = std::chrono::high_resolution_clock::now();
   std::cout << "\nDone: "
             << std::chrono::duration_cast<std::chrono::milliseconds>(t3 - t2)
             << "\n\n";
-  std::cout << "Writing elevation data ..." << std::endl;
+  std::cout << "\nWriting elevation data ...\n" << std::endl;
 
-  elevations_.resize(size);
   auto const max_step_size = provider.get_step_size();
 
+  using sort_idx_t = cista::strong<std::uint32_t, struct sort_idx_>;
+  struct mapping_t {
+    way_idx_t way_idx_;
+    sort_idx_t sort_idx_;
+  };
+  auto mappings = osr::mm_vec<mapping_t>{
+      mm(std::filesystem::temp_directory_path(), "temp_osr_extract_mapping",
+         cista::mmap::protection::WRITE)};
+  auto unsorted_elevations = osr::mm_vecvec<sort_idx_t, encoding>{
+      mm_vec<encoding>{mm(std::filesystem::temp_directory_path(),
+                          "temp_osr_extract_unsorted_elevations_data",
+                          cista::mmap::protection::WRITE)},
+      mm_vec<cista::base_t<sort_idx_t>>{
+          mm(std::filesystem::temp_directory_path(),
+             "temp_osr_extract_unsorted_elevations_idx",
+             cista::mmap::protection::WRITE)}};
+  mappings.reserve(sorted_ways.size());
+
   pt->status("Calculating elevation data")
-      .out_bounds(87, 90)
+      .out_bounds(87, 88)
       .in_high(sorted_ways.size());
   utl::parallel_for(
       sorted_ways,
-      [&](element_t const& element) {
+      [&](way_bucket_idx_t const& way_bucket_idx) {
         thread_local auto elevations = std::vector<encoding>{};
         thread_local auto points = std::vector<point>{};
         elevations.clear();
         points.clear();
 
-        auto const& way_idx = element.first;
+        auto const& way_idx = way_bucket_idx.way_idx_;
         auto const& nodes = w.r_->way_nodes_[way_idx];
 
         for (auto const& node : nodes) {
@@ -179,12 +203,15 @@ void elevation_storage::set_elevations(
           }
           ++elevations_idx;
         }
-        {
+        if (!elevations.empty()) {
           auto const lock = std::lock_guard{m};
-          auto bucket = elevations_[way_idx];
-          for (auto const e : elevations) {
-            bucket.push_back(e);
-          }
+          mappings.emplace_back(way_idx,
+                                sort_idx_t{unsorted_elevations.size()});
+          unsorted_elevations.emplace_back(elevations);
+          // auto bucket = elevations_[way_idx];
+          // for (auto const e : elevations) {
+          //   bucket.push_back(e);
+          // }
         }
       },
       pt->update_fn());
@@ -194,6 +221,43 @@ void elevation_storage::set_elevations(
             << std::chrono::duration_cast<std::chrono::milliseconds>(t4 - t3)
             << "\n\n"
             << std::endl;
+  std::cout << "\nSorting results ...\n" << std::endl;
+  pt->status("Sorting results")
+      .out_bounds(88, 89)
+      .in_high(unsorted_elevations.size());
+
+  std::sort(
+#if __cpp_lib_execution
+      std::execution::par_unseq,
+#endif
+      begin(mappings), end(mappings),
+      [](mapping_t const& a, mapping_t const& b) {
+        return a.way_idx_ < b.way_idx_;
+      });
+
+  auto const t5 = std::chrono::high_resolution_clock::now();
+  std::cout << "\nDone: "
+            << std::chrono::duration_cast<std::chrono::milliseconds>(t5 - t4)
+            << "\n\n"
+            << std::endl;
+  std::cout << "\nStoring elevations ...\n" << std::endl;
+  pt->status("Storing elevations")
+      .out_bounds(89, 90)
+      .in_high(unsorted_elevations.size());
+  elevations_.resize(size);
+
+  for (auto const& mapping : mappings) {
+    auto bucket = elevations_[mapping.way_idx_];
+    for (auto const e : unsorted_elevations[mapping.sort_idx_]) {
+      bucket.push_back(e);
+    }
+    pt->increment();
+  }
+
+  auto const t6 = std::chrono::high_resolution_clock::now();
+  std::cout << "\nDone: "
+            << std::chrono::duration_cast<std::chrono::milliseconds>(t6 - t5)
+            << "\n\n";
 }
 
 elevation_storage::elevation elevation_storage::get_elevations(
