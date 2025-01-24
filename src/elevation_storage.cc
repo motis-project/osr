@@ -96,6 +96,48 @@ elevation_storage::elevation get_way_elevation(
   }
   return elevation;
 }
+// DEBUG EXTRACT START
+  using sort_idx_t = cista::strong<std::uint32_t, struct sort_idx_>;
+
+void calculate_elevations(
+  preprocessing::elevation::provider const& provider,
+  ways const& w,
+  std::vector<elevation_storage::encoding>& elevations,
+  std::vector<point>& points,
+  way_idx_t const way_idx,
+  preprocessing::elevation::step_size const& max_step_size) {
+
+        elevations.clear();
+        points.clear();
+
+        auto const& nodes = w.r_->way_nodes_[way_idx];
+
+        for (auto const& node : nodes) {
+          points.emplace_back(w.get_node_pos(node));
+        }
+        auto elevations_idx = std::size_t{0U};
+        for (auto const [from, to] : utl::pairwise(points)) {
+          auto const elevation =
+              elevation_storage::encoding{get_way_elevation(provider, from, to, max_step_size)};
+          if (elevation) {
+            elevations.resize(elevations_idx);
+            elevations.push_back(std::move(elevation));
+          }
+          ++elevations_idx;
+        }
+  }
+
+void store_elevations(
+  auto& mappings,
+  auto& unsorted_elevations,
+  way_idx_t const way_idx,
+  auto const& elevations) {
+          mappings.emplace_back(way_idx,
+                                sort_idx_t{unsorted_elevations.size()});
+          unsorted_elevations.emplace_back(elevations);
+}
+// DEBUG EXTRACT START
+
 
 #include <chrono>
 
@@ -161,7 +203,7 @@ void elevation_storage::set_elevations(
 
   auto const max_step_size = provider.get_step_size();
 
-  using sort_idx_t = cista::strong<std::uint32_t, struct sort_idx_>;
+  // using sort_idx_t = cista::strong<std::uint32_t, struct sort_idx_>;
   struct mapping_t {
     way_idx_t way_idx_;
     sort_idx_t sort_idx_;
@@ -189,30 +231,34 @@ void elevation_storage::set_elevations(
       [&](way_bucket_idx_t const& way_bucket_idx) {
         thread_local auto elevations = std::vector<encoding>{};
         thread_local auto points = std::vector<point>{};
-        elevations.clear();
-        points.clear();
+
+        calculate_elevations(provider, w, elevations, points, way_bucket_idx.way_idx_, max_step_size);
+
+        // elevations.clear();
+        // points.clear();
 
         auto const& way_idx = way_bucket_idx.way_idx_;
-        auto const& nodes = w.r_->way_nodes_[way_idx];
+        // auto const& nodes = w.r_->way_nodes_[way_idx];
 
-        for (auto const& node : nodes) {
-          points.emplace_back(w.get_node_pos(node));
-        }
-        auto elevations_idx = std::size_t{0U};
-        for (auto const [from, to] : utl::pairwise(points)) {
-          auto const elevation =
-              encoding{get_way_elevation(provider, from, to, max_step_size)};
-          if (elevation) {
-            elevations.resize(elevations_idx);
-            elevations.push_back(std::move(elevation));
-          }
-          ++elevations_idx;
-        }
+        // for (auto const& node : nodes) {
+        //   points.emplace_back(w.get_node_pos(node));
+        // }
+        // auto elevations_idx = std::size_t{0U};
+        // for (auto const [from, to] : utl::pairwise(points)) {
+        //   auto const elevation =
+        //       encoding{get_way_elevation(provider, from, to, max_step_size)};
+        //   if (elevation) {
+        //     elevations.resize(elevations_idx);
+        //     elevations.push_back(std::move(elevation));
+        //   }
+        //   ++elevations_idx;
+        // }
         if (!elevations.empty()) {
           auto const lock = std::lock_guard{m};
-          mappings.emplace_back(way_idx,
-                                sort_idx_t{unsorted_elevations.size()});
-          unsorted_elevations.emplace_back(elevations);
+          store_elevations(mappings, unsorted_elevations, way_idx, elevations);
+          // mappings.emplace_back(way_idx,
+          //                       sort_idx_t{unsorted_elevations.size()});
+          // unsorted_elevations.emplace_back(elevations);
           // auto bucket = elevations_[way_idx];
           // for (auto const e : elevations) {
           //   bucket.push_back(e);
