@@ -121,6 +121,8 @@ void elevation_storage::set_elevations(
          cista::mmap::protection::WRITE)};
   sorted_ways.reserve(size);
 
+  auto way_count = std::size_t{0U};
+
   for (auto const [way_idx, way] : utl::enumerate(w.r_->way_nodes_)) {
     if (!way.empty()) {
       auto const p = w.get_node_pos(way.front());
@@ -128,6 +130,7 @@ void elevation_storage::set_elevations(
       if (bucket_idx != elevation_bucket_idx_t::invalid()) {
         auto const lock = std::lock_guard{m};
         sorted_ways.emplace_back(way_idx_t{way_idx}, bucket_idx);
+        way_count += way.size();
       }
     }
   }
@@ -175,6 +178,8 @@ void elevation_storage::set_elevations(
              "temp_osr_extract_unsorted_elevations_idx",
              cista::mmap::protection::WRITE)}};
   mappings.reserve(sorted_ways.size());
+  unsorted_elevations.bucket_starts_.reserve(way_count);
+  std::cout << "\nSizes: " << size << ", " << sorted_ways.size() << ", " << way_count << ", " << unsorted_elevations.size() << ", " << unsorted_elevations.bucket_starts_.size() << "\n\n";
 
   pt->status("Calculating elevation data")
       .out_bounds(87, 88)
