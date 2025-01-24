@@ -5,6 +5,7 @@
 #include <execution>
 #include <mutex>
 #include <ranges>
+#include <string>
 
 #include "utl/enumerate.h"
 #include "utl/pairwise.h"
@@ -97,47 +98,53 @@ elevation_storage::elevation get_way_elevation(
   return elevation;
 }
 // DEBUG EXTRACT START
-  using sort_idx_t = cista::strong<std::uint32_t, struct sort_idx_>;
+using sort_idx_t = cista::strong<std::uint32_t, struct sort_idx_>;
+
+struct mapping_t {
+  way_idx_t way_idx_;
+  sort_idx_t sort_idx_;
+};
+
+struct task_result {
+  osr::mm_vec<mapping_t> mapping_;
+  osr::mm_vecvec<sort_idx_t, elevation_storage::encoding> encodings_;
+};
 
 void calculate_elevations(
-  preprocessing::elevation::provider const& provider,
-  ways const& w,
-  std::vector<elevation_storage::encoding>& elevations,
-  std::vector<point>& points,
-  way_idx_t const way_idx,
-  preprocessing::elevation::step_size const& max_step_size) {
+    preprocessing::elevation::provider const& provider,
+    ways const& w,
+    std::vector<elevation_storage::encoding>& elevations,
+    std::vector<point>& points,
+    way_idx_t const way_idx,
+    preprocessing::elevation::step_size const& max_step_size) {
 
-        elevations.clear();
-        points.clear();
+  elevations.clear();
+  points.clear();
 
-        auto const& nodes = w.r_->way_nodes_[way_idx];
+  auto const& nodes = w.r_->way_nodes_[way_idx];
 
-        for (auto const& node : nodes) {
-          points.emplace_back(w.get_node_pos(node));
-        }
-        auto elevations_idx = std::size_t{0U};
-        for (auto const [from, to] : utl::pairwise(points)) {
-          auto const elevation =
-              elevation_storage::encoding{get_way_elevation(provider, from, to, max_step_size)};
-          if (elevation) {
-            elevations.resize(elevations_idx);
-            elevations.push_back(std::move(elevation));
-          }
-          ++elevations_idx;
-        }
+  for (auto const& node : nodes) {
+    points.emplace_back(w.get_node_pos(node));
   }
+  auto elevations_idx = std::size_t{0U};
+  for (auto const [from, to] : utl::pairwise(points)) {
+    auto const elevation = elevation_storage::encoding{
+        get_way_elevation(provider, from, to, max_step_size)};
+    if (elevation) {
+      elevations.resize(elevations_idx);
+      elevations.push_back(std::move(elevation));
+    }
+    ++elevations_idx;
+  }
+}
 
-void store_elevations(
-  auto& mappings,
-  auto& unsorted_elevations,
-  way_idx_t const way_idx,
-  auto const& elevations) {
-          mappings.emplace_back(way_idx,
-                                sort_idx_t{unsorted_elevations.size()});
-          unsorted_elevations.emplace_back(elevations);
+void store_elevations(task_result& result,
+                      way_idx_t const way_idx,
+                      auto const& elevations) {
+  result.mapping_.emplace_back(way_idx, sort_idx_t{result.encodings_.size()});
+  result.encodings_.emplace_back(elevations);
 }
 // DEBUG EXTRACT START
-
 
 #include <chrono>
 
@@ -163,7 +170,7 @@ void elevation_storage::set_elevations(
          cista::mmap::protection::WRITE)};
   sorted_ways.reserve(size);
 
-  auto way_count = std::size_t{0U};
+  // auto way_count = std::size_t{0U};
 
   for (auto const [way_idx, way] : utl::enumerate(w.r_->way_nodes_)) {
     if (!way.empty()) {
@@ -172,7 +179,7 @@ void elevation_storage::set_elevations(
       if (bucket_idx != elevation_bucket_idx_t::invalid()) {
         auto const lock = std::lock_guard{m};
         sorted_ways.emplace_back(way_idx_t{way_idx}, bucket_idx);
-        way_count += way.size();
+        // way_count += way.size();
       }
     }
   }
@@ -204,24 +211,52 @@ void elevation_storage::set_elevations(
   auto const max_step_size = provider.get_step_size();
 
   // using sort_idx_t = cista::strong<std::uint32_t, struct sort_idx_>;
-  struct mapping_t {
-    way_idx_t way_idx_;
-    sort_idx_t sort_idx_;
+
+  auto results = std::vector<std::unique_ptr<task_result>>{};
+
+  auto const create_result = [&]() -> task_result& {
+    auto lock = std::lock_guard{m};
+    auto const idx = std::to_string(results.size());
+    return *results
+                .emplace_back(std::make_unique<task_result>(task_result{
+                    .mapping_ = osr::mm_vec<mapping_t>{mm(
+                        std::filesystem::temp_directory_path(),
+                        ("temp_osr_extract_mapping_" + idx).data(),
+                        cista::mmap::protection::WRITE)},
+                    .encodings_ =
+                        osr::mm_vecvec<sort_idx_t, encoding>{
+                            mm_vec<encoding>{mm(
+                                std::filesystem::temp_directory_path(),
+                                ("temp_osr_extract_unsorted_elevations_data_" +
+                                 idx)
+                                    .data(),
+                                cista::mmap::protection::WRITE)},
+                            mm_vec<cista::base_t<sort_idx_t>>{mm(
+                                std::filesystem::temp_directory_path(),
+                                ("temp_osr_extract_unsorted_elevations_idx_" +
+                                 idx)
+                                    .data(),
+                                cista::mmap::protection::WRITE)}},
+                }))
+                .get();
   };
-  auto mappings = osr::mm_vec<mapping_t>{
-      mm(std::filesystem::temp_directory_path(), "temp_osr_extract_mapping",
-         cista::mmap::protection::WRITE)};
-  auto unsorted_elevations = osr::mm_vecvec<sort_idx_t, encoding>{
-      mm_vec<encoding>{mm(std::filesystem::temp_directory_path(),
-                          "temp_osr_extract_unsorted_elevations_data",
-                          cista::mmap::protection::WRITE)},
-      mm_vec<cista::base_t<sort_idx_t>>{
-          mm(std::filesystem::temp_directory_path(),
-             "temp_osr_extract_unsorted_elevations_idx",
-             cista::mmap::protection::WRITE)}};
-  mappings.reserve(sorted_ways.size());
-  unsorted_elevations.bucket_starts_.reserve(way_count);
-  std::cout << "\nSizes: " << size << ", " << sorted_ways.size() << ", " << way_count << ", " << unsorted_elevations.size() << ", " << unsorted_elevations.bucket_starts_.size() << "\n\n";
+
+  // auto mappings = osr::mm_vec<mapping_t>{
+  //     mm(std::filesystem::temp_directory_path(), "temp_osr_extract_mapping",
+  //        cista::mmap::protection::WRITE)};
+  // auto unsorted_elevations = osr::mm_vecvec<sort_idx_t, encoding>{
+  //     mm_vec<encoding>{mm(std::filesystem::temp_directory_path(),
+  //                         "temp_osr_extract_unsorted_elevations_data",
+  //                         cista::mmap::protection::WRITE)},
+  //     mm_vec<cista::base_t<sort_idx_t>>{
+  //         mm(std::filesystem::temp_directory_path(),
+  //            "temp_osr_extract_unsorted_elevations_idx",
+  //            cista::mmap::protection::WRITE)}};
+  // mappings.reserve(sorted_ways.size());
+  // unsorted_elevations.bucket_starts_.reserve(way_count);
+  // std::cout << "\nSizes: " << size << ", " << sorted_ways.size() << ", " <<
+  // way_count << ", " << unsorted_elevations.size() << ", " <<
+  // unsorted_elevations.bucket_starts_.size() << "\n\n";
 
   pt->status("Calculating elevation data")
       .out_bounds(87, 88)
@@ -229,10 +264,12 @@ void elevation_storage::set_elevations(
   utl::parallel_for(
       sorted_ways,
       [&](way_bucket_idx_t const& way_bucket_idx) {
+        thread_local auto& result = create_result();
         thread_local auto elevations = std::vector<encoding>{};
         thread_local auto points = std::vector<point>{};
 
-        calculate_elevations(provider, w, elevations, points, way_bucket_idx.way_idx_, max_step_size);
+        calculate_elevations(provider, w, elevations, points,
+                             way_bucket_idx.way_idx_, max_step_size);
 
         // elevations.clear();
         // points.clear();
@@ -254,8 +291,10 @@ void elevation_storage::set_elevations(
         //   ++elevations_idx;
         // }
         if (!elevations.empty()) {
-          auto const lock = std::lock_guard{m};
-          store_elevations(mappings, unsorted_elevations, way_idx, elevations);
+          // auto const lock = std::lock_guard{m};
+          // store_elevations(mappings, unsorted_elevations, way_idx,
+          // elevations);
+          store_elevations(result, way_idx, elevations);
           // mappings.emplace_back(way_idx,
           //                       sort_idx_t{unsorted_elevations.size()});
           // unsorted_elevations.emplace_back(elevations);
@@ -267,9 +306,39 @@ void elevation_storage::set_elevations(
       },
       pt->update_fn());
 
+  auto const t3b = std::chrono::high_resolution_clock::now();
+  std::cout << "\nDone: "
+            << std::chrono::duration_cast<std::chrono::milliseconds>(t3b - t3)
+            << "\n\n"
+            << std::endl;
+  std::cout << "\nMerging results ...\n" << std::endl;
+  pt->status("Merging results").out_bounds(88, 89).in_high(results.size());
+
+  auto mappings = osr::mm_vec<mapping_t>{
+      mm(std::filesystem::temp_directory_path(), "temp_osr_extract_mapping",
+         cista::mmap::protection::WRITE)};
+  auto unsorted_elevations = osr::mm_vecvec<sort_idx_t, encoding>{
+      mm_vec<encoding>{mm(std::filesystem::temp_directory_path(),
+                          "temp_osr_extract_unsorted_elevations_data",
+                          cista::mmap::protection::WRITE)},
+      mm_vec<cista::base_t<sort_idx_t>>{
+          mm(std::filesystem::temp_directory_path(),
+             "temp_osr_extract_unsorted_elevations_idx",
+             cista::mmap::protection::WRITE)}};
+
+  for (auto& result : results) {
+    for (auto const& mp : result->mapping_) {
+      mappings.emplace_back(mp);
+    }
+    for (auto const e : result->encodings_) {
+      unsorted_elevations.emplace_back(e);
+    }
+    result.reset();
+  }
+
   auto const t4 = std::chrono::high_resolution_clock::now();
   std::cout << "\nDone: "
-            << std::chrono::duration_cast<std::chrono::milliseconds>(t4 - t3)
+            << std::chrono::duration_cast<std::chrono::milliseconds>(t4 - t3b)
             << "\n\n"
             << std::endl;
   std::cout << "\nSorting results ...\n" << std::endl;
