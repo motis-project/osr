@@ -5,10 +5,12 @@
 #include <cstdint>
 #include <algorithm>
 #include <bit>
+#include <limits>
 
 #include "cista/mmap.h"
 
 #include "osr/elevation_storage.h"
+#include "osr/preprocessing/elevation/shared.h"
 
 // SRTM HGT File Format
 //
@@ -51,7 +53,8 @@ struct hgt_tile<RasterSize>::hgt_tile<RasterSize>::impl {
         sw_lat_(lat),
         sw_lng_(lng) {}
 
-  elevation_t get(::osr::point const& p) {
+  template <std::size_t UpperBound>
+  std::size_t get_offset(::osr::point const& p) const {
     auto const lat = p.lat();
     auto const lng = p.lng();
     auto const box = get_coord_box();
@@ -59,20 +62,28 @@ struct hgt_tile<RasterSize>::hgt_tile<RasterSize>::impl {
         box.min_lat_ <= lat && lat < box.max_lat_) {
       auto const column =
           std::clamp(static_cast<std::size_t>(
-                         std::floor((lng - box.min_lng_) * (RasterSize - 1U))),
-                     std::size_t{0U}, RasterSize - 1U);
-      auto const row =
-          std::clamp(static_cast<std::size_t>(
-                         std::floor((box.max_lat_ - lat) * (RasterSize - 1U))),
-                     std::size_t{0U}, RasterSize - 1);
-      auto const offset = kBytesPerPixel * (RasterSize * row + column);
-      auto const value = get(offset);
-      return (value == kVoidValue) ? ::osr::NO_ELEVATION_DATA : value;
+                         std::floor((lng - box.min_lng_) * (RasterSize - 1U) *
+                                    (UpperBound / RasterSize))),
+                     std::size_t{0U}, UpperBound - 1U);
+      auto const row = std::clamp(static_cast<std::size_t>(std::floor(
+                                      (box.max_lat_ - lat) * (RasterSize - 1U) *
+                                      (UpperBound / RasterSize))),
+                                  std::size_t{0U}, (UpperBound - 1U));
+      return UpperBound * row + column;
     }
-    return ::osr::NO_ELEVATION_DATA;
+    return std::numeric_limits<std::size_t>::max();
   }
 
-  elevation_t get(std::size_t const offset) {
+  elevation_t get(::osr::point const& p) const {
+    auto const offset = get_offset<RasterSize>(p);
+    if (offset == std::numeric_limits<std::size_t>::max()) {
+      return ::osr::NO_ELEVATION_DATA;
+    }
+    auto const value = get(kBytesPerPixel * offset);
+    return (value == kVoidValue) ? ::osr::NO_ELEVATION_DATA : value;
+  }
+
+  elevation_t get(std::size_t const offset) const {
     assert(offset < kBytesPerPixel * RasterSize * RasterSize);
     auto const byte_ptr = file_.data() + offset;
     auto const raw_value = *reinterpret_cast<std::int16_t const*>(byte_ptr);
@@ -88,6 +99,13 @@ struct hgt_tile<RasterSize>::hgt_tile<RasterSize>::impl {
         .max_lat_ = static_cast<float>(sw_lat_ + 1.F + kCenterOffset),
         .max_lng_ = static_cast<float>(sw_lng_ + 1.F + kCenterOffset),
     };
+  }
+
+  sub_tile_idx_t get_sub_tile_idx(::osr::point const& p) const {
+    constexpr auto const kUpper =
+        1 << (std::numeric_limits<sub_tile_idx_t>::digits / 2);
+    auto const offset = get_offset<kUpper>(p);
+    return (offset == std::numeric_limits<std::size_t>::max()) ? 0U : offset;
   }
 
   constexpr step_size get_step_size() const {
@@ -125,6 +143,12 @@ step_size hgt_tile<RasterSize>::get_step_size() const {
 template <size_t RasterSize>
 coord_box hgt_tile<RasterSize>::get_coord_box() const {
   return impl_->get_coord_box();
+}
+
+template <size_t RasterSize>
+sub_tile_idx_t hgt_tile<RasterSize>::get_sub_tile_idx(
+    ::osr::point const& point) const {
+  return impl_->get_sub_tile_idx(point);
 }
 
 }  // namespace osr::preprocessing::elevation

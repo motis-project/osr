@@ -102,6 +102,26 @@ elevation_tile_idx_t hgt_driver::get_tile_idx(::osr::point const& point) const {
   return idx;
 }
 
+elevation_tile_idx_t hgt_driver::get_sub_tile_idx(
+    ::osr::point const& point) const {
+  auto const p = decltype(rtree_)::coord_t{static_cast<float>(point.lat()),
+                                           static_cast<float>(point.lng())};
+  auto idx = elevation_tile_idx_t::invalid();
+  rtree_.search(
+      p, p, [&](auto const&, auto const&, std::size_t const& tile_idx) {
+        // auto const t_idx = elevation_tile_idx_t{tile_idx};
+        auto const sub_tile = std::visit(
+            [&](IsTile auto const& tile) {
+              return tile.get_sub_tile_idx(point);
+            },
+            tiles_[tile_idx]);
+        idx = elevation_tile_idx_t{tile_idx * kSubTileFactor + sub_tile};
+        return true;
+        // return idx != elevation_tile_idx_t::invalid();
+      });
+  return idx;
+}
+
 std::size_t hgt_driver::n_tiles() const { return tiles_.size(); }
 
 std::optional<hgt_driver::hgt_tile_t> hgt_driver::open(fs::path const& path) {

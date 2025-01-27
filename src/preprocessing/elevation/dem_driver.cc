@@ -3,6 +3,7 @@
 #include <limits>
 
 #include "osr/elevation_storage.h"
+#include "osr/preprocessing/elevation/shared.h"
 
 namespace fs = std::filesystem;
 
@@ -60,6 +61,11 @@ elevation_tile_idx_t dem_driver::get_tile_idx(::osr::point const& point) const {
                   return idx != elevation_tile_idx_t::invalid();
                 });
   return idx;
+}
+
+elevation_tile_idx_t dem_driver::get_sub_tile_idx(
+    ::osr::point const& point) const {
+  return get_tile_idx(point) * kSubTileFactor;
 }
 
 std::size_t dem_driver::n_tiles() const { return tiles_.size(); }

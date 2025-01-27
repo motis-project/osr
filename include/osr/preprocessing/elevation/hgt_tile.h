@@ -29,6 +29,7 @@ struct hgt_tile {
   step_size get_step_size() const;
 
   coord_box get_coord_box() const;
+  sub_tile_idx_t get_sub_tile_idx(::osr::point const&) const;
 
   static constexpr std::size_t file_size() {
     return RasterSize * RasterSize * kBytesPerPixel;

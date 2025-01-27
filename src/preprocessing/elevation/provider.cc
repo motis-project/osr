@@ -28,8 +28,8 @@ struct provider::impl {
   void add_driver(IsDriver auto&& driver) {
     auto const old_count = cusum_drivers_.empty() ? elevation_bucket_idx_t{0}
                                                   : cusum_drivers_.back();
-    cusum_drivers_.emplace_back(old_count +
-                                elevation_bucket_idx_t{driver.n_tiles()});
+    cusum_drivers_.emplace_back(
+        old_count + elevation_bucket_idx_t{driver.n_tiles() * kSubTileFactor});
     drivers_.emplace_back(std::move(driver));
   }
 
@@ -127,12 +127,14 @@ unsigned int provider::get_bucket_count() const {
 elevation_bucket_idx_t provider::get_bucket_idx(
     ::osr::point const& point) const {
   for (auto const [driver_idx, driver] : utl::enumerate(impl_->drivers_)) {
-    auto const tile_idx = std::visit(
-        [&](IsDriver auto const& d) { return d.get_tile_idx(point); }, driver);
-    if (tile_idx != elevation_tile_idx_t::invalid()) {
-      return driver_idx == 0U ? elevation_bucket_idx_t{cista::to_idx(tile_idx)}
-                              : impl_->cusum_drivers_[driver_idx - 1U] +
-                                    cista::to_idx(tile_idx);
+    auto const sub_tile_idx = std::visit(
+        [&](IsDriver auto const& d) { return d.get_sub_tile_idx(point); },
+        driver);
+    if (sub_tile_idx != elevation_tile_idx_t::invalid()) {
+      return driver_idx == 0U
+                 ? elevation_bucket_idx_t{cista::to_idx(sub_tile_idx)}
+                 : impl_->cusum_drivers_[driver_idx - 1U] +
+                       cista::to_idx(sub_tile_idx);
     }
   }
   return elevation_bucket_idx_t::invalid();
