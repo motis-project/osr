@@ -326,10 +326,13 @@ void elevation_storage::set_elevations(
              "temp_osr_extract_unsorted_elevations_idx",
              cista::mmap::protection::WRITE)}};
 
+  auto part_count = 0U;
   for (auto& result : results) {
     for (auto const& mp : result->mapping_) {
-      mappings.emplace_back(mp);
+      mappings.emplace_back(mapping_t{.way_idx_ = mp.way_idx_,
+                                      .sort_idx_ = mp.sort_idx_ + part_count});
     }
+    part_count += result->mapping_.size();
     for (auto const e : result->encodings_) {
       unsorted_elevations.emplace_back(e);
     }
