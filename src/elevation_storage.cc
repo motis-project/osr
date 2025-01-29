@@ -16,6 +16,7 @@
 
 #include "osr/point.h"
 #include "osr/preprocessing/elevation/provider.h"
+#include "osr/preprocessing/elevation/shared.h"
 #include "osr/preprocessing/elevation/step_size.h"
 
 namespace osr {
@@ -159,27 +160,23 @@ void elevation_storage::set_elevations(
   std::cout << "\nCalculating tile buckets ...\n" << std::endl;
 
   pt->status("Calculating tile buckets").out_bounds(85, 86).in_high(size);
-  struct way_bucket_idx_t {
+  struct way_tile_idx_t {
     osr::way_idx_t way_idx_;
-    osr::elevation_bucket_idx_t bucket_idx_;
+    preprocessing::elevation::tile_idx_t tile_idx_;
   };
   // using element_t = cista::pair<osr::way_idx_t, osr::elevation_bucket_idx_t>;
   // auto sorted_ways = osr::mm_vec<element_t>{
-  auto sorted_ways = osr::mm_vec<way_bucket_idx_t>{
+  auto sorted_ways = osr::mm_vec<way_tile_idx_t>{
       mm(std::filesystem::temp_directory_path(), "temp_osr_extract_sorted_ways",
          cista::mmap::protection::WRITE)};
   sorted_ways.reserve(size);
 
-  // auto way_count = std::size_t{0U};
-
   for (auto const [way_idx, way] : utl::enumerate(w.r_->way_nodes_)) {
     if (!way.empty()) {
       auto const p = w.get_node_pos(way.front());
-      auto const bucket_idx = provider.get_bucket_idx(p);
-      if (bucket_idx != elevation_bucket_idx_t::invalid()) {
-        auto const lock = std::lock_guard{m};
-        sorted_ways.emplace_back(way_idx_t{way_idx}, bucket_idx);
-        // way_count += way.size();
+      auto const tile_idx = provider.tile_idx(p);
+      if (tile_idx != preprocessing::elevation::tile_idx_t::invalid()) {
+        sorted_ways.emplace_back(way_idx_t{way_idx}, tile_idx);
       }
     }
   }
@@ -198,8 +195,8 @@ void elevation_storage::set_elevations(
       std::execution::par_unseq,
 #endif
       begin(sorted_ways), end(sorted_ways),
-      [](way_bucket_idx_t const& a, way_bucket_idx_t const& b) {
-        return a.bucket_idx_ < b.bucket_idx_;
+      [](way_tile_idx_t const& a, way_tile_idx_t const& b) {
+        return a.tile_idx_ < b.tile_idx_;
       });
 
   auto const t3 = std::chrono::high_resolution_clock::now();
@@ -235,7 +232,7 @@ void elevation_storage::set_elevations(
       .in_high(sorted_ways.size());
   utl::parallel_for(
       sorted_ways,
-      [&](way_bucket_idx_t const& way_bucket_idx) {
+      [&](way_tile_idx_t const& way_bucket_idx) {
         thread_local auto elevations = std::vector<encoding>{};
         thread_local auto points = std::vector<point>{};
 
