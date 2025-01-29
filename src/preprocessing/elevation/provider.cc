@@ -26,10 +26,6 @@ struct provider::impl {
   impl() = default;
 
   void add_driver(IsDriver auto&& driver) {
-    auto const old_count = cusum_drivers_.empty() ? elevation_bucket_idx_t{0}
-                                                  : cusum_drivers_.back();
-    cusum_drivers_.emplace_back(
-        old_count + elevation_bucket_idx_t{driver.n_tiles() * kSubTileFactor});
     drivers_.emplace_back(std::move(driver));
   }
 
@@ -57,7 +53,6 @@ struct provider::impl {
   }
 
   std::vector<raster_driver> drivers_;
-  std::vector<elevation_bucket_idx_t> cusum_drivers_;
 };
 
 provider::provider(std::filesystem::path const& p)
@@ -114,46 +109,6 @@ step_size provider::get_step_size() const {
     }
   }
   return steps;
-}
-
-provider::point_idx provider::get_point_idx(::osr::point const& point) const {
-  for (auto const [driver_idx, driver] : utl::enumerate(impl_->drivers_)) {
-    auto const tile_idx = std::visit(
-        [&](IsDriver auto const& d) { return d.get_tile_idx(point); }, driver);
-    if (tile_idx != elevation_tile_idx_t::invalid()) {
-      return {
-          .driver_idx_ =
-              elevation_driver_idx_t{static_cast<std::uint8_t>(driver_idx)},
-          .tile_idx_ = tile_idx,
-      };
-    }
-  }
-  return {
-      .driver_idx_ = elevation_driver_idx_t::invalid(),
-      .tile_idx_ = elevation_tile_idx_t::invalid(),
-  };
-}
-
-unsigned int provider::get_bucket_count() const {
-  return impl_->cusum_drivers_.empty()
-             ? 0U
-             : cista::to_idx(impl_->cusum_drivers_.back());
-}
-
-elevation_bucket_idx_t provider::get_bucket_idx(
-    ::osr::point const& point) const {
-  for (auto const [driver_idx, driver] : utl::enumerate(impl_->drivers_)) {
-    auto const sub_tile_idx = std::visit(
-        [&](IsDriver auto const& d) { return d.get_sub_tile_idx(point); },
-        driver);
-    if (sub_tile_idx != elevation_tile_idx_t::invalid()) {
-      return driver_idx == 0U
-                 ? elevation_bucket_idx_t{cista::to_idx(sub_tile_idx)}
-                 : impl_->cusum_drivers_[driver_idx - 1U] +
-                       cista::to_idx(sub_tile_idx);
-    }
-  }
-  return elevation_bucket_idx_t::invalid();
 }
 
 }  // namespace osr::preprocessing::elevation

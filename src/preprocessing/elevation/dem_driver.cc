@@ -67,23 +67,6 @@ step_size dem_driver::get_step_size() const {
   return steps;
 }
 
-elevation_tile_idx_t dem_driver::get_tile_idx(::osr::point const& point) const {
-  auto const p = decltype(rtree_)::coord_t{static_cast<float>(point.lat()),
-                                           static_cast<float>(point.lng())};
-  auto idx = elevation_tile_idx_t::invalid();
-  rtree_.search(p, p,
-                [&](auto const&, auto const&, std::size_t const& tile_idx) {
-                  idx = elevation_tile_idx_t{tile_idx};
-                  return idx != elevation_tile_idx_t::invalid();
-                });
-  return idx;
-}
-
-elevation_tile_idx_t dem_driver::get_sub_tile_idx(
-    ::osr::point const& point) const {
-  return get_tile_idx(point) * kSubTileFactor;
-}
-
 std::size_t dem_driver::n_tiles() const { return tiles_.size(); }
 
 }  // namespace osr::preprocessing::elevation

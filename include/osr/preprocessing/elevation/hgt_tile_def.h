@@ -93,8 +93,8 @@ struct hgt_tile<RasterSize>::hgt_tile<RasterSize>::impl {
   }
 
   tile_idx_t tile_idx(::osr::point const& p) const {
-    constexpr auto const kUpper = 1 << (tile_idx_t::kSubTileIdxSize / 2);
-    auto const offset = get_offset<kUpper>(p);
+    constexpr auto const kSegments = 1 << (tile_idx_t::kSubTileIdxSize / 2);
+    auto const offset = get_offset<kSegments>(p);
     return (offset == std::numeric_limits<std::size_t>::max())
                ? tile_idx_t::invalid()
                : tile_idx_t::from_sub_tile(offset);
@@ -107,15 +107,6 @@ struct hgt_tile<RasterSize>::hgt_tile<RasterSize>::impl {
         .max_lat_ = static_cast<float>(sw_lat_ + 1.F + kCenterOffset),
         .max_lng_ = static_cast<float>(sw_lng_ + 1.F + kCenterOffset),
     };
-  }
-
-  sub_tile_idx_t get_sub_tile_idx(::osr::point const& p) const {
-    constexpr auto const kUpper =
-        1 << (std::numeric_limits<sub_tile_idx_t>::digits / 2);
-    auto const offset = get_offset<kUpper>(p);
-    return (offset == std::numeric_limits<std::size_t>::max())
-               ? 0U
-               : static_cast<sub_tile_idx_t>(offset);
   }
 
   constexpr step_size get_step_size() const {
@@ -158,12 +149,6 @@ step_size hgt_tile<RasterSize>::get_step_size() const {
 template <size_t RasterSize>
 coord_box hgt_tile<RasterSize>::get_coord_box() const {
   return impl_->get_coord_box();
-}
-
-template <size_t RasterSize>
-sub_tile_idx_t hgt_tile<RasterSize>::get_sub_tile_idx(
-    ::osr::point const& point) const {
-  return impl_->get_sub_tile_idx(point);
 }
 
 }  // namespace osr::preprocessing::elevation
