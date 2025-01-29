@@ -92,6 +92,15 @@ struct hgt_tile<RasterSize>::hgt_tile<RasterSize>::impl {
                                                    : std::byteswap(raw_value);
   }
 
+  tile_idx_t tile_idx(::osr::point const& p) const {
+    constexpr auto const kUpper = 1 << (tile_idx_t::kSubTileIdxSize / 2);
+    auto const offset = get_offset<kUpper>(p);
+    return (offset == std::numeric_limits<std::size_t>::max())
+               ? tile_idx_t::invalid()
+               : tile_idx_t{.subtile_idx_ =
+                                static_cast<tile_idx_t::data_t>(offset)};
+  }
+
   coord_box get_coord_box() const {
     return {
         .min_lat_ = static_cast<float>(sw_lat_ - kCenterOffset),
@@ -105,7 +114,9 @@ struct hgt_tile<RasterSize>::hgt_tile<RasterSize>::impl {
     constexpr auto const kUpper =
         1 << (std::numeric_limits<sub_tile_idx_t>::digits / 2);
     auto const offset = get_offset<kUpper>(p);
-    return (offset == std::numeric_limits<std::size_t>::max()) ? 0U : offset;
+    return (offset == std::numeric_limits<std::size_t>::max())
+               ? 0U
+               : static_cast<sub_tile_idx_t>(offset);
   }
 
   constexpr step_size get_step_size() const {
@@ -133,6 +144,11 @@ hgt_tile<RasterSize>::hgt_tile(hgt_tile&& grid) noexcept = default;
 template <std::size_t RasterSize>
 ::osr::elevation_t hgt_tile<RasterSize>::get(::osr::point const& p) const {
   return impl_->get(p);
+}
+
+template <std::size_t RasterSize>
+tile_idx_t hgt_tile<RasterSize>::tile_idx(::osr::point const& p) const {
+  return impl_->tile_idx(p);
 }
 
 template <std::size_t RasterSize>

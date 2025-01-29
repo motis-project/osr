@@ -29,6 +29,7 @@ struct dem_tile {
   dem_tile& operator=(dem_tile&&) = delete;
 
   ::osr::elevation_t get(::osr::point const&) const;
+  tile_idx_t tile_idx(::osr::point const&) const;
   coord_box get_coord_box() const;
 
   pixel_value get_raw(::osr::point const&) const;

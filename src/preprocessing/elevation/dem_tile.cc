@@ -236,6 +236,10 @@ dem_tile::~dem_tile() = default;
   throw std::runtime_error{"dem_grid: invalid pixel type"};
 }
 
+tile_idx_t dem_tile::tile_idx(::osr::point const&) const {
+  return {.subtile_idx_ = 0};
+}
+
 coord_box dem_tile::get_coord_box() const {
   return {
       .min_lat_ = static_cast<float>(impl_->hdr_.bry_),

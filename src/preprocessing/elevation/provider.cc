@@ -44,6 +44,18 @@ struct provider::impl {
     return NO_ELEVATION_DATA;
   }
 
+  tile_idx_t tile_idx(::osr::point const& p) const {
+    for (auto const [driver_idx, driver] : std::views::enumerate(drivers_)) {
+      auto idx = std::visit(
+          [&](IsDriver auto const& d) { return d.tile_idx(p); }, driver);
+      if (idx != tile_idx_t::invalid()) {
+        idx.driver_idx_ = static_cast<tile_idx_t::data_t>(driver_idx);
+        return idx;
+      }
+    }
+    return tile_idx_t::invalid();
+  }
+
   std::vector<raster_driver> drivers_;
   std::vector<elevation_bucket_idx_t> cusum_drivers_;
 };
@@ -80,6 +92,10 @@ provider::~provider() = default;
 
 ::osr::elevation_t provider::get(::osr::point const& p) const {
   return impl_->get(p);
+}
+
+tile_idx_t provider::tile_idx(::osr::point const& p) const {
+  return impl_->tile_idx(p);
 }
 
 std::size_t provider::driver_count() const { return impl_->drivers_.size(); }

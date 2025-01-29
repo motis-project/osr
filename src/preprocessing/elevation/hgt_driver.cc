@@ -3,6 +3,7 @@
 #include <cstddef>
 #include <sstream>
 
+#include "osr/preprocessing/elevation/shared.h"
 #include "utl/verify.h"
 
 #include "osr/elevation_storage.h"
@@ -72,6 +73,26 @@ bool hgt_driver::add_tile(fs::path const& path) {
                   return elevation != NO_ELEVATION_DATA;
                 });
   return elevation;
+}
+
+tile_idx_t hgt_driver::tile_idx(::osr::point const& point) const {
+  auto const p = decltype(rtree_)::coord_t{static_cast<float>(point.lat()),
+                                           static_cast<float>(point.lng())};
+  auto idx = tile_idx_t::invalid();
+  rtree_.search(p, p,
+                [&](auto const&, auto const&, std::size_t const& tile_idx) {
+                  idx = std::visit(
+                      [&](IsTile auto const& t) -> tile_idx_t {
+                        return t.tile_idx(point);
+                      },
+                      tiles_[tile_idx]);
+                  if (idx == tile_idx_t::invalid()) {
+                    return false;
+                  }
+                  idx.tile_idx_ = static_cast<tile_idx_t::data_t>(tile_idx);
+                  return true;
+                });
+  return idx;
 }
 
 step_size hgt_driver::get_step_size() const {

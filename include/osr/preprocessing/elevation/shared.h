@@ -1,5 +1,6 @@
 #pragma once
 
+#include <compare>
 #include <concepts>
 #include <limits>
 #include <utility>
@@ -17,6 +18,33 @@ struct coord_box {
   float max_lng_;
 };
 
+struct tile_idx_t {
+  using data_t = std::uint32_t;
+  constexpr static auto const kDriverIdxSize = 4;
+  constexpr static auto const kTileIdxSize = 16;
+  constexpr static auto const kSubTileIdxSize =
+      sizeof(data_t) * CHAR_BIT - kDriverIdxSize - kTileIdxSize;
+  std::partial_ordering operator<=>(tile_idx_t const&) const = default;
+  // static tile_idx_t invalid() { return {}; }
+  constexpr static tile_idx_t invalid() {
+    return {
+        .driver_idx_ = (1 << kDriverIdxSize) - 1,
+        .tile_idx_ = (1 << kTileIdxSize) - 1,
+        .subtile_idx_ = (1 << kSubTileIdxSize) - 1,
+    };
+    //   // return
+    //   {static_cast<tile_idx_t>(std::numeric_limits<data_t>::max())}; return
+    //   {std::numeric_limits<data_t>::max()};
+  }
+  data_t driver_idx_ : kDriverIdxSize{(1 << kDriverIdxSize) - 1};
+  data_t tile_idx_ : kTileIdxSize{(1 << kTileIdxSize) - 1};
+  // data_t subtile_idx_ : kSubTileIdxSize{(1 << kSubTileIdxSize) - 1};
+  // data_t driver_idx_ : kDriverIdxSize;
+  // data_t tile_idx_ : kTileIdxSize;
+  data_t subtile_idx_ : kSubTileIdxSize;
+};
+static_assert(sizeof(tile_idx_t) == sizeof(tile_idx_t::data_t));
+
 using sub_tile_idx_t = std::uint8_t;
 constexpr auto const kSubTileFactor =
     std::numeric_limits<sub_tile_idx_t>::max() + 1U;
@@ -26,6 +54,9 @@ concept IsProvider = requires(ElevationProvider provider) {
   {
     std::as_const(provider).get(std::declval<::osr::point>())
   } -> std::same_as<::osr::elevation_t>;
+  {
+    std::as_const(provider).tile_idx(std::declval<point const&>())
+  } -> std::same_as<tile_idx_t>;
   { std::as_const(provider).get_step_size() } -> std::same_as<step_size>;
 };
 

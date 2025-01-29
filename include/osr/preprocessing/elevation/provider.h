@@ -31,6 +31,7 @@ struct provider {
   provider& operator=(provider&&) = delete;
 
   ::osr::elevation_t get(::osr::point const&) const;
+  tile_idx_t tile_idx(::osr::point const&) const;
   std::size_t driver_count() const;
   step_size get_step_size() const;
   point_idx get_point_idx(::osr::point const&) const;

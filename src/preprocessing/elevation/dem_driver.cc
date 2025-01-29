@@ -36,6 +36,22 @@ bool dem_driver::add_tile(fs::path const& path) {
   return elevation;
 }
 
+tile_idx_t dem_driver::tile_idx(::osr::point const& point) const {
+  auto const p = decltype(rtree_)::coord_t{static_cast<float>(point.lat()),
+                                           static_cast<float>(point.lng())};
+  auto idx = tile_idx_t::invalid();
+  rtree_.search(p, p,
+                [&](auto const&, auto const&, std::size_t const& tile_idx) {
+                  idx = tiles_[tile_idx].tile_idx(point);
+                  if (idx == tile_idx_t::invalid()) {
+                    return false;
+                  }
+                  idx.tile_idx_ = static_cast<tile_idx_t::data_t>(tile_idx);
+                  return true;
+                });
+  return idx;
+}
+
 step_size dem_driver::get_step_size() const {
   auto steps = step_size{.x_ = std::numeric_limits<double>::quiet_NaN(),
                          .y_ = std::numeric_limits<double>::quiet_NaN()};
