@@ -24,24 +24,24 @@ struct tile_idx_t {
   constexpr static auto const kTileIdxSize = 16;
   constexpr static auto const kSubTileIdxSize =
       sizeof(data_t) * CHAR_BIT - kDriverIdxSize - kTileIdxSize;
-  std::partial_ordering operator<=>(tile_idx_t const&) const = default;
-  // static tile_idx_t invalid() { return {}; }
+
   constexpr static tile_idx_t invalid() {
     return {
         .driver_idx_ = (1 << kDriverIdxSize) - 1,
         .tile_idx_ = (1 << kTileIdxSize) - 1,
-        .subtile_idx_ = (1 << kSubTileIdxSize) - 1,
+        .sub_tile_idx_ = (1 << kSubTileIdxSize) - 1,
     };
-    //   // return
-    //   {static_cast<tile_idx_t>(std::numeric_limits<data_t>::max())}; return
-    //   {std::numeric_limits<data_t>::max()};
   }
-  data_t driver_idx_ : kDriverIdxSize{(1 << kDriverIdxSize) - 1};
-  data_t tile_idx_ : kTileIdxSize{(1 << kTileIdxSize) - 1};
-  // data_t subtile_idx_ : kSubTileIdxSize{(1 << kSubTileIdxSize) - 1};
-  // data_t driver_idx_ : kDriverIdxSize;
-  // data_t tile_idx_ : kTileIdxSize;
-  data_t subtile_idx_ : kSubTileIdxSize;
+  static tile_idx_t from_sub_tile(data_t const& idx) {
+    auto t = invalid();
+    t.sub_tile_idx_ = idx;
+    return t;
+  }
+  std::partial_ordering operator<=>(tile_idx_t const&) const = default;
+
+  data_t driver_idx_ : kDriverIdxSize;
+  data_t tile_idx_ : kTileIdxSize;
+  data_t sub_tile_idx_ : kSubTileIdxSize;
 };
 static_assert(sizeof(tile_idx_t) == sizeof(tile_idx_t::data_t));
 

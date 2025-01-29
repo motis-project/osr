@@ -15,6 +15,7 @@
 #include "cista/mmap.h"
 
 #include "osr/elevation_storage.h"
+#include "osr/preprocessing/elevation/shared.h"
 
 // EHdr / BIL File Format:
 // http://www.gdal.org/frmt_various.html#EHdr
@@ -237,7 +238,7 @@ dem_tile::~dem_tile() = default;
 }
 
 tile_idx_t dem_tile::tile_idx(::osr::point const&) const {
-  return {.subtile_idx_ = 0};
+  return tile_idx_t::from_sub_tile(0U);
 }
 
 coord_box dem_tile::get_coord_box() const {
