@@ -12,10 +12,16 @@ struct sharing_data;
 
 constexpr auto const kElevationNoCost = 0;
 // TODO Adjust value
-constexpr auto const kElevationLowCost = 250;
-constexpr auto const kElevationHighCost = 800;
+constexpr auto const kElevationLowCost = 570;
+constexpr auto const kElevationHighCost = 3700;
 
-template <int ElevationUpCost>
+// Some configurations (cost, exp):
+// (250, 1)
+// (800, 1)
+// (570, 2.1)
+// (3700, 2.1)
+
+template <int ElevationUpCost, double ElevationExponent = 2.1>
 struct bike {
   static constexpr auto const kMaxMatchDistance = 100U;
   static constexpr auto const kOffroadPenalty = 1U;
@@ -147,7 +153,13 @@ struct bike {
           return in_direction ? e : e.swap();
         }();
         auto const elevation_cost = static_cast<cost_t>(
-            dist > 0 ? ElevationUpCost * elevation.up_ / dist : 0);
+            ElevationUpCost > 0 && dist > 0
+                ? (ElevationExponent > 1.0
+                       ? ElevationUpCost *
+                             std::pow(static_cast<double>(elevation.up_) / dist,
+                                      ElevationExponent)
+                       : ElevationUpCost * elevation.up_ / dist)
+                : 0);
         auto const cost = way_cost(target_way_prop, way_dir, dist) +
                           node_cost(target_node_prop) + elevation_cost;
         fn(node{target_node}, static_cast<std::uint32_t>(cost), dist, way, from,
