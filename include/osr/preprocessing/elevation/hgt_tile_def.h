@@ -97,7 +97,8 @@ struct hgt_tile<RasterSize>::hgt_tile<RasterSize>::impl {
     auto const offset = get_offset<kSegments>(p);
     return (offset == std::numeric_limits<std::size_t>::max())
                ? tile_idx_t::invalid()
-               : tile_idx_t::from_sub_tile(offset);
+               : tile_idx_t::from_sub_tile(
+                     static_cast<tile_idx_t::data_t>(offset));
   }
 
   coord_box get_coord_box() const {
