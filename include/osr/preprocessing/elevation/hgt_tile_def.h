@@ -62,13 +62,14 @@ struct hgt_tile<RasterSize>::hgt_tile<RasterSize>::impl {
         box.min_lat_ <= lat && lat < box.max_lat_) {
       auto const column =
           std::clamp(static_cast<std::size_t>(
-                         std::floor((lng - box.min_lng_) * (RasterSize - 1U) *
-                                    (UpperBound / RasterSize))),
+                         std::floor(((lng - box.min_lng_) * (RasterSize - 1U)) /
+                                    RasterSize * UpperBound)),
                      std::size_t{0U}, UpperBound - 1U);
-      auto const row = std::clamp(static_cast<std::size_t>(std::floor(
-                                      (box.max_lat_ - lat) * (RasterSize - 1U) *
-                                      (UpperBound / RasterSize))),
-                                  std::size_t{0U}, (UpperBound - 1U));
+      auto const row =
+          std::clamp(static_cast<std::size_t>(
+                         std::floor(((box.max_lat_ - lat) * (RasterSize - 1U)) /
+                                    RasterSize * UpperBound)),
+                     std::size_t{0U}, (UpperBound - 1U));
       return UpperBound * row + column;
     }
     return std::numeric_limits<std::size_t>::max();
