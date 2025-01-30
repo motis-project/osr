@@ -1,8 +1,6 @@
 #pragma once
 
-#include <compare>
 #include <concepts>
-#include <bit>
 #include <limits>
 #include <utility>
 
@@ -38,16 +36,10 @@ struct tile_idx_t {
     t.sub_tile_idx_ = idx;
     return t;
   }
-  // std::strong_ordering operator<=>(tile_idx_t const& o) const {
-  //   return std::bit_cast<data_t>(*this) <=> std::bit_cast<data_t>(o);
-  // }
   bool operator==(tile_idx_t const&) const = default;
   bool operator<(tile_idx_t const& o) const {
-    return (driver_idx_ < o.driver_idx_) ||
-           (driver_idx_ == o.driver_idx_ &&
-            ((tile_idx_ < o.tile_idx_) ||
-             (tile_idx_ == o.tile_idx_ && sub_tile_idx_ < o.sub_tile_idx_)));
-    // return std::bit_cast<data_t>(*this) < std::bit_cast<data_t>(o);
+    return std::tie(driver_idx_, tile_idx_, sub_tile_idx_) <
+           std::tie(o.driver_idx_, o.tile_idx_, o.sub_tile_idx_);
   }
 
   data_t driver_idx_ : kDriverIdxSize;

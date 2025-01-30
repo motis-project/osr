@@ -10,7 +10,6 @@
 #include "utl/enumerate.h"
 #include "utl/pairwise.h"
 #include "utl/parallel_for.h"
-#include "utl/pipes/iota.h"
 #include "utl/progress_tracker.h"
 
 #include "cista/strong.h"
