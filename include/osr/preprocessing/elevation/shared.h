@@ -37,8 +37,8 @@ struct tile_idx_t {
     return t;
   }
   bool operator==(tile_idx_t const&) const = default;
-  bool operator<(tile_idx_t const& o) const {
-    return std::tie(driver_idx_, tile_idx_, sub_tile_idx_) <
+  std::strong_ordering operator<=>(tile_idx_t const& o) const {
+    return std::tie(driver_idx_, tile_idx_, sub_tile_idx_) <=>
            std::tie(o.driver_idx_, o.tile_idx_, o.sub_tile_idx_);
   }
 
