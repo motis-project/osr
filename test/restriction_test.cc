@@ -52,7 +52,7 @@ TEST(extract, wa) {
   auto const p2 = route(w, l, search_profile::kBike, from, to, kMaxCost,
                         direction::kForward, kMaxMatchDistance, nullptr,
                         nullptr, elevations.get());
-  auto const p3 = route(w, l, search_profile::kBikeElevationLow, from, to,
+  auto const p3 = route(w, l, search_profile::kBikeElevationHigh, from, to,
                         kMaxCost, direction::kForward, kMaxMatchDistance,
                         nullptr, nullptr, elevations.get());
 
