@@ -19,7 +19,23 @@
 #include "osr/preprocessing/elevation/shared.h"
 #include "osr/preprocessing/elevation/step_size.h"
 
+constexpr auto const kTimeIt = false;
+
 auto timeit(std::string_view const name, auto&& f, auto&&... args) {
+  constexpr auto const returns_value =
+      !std::is_same_v<std::invoke_result_t<decltype(f), decltype(args)...>,
+                      void>;
+  if constexpr (!kTimeIt) {
+    if constexpr (returns_value) {
+
+      return f(std::forward<decltype(args)>(args)...);
+    } else {
+
+      f(std::forward<decltype(args)>(args)...);
+      return;
+    }
+  }
+#include <chrono>
   std::cout << "\nProcessing " << name << " ...\n" << std::endl;
   auto const start = std::chrono::high_resolution_clock::now();
   auto const show_report = [&start]() {
@@ -30,9 +46,6 @@ auto timeit(std::string_view const name, auto&& f, auto&&... args) {
               << "\n"
               << std::endl;
   };
-  constexpr auto const returns_value =
-      !std::is_same_v<std::invoke_result_t<decltype(f), decltype(args)...>,
-                      void>;
   if constexpr (returns_value) {
     auto result = f(std::forward<decltype(args)>(args)...);
     show_report();
@@ -42,6 +55,7 @@ auto timeit(std::string_view const name, auto&& f, auto&&... args) {
     show_report();
   }
 }
+
 namespace osr {
 
 constexpr auto const kWriteMode = cista::mmap::protection::WRITE;
@@ -205,8 +219,6 @@ void store_elevations(result_t& result,
 }
 // DEBUG EXTRACT START
 
-#include <chrono>
-
 struct way_ordering_t {
   way_idx_t way_idx_;
   preprocessing::elevation::tile_idx_t order_;
@@ -361,19 +373,14 @@ void elevation_storage::set_elevations(
   auto pt = utl::get_active_progress_tracker_or_activate("osr");
 
   pt->status("Calculating way order").out_bounds(85, 86);
-  // auto const processing_order = calculate_way_order(w, provider, pt);
   auto const processing_order =
       timeit("calculate order", calculate_way_order, w, provider, pt);
   pt->status("Precalculating way points").out_bounds(87, 87);
-  // auto const points = calculate_points(w, pt);
   auto const points = timeit("Calculate points", calculate_points, w, pt);
   pt->status("Calculating way elevations").out_bounds(88, 89);
-  // auto unordered_encodings =
-  //     calculate_way_encodings(w, provider, processing_order, points, pt);
   auto unordered_encodings = timeit("calculate order", calculate_way_encodings,
                                     w, provider, processing_order, points, pt);
   pt->status("Storing ordered elevations").out_bounds(90, 90);
-  // write_ordered_encodings(*this, std::move(unordered_encodings), pt);
   timeit("write ordered", write_ordered_encodings, *this,
          std::move(unordered_encodings), pt);
 }
