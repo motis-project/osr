@@ -19,12 +19,43 @@
 #include "osr/preprocessing/elevation/shared.h"
 #include "osr/preprocessing/elevation/step_size.h"
 
+auto timeit(std::string_view const name, auto&& f, auto&&... args) {
+  std::cout << "\nProcessing " << name << " ...\n" << std::endl;
+  auto const start = std::chrono::high_resolution_clock::now();
+  auto const show_report = [&start]() {
+    auto const end = std::chrono::high_resolution_clock::now();
+    std::cout << "\nDone: "
+              << std::chrono::duration_cast<std::chrono::milliseconds>(end -
+                                                                       start)
+              << "\n"
+              << std::endl;
+  };
+  constexpr auto const returns_value =
+      !std::is_same_v<std::invoke_result_t<decltype(f), decltype(args)...>,
+                      void>;
+  if constexpr (returns_value) {
+    auto result = f(std::forward<decltype(args)>(args)...);
+    show_report();
+    return result;
+  } else {
+    f(std::forward<decltype(args)>(args)...);
+    show_report();
+  }
+}
 namespace osr {
 
+constexpr auto const kWriteMode = cista::mmap::protection::WRITE;
+
+cista::mmap mm(std::filesystem::path const& path,
+               cista::mmap::protection const mode) {
+  return cista::mmap{path.string().data(), mode};
+}
+
+// TODO Remove
 cista::mmap mm(std::filesystem::path const& p,
                char const* file,
                cista::mmap::protection const mode) {
-  return cista::mmap{(p / file).string().data(), mode};
+  return mm(p / file, mode);
 }
 
 namespace elevation_files {
@@ -176,6 +207,164 @@ void store_elevations(result_t& result,
 
 #include <chrono>
 
+struct way_ordering_t {
+  way_idx_t way_idx_;
+  preprocessing::elevation::tile_idx_t order_;
+};
+
+mm_vec<way_ordering_t> calculate_way_order(
+    ways const& w, preprocessing::elevation::provider const& provider) {
+  auto const path =
+      std::filesystem::temp_directory_path() / "temp_osr_extract_way_ordering";
+  // auto ordering = utl::make_raii<osr::mm_vec<way_ordering_t>>({mm(path,
+  // kWriteMode)}, [p = std::move(path)](auto* mm){ std::destroy_at(mm); });
+  // auto ordering = utl::make_raii(osr::mm_vec<way_ordering_t>{mm(path,
+  // kWriteMode)}, [p = std::move(path)](auto* mm){ std::destroy_at(mm); });
+  // auto& ord = ordering.get();
+  // ord.reserve(w.n_ways());
+
+  auto ordering = mm_vec<way_ordering_t>{mm(path, kWriteMode)};
+  ordering.reserve(w.n_ways());
+
+  // for (auto const [way_idx, way] : utl::enumerate(w.r_->way_nodes_) |
+  // utl::remove_if([](auto const& enumerated_way) -> bool {
+  //   return enumerated_way.second.empty();
+  // })) {
+  for (auto const [way_idx, way] : utl::enumerate(w.r_->way_nodes_)) {
+    if (!way.empty()) {
+      auto const node_point = w.get_node_pos(way.front());
+      auto const tile_idx = provider.tile_idx(node_point);
+      if (tile_idx != preprocessing::elevation::tile_idx_t::invalid()) {
+        ordering.emplace_back(way_idx_t{way_idx}, std::move(tile_idx));
+      }
+    }
+  }
+
+  std::sort(
+#if __cpp_lib_execution
+      std::execution::par_unseq,
+#endif
+      begin(ordering), end(ordering),
+      [](way_ordering_t const& a, way_ordering_t const& b) {
+        return a.order_ < b.order_;
+      });
+
+  return ordering;
+}
+
+mm_vec_map<node_idx_t, point> calculate_points(ways const& w) {
+  auto points = mm_vec_map<node_idx_t, point>{
+      mm(std::filesystem::temp_directory_path(), "temp_osr_extract_points",
+         cista::mmap::protection::WRITE)};
+
+  points.resize(w.n_nodes());
+  utl::parallel_for_run(w.n_nodes(), [&](std::size_t const& idx) {
+    auto const node_idx = node_idx_t{idx};
+    if (!w.r_->node_ways_[node_idx].empty()) {
+      points[node_idx] = w.get_node_pos(node_idx);
+    }
+  });
+
+  return points;
+}
+
+struct encoding_result_t {
+  osr::mm_vec<mapping_t> mappings_;
+  mm_vecvec<sort_idx_t, elevation_storage::encoding> encodings_;
+};
+
+encoding_result_t calculate_way_encodings(
+    ways const& w,
+    preprocessing::elevation::provider const& provider,
+    mm_vec<way_ordering_t> const& ordering,
+    mm_vec_map<node_idx_t, point> const& points) {
+  auto const mapping_path =
+      std::filesystem::temp_directory_path() / "temp_osr_extract_mapping";
+  auto const encoding_data_path = std::filesystem::temp_directory_path() /
+                                  "temp_osr_extract_unordered_encoding_data";
+  auto const encoding_idx_path = std::filesystem::temp_directory_path() /
+                                 "temp_osr_extract_unordered_encoding_idx";
+
+  auto result = encoding_result_t{
+      .mappings_ = osr::mm_vec<mapping_t>{mm(mapping_path, kWriteMode)},
+      .encodings_ =
+          osr::mm_vecvec<sort_idx_t, elevation_storage::encoding>{
+              mm_vec<elevation_storage::encoding>{
+                  mm(encoding_data_path, kWriteMode)},
+              mm_vec<cista::base_t<sort_idx_t>>{
+                  mm(encoding_idx_path, kWriteMode)}},
+  };
+  result.mappings_.reserve(ordering.size());
+  auto const max_step_size = provider.get_step_size();
+  auto m = std::mutex{};
+
+  utl::parallel_for(ordering, [&](way_ordering_t const way_ordering) {
+    thread_local auto elevations = std::vector<elevation_storage::encoding>{};
+    auto const& way_idx = way_ordering.way_idx_;
+
+    calculate_elevations(provider, w, elevations, points, way_idx,
+                         max_step_size);
+
+    if (!elevations.empty()) {
+      auto const lock = std::lock_guard{m};
+      result.mappings_.emplace_back(way_idx,
+                                    sort_idx_t{result.encodings_.size()});
+      result.encodings_.emplace_back(elevations);
+    }
+  });
+
+  return result;
+}
+
+void write_ordered_encodings(elevation_storage& storage,
+                             encoding_result_t&& result) {
+  std::sort(
+#if __cpp_lib_execution
+      std::execution::par_unseq,
+#endif
+      begin(result.mappings_), end(result.mappings_),
+      [](mapping_t const& a, mapping_t const& b) {
+        return a.way_idx_ < b.way_idx_;
+      });
+
+  for (auto const& mapping : result.mappings_) {
+    storage.elevations_.resize(to_idx(mapping.way_idx_) + 1U);
+    auto bucket = storage.elevations_.back();
+    for (auto const e : result.encodings_[mapping.sort_idx_]) {
+      bucket.push_back(e);
+    }
+  }
+}
+
+void elevation_storage::set_elevations(
+    ways const& w, preprocessing::elevation::provider const& provider) {
+  auto pt = utl::get_active_progress_tracker_or_activate("osr");
+
+  pt->status("Calculating way order").out_bounds(85, 86).in_high(w.n_ways());
+  // auto const processing_order = calculate_way_order(w, provider);
+  auto const processing_order =
+      timeit("calculate order", calculate_way_order, w, provider);
+  pt->status("Precalculating way points")
+      .out_bounds(87, 87)
+      .in_high(w.n_nodes());
+  // auto const points = calculate_points(w);
+  auto const points = timeit("Calculate points", calculate_points, w);
+  pt->status("Calculating way elevations")
+      .out_bounds(88, 89)
+      .in_high(w.n_ways());
+  // auto unordered_encodings =
+  //     calculate_way_encodings(w, provider, processing_order, points);
+  auto unordered_encodings = timeit("calculate order", calculate_way_encodings,
+                                    w, provider, processing_order, points);
+  pt->status("Storing ordered elevations")
+      .out_bounds(90, 90)
+      .in_high(unordered_encodings.mappings_.size());
+  // write_ordered_encodings(*this, std::move(unordered_encodings));
+  timeit("write ordered", write_ordered_encodings, *this,
+         std::move(unordered_encodings));
+}
+
+/*
 void elevation_storage::set_elevations(
     ways const& w, preprocessing::elevation::provider const& provider) {
   auto const size = w.n_ways();
@@ -353,6 +542,7 @@ void elevation_storage::set_elevations(
             << std::chrono::duration_cast<std::chrono::milliseconds>(t6 - t5)
             << "\n\n";
 }
+*/
 
 elevation_storage::elevation elevation_storage::get_elevations(
     way_idx_t const way, std::uint16_t const segment) const {
