@@ -16,12 +16,12 @@ constexpr auto const kElevationLowCost = 570;
 constexpr auto const kElevationHighCost = 3700;
 
 // Some configurations (cost, exp):
-// (250, 1)
-// (800, 1)
-// (570, 2.1)
-// (3700, 2.1)
+// (250, 1000)
+// (800, 1000)
+// (570, 2100)
+// (3700, 2100)
 
-template <int ElevationUpCost, double ElevationExponent = 2.1>
+template <int ElevationUpCost, unsigned int ElevationExponentThousandth = 2100U>
 struct bike {
   static constexpr auto const kMaxMatchDistance = 100U;
   static constexpr auto const kOffroadPenalty = 1U;
@@ -154,10 +154,10 @@ struct bike {
         }();
         auto const elevation_cost = static_cast<cost_t>(
             ElevationUpCost > 0 && dist > 0
-                ? (ElevationExponent > 1.0
+                ? (ElevationExponentThousandth > 1000U
                        ? ElevationUpCost *
                              std::pow(static_cast<double>(elevation.up_) / dist,
-                                      ElevationExponent)
+                                      ElevationExponentThousandth / 1000.0)
                        : ElevationUpCost * elevation.up_ / dist)
                 : 0);
         auto const cost = way_cost(target_way_prop, way_dir, dist) +

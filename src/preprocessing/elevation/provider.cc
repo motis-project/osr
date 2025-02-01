@@ -3,6 +3,7 @@
 #include <filesystem>
 #include <limits>
 #include <memory>
+#include <ranges>
 #include <utility>
 #include <vector>
 
