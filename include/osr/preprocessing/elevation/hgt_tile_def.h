@@ -52,7 +52,7 @@ struct hgt_tile<RasterSize>::hgt_tile<RasterSize>::impl {
         sw_lng_(lng) {}
 
   template <std::size_t UpperBound>
-  std::size_t get_offset(::osr::point const& p) const {
+  std::size_t get_offset(point const& p) const {
     auto const lat = p.lat();
     auto const lng = p.lng();
     auto const box = get_coord_box();
@@ -73,7 +73,7 @@ struct hgt_tile<RasterSize>::hgt_tile<RasterSize>::impl {
     return std::numeric_limits<std::size_t>::max();
   }
 
-  elevation_meters_t get(::osr::point const& p) const {
+  elevation_meters_t get(point const& p) const {
     auto const offset = get_offset<RasterSize>(p);
     if (offset == std::numeric_limits<std::size_t>::max()) {
       return elevation_meters_t::invalid();
@@ -93,7 +93,7 @@ struct hgt_tile<RasterSize>::hgt_tile<RasterSize>::impl {
                                   : elevation_meters_t{meters};
   }
 
-  tile_idx_t tile_idx(::osr::point const& p) const {
+  tile_idx_t tile_idx(point const& p) const {
     constexpr auto const kSegments = 1 << (tile_idx_t::kSubTileIdxSize / 2);
     auto const offset = get_offset<kSegments>(p);
     return (offset == std::numeric_limits<std::size_t>::max())
@@ -134,12 +134,12 @@ template <std::size_t RasterSize>
 hgt_tile<RasterSize>::hgt_tile(hgt_tile&& grid) noexcept = default;
 
 template <std::size_t RasterSize>
-elevation_meters_t hgt_tile<RasterSize>::get(::osr::point const& p) const {
+elevation_meters_t hgt_tile<RasterSize>::get(point const& p) const {
   return impl_->get(p);
 }
 
 template <std::size_t RasterSize>
-tile_idx_t hgt_tile<RasterSize>::tile_idx(::osr::point const& p) const {
+tile_idx_t hgt_tile<RasterSize>::tile_idx(point const& p) const {
   return impl_->tile_idx(p);
 }
 

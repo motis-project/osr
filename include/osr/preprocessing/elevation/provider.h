@@ -16,8 +16,8 @@ struct provider {
   provider(provider&&) = delete;
   provider& operator=(provider&&) = delete;
 
-  elevation_meters_t get(::osr::point const&) const;
-  tile_idx_t tile_idx(::osr::point const&) const;
+  elevation_meters_t get(point const&) const;
+  tile_idx_t tile_idx(point const&) const;
   std::size_t driver_count() const;
   step_size get_step_size() const;
 

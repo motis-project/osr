@@ -21,7 +21,7 @@ bool dem_driver::add_tile(fs::path const& path) {
   return true;
 }
 
-elevation_meters_t dem_driver::get(::osr::point const& point) const {
+elevation_meters_t dem_driver::get(point const& point) const {
   auto const p = decltype(rtree_)::coord_t{static_cast<float>(point.lat()),
                                            static_cast<float>(point.lng())};
   auto elevation = elevation_meters_t::invalid();
@@ -33,7 +33,7 @@ elevation_meters_t dem_driver::get(::osr::point const& point) const {
   return elevation;
 }
 
-tile_idx_t dem_driver::tile_idx(::osr::point const& point) const {
+tile_idx_t dem_driver::tile_idx(point const& point) const {
   auto const p = decltype(rtree_)::coord_t{static_cast<float>(point.lat()),
                                            static_cast<float>(point.lng())};
   auto idx = tile_idx_t::invalid();

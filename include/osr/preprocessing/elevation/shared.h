@@ -60,7 +60,7 @@ constexpr auto const kSubTileFactor =
 template <typename ElevationProvider>
 concept IsProvider = requires(ElevationProvider provider) {
   {
-    std::as_const(provider).get(std::declval<::osr::point>())
+    std::as_const(provider).get(std::declval<point>())
   } -> std::same_as<elevation_meters_t>;
   {
     std::as_const(provider).tile_idx(std::declval<point const&>())
