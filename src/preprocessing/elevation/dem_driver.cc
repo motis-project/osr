@@ -2,9 +2,6 @@
 
 #include <limits>
 
-#include "osr/elevation_storage.h"
-#include "osr/preprocessing/elevation/shared.h"
-
 namespace fs = std::filesystem;
 
 namespace osr::preprocessing::elevation {

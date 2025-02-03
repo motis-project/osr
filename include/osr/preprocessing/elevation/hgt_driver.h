@@ -10,7 +10,6 @@
 #include "osr/preprocessing/elevation/hgt_tile.h"
 #include "osr/preprocessing/elevation/shared.h"
 #include "osr/preprocessing/elevation/step_size.h"
-#include "osr/types.h"
 
 namespace fs = std::filesystem;
 

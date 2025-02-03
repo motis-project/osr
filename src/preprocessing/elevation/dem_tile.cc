@@ -6,9 +6,7 @@
 #include <filesystem>
 #include <fstream>
 #include <functional>
-#include <iostream>
 #include <limits>
-#include <mutex>
 #include <stdexcept>
 #include <unordered_map>
 
@@ -16,7 +14,6 @@
 
 #include "cista/mmap.h"
 
-#include "osr/elevation_storage.h"
 #include "osr/preprocessing/elevation/shared.h"
 
 // EHdr / BIL File Format:

@@ -5,9 +5,10 @@
 #include <limits>
 #include <utility>
 
+#include "cista/strong.h"
+
 #include "osr/point.h"
 #include "osr/preprocessing/elevation/step_size.h"
-#include "osr/types.h"
 
 namespace osr::preprocessing::elevation {
 

@@ -8,7 +8,6 @@
 #include "osr/preprocessing/elevation/dem_tile.h"
 #include "osr/preprocessing/elevation/shared.h"
 #include "osr/preprocessing/elevation/step_size.h"
-#include "osr/types.h"
 
 namespace fs = std::filesystem;
 

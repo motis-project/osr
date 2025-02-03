@@ -3,10 +3,7 @@
 #include <cstddef>
 #include <sstream>
 
-#include "osr/preprocessing/elevation/shared.h"
 #include "utl/verify.h"
-
-#include "osr/elevation_storage.h"
 
 namespace fs = std::filesystem;
 

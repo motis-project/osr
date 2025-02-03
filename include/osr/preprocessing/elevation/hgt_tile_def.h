@@ -2,15 +2,13 @@
 
 #include "osr/preprocessing/elevation/hgt_tile.h"
 
+#include <cassert>
 #include <cstdint>
 #include <algorithm>
 #include <bit>
 #include <limits>
 
 #include "cista/mmap.h"
-
-#include "osr/elevation_storage.h"
-#include "osr/preprocessing/elevation/shared.h"
 
 // SRTM HGT File Format
 //

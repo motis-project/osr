@@ -1,6 +1,5 @@
 #include "osr/preprocessing/elevation/provider.h"
 
-#include <filesystem>
 #include <limits>
 #include <memory>
 #include <utility>
@@ -9,7 +8,6 @@
 #include "osr/elevation_storage.h"
 #include "osr/preprocessing/elevation/dem_driver.h"
 #include "osr/preprocessing/elevation/hgt_driver.h"
-#include "osr/preprocessing/elevation/shared.h"
 
 namespace osr::preprocessing::elevation {
 
