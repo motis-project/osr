@@ -59,18 +59,18 @@ bool hgt_driver::add_tile(fs::path const& path) {
   }
 }
 
-::osr::elevation_t hgt_driver::get(::osr::point const& point) const {
+elevation_meters_t hgt_driver::get(::osr::point const& point) const {
   auto const p = decltype(rtree_)::coord_t{static_cast<float>(point.lat()),
                                            static_cast<float>(point.lng())};
-  auto elevation = NO_ELEVATION_DATA;
+  auto elevation = elevation_meters_t::invalid();
   rtree_.search(p, p,
                 [&](auto const&, auto const&, std::size_t const& tile_idx) {
                   elevation = std::visit(
-                      [&](IsTile auto const& t) -> ::osr::elevation_t {
+                      [&](IsTile auto const& t) -> elevation_meters_t {
                         return t.get(point);
                       },
                       tiles_[tile_idx]);
-                  return elevation != NO_ELEVATION_DATA;
+                  return elevation != elevation_meters_t::invalid();
                 });
   return elevation;
 }

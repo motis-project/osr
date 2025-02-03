@@ -1,6 +1,8 @@
 #include "osr/preprocessing/elevation/dem_tile.h"
+#include <cista/strong.h>
 
 #include <cmath>
+#include <cstdint>
 #include <filesystem>
 #include <fstream>
 #include <functional>
@@ -25,6 +27,8 @@
 namespace fs = std::filesystem;
 
 namespace osr::preprocessing::elevation {
+
+constexpr auto const kNoData = std::int16_t{-32768};
 
 using str_map = std::unordered_map<std::string, std::string>;
 using dem_exception = std::runtime_error;
@@ -218,20 +222,25 @@ dem_tile::dem_tile(dem_tile&& grid) noexcept : impl_(std::move(grid.impl_)) {}
 
 dem_tile::~dem_tile() = default;
 
-::osr::elevation_t dem_tile::get(::osr::point const& p) const {
+elevation_meters_t dem_tile::get(::osr::point const& p) const {
   auto const val = get_raw(p);
   switch (impl_->hdr_.pixel_type_) {
     case pixel_type::int16:
       if (val.int16_ == impl_->hdr_.nodata_.int16_) {
-        return NO_ELEVATION_DATA;
+        return elevation_meters_t::invalid();
       } else {
-        return static_cast<::osr::elevation_t>(val.int16_);
+        auto const value = val.int16_;
+        return value != kNoData ? elevation_meters_t{value}
+                                : elevation_meters_t::invalid();
       }
     case pixel_type::float32:
       if (std::equal_to<>()(val.float32_, impl_->hdr_.nodata_.float32_)) {
-        return NO_ELEVATION_DATA;
+        return elevation_meters_t::invalid();
       } else {
-        return static_cast<::osr::elevation_t>(std::round(val.float32_));
+        auto const value = static_cast<cista::base_t<elevation_meters_t>>(
+            std::round(val.float32_));
+        return value != kNoData ? elevation_meters_t{value}
+                                : elevation_meters_t::invalid();
       }
   }
   throw std::runtime_error{"dem_grid: invalid pixel type"};

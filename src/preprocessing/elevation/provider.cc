@@ -25,15 +25,15 @@ struct provider::impl {
     drivers_.emplace_back(std::move(driver));
   }
 
-  elevation_t get(::osr::point const& p) {
+  elevation_meters_t get(::osr::point const& p) {
     for (auto const& grid : drivers_) {
       auto const data = std::visit(
           [&](IsDriver auto const& driver) { return driver.get(p); }, grid);
-      if (data != NO_ELEVATION_DATA) {
+      if (data != elevation_meters_t::invalid()) {
         return data;
       }
     }
-    return NO_ELEVATION_DATA;
+    return elevation_meters_t::invalid();
   }
 
   tile_idx_t tile_idx(::osr::point const& p) const {
@@ -83,7 +83,7 @@ provider::provider(std::filesystem::path const& p)
 
 provider::~provider() = default;
 
-::osr::elevation_t provider::get(::osr::point const& p) const {
+elevation_meters_t provider::get(::osr::point const& p) const {
   return impl_->get(p);
 }
 

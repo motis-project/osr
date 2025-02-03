@@ -156,9 +156,11 @@ struct bike {
             ElevationUpCost > 0 && dist > 0
                 ? (ElevationExponentThousandth > 1000U
                        ? ElevationUpCost *
-                             std::pow(static_cast<double>(elevation.up_) / dist,
-                                      ElevationExponentThousandth / 1000.0)
-                       : ElevationUpCost * elevation.up_ / dist)
+                             std::pow(
+                                 static_cast<double>(to_idx(elevation.up_)) /
+                                     dist,
+                                 ElevationExponentThousandth / 1000.0)
+                       : ElevationUpCost * to_idx(elevation.up_) / dist)
                 : 0);
         auto const cost = way_cost(target_way_prop, way_dir, dist) +
                           node_cost(target_node_prop) + elevation_cost;

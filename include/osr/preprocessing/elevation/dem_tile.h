@@ -28,7 +28,7 @@ struct dem_tile {
   dem_tile& operator=(dem_tile const&) = delete;
   dem_tile& operator=(dem_tile&&) = delete;
 
-  ::osr::elevation_t get(::osr::point const&) const;
+  elevation_meters_t get(::osr::point const&) const;
   tile_idx_t tile_idx(::osr::point const&) const;
   coord_box get_coord_box() const;
 

@@ -38,7 +38,7 @@
 namespace osr::preprocessing::elevation {
 
 // Void value is used in version 1.0 and 2.1 only
-constexpr auto const kVoidValue = -32786;
+constexpr auto const kVoidValue = std::int16_t{-32768};
 
 template <std::size_t RasterSize>
 struct hgt_tile<RasterSize>::hgt_tile<RasterSize>::impl {
@@ -75,22 +75,24 @@ struct hgt_tile<RasterSize>::hgt_tile<RasterSize>::impl {
     return std::numeric_limits<std::size_t>::max();
   }
 
-  elevation_t get(::osr::point const& p) const {
+  elevation_meters_t get(::osr::point const& p) const {
     auto const offset = get_offset<RasterSize>(p);
     if (offset == std::numeric_limits<std::size_t>::max()) {
-      return ::osr::NO_ELEVATION_DATA;
+      return elevation_meters_t::invalid();
     }
-    auto const value = get(kBytesPerPixel * offset);
-    return (value == kVoidValue) ? ::osr::NO_ELEVATION_DATA : value;
+    return get(kBytesPerPixel * offset);
   }
 
-  elevation_t get(std::size_t const offset) const {
+  elevation_meters_t get(std::size_t const offset) const {
     assert(offset < kBytesPerPixel * RasterSize * RasterSize);
     auto const byte_ptr = file_.data() + offset;
     auto const raw_value = *reinterpret_cast<std::int16_t const*>(byte_ptr);
     // Byte is stored in big-endian
-    return std::endian::native == std::endian::big ? raw_value
-                                                   : std::byteswap(raw_value);
+    auto const meters = std::endian::native == std::endian::big
+                            ? raw_value
+                            : std::byteswap(raw_value);
+    return (meters == kVoidValue) ? elevation_meters_t::invalid()
+                                  : elevation_meters_t{meters};
   }
 
   tile_idx_t tile_idx(::osr::point const& p) const {
@@ -134,7 +136,7 @@ template <std::size_t RasterSize>
 hgt_tile<RasterSize>::hgt_tile(hgt_tile&& grid) noexcept = default;
 
 template <std::size_t RasterSize>
-::osr::elevation_t hgt_tile<RasterSize>::get(::osr::point const& p) const {
+elevation_meters_t hgt_tile<RasterSize>::get(::osr::point const& p) const {
   return impl_->get(p);
 }
 

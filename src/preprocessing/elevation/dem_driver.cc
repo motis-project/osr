@@ -24,14 +24,14 @@ bool dem_driver::add_tile(fs::path const& path) {
   return true;
 }
 
-::osr::elevation_t dem_driver::get(::osr::point const& point) const {
+elevation_meters_t dem_driver::get(::osr::point const& point) const {
   auto const p = decltype(rtree_)::coord_t{static_cast<float>(point.lat()),
                                            static_cast<float>(point.lng())};
-  auto elevation = NO_ELEVATION_DATA;
+  auto elevation = elevation_meters_t::invalid();
   rtree_.search(p, p,
                 [&](auto const&, auto const&, std::size_t const& tile_idx) {
                   elevation = tiles_[tile_idx].get(point);
-                  return elevation != NO_ELEVATION_DATA;
+                  return elevation != elevation_meters_t::invalid();
                 });
   return elevation;
 }

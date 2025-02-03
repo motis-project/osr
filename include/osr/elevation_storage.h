@@ -11,8 +11,6 @@
 
 namespace osr {
 
-constexpr elevation_t NO_ELEVATION_DATA = -32767;
-
 namespace preprocessing::elevation {
 struct provider;
 }
@@ -21,8 +19,8 @@ struct elevation_storage {
   struct elevation {
     elevation& operator+=(elevation const&);
     elevation swap() const;
-    elevation_t up_;
-    elevation_t down_;
+    elevation_monotonic_t up_{0U};
+    elevation_monotonic_t down_{0U};
   };
   struct encoding {
     using coding = std::uint8_t;

@@ -11,6 +11,8 @@
 
 namespace osr::preprocessing::elevation {
 
+using elevation_meters_t = cista::strong<std::int16_t, struct elevation_meters_>;
+
 struct coord_box {
   float min_lat_;
   float min_lng_;

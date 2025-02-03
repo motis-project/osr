@@ -24,7 +24,7 @@ struct hgt_driver {
 
   hgt_driver() = default;
   bool add_tile(fs::path const&);
-  ::osr::elevation_t get(::osr::point const&) const;
+  elevation_meters_t get(::osr::point const&) const;
   tile_idx_t tile_idx(::osr::point const&) const;
   step_size get_step_size() const;
   std::size_t n_tiles() const;
