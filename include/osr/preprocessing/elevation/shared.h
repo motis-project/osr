@@ -11,7 +11,8 @@
 
 namespace osr::preprocessing::elevation {
 
-using elevation_meters_t = cista::strong<std::int16_t, struct elevation_meters_>;
+using elevation_meters_t =
+    cista::strong<std::int16_t, struct elevation_meters_>;
 
 struct coord_box {
   float min_lat_;
@@ -59,7 +60,7 @@ template <typename ElevationProvider>
 concept IsProvider = requires(ElevationProvider provider) {
   {
     std::as_const(provider).get(std::declval<::osr::point>())
-  } -> std::same_as<::osr::elevation_t>;
+  } -> std::same_as<elevation_meters_t>;
   {
     std::as_const(provider).tile_idx(std::declval<point const&>())
   } -> std::same_as<tile_idx_t>;
