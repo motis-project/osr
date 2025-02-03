@@ -3,15 +3,18 @@
 #include <algorithm>
 #include <array>
 #include <execution>
+#include <filesystem>
 #include <memory>
 #include <mutex>
 #include <ranges>
 #include <string>
+#include <type_traits>
 
 #include "utl/enumerate.h"
 #include "utl/pairwise.h"
 #include "utl/parallel_for.h"
 #include "utl/progress_tracker.h"
+#include "utl/raii.h"
 
 #include "cista/strong.h"
 
@@ -153,27 +156,17 @@ struct way_ordering_t {
 };
 
 using way_ordering_vec = mm_vec<way_ordering_t>;
-
-way_ordering_vec calculate_way_order(ways const& w,
+way_ordering_vec calculate_way_order(std::vector<std::filesystem::path>& paths,
+                                     ways const& w,
                                      provider const& provider,
                                      utl::progress_tracker_ptr& pt) {
-  auto const path =
-      std::filesystem::temp_directory_path() / "temp_osr_extract_way_ordering";
-  // auto ordering = utl::make_raii<osr::mm_vec<way_ordering_t>>({mm(path,
-  // kWriteMode)}, [p = std::move(path)](auto* mm){ std::destroy_at(mm); });
-  // auto ordering = utl::make_raii(osr::mm_vec<way_ordering_t>{mm(path,
-  // kWriteMode)}, [p = std::move(path)](auto* mm){ std::destroy_at(mm); });
-  // auto& ord = ordering.get();
-  // ord.reserve(w.n_ways());
+  auto const& path = paths.emplace_back(std::filesystem::temp_directory_path() /
+                                        "temp_osr_extract_way_ordering");
 
   auto ordering = mm_vec<way_ordering_t>{mm(path, kWriteMode)};
   ordering.reserve(w.n_ways());
 
   pt->in_high(w.n_ways());
-  // for (auto const [way_idx, way] : utl::enumerate(w.r_->way_nodes_) |
-  // utl::remove_if([](auto const& enumerated_way) -> bool {
-  //   return enumerated_way.second.empty();
-  // })) {
   for (auto const [way_idx, way] : utl::enumerate(w.r_->way_nodes_)) {
     if (!way.empty()) {
       auto const node_point = w.get_node_pos(way.front());
@@ -197,11 +190,14 @@ way_ordering_vec calculate_way_order(ways const& w,
   return ordering;
 }
 
-mm_vec_map<node_idx_t, point> calculate_points(ways const& w,
-                                               utl::progress_tracker_ptr& pt) {
-  auto points = mm_vec_map<node_idx_t, point>{
-      mm(std::filesystem::temp_directory_path() / "temp_osr_extract_points",
-         cista::mmap::protection::WRITE)};
+mm_vec_map<node_idx_t, point> calculate_points(
+    std::vector<std::filesystem::path>& paths,
+    ways const& w,
+    utl::progress_tracker_ptr& pt) {
+  auto const& path = paths.emplace_back(std::filesystem::temp_directory_path() /
+                                        "temp_osr_extract_points");
+  auto points =
+      mm_vec_map<node_idx_t, point>{mm(path, cista::mmap::protection::WRITE)};
 
   auto const size = w.n_nodes();
   points.resize(size);
@@ -233,17 +229,21 @@ struct encoding_result_t {
 };
 
 encoding_result_t calculate_way_encodings(
+    std::vector<std::filesystem::path>& paths,
     ways const& w,
     provider const& provider,
     mm_vec<way_ordering_t> const& ordering,
     mm_vec_map<node_idx_t, point> const& points,
     utl::progress_tracker_ptr& pt) {
-  auto const mapping_path =
-      std::filesystem::temp_directory_path() / "temp_osr_extract_mapping";
-  auto const encoding_data_path = std::filesystem::temp_directory_path() /
-                                  "temp_osr_extract_unordered_encoding_data";
-  auto const encoding_idx_path = std::filesystem::temp_directory_path() /
-                                 "temp_osr_extract_unordered_encoding_idx";
+  paths.reserve(paths.size() + 3U);
+  auto const& mapping_path = paths.emplace_back(
+      std::filesystem::temp_directory_path() / "temp_osr_extract_mapping");
+  auto const& encoding_data_path =
+      paths.emplace_back(std::filesystem::temp_directory_path() /
+                         "temp_osr_extract_unordered_encoding_data");
+  auto const& encoding_idx_path =
+      paths.emplace_back(std::filesystem::temp_directory_path() /
+                         "temp_osr_extract_unordered_encoding_idx");
 
   auto result = encoding_result_t{
       .mappings_ = osr::mm_vec<mapping_t>{mm(mapping_path, kWriteMode)},
@@ -319,15 +319,24 @@ void write_ordered_encodings(elevation_storage& storage,
 void elevation_storage::set_elevations(ways const& w,
                                        provider const& provider) {
   auto pt = utl::get_active_progress_tracker_or_activate("osr");
+  auto cleanup_paths =
+      utl::make_raii(std::vector<std::filesystem::path>{},
+                     [](std::vector<std::filesystem::path> const& paths) {
+                       for (auto const& path : paths) {
+                         std::filesystem::remove(path);
+                       }
+                     });
 
   pt->status("Calculating way order").out_bounds(85, 86);
-  auto const processing_order =
-      timeit("calculate order", calculate_way_order, w, provider, pt);
+  auto const processing_order = timeit("calculate order", calculate_way_order,
+                                       cleanup_paths.get(), w, provider, pt);
   pt->status("Precalculating way points").out_bounds(87, 87);
-  auto const points = timeit("Calculate points", calculate_points, w, pt);
+  auto const points =
+      timeit("Calculate points", calculate_points, cleanup_paths.get(), w, pt);
   pt->status("Calculating way elevations").out_bounds(88, 89);
-  auto unordered_encodings = timeit("calculate order", calculate_way_encodings,
-                                    w, provider, processing_order, points, pt);
+  auto unordered_encodings =
+      timeit("calculate order", calculate_way_encodings, cleanup_paths.get(), w,
+             provider, processing_order, points, pt);
   pt->status("Storing ordered elevations").out_bounds(90, 90);
   timeit("write ordered", write_ordered_encodings, *this,
          std::move(unordered_encodings), pt);
