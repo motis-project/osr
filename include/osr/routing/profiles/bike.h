@@ -10,10 +10,10 @@ namespace osr {
 
 struct sharing_data;
 
-constexpr auto const kElevationNoCost = 0;
+constexpr auto const kElevationNoCost = 0U;
 // TODO Adjust value
-constexpr auto const kElevationLowCost = 570;
-constexpr auto const kElevationHighCost = 3700;
+constexpr auto const kElevationLowCost = 570U;
+constexpr auto const kElevationHighCost = 3700U;
 
 // Some configurations (cost, exp):
 // (250, 1000)
@@ -21,7 +21,8 @@ constexpr auto const kElevationHighCost = 3700;
 // (570, 2100)
 // (3700, 2100)
 
-template <int ElevationUpCost, unsigned int ElevationExponentThousandth = 2100U>
+template <unsigned int ElevationUpCost,
+          unsigned int ElevationExponentThousandth = 2100U>
 struct bike {
   static constexpr auto const kMaxMatchDistance = 100U;
   static constexpr auto const kOffroadPenalty = 1U;
@@ -153,7 +154,7 @@ struct bike {
           return in_direction ? e : e.swap();
         }();
         auto const elevation_cost = static_cast<cost_t>(
-            ElevationUpCost > 0 && dist > 0
+            ElevationUpCost > 0U && dist > 0U
                 ? (ElevationExponentThousandth > 1000U
                        ? ElevationUpCost *
                              std::pow(
