@@ -280,13 +280,9 @@ void elevation_storage::set_elevations(ways const& w,
                                        provider const& provider) {
   auto pt = utl::get_active_progress_tracker_or_activate("osr");
   auto cleanup_paths = utl::make_raii(path_vec{}, [](path_vec const& paths) {
+    auto e = std::error_code{};
     for (auto const& path : paths) {
-      try {
-        fs::remove(path);
-
-      } catch (fs::filesystem_error const&) {
-        std::cout << "Warning: Failed to delete '" << path << "'\n";
-      }
+      fs::remove(path, e);
     }
   });
 
