@@ -12,12 +12,12 @@ bool dem_driver::add_tile(fs::path const& path) {
     return false;
   }
 
-  auto tile = dem_tile{path};
+  auto const idx = static_cast<std::size_t>(tiles_.size());
+  auto const& tile = tiles_.emplace_back(dem_tile{path});
   auto const box = tile.get_coord_box();
   auto const min = decltype(rtree_)::coord_t{box.min_lat_, box.min_lng_};
   auto const max = decltype(rtree_)::coord_t{box.max_lat_, box.max_lng_};
-  rtree_.insert(min, max, static_cast<std::size_t>(tiles_.size()));
-  tiles_.emplace_back(std::move(tile));
+  rtree_.insert(min, max, idx);
   return true;
 }
 
