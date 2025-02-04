@@ -330,17 +330,17 @@ void elevation_storage::set_elevations(ways const& w,
     }
   });
 
-  pt->status("Calculating way order").out_bounds(85, 86);
+  pt->status("Calculating way order").out_bounds(75, 79);
   auto const processing_order = timeit("calculate order", calculate_way_order,
                                        cleanup_paths.get(), w, provider, pt);
-  pt->status("Precalculating way points").out_bounds(87, 87);
+  pt->status("Precalculating way points").out_bounds(79, 81);
   auto const points =
       timeit("Calculate points", calculate_points, cleanup_paths.get(), w, pt);
-  pt->status("Calculating way elevations").out_bounds(88, 89);
+  pt->status("Calculating way elevations").out_bounds(81, 89);
   auto unordered_encodings =
       timeit("calculate order", calculate_way_encodings, cleanup_paths.get(), w,
              provider, processing_order, points, pt);
-  pt->status("Storing ordered elevations").out_bounds(90, 90);
+  pt->status("Storing ordered elevations").out_bounds(89, 90);
   timeit("write ordered", write_ordered_encodings, *this,
          std::move(unordered_encodings), pt);
 }

@@ -492,7 +492,7 @@ void extract(bool const with_platforms,
 
   w.node_way_counter_.reserve(12000000000);
   {  // Collect node coordinates.
-    pt->status("Load OSM / Coordinates").in_high(file_size).out_bounds(0, 20);
+    pt->status("Load OSM / Coordinates").in_high(file_size).out_bounds(0, 15);
 
     auto node_idx_builder = tiles::hybrid_node_idx_builder{node_idx};
 
@@ -510,7 +510,7 @@ void extract(bool const with_platforms,
 
   auto elevator_nodes = hash_map<osm_node_idx_t, level_bits_t>{};
   {  // Extract streets, places, and areas.
-    pt->status("Load OSM / Ways").in_high(file_size).out_bounds(20, 50);
+    pt->status("Load OSM / Ways").in_high(file_size).out_bounds(15, 40);
 
     auto h = way_handler{w, pl.get(), rel_ways, elevator_nodes};
     auto reader =

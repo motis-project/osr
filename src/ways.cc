@@ -58,7 +58,7 @@ void ways::connect_ways() {
   {  // Assign graph node ids to every node with >1 way.
     pt->status("Create graph nodes")
         .in_high(node_way_counter_.size())
-        .out_bounds(50, 60);
+        .out_bounds(40, 50);
 
     auto node_idx = node_idx_t{0U};
     node_way_counter_.multi_.for_each_set_bit([&](std::uint64_t const b_idx) {
@@ -74,7 +74,7 @@ void ways::connect_ways() {
   {
     pt->status("Connect ways")
         .in_high(way_osm_nodes_.size())
-        .out_bounds(60, 85);
+        .out_bounds(50, 75);
     auto node_ways = mm_paged_vecvec<node_idx_t, way_idx_t>{
         cista::paged<mm_vec32<way_idx_t>>{
             mm_vec32<way_idx_t>{mm("tmp_node_ways_data.bin")}},
