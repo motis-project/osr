@@ -53,10 +53,6 @@ struct tile_idx_t {
 };
 static_assert(sizeof(tile_idx_t) == sizeof(tile_idx_t::data_t));
 
-using sub_tile_idx_t = std::uint8_t;
-constexpr auto const kSubTileFactor =
-    std::numeric_limits<sub_tile_idx_t>::max() + 1U;
-
 template <typename ElevationProvider>
 concept IsProvider =
     requires(ElevationProvider const& provider, point const& p) {
