@@ -3,7 +3,6 @@
 #include "osr/preprocessing/elevation/hgt_tile.h"
 
 #include <cassert>
-#include <cstdint>
 #include <algorithm>
 #include <bit>
 #include <limits>
@@ -58,16 +57,19 @@ struct hgt_tile<RasterSize>::hgt_tile<RasterSize>::impl {
     auto const box = get_coord_box();
     if (box.min_lng_ <= lng && lng < box.max_lng_ &&  //
         box.min_lat_ <= lat && lat < box.max_lat_) {
+      // Column: Left to right
       auto const column =
           std::clamp(static_cast<std::size_t>(
                          std::floor(((lng - box.min_lng_) * (RasterSize - 1U)) /
                                     RasterSize * UpperBound)),
                      std::size_t{0U}, UpperBound - 1U);
+      // Row: Top to bottom
       auto const row =
           std::clamp(static_cast<std::size_t>(
                          std::floor(((box.max_lat_ - lat) * (RasterSize - 1U)) /
                                     RasterSize * UpperBound)),
                      std::size_t{0U}, (UpperBound - 1U));
+      // Data in row major order
       return UpperBound * row + column;
     }
     return std::numeric_limits<std::size_t>::max();
