@@ -118,6 +118,7 @@ way_properties get_way_properties(tags const& t) {
   p.from_level_ = to_idx(from);
   p.to_level_ = to_idx(to);
   p.is_platform_ = t.is_platform_;
+  p.is_ramp_ = t.is_ramp_;
   return p;
 }
 
