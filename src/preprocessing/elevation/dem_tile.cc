@@ -1,5 +1,4 @@
 #include "osr/preprocessing/elevation/dem_tile.h"
-#include <cista/strong.h>
 
 #include <cmath>
 #include <cstdint>
@@ -13,6 +12,7 @@
 #include "boost/algorithm/string/case_conv.hpp"
 
 #include "cista/mmap.h"
+#include "cista/strong.h"
 
 #include "osr/preprocessing/elevation/shared.h"
 
@@ -244,6 +244,7 @@ elevation_meters_t dem_tile::get(point const& p) const {
 }
 
 tile_idx_t dem_tile::tile_idx(point const&) const {
+  // TODO Return non trivial sub tile index
   return tile_idx_t::from_sub_tile(0U);
 }
 
