@@ -261,7 +261,7 @@ pixel_value dem_tile::get_raw(point const& p) const { return impl_->get(p); }
 
 pixel_type dem_tile::get_pixel_type() const { return impl_->hdr_.pixel_type_; }
 
-step_size dem_tile::get_step_size() const {
+resolution dem_tile::max_resolution() const {
   return {.x_ = impl_->hdr_.xdim_, .y_ = impl_->hdr_.ydim_};
 }
 

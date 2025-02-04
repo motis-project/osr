@@ -113,7 +113,7 @@ struct hgt_tile<RasterSize>::hgt_tile<RasterSize>::impl {
     };
   }
 
-  constexpr step_size get_step_size() const {
+  constexpr resolution max_resolution() const {
     return {.x_ = kStepWidth, .y_ = kStepWidth};
   }
 
@@ -146,8 +146,8 @@ tile_idx_t hgt_tile<RasterSize>::tile_idx(point const& p) const {
 }
 
 template <std::size_t RasterSize>
-step_size hgt_tile<RasterSize>::get_step_size() const {
-  return impl_->get_step_size();
+resolution hgt_tile<RasterSize>::max_resolution() const {
+  return impl_->max_resolution();
 }
 
 template <size_t RasterSize>

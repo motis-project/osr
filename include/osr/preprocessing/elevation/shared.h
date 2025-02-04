@@ -8,7 +8,7 @@
 #include "cista/strong.h"
 
 #include "osr/point.h"
-#include "osr/preprocessing/elevation/step_size.h"
+#include "osr/preprocessing/elevation/resolution.h"
 
 namespace osr::preprocessing::elevation {
 
@@ -58,7 +58,7 @@ concept IsProvider =
     requires(ElevationProvider const& provider, point const& p) {
       { provider.get(p) } -> std::same_as<elevation_meters_t>;
       { provider.tile_idx(p) } -> std::same_as<tile_idx_t>;
-      { provider.get_step_size() } -> std::same_as<step_size>;
+      { provider.max_resolution() } -> std::same_as<resolution>;
     };
 
 template <typename Tile>

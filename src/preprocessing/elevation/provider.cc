@@ -89,20 +89,14 @@ tile_idx_t provider::tile_idx(point const& p) const {
 
 std::size_t provider::driver_count() const { return impl_->drivers_.size(); }
 
-step_size provider::get_step_size() const {
-  auto steps = step_size{.x_ = std::numeric_limits<double>::quiet_NaN(),
-                         .y_ = std::numeric_limits<double>::quiet_NaN()};
+resolution provider::max_resolution() const {
+  auto res = resolution{};
   for (auto const& driver : impl_->drivers_) {
-    auto const s = std::visit(
-        [](IsDriver auto const& d) { return d.get_step_size(); }, driver);
-    if (std::isnan(steps.x_) || s.x_ < steps.x_) {
-      steps.x_ = s.x_;
-    }
-    if (std::isnan(steps.y_) || s.y_ < steps.y_) {
-      steps.y_ = s.y_;
-    }
+    auto const r = std::visit(
+        [](IsDriver auto const& d) { return d.max_resolution(); }, driver);
+    res.update(r);
   }
-  return steps;
+  return res;
 }
 
 }  // namespace osr::preprocessing::elevation

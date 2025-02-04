@@ -5,8 +5,8 @@
 #include <memory>
 
 #include "osr/point.h"
+#include "osr/preprocessing/elevation/resolution.h"
 #include "osr/preprocessing/elevation/shared.h"
-#include "osr/preprocessing/elevation/step_size.h"
 
 namespace fs = std::filesystem;
 
@@ -33,7 +33,7 @@ struct dem_tile {
 
   pixel_value get_raw(point const&) const;
   pixel_type get_pixel_type() const;
-  step_size get_step_size() const;
+  resolution max_resolution() const;
 
 private:
   struct impl;

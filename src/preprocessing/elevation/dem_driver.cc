@@ -49,19 +49,14 @@ tile_idx_t dem_driver::tile_idx(point const& point) const {
   return idx;
 }
 
-step_size dem_driver::get_step_size() const {
-  auto steps = step_size{.x_ = std::numeric_limits<double>::quiet_NaN(),
+resolution dem_driver::max_resolution() const {
+  auto res = resolution{.x_ = std::numeric_limits<double>::quiet_NaN(),
                          .y_ = std::numeric_limits<double>::quiet_NaN()};
   for (auto const& tile : tiles_) {
-    auto const s = tile.get_step_size();
-    if (std::isnan(steps.x_) || s.x_ < steps.x_) {
-      steps.x_ = s.x_;
-    }
-    if (std::isnan(steps.y_) || s.y_ < steps.y_) {
-      steps.y_ = s.y_;
-    }
+    auto const r = tile.max_resolution();
+    res.update(r);
   }
-  return steps;
+  return res;
 }
 
 std::size_t dem_driver::n_tiles() const { return tiles_.size(); }

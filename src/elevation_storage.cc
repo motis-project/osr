@@ -18,7 +18,7 @@
 #include "osr/point.h"
 #include "osr/preprocessing/elevation/provider.h"
 #include "osr/preprocessing/elevation/shared.h"
-#include "osr/preprocessing/elevation/step_size.h"
+#include "osr/preprocessing/elevation/resolution.h"
 
 namespace fs = std::filesystem;
 
@@ -26,7 +26,7 @@ namespace osr {
 
 using preprocessing::elevation::elevation_meters_t;
 using preprocessing::elevation::provider;
-using preprocessing::elevation::step_size;
+using preprocessing::elevation::resolution;
 using preprocessing::elevation::tile_idx_t;
 
 using path_vec = std::vector<fs::path>;
@@ -65,7 +65,7 @@ std::unique_ptr<elevation_storage> elevation_storage::try_open(
 elevation_storage::elevation get_way_elevation(provider const& provider,
                                                point const& from,
                                                point const& to,
-                                               step_size const& max_step_size) {
+                                               resolution const& max_res) {
   auto elevation = elevation_storage::elevation{};
   auto a = provider.get(from);
   auto const b = provider.get(to);
@@ -78,16 +78,16 @@ elevation_storage::elevation get_way_elevation(provider const& provider,
         std::abs(180 - std::abs((to.lng() - from.lng()) - 180));
     auto const lat_diff = std::abs(to.lat() - from.lat());
     auto const steps = static_cast<int>(
-        std::max(std::ceil(kSafetyFactor * lat_diff / max_step_size.y_),
-                 std::ceil(kSafetyFactor * min_lng_diff / max_step_size.x_)));
+        std::max(std::ceil(kSafetyFactor * lat_diff / max_res.y_),
+                 std::ceil(kSafetyFactor * min_lng_diff / max_res.x_)));
     if (steps > 1) {
       auto const from_lat = from.lat();
       auto const from_lng = from.lng();
-      auto const way_step_size = step_size{.x_ = (to.lat() - from_lat) / steps,
+      auto const way_res = resolution{.x_ = (to.lat() - from_lat) / steps,
                                            .y_ = (to.lng() - from_lng) / steps};
       for (auto s = 1; s < steps; ++s) {
         auto const m = provider.get(point::from_latlng(
-            from_lat + s * way_step_size.x_, from_lng + s * way_step_size.y_));
+            from_lat + s * way_res.x_, from_lng + s * way_res.y_));
         if (m != elevation_meters_t::invalid()) {
           if (a < m) {
             elevation.up_ += static_cast<cista::base_t<elevation_monotonic_t>>(
@@ -214,7 +214,7 @@ encoding_result_t calculate_way_encodings(
                   mm(encoding_idx_path, kWriteMode)}},
   };
   result.mappings_.reserve(ordering.size());
-  auto const max_step_size = provider.get_step_size();
+  auto const max_res = provider.max_resolution();
   auto m = std::mutex{};
 
   pt->in_high(ordering.size());
@@ -231,7 +231,7 @@ encoding_result_t calculate_way_encodings(
         elevations.clear();
         for (auto const [from, to] : utl::pairwise(w.r_->way_nodes_[way_idx])) {
           auto const elevation = elevation_storage::encoding{get_way_elevation(
-              provider, points[from], points[to], max_step_size)};
+              provider, points[from], points[to], max_res)};
           if (elevation) {
             elevations.resize(elevations_idx);
             elevations.push_back(std::move(elevation));

@@ -92,20 +92,14 @@ tile_idx_t hgt_driver::tile_idx(point const& point) const {
   return idx;
 }
 
-step_size hgt_driver::get_step_size() const {
-  auto steps = step_size{.x_ = std::numeric_limits<double>::quiet_NaN(),
-                         .y_ = std::numeric_limits<double>::quiet_NaN()};
+resolution hgt_driver::max_resolution() const {
+  auto res = resolution{};
   for (auto const& tile : tiles_) {
-    auto const s = std::visit(
-        [](IsTile auto const& t) { return t.get_step_size(); }, tile);
-    if (std::isnan(steps.x_) || s.x_ < steps.x_) {
-      steps.x_ = s.x_;
-    }
-    if (std::isnan(steps.y_) || s.y_ < steps.y_) {
-      steps.y_ = s.y_;
-    }
+    auto const r = std::visit(
+        [](IsTile auto const& t) { return t.max_resolution(); }, tile);
+    res.update(r);
   }
-  return steps;
+  return res;
 }
 
 std::size_t hgt_driver::n_tiles() const { return tiles_.size(); }

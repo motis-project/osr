@@ -8,8 +8,8 @@
 
 #include "osr/point.h"
 #include "osr/preprocessing/elevation/hgt_tile.h"
+#include "osr/preprocessing/elevation/resolution.h"
 #include "osr/preprocessing/elevation/shared.h"
-#include "osr/preprocessing/elevation/step_size.h"
 
 namespace fs = std::filesystem;
 
@@ -25,7 +25,7 @@ struct hgt_driver {
   bool add_tile(fs::path const&);
   elevation_meters_t get(point const&) const;
   tile_idx_t tile_idx(point const&) const;
-  step_size get_step_size() const;
+  resolution max_resolution() const;
   std::size_t n_tiles() const;
   static std::optional<hgt_tile_t> open(fs::path const&);
 

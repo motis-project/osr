@@ -5,8 +5,8 @@
 #include <string>
 
 #include "osr/point.h"
+#include "osr/preprocessing/elevation/resolution.h"
 #include "osr/preprocessing/elevation/shared.h"
-#include "osr/preprocessing/elevation/step_size.h"
 
 namespace osr::preprocessing::elevation {
 
@@ -26,7 +26,7 @@ struct hgt_tile {
   elevation_meters_t get(point const&) const;
   tile_idx_t tile_idx(point const&) const;
 
-  step_size get_step_size() const;
+  resolution max_resolution() const;
 
   coord_box get_coord_box() const;
 
