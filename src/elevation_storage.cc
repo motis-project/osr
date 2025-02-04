@@ -3,11 +3,9 @@
 #include <algorithm>
 #include <array>
 #include <execution>
-#include <format>
 #include <mutex>
 #include <ranges>
 #include <string>
-#include <type_traits>
 
 #include "utl/enumerate.h"
 #include "utl/pairwise.h"
@@ -287,8 +285,7 @@ void elevation_storage::set_elevations(ways const& w,
         fs::remove(path);
 
       } catch (fs::filesystem_error const&) {
-        std::cout << std::format("Warning: Failed to delete '{}'\n",
-                                 path.string());
+        std::cout << "Warning: Failed to delete '" << path << "'\n";
       }
     }
   });
