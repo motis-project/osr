@@ -58,24 +58,21 @@ constexpr auto const kSubTileFactor =
     std::numeric_limits<sub_tile_idx_t>::max() + 1U;
 
 template <typename ElevationProvider>
-concept IsProvider = requires(ElevationProvider provider) {
-  {
-    std::as_const(provider).get(std::declval<point>())
-  } -> std::same_as<elevation_meters_t>;
-  {
-    std::as_const(provider).tile_idx(std::declval<point const&>())
-  } -> std::same_as<tile_idx_t>;
-  { std::as_const(provider).get_step_size() } -> std::same_as<step_size>;
-};
+concept IsProvider =
+    requires(ElevationProvider const& provider, point const& p) {
+      { provider.get(p) } -> std::same_as<elevation_meters_t>;
+      { provider.tile_idx(p) } -> std::same_as<tile_idx_t>;
+      { provider.get_step_size() } -> std::same_as<step_size>;
+    };
 
 template <typename Tile>
-concept IsTile = IsProvider<Tile> && requires(Tile tile) {
-  { std::as_const(tile).get_coord_box() } -> std::same_as<coord_box>;
+concept IsTile = IsProvider<Tile> && requires(Tile const& tile) {
+  { tile.get_coord_box() } -> std::same_as<coord_box>;
 };
 
 template <typename Driver>
-concept IsDriver = IsProvider<Driver> && requires(Driver driver) {
-  { std::as_const(driver).n_tiles() } -> std::same_as<std::size_t>;
+concept IsDriver = IsProvider<Driver> && requires(Driver const& driver) {
+  { driver.n_tiles() } -> std::same_as<std::size_t>;
 };
 
 }  // namespace osr::preprocessing::elevation
