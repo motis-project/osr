@@ -14,7 +14,7 @@ namespace osr::preprocessing::elevation {
 static_assert(IsDriver<dem_driver>);
 static_assert(IsDriver<hgt_driver>);
 
-using raster_driver = std::variant<dem_driver, hgt_driver>;
+using driver_t = std::variant<dem_driver, hgt_driver>;
 
 struct provider::impl {
   impl() = default;
@@ -24,11 +24,11 @@ struct provider::impl {
   }
 
   elevation_meters_t get(point const& p) {
-    for (auto const& grid : drivers_) {
-      auto const data = std::visit(
-          [&](IsDriver auto const& driver) { return driver.get(p); }, grid);
-      if (data != elevation_meters_t::invalid()) {
-        return data;
+    for (auto const& driver : drivers_) {
+      auto const meters =
+          std::visit([&](IsDriver auto const& d) { return d.get(p); }, driver);
+      if (meters != elevation_meters_t::invalid()) {
+        return meters;
       }
     }
     return elevation_meters_t::invalid();
@@ -48,7 +48,7 @@ struct provider::impl {
     return tile_idx_t::invalid();
   }
 
-  std::vector<raster_driver> drivers_;
+  std::vector<driver_t> drivers_;
 };
 
 provider::provider(std::filesystem::path const& p)
