@@ -70,20 +70,29 @@ elevation_storage::elevation get_way_elevation(ev::provider const& provider,
     // TODO Approximation only for short ways
     // Use slightly larger value to not skip intermediate values
     constexpr auto const kSafetyFactor = 1.000001;
-    auto const min_lng_diff =
-        std::abs(180 - std::abs((to.lng() - from.lng()) - 180));
-    auto const lat_diff = std::abs(to.lat() - from.lat());
+    // map longitude ∈ [-360, 360] to [-180, 180]
+    auto const adjust_lng = [](double const x) {
+      if (x < -180.) {
+        return x + 360.;
+      } else if (x <= 180.) {
+        return x;
+      } else {
+        return x - 360.;
+      }
+    };
+    auto const from_lat = from.lat();
+    auto const from_lng = from.lng();
+    auto const min_lng_diff = adjust_lng(to.lng() - from_lng);
+    auto const lat_diff = to.lat() - from_lat;
     auto const steps = static_cast<int>(
-        std::max(std::ceil(kSafetyFactor * lat_diff / res.y_),
-                 std::ceil(kSafetyFactor * min_lng_diff / res.x_)));
+        std::max(std::ceil(kSafetyFactor * std::abs(lat_diff) / res.y_),
+                 std::ceil(kSafetyFactor * std::abs(min_lng_diff) / res.x_)));
     if (steps > 1) {
-      auto const from_lat = from.lat();
-      auto const from_lng = from.lng();
-      auto const way_res = ev::resolution{.x_ = (to.lat() - from_lat) / steps,
-                                          .y_ = (to.lng() - from_lng) / steps};
+      auto const way_dir =
+          ev::resolution{.x_ = min_lng_diff / steps, .y_ = lat_diff / steps};
       for (auto s = 1; s < steps; ++s) {
         auto const m = provider.get(point::from_latlng(
-            from_lat + s * way_res.x_, from_lng + s * way_res.y_));
+            from_lat + s * way_dir.y_, adjust_lng(from_lng + s * way_dir.x_)));
         if (m != ev::elevation_meters_t::invalid()) {
           if (a < m) {
             elevation.up_ += static_cast<cista::base_t<elevation_monotonic_t>>(
