@@ -7,10 +7,10 @@ namespace osr::preprocessing::elevation {
 
 struct resolution {
   resolution& update(resolution const& o) {
-    if (std::isnan(x_) || x_ < o.x_) {
+    if (std::isnan(x_) || o.x_ < x_) {
       x_ = o.x_;
     }
-    if (std::isnan(y_) || y_ < o.y_) {
+    if (std::isnan(y_) || o.y_ < y_) {
       y_ = o.y_;
     }
     return *this;
