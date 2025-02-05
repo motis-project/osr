@@ -51,7 +51,7 @@ tile_idx_t dem_driver::tile_idx(point const& point) const {
 
 resolution dem_driver::max_resolution() const {
   auto res = resolution{.x_ = std::numeric_limits<double>::quiet_NaN(),
-                         .y_ = std::numeric_limits<double>::quiet_NaN()};
+                        .y_ = std::numeric_limits<double>::quiet_NaN()};
   for (auto const& tile : tiles_) {
     auto const r = tile.max_resolution();
     res.update(r);
