@@ -117,14 +117,52 @@ elevation_storage::elevation get_way_elevation(ev::provider const& provider,
   return elevation;
 }
 
+using sort_idx_t = cista::strong<std::uint32_t, struct sort_idx_>;
+using node_point_map = mm_vec_map<node_idx_t, point>;
+
 struct way_ordering_t {
   way_idx_t way_idx_;
   ev::tile_idx_t order_;
 };
 
+struct mapping_t {
+  way_idx_t way_idx_;
+  sort_idx_t sort_idx_;
+};
+
+struct encoding_result_t {
+  osr::mm_vec<mapping_t> mappings_;
+  mm_vecvec<sort_idx_t, elevation_storage::encoding> encodings_;
+};
+
+node_point_map calculate_points(path_vec& paths,
+                                ways const& w,
+                                utl::progress_tracker_ptr& pt) {
+  auto const& path =
+      paths.emplace_back(fs::temp_directory_path() / "temp_osr_extract_points");
+  auto points = node_point_map{mm(path, cista::mmap::protection::WRITE)};
+
+  auto const size = w.n_nodes();
+  points.resize(size);
+  pt->in_high(size);
+
+  utl::parallel_for_run(
+      w.n_nodes(),
+      [&](std::size_t const& idx) {
+        auto const node_idx = node_idx_t{idx};
+        if (!w.r_->node_ways_[node_idx].empty()) {
+          points[node_idx] = w.get_node_pos(node_idx);
+        }
+      },
+      pt->update_fn());
+
+  return points;
+}
+
 using way_ordering_vec = mm_vec<way_ordering_t>;
 way_ordering_vec calculate_way_order(path_vec& paths,
                                      ways const& w,
+                                     node_point_map const& points,
                                      ev::provider const& provider,
                                      utl::progress_tracker_ptr& pt) {
   auto const& path = paths.emplace_back(fs::temp_directory_path() /
@@ -136,7 +174,7 @@ way_ordering_vec calculate_way_order(path_vec& paths,
   pt->in_high(w.n_ways());
   for (auto const [way_idx, way] : utl::enumerate(w.r_->way_nodes_)) {
     if (!way.empty()) {
-      auto const node_point = w.get_node_pos(way.front());
+      auto const node_point = points[way.front()];
       auto const tile_idx = provider.tile_idx(node_point);
       if (tile_idx != ev::tile_idx_t::invalid()) {
         ordering.emplace_back(way_idx_t{way_idx}, std::move(tile_idx));
@@ -157,49 +195,12 @@ way_ordering_vec calculate_way_order(path_vec& paths,
   return ordering;
 }
 
-mm_vec_map<node_idx_t, point> calculate_points(path_vec& paths,
-                                               ways const& w,
-                                               utl::progress_tracker_ptr& pt) {
-  auto const& path =
-      paths.emplace_back(fs::temp_directory_path() / "temp_osr_extract_points");
-  auto points =
-      mm_vec_map<node_idx_t, point>{mm(path, cista::mmap::protection::WRITE)};
-
-  auto const size = w.n_nodes();
-  points.resize(size);
-  pt->in_high(size);
-
-  utl::parallel_for_run(
-      w.n_nodes(),
-      [&](std::size_t const& idx) {
-        auto const node_idx = node_idx_t{idx};
-        if (!w.r_->node_ways_[node_idx].empty()) {
-          points[node_idx] = w.get_node_pos(node_idx);
-        }
-      },
-      pt->update_fn());
-
-  return points;
-}
-
-using sort_idx_t = cista::strong<std::uint32_t, struct sort_idx_>;
-
-struct mapping_t {
-  way_idx_t way_idx_;
-  sort_idx_t sort_idx_;
-};
-
-struct encoding_result_t {
-  osr::mm_vec<mapping_t> mappings_;
-  mm_vecvec<sort_idx_t, elevation_storage::encoding> encodings_;
-};
-
 encoding_result_t calculate_way_encodings(
     path_vec& paths,
     ways const& w,
     ev::provider const& provider,
     mm_vec<way_ordering_t> const& ordering,
-    mm_vec_map<node_idx_t, point> const& points,
+    node_point_map const& points,
     utl::progress_tracker_ptr& pt) {
   paths.reserve(paths.size() + 3U);
   auto const& mapping_path = paths.emplace_back(fs::temp_directory_path() /
@@ -290,11 +291,11 @@ void elevation_storage::set_elevations(ways const& w,
     }
   });
 
-  pt->status("Calculating way order").out_bounds(75, 79);
-  auto const processing_order =
-      calculate_way_order(cleanup_paths.get(), w, provider, pt);
-  pt->status("Precalculating way points").out_bounds(79, 81);
+  pt->status("Calculating way order").out_bounds(75, 77);
   auto const points = calculate_points(cleanup_paths.get(), w, pt);
+  pt->status("Precalculating way points").out_bounds(77, 81);
+  auto const processing_order =
+      calculate_way_order(cleanup_paths.get(), w, points, provider, pt);
   pt->status("Calculating way elevations").out_bounds(81, 89);
   auto unordered_encodings = calculate_way_encodings(
       cleanup_paths.get(), w, provider, processing_order, points, pt);
