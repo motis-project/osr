@@ -295,9 +295,9 @@ void elevation_storage::set_elevations(ways const& w,
     }
   });
 
-  pt->status("Calculating way order").out_bounds(75, 77);
+  pt->status("Precalculating way points").out_bounds(75, 77);
   auto const points = calculate_points(cleanup_paths.get(), w, pt);
-  pt->status("Precalculating way points").out_bounds(77, 81);
+  pt->status("Calculating way order").out_bounds(77, 81);
   auto const processing_order =
       calculate_way_order(cleanup_paths.get(), w, points, provider, pt);
   pt->status("Calculating way elevations").out_bounds(81, 89);
