@@ -25,18 +25,37 @@ namespace fs = std::filesystem;
 
 namespace osr {
 
+namespace elevation_files {
+constexpr auto const kDataName = "elevation_data.bin";
+constexpr auto const kIndexName = "elevation_idx.bin";
+};  // namespace elevation_files
+
 using path_vec = std::vector<fs::path>;
+using sort_idx_t = cista::strong<std::uint32_t, struct sort_idx_>;
+using node_point_map = mm_vec_map<node_idx_t, point>;
+
+struct way_ordering_t {
+  way_idx_t way_idx_;
+  ev::tile_idx_t order_;
+};
+
+struct mapping_t {
+  way_idx_t way_idx_;
+  sort_idx_t sort_idx_;
+};
+
+struct encoding_result_t {
+  osr::mm_vec<mapping_t> mappings_;
+  mm_vecvec<sort_idx_t, elevation_storage::encoding> encodings_;
+};
+
+using way_ordering_vec = mm_vec<way_ordering_t>;
 
 constexpr auto const kWriteMode = cista::mmap::protection::WRITE;
 
 cista::mmap mm(fs::path const& path, cista::mmap::protection const mode) {
   return cista::mmap{path.string().data(), mode};
 }
-
-namespace elevation_files {
-constexpr auto const kDataName = "elevation_data.bin";
-constexpr auto const kIndexName = "elevation_idx.bin";
-};  // namespace elevation_files
 
 elevation_storage::elevation_storage(fs::path const& p,
                                      cista::mmap::protection const mode)
@@ -117,24 +136,6 @@ elevation_storage::elevation get_way_elevation(ev::provider const& provider,
   return elevation;
 }
 
-using sort_idx_t = cista::strong<std::uint32_t, struct sort_idx_>;
-using node_point_map = mm_vec_map<node_idx_t, point>;
-
-struct way_ordering_t {
-  way_idx_t way_idx_;
-  ev::tile_idx_t order_;
-};
-
-struct mapping_t {
-  way_idx_t way_idx_;
-  sort_idx_t sort_idx_;
-};
-
-struct encoding_result_t {
-  osr::mm_vec<mapping_t> mappings_;
-  mm_vecvec<sort_idx_t, elevation_storage::encoding> encodings_;
-};
-
 node_point_map calculate_points(path_vec& paths,
                                 ways const& w,
                                 utl::progress_tracker_ptr& pt) {
@@ -159,7 +160,6 @@ node_point_map calculate_points(path_vec& paths,
   return points;
 }
 
-using way_ordering_vec = mm_vec<way_ordering_t>;
 way_ordering_vec calculate_way_order(path_vec& paths,
                                      ways const& w,
                                      node_point_map const& points,
