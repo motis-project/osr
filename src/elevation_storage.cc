@@ -45,7 +45,7 @@ struct mapping_t {
 };
 
 struct encoding_result_t {
-  osr::mm_vec<mapping_t> mappings_;
+  mm_vec<mapping_t> mappings_;
   mm_vecvec<sort_idx_t, elevation_storage::encoding> encodings_;
 };
 
@@ -148,7 +148,7 @@ node_point_map calculate_points(path_vec& paths,
   pt->in_high(size);
 
   utl::parallel_for_run(
-      w.n_nodes(),
+      size,
       [&](std::size_t const& idx) {
         auto const node_idx = node_idx_t{idx};
         if (!w.r_->node_ways_[node_idx].empty()) {
@@ -167,11 +167,12 @@ way_ordering_vec calculate_way_order(path_vec& paths,
                                      utl::progress_tracker_ptr& pt) {
   auto const& path = paths.emplace_back(fs::temp_directory_path() /
                                         "temp_osr_extract_way_ordering");
-
   auto ordering = mm_vec<way_ordering_t>{mm(path, kWriteMode)};
-  ordering.reserve(w.n_ways());
 
-  pt->in_high(w.n_ways());
+  auto const size = w.n_ways();
+  ordering.reserve(size);
+  pt->in_high(size);
+
   for (auto const [way_idx, way] : utl::enumerate(w.r_->way_nodes_)) {
     if (!way.empty()) {
       auto const node_point = points[way.front()];
@@ -211,19 +212,21 @@ encoding_result_t calculate_way_encodings(
       fs::temp_directory_path() / "temp_osr_extract_unordered_encoding_idx");
 
   auto result = encoding_result_t{
-      .mappings_ = osr::mm_vec<mapping_t>{mm(mapping_path, kWriteMode)},
+      .mappings_ = mm_vec<mapping_t>{mm(mapping_path, kWriteMode)},
       .encodings_ =
-          osr::mm_vecvec<sort_idx_t, elevation_storage::encoding>{
+          mm_vecvec<sort_idx_t, elevation_storage::encoding>{
               mm_vec<elevation_storage::encoding>{
                   mm(encoding_data_path, kWriteMode)},
               mm_vec<cista::base_t<sort_idx_t>>{
                   mm(encoding_idx_path, kWriteMode)}},
   };
   result.mappings_.reserve(ordering.size());
+
   auto const res = provider.max_resolution();
   auto m = std::mutex{};
 
   pt->in_high(ordering.size());
+
   utl::parallel_for(
       ordering,
       [&](way_ordering_t const way_ordering) {
@@ -233,8 +236,8 @@ encoding_result_t calculate_way_encodings(
         auto const& way_idx = way_ordering.way_idx_;
 
         // Calculate elevations
-        auto elevations_idx = std::size_t{0U};
         elevations.clear();
+        auto elevations_idx = std::size_t{0U};
         for (auto const [from, to] : utl::pairwise(w.r_->way_nodes_[way_idx])) {
           auto const elevation = elevation_storage::encoding{
               get_way_elevation(provider, points[from], points[to], res)};
@@ -271,6 +274,7 @@ void write_ordered_encodings(elevation_storage& storage,
       });
 
   pt->in_high(result.mappings_.size());
+
   for (auto const& mapping : result.mappings_) {
     storage.elevations_.resize(to_idx(mapping.way_idx_) + 1U);
     auto bucket = storage.elevations_.back();
@@ -324,7 +328,7 @@ elevation_storage::elevation& elevation_storage::elevation::operator+=(
   return *this;
 }
 
-elevation_storage::elevation elevation_storage::elevation::swap() const {
+elevation_storage::elevation elevation_storage::elevation::swapped() const {
   return {
       .up_ = down_,
       .down_ = up_,

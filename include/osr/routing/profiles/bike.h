@@ -151,7 +151,7 @@ struct bike {
                                      : get_elevations(elevations, way, to);
           auto const in_direction =
               (SearchDir == direction::kForward) == (from < to);
-          return in_direction ? e : e.swap();
+          return in_direction ? e : e.swapped();
         }();
         auto const elevation_cost = static_cast<cost_t>(
             ElevationUpCost > 0U && dist > 0U
