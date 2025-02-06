@@ -4,6 +4,8 @@
 #include <utility>
 #include <vector>
 
+#include "utl/enumerate.h"
+
 #include "osr/elevation_storage.h"
 #include "osr/preprocessing/elevation/dem_driver.h"
 #include "osr/preprocessing/elevation/hgt_driver.h"
@@ -34,13 +36,11 @@ struct provider::impl {
   }
 
   tile_idx_t tile_idx(point const& p) const {
-    for (auto driver_idx = tile_idx_t::data_t{0U}; driver_idx < drivers_.size();
-         ++driver_idx) {
-      auto idx =
-          std::visit([&](IsDriver auto const& d) { return d.tile_idx(p); },
-                     drivers_[driver_idx]);
+    for (auto const [driver_idx, driver] : utl::enumerate(drivers_)) {
+      auto idx = std::visit(
+          [&](IsDriver auto const& d) { return d.tile_idx(p); }, driver);
       if (idx != tile_idx_t::invalid()) {
-        idx.driver_idx_ = driver_idx;
+        idx.driver_idx_ = static_cast<tile_idx_t::data_t>(driver_idx);
         return idx;
       }
     }
