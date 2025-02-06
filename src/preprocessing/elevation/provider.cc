@@ -1,6 +1,5 @@
 #include "osr/preprocessing/elevation/provider.h"
 
-#include <limits>
 #include <memory>
 #include <utility>
 #include <vector>
@@ -23,7 +22,7 @@ struct provider::impl {
     drivers_.emplace_back(std::move(driver));
   }
 
-  elevation_meters_t get(point const& p) {
+  elevation_meters_t get(point const& p) const {
     for (auto const& driver : drivers_) {
       auto const meters =
           std::visit([&](IsDriver auto const& d) { return d.get(p); }, driver);

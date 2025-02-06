@@ -175,7 +175,7 @@ struct dem_tile::impl {
         mapped_file_{cista::mmap{data_file_.string().data(),
                                  cista::mmap::protection::READ}} {}
 
-  pixel_value get(point const& p) {
+  pixel_value get(point const& p) const {
     auto const lng = p.lng();
     auto const lat = p.lat();
 

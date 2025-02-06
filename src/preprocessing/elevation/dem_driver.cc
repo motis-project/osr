@@ -1,7 +1,5 @@
 #include "osr/preprocessing/elevation/dem_driver.h"
 
-#include <limits>
-
 namespace fs = std::filesystem;
 
 namespace osr::preprocessing::elevation {
