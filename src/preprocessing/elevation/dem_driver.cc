@@ -22,13 +22,13 @@ bool dem_driver::add_tile(fs::path const& path) {
 elevation_meters_t dem_driver::get(point const& point) const {
   auto const p = decltype(rtree_)::coord_t{static_cast<float>(point.lat()),
                                            static_cast<float>(point.lng())};
-  auto elevation = elevation_meters_t::invalid();
+  auto meters = elevation_meters_t::invalid();
   rtree_.search(p, p,
                 [&](auto const&, auto const&, std::size_t const& tile_idx) {
-                  elevation = tiles_[tile_idx].get(point);
-                  return elevation != elevation_meters_t::invalid();
+                  meters = tiles_[tile_idx].get(point);
+                  return meters != elevation_meters_t::invalid();
                 });
-  return elevation;
+  return meters;
 }
 
 tile_idx_t dem_driver::tile_idx(point const& point) const {

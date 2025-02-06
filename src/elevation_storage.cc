@@ -89,7 +89,7 @@ elevation_storage::elevation get_way_elevation(ev::provider const& provider,
     // TODO Approximation only for short ways
     // Use slightly larger value to not skip intermediate values
     constexpr auto const kSafetyFactor = 1.000001;
-    // map longitude ∈ [-360, 360] to [-180, 180]
+    // map longitude in [-360, 360] to [-180, 180]
     auto const adjust_lng = [](double const x) {
       if (x < -180.) {
         return x + 360.;
