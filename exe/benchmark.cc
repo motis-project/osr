@@ -172,6 +172,8 @@ int main(int argc, char const* argv[]) {
   run_benchmark.template operator()<car>("car");
   run_benchmark.template operator()<bike<kElevationNoCost>>(
       "bike (no elevation costs)");
+  run_benchmark.template operator()<bike<kElevationLowCost>>(
+      "bike (low elevation costs)");
   run_benchmark.template operator()<bike<kElevationHighCost>>(
       "bike (high elevation costs)");
 }
