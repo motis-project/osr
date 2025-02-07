@@ -127,6 +127,10 @@
     <option value="forward" selected>forward</option>
     <option value="backward">backward</option>
 </select>
+<select id="routing-algorithm" onchange="selectRoutingAlgorithm(event)">
+    <option value="dijkstra" selected>dijkstra</option>
+    <option value="bidirectional">Bidirectional (A*)</option>
+</select>
 <div id="journey-info">
     Test
 </div>
@@ -141,7 +145,8 @@
         start_level: 0.0,
         destination_level: 1.0,
         profile: document.getElementById('profile').value,
-        direction: document.getElementById('direction').value
+        direction: document.getElementById('direction').value,
+        routing: document.getElementById('routing-algorithm').value
     };
 
     const meta = document.getElementById('journey-info');
@@ -233,7 +238,8 @@
                     level: query.destination_level
                 },
                 profile: query.profile,
-                direction: query.direction
+                direction: query.direction,
+                routing: query.routing
             })
         });
         const r = await response.json();
@@ -462,6 +468,11 @@
 
     window.selectDirection = async (e) => {
         query.direction = e.target.value;
+        map.getSource('path').setData(await getRoute());
+    }
+
+    window.selectRoutingAlgorithm = async (e) => {
+        query.routing = e.target.value;
         map.getSource('path').setData(await getRoute());
     }
 

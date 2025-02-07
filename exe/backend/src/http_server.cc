@@ -101,11 +101,20 @@ struct http_server::impl {
                : to_profile(profile_it->value().as_string());
   }
 
+  static routing_algorithm get_routing_algorithm_from_request(
+      boost::json::object const& q) {
+        auto const routing_it = q.find("routing");
+        return routing_it == q.end() || !routing_it->value().is_string()
+               ? routing_algorithm::kDijkstra
+               : to_algorithm(routing_it->value().as_string());
+  }
+
   void handle_route(web_server::http_req_t const& req,
                     web_server::http_res_cb_t const& cb) {
     auto const q = boost::json::parse(req.body()).as_object();
     auto const profile = get_search_profile_from_request(q);
     auto const direction_it = q.find("direction");
+    auto const routing_algo = get_routing_algorithm_from_request(q);
     auto const dir = to_direction(direction_it == q.end() ||
                                           !direction_it->value().is_string()
                                       ? to_str(direction::kForward)
@@ -115,7 +124,7 @@ struct http_server::impl {
     auto const max_it = q.find("max");
     auto const max = static_cast<cost_t>(
         max_it == q.end() ? 3600 : max_it->value().as_int64());
-    auto const p = route(w_, l_, profile, from, to, max, dir, 100);
+    auto const p = route(w_, l_, profile, routing_algo, from, to, max, dir, 100);
     if (!p.has_value()) {
       cb(json_response(req, "could not find a valid path",
                        http::status::not_found));

@@ -5,10 +5,12 @@
 
 #include "geo/polyline.h"
 
+#include "bidirectional.h"
 #include "osr/location.h"
 #include "osr/lookup.h"
 #include "osr/routing/mode.h"
 #include "osr/routing/profile.h"
+#include "osr/routing/algorithms.h"
 #include "osr/types.h"
 
 namespace osr {
@@ -40,6 +42,9 @@ struct path {
 };
 
 template <typename Profile>
+bidirectional<Profile>& get_bidirectional();
+
+template <typename Profile>
 dijkstra<Profile>& get_dijkstra();
 
 struct one_to_many_result {
@@ -69,7 +74,7 @@ one_to_many_result route(
       return false;
     });
 
-std::optional<path> route(ways const&,
+std::optional<path> route_dijkstra(ways const&,
                           lookup const&,
                           search_profile,
                           location const& from,
@@ -80,7 +85,18 @@ std::optional<path> route(ways const&,
                           bitvec<node_idx_t> const* blocked = nullptr,
                           sharing_data const* sharing = nullptr);
 
-std::optional<path> route(ways const&,
+std::optional<path> route_bidirectional(ways const&,
+                                   lookup const&,
+                                   search_profile,
+                                   location const& from,
+                                   location const& to,
+                                   cost_t max,
+                                   direction,
+                                   double max_match_distance,
+                                   bitvec<node_idx_t> const* blocked = nullptr,
+                                   sharing_data const* sharing = nullptr);
+
+std::optional<path> route_dijkstra(ways const&,
                           search_profile,
                           location const& from,
                           location const& to,
@@ -106,4 +122,14 @@ std::vector<std::optional<path>> route(
       return false;
     });
 
+std::optional<path> route(ways const&,
+                          lookup const&,
+                          search_profile,
+                          routing_algorithm,
+                          location const& from,
+                          location const& to,
+                          cost_t max,
+                          direction,
+                          double max_match_distance,
+                          bitvec<node_idx_t> const* blocked = nullptr);
 }  // namespace osr
