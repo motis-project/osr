@@ -11,7 +11,6 @@ namespace osr {
 struct sharing_data;
 
 constexpr auto const kElevationNoCost = 0U;
-// TODO Adjust value
 constexpr auto const kElevationLowCost = 570U;
 constexpr auto const kElevationHighCost = 3700U;
 
