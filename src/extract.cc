@@ -76,7 +76,7 @@ speed_limit get_speed_limit(tags const& t) {
       case cista::hash("tertiary"):
         return t.name_.empty() ? get_speed_limit(70) : get_speed_limit(40);
       case cista::hash("tertiary_link"): return get_speed_limit(20);
-      case cista::hash("unclassified"): [[fallthrough]];
+      case cista::hash("unclassified"): return get_speed_limit(40);
       case cista::hash("residential"): return get_speed_limit(25);
       case cista::hash("living_street"): return get_speed_limit(10);
       case cista::hash("service"): return get_speed_limit(15);
