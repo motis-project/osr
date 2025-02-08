@@ -16,6 +16,7 @@
 #include "osr/extract/extract.h"
 #include "osr/geojson.h"
 #include "osr/lookup.h"
+#include "osr/routing/algorithms.h"
 #include "osr/routing/route.h"
 #include "osr/ways.h"
 
@@ -35,9 +36,9 @@ TEST(routing, no_lvl_wildcard) {
   auto w = osr::ways{kTestFolder, cista::mmap::protection::READ};
   auto l = osr::lookup{w, kTestFolder, cista::mmap::protection::READ};
 
-  auto const p = route(w, l, search_profile::kFoot,  //
+  auto const p = route(w, l, search_profile::kFoot, routing_algorithm::kDijkstra,
                        {{48.7829, 9.18212}, level_t{0.F}},
-                       {{48.7847, 9.18337}, level_t{1.F}},  //
+                       {{48.7847, 9.18337}, level_t{1.F}},
                        3600, direction::kForward, 100);
 
   ASSERT_TRUE(p.has_value());

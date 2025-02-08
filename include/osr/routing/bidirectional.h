@@ -2,6 +2,7 @@
 
 #include "osr/types.h"
 #include "osr/routing/a_star.h"
+
 namespace osr {
 
 struct sharing_data;
@@ -19,10 +20,12 @@ struct bidirectional{
 
   constexpr static auto const kDebug = false;
 
+  // "get_bucket" function for the dial priority queue
   struct get_bucket {
     cost_t operator()(node_h const& n) { return n.cost + n.heuristic; }
   };
 
+  // Add a label to the cost:map and the dial f it improved
   void add(ways const& w,
            label const l,
            location const& loc,
@@ -40,6 +43,8 @@ struct bidirectional{
   void add_end(ways const& w, label const l){
     add(w, l, start_loc_, cost2_, pq2_);
   }
+
+  void clear_mp() {meet_point = meet_point.invalid();}
 
   void reset(cost_t max, location const& start_loc, location const& end_loc){
     pq1_.clear();
@@ -86,12 +91,12 @@ struct bidirectional{
   }
 
   cost_t get_cost_from_start(node const n) const {
-    auto const it = cost1_.find(n.getkey());
+    auto const it = cost1_.find(n.get_key());
     return it == cost1_.end() ? kInfeasible : it->second.cost(n);
   }
 
   cost_t get_cost_from_end(node const n) const {
-    auto const it = cost2_.find(n.getkey());
+    auto const it = cost2_.find(n.get_key());
     return it == cost2_.end() ? kInfeasible : it->second.cost(n);
   }
 
@@ -104,6 +109,8 @@ struct bidirectional{
     return cost1 + cost2;
   }
 
+
+  // Single-step expansion function
   template <direction SearchDir, bool WithBlocked, typename fn>
   std::optional<node> run(ways const& w,
            ways::routing const& r,
@@ -129,7 +136,7 @@ struct bidirectional{
       [&](node const neighbor, std::uint32_t const cost, distance_t,
           way_idx_t const way, std::uint16_t, std::uint16_t) {
         auto const total = l.cost() + cost;
-        if(total <= max && cost_map[neighbor.get_key()].update(
+        if(total < max && cost_map[neighbor.get_key()].update(
           l, neighbor, static_cast<cost_t>(total), curr_node)){
             auto next = label{neighbor, static_cast<cost_t>(total)};
             next.track(l, r, way, neighbor.get_node());
@@ -142,30 +149,39 @@ struct bidirectional{
     return curr_node;
   }
 
+  // Bidirectional run loop
   template <direction SearchDir, bool WithBlocked>
   void run(ways const& w,
            ways::routing const& r,
            cost_t const max,
-           bitvec<node_idx_t> const* blocked){
+           bitvec<node_idx_t> const* blocked,
+           sharing_data const* sharing){
     auto best_cost = kInfeasible - PI*2;
+
+    // update top priorities on every loop iteration
+
+    // next_item is
     auto next_item1 = pq1_.buckets_[pq1_.get_next_bucket()].back();
     auto next_item2 = pq2_.buckets_[pq2_.get_next_bucket()].back();
-
+    // top are top heap values (forward and reverse)
     auto top_f = next_item1.priority();
     auto top_r = next_item2.priority();
 
-    while (!pq1_.empty() && !pq2_.empty() && (top_f + top_r < best_cost + PI*2 || best_cost == kInfeasible)){
+    while (!pq1_.empty() && !pq2_.empty()) {
 
-      auto curr1 = run<SearchDir, WithBlocked>(w, r, max, blocked, pq1_, cost1_, [this](auto curr){return get_cost_from_start(curr);}, end_loc_);
-      auto curr2 = run<opposite(SearchDir), WithBlocked>(w, r, max, blocked, pq2_, cost2_, [this](auto curr){return get_cost_from_end(curr);}, start_loc_);
+      if (!((top_f + top_r < best_cost + PI * 2) || best_cost == kInfeasible))
+        break;
 
+      auto curr1 = run<SearchDir, WithBlocked>(w, r, max, blocked, sharing, pq1_, cost1_, [this](auto curr){return get_cost_from_start(curr);}, end_loc_);
+      auto curr2 = run<opposite(SearchDir), WithBlocked>(w, r, max, blocked, sharing, pq2_, cost2_, [this](auto curr){return get_cost_from_end(curr);}, start_loc_);
+
+      // When a node is found that is already expanded from the other search, we have a meeting point
       if (curr1 != std::nullopt){
-        if  (!expanded_.contains(curr1->get_node())){
-          expanded_.emplace(curr1->get_node());               //changed this, check if it works later
-        } else if (get_cost_to_mp(curr1->get_node()) < best_cost) {
-          meet_point = curr2->get_node();
-          best_cost = get_cost_to_mp(curr1->get_node());
-          break;
+        if  (!expanded_.contains(curr1.value().n_)){
+          expanded_.emplace(curr1.value().n_);               //changed this, check if it works later
+        } else if (get_cost_to_mp(curr1.value()) < best_cost) {
+          meet_point = curr2.value();
+          best_cost = get_cost_to_mp(curr1.value());
         }
       }
       if (curr2 != std::nullopt) {
@@ -176,9 +192,12 @@ struct bidirectional{
           best_cost = get_cost_to_mp(curr2.value());
         }
       }
+      top_f = pq1_.buckets_[pq1_.get_next_bucket()].back().priority();
+      top_r = pq2_.buckets_[pq2_.get_next_bucket()].back().priority();
     }
   }
 
+  // a wrapper to select whether blocked edges should be considered
   void run(ways const& w,
            ways::routing const& r,
            cost_t const max,
@@ -200,7 +219,7 @@ struct bidirectional{
   dial<node_h, get_bucket> pq2_{get_bucket{}};
   location start_loc_;
   location end_loc_;
-  hash_set<node_idx_> expanded_;
+  hash_set<node_idx_t> expanded_;
   node meet_point;
   ankerl::unordered_dense::map<key, entry, hash> cost1_;
   ankerl::unordered_dense::map<key, entry, hash> cost2_;

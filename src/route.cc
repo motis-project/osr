@@ -8,7 +8,6 @@
 #include "utl/verify.h"
 
 #include "osr/routing/bidirectional.h"
-#include "osr/routing/bidirectional.h"
 #include "osr/routing/dijkstra.h"
 #include "osr/routing/profiles/bike.h"
 #include "osr/routing/profiles/bike_sharing.h"
@@ -34,6 +33,7 @@ routing_algorithm to_algorithm(std::string_view s){
   switch (cista::hash(s)) {
     case cista::hash("dijkstra"): return routing_algorithm::kDijkstra;
     case cista::hash("a_star"): return routing_algorithm::kAStar;
+    case cista::hash("bidirectional"): return routing_algorithm::kAStarBi;
   }
   throw utl::fail("unknown routing algorithm: {}", s);
 }
@@ -207,7 +207,7 @@ path reconstruct_bi(ways const& w,
         auto const pred = e.pred(backward_n);
         if (pred.has_value()) {
           auto const expected_cost =
-                  static_cast<cost_t>(e.cost(backward_n) - b.get_cost(*pred));
+                  static_cast<cost_t>(e.cost(backward_n) - b.get_cost_from_end(*pred));
           backward_dist += add_path<Profile>(w, *w.r_, blocked, nullptr, *pred,
                                                  backward_n, expected_cost, backward_segments,
                                              opposite(dir));
@@ -377,6 +377,70 @@ std::optional<path> try_direct(osr::location const& from,
                                   .uses_elevator_ = false}}
              : std::nullopt;
 }
+
+template <typename Profile>
+std::optional<path> route(ways const& w,
+                          bidirectional<Profile>& b,
+                          location const& from,
+                          location const& to,
+                          match_view_t from_match,
+                          match_view_t to_match,
+                          cost_t const max,
+                          direction const dir,
+                          bitvec<node_idx_t> const* blocked,
+                          sharing_data const* sharing) {
+  if (auto const direct = try_direct(from, to); direct.has_value()) {
+    return *direct;
+  }
+
+  b.reset(max, from, to);
+
+  for (auto const& start : from_match) {
+    for (auto const* nc : {&start.left_, &start.right_}) {
+      if (nc->valid() && nc->cost_ < max) {
+        Profile::resolve_start_node(
+            *w.r_, start.way_, nc->node_, from.lvl_, dir,
+            [&](auto const node) { b.add_start(w, {node, nc->cost_}); });
+      }
+    }
+    if (b.pq1_.empty()) {
+      continue;
+    }
+    for (auto const& end : to_match) {
+      for (auto const* nc : {&end.left_, &end.right_}) {
+        if (nc->valid() && nc->cost_ < max) {
+          Profile::resolve_start_node(
+              *w.r_, start.way_, nc->node_, from.lvl_, opposite(dir),
+              [&](auto const node) { b.add_end(w, {node, nc->cost_}); });
+        }
+      }
+      if (b.pq2_.empty()) {
+        continue;
+      }
+      b.clear_mp();
+
+      b.run(w, *w.r_, max, blocked, sharing, dir);
+
+      cost_t cost = 0U;
+      if (b.meet_point.get_node() == node_idx_t::invalid() ||
+          static_cast<uint32_t>(b.meet_point.get_node()) == 0) {
+        continue;
+      }
+
+      if (b.cost1_.find(b.meet_point.get_key()) != b.cost1_.end()) {
+        cost += b.cost1_.at(b.meet_point.get_key()).cost(b.meet_point);
+      }
+      if (b.cost2_.find(b.meet_point.get_key()) != b.cost2_.end()) {
+        cost += b.cost2_.at(b.meet_point.get_key()).cost(b.meet_point);
+      }
+      return reconstruct_bi(w, blocked, sharing, b, start, end, cost, dir);
+    }
+  }
+
+  return std::nullopt;
+}
+
+
 
 template <typename Profile>
 std::optional<path> route(ways const& w,
@@ -623,7 +687,7 @@ std::optional<path> route_dijkstra(ways const& w,
   throw utl::fail("not implemented");
 }
 
-std::vector<std::optional<path>> route_dijkstra(
+std::vector<std::optional<path>> route(
     ways const& w,
     search_profile const profile,
     location const& from,
@@ -662,7 +726,7 @@ std::vector<std::optional<path>> route_dijkstra(
   throw utl::fail("not implemented");
 }
 
-std::optional<path> route(ways const& w,
+std::optional<path> route_dijkstra(ways const& w,
                           search_profile const profile,
                           location const& from,
                           location const& to,
@@ -718,7 +782,7 @@ std::optional<path> route(ways const& w,
       return route_bidirectional(w, l, profile, from, to, max, dir,
                              max_match_distance, blocked, sharing);
     case routing_algorithm::kAStar:
-      return nullptr; //TODO what's with a star
+      return route_bidirectional(w, l, profile, from, to, max, dir, max_match_distance, blocked, sharing); //TODO what's with a star
   }
   throw utl::fail("not implemented");
 }

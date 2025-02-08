@@ -131,5 +131,6 @@ std::optional<path> route(ways const&,
                           cost_t max,
                           direction,
                           double max_match_distance,
-                          bitvec<node_idx_t> const* blocked = nullptr);
+                          bitvec<node_idx_t> const* blocked = nullptr,
+                          sharing_data const* sharing = nullptr);
 }  // namespace osr
