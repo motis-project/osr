@@ -81,7 +81,7 @@
             background: #bdffb1;
         }
 
-        #profile, #direction {
+        #profile, #direction, #routing-algorithm {
             position: absolute;
             top: 5px;
             right: 5px;
@@ -93,6 +93,10 @@
 
         #direction {
             top: 48px;
+        }
+
+        #routing-algorithm {
+            top: 91px;
         }
 
         #journey-info {
@@ -129,7 +133,7 @@
 </select>
 <select id="routing-algorithm" onchange="selectRoutingAlgorithm(event)">
     <option value="dijkstra" selected>dijkstra</option>
-    <option value="bidirectional">Bidirectional (A*)</option>
+    <option value="bidirectional">bidirectional A*</option>
 </select>
 <div id="journey-info">
     Test
@@ -138,8 +142,8 @@
 <script type="module">
     import {style} from "./style.js";
 
-    const start = [9.182124, 48.782888]
-    const destination = [9.183369, 48.784705];
+    const start = [8.65749737, 50.10416625]
+    const destination = [8.65749757, 50.10416645];
     const query = {
         start, destination,
         start_level: 0.0,
