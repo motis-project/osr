@@ -156,18 +156,21 @@ struct bidirectional{
            cost_t const max,
            bitvec<node_idx_t> const* blocked,
            sharing_data const* sharing){
+    std::cout << "in run" << std::endl;
+
     auto best_cost = kInfeasible - PI*2;
 
     // update top priorities on every loop iteration
 
-    // next_item is
-    auto next_item1 = pq1_.buckets_[pq1_.get_next_bucket()].back();
-    auto next_item2 = pq2_.buckets_[pq2_.get_next_bucket()].back();
-    // top are top heap values (forward and reverse)
-    auto top_f = next_item1.priority();
-    auto top_r = next_item2.priority();
+    // next_item is are top heap values (forward and reverse)
+    auto next_item_f = pq1_.buckets_[pq1_.get_next_bucket()].back(); //forward
+    auto next_item_r = pq2_.buckets_[pq2_.get_next_bucket()].back(); //reverse
+    std::cout << "after next item" << std::endl;
+    auto top_f = next_item_f.priority(); //cost + heuristic forward top
+    auto top_r = next_item_r.priority(); //cost + heuristic reverse top
+    std::cout << "while next" << std::endl;
 
-    while (!pq1_.empty() && !pq2_.empty()) {
+    while (!pq1_.empty() && !pq2_.empty()){
 
       if (!((top_f + top_r < best_cost + PI * 2) || best_cost == kInfeasible))
         break;
@@ -178,22 +181,37 @@ struct bidirectional{
       // When a node is found that is already expanded from the other search, we have a meeting point
       if (curr1 != std::nullopt){
         if  (!expanded_.contains(curr1.value().n_)){
-          expanded_.emplace(curr1.value().n_);               //changed this, check if it works later
+          std::cout << "pq1 expands " << static_cast<uint32_t>(curr1.value().n_) << std::endl;
+          expanded_.emplace(curr1.value().n_);
         } else if (get_cost_to_mp(curr1.value()) < best_cost) {
+          std::cout << "-----meet point has been found by pq1 " << static_cast<uint32_t>(meet_point.n_) << std::endl;
           meet_point = curr2.value();
           best_cost = get_cost_to_mp(curr1.value());
+          std::cout << "best cost " << static_cast<uint32_t>(best_cost) << std::endl;
         }
       }
       if (curr2 != std::nullopt) {
         if (!expanded_.contains(curr2.value().n_)) {
+          std::cout << "pq2 expands " << static_cast<uint32_t>(curr2.value().n_) << std::endl;
           expanded_.emplace(curr2.value().n_);
         } else if (get_cost_to_mp(curr2.value()) < best_cost) {
+          std::cout << "-----meet point has been found by pq2 " << static_cast<uint32_t>(meet_point.n_) << std::endl;
           meet_point = curr2.value();
           best_cost = get_cost_to_mp(curr2.value());
+          std::cout << "best cost " << static_cast<uint32_t>(best_cost) << std::endl;
         }
       }
-      top_f = pq1_.buckets_[pq1_.get_next_bucket()].back().priority();
+      // Debugging code
+      auto next_bucket_idx = pq1_.get_next_bucket();
+      std::cout << "pq1 bucket " << next_bucket_idx << " has size " << pq1_.buckets_[next_bucket_idx].size() << std::endl;
+      if(pq1_.buckets_[next_bucket_idx].empty()){
+        std::cout << "pq1 bucket empty, breaking out" << std::endl;
+        break;
+      }
+      top_f = pq1_.buckets_[next_bucket_idx].back().priority();
+      std::cout << "top_f - " << static_cast<uint32_t>(top_f) << std::endl;
       top_r = pq2_.buckets_[pq2_.get_next_bucket()].back().priority();
+      std::cout << "top_r - " << static_cast<uint32_t>(top_r) << std::endl;
     }
   }
 

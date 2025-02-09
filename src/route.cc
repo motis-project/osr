@@ -194,8 +194,8 @@ path reconstruct_bi(ways const& w,
        .to_ = dir == direction::kForward ? forward_n.get_node() : node_idx_t::invalid(),
 
        .way_ = way_idx_t::invalid(),
-       .cost_ = start_node_candidate.cost_,
-       .dist_ = static_cast<distance_t>(start_node_candidate.dist_to_node_),
+       .cost_ = kInfeasible,
+       .dist_ = 0,
        .mode_ = forward_n.get_mode()});
 
   auto backward_segments = std::vector<path::segment>{};
@@ -226,14 +226,14 @@ path reconstruct_bi(ways const& w,
        .from_ = dir == direction::kForward ? backward_n.get_node() : node_idx_t::invalid(),
        .to_ = dir == direction::kBackward ? backward_n.get_node() : node_idx_t::invalid(),
        .way_ = way_idx_t::invalid(),
-       .cost_ = dest_node_candidate.cost_,
-       .dist_ = static_cast<distance_t>(dest_node_candidate.dist_to_node_),                 // TODO: Check if right
+       .cost_ = kInfeasible,
+       .dist_ = 0,
        .mode_ = backward_n.get_mode()});
 
   std::reverse(forward_segments.begin(), forward_segments.end());
   forward_segments.insert(forward_segments.end(), backward_segments.begin(), backward_segments.end());
 
-  auto total_dist = forward_segments.front().dist_ + forward_dist + backward_dist + backward_segments.back().dist_;
+  auto total_dist = start_node_candidate.dist_to_node_ + forward_dist + backward_dist + dest_node_candidate.dist_to_node_;
 
   auto p = path{.cost_ = cost,
                 .dist_ = total_dist,
@@ -418,9 +418,8 @@ std::optional<path> route(ways const& w,
         continue;
       }
       b.clear_mp();
-
+      std::cout << "Running bidirectional in route" << std::endl;
       b.run(w, *w.r_, max, blocked, sharing, dir);
-
       cost_t cost = 0U;
       if (b.meet_point.get_node() == node_idx_t::invalid() ||
           static_cast<uint32_t>(b.meet_point.get_node()) == 0) {
@@ -739,7 +738,6 @@ std::optional<path> route_dijkstra(ways const& w,
   if (from_match.empty() || to_match.empty()) {
     return std::nullopt;
   }
-
   auto const r =
       [&]<typename Profile>(dijkstra<Profile>& d) -> std::optional<path> {
     return route(w, d, from, to, from_match, to_match, max, dir, blocked,
@@ -781,8 +779,9 @@ std::optional<path> route(ways const& w,
     case routing_algorithm::kAStarBi:
       return route_bidirectional(w, l, profile, from, to, max, dir,
                              max_match_distance, blocked, sharing);
+    //placeholder for future AStar implementation
     case routing_algorithm::kAStar:
-      return route_bidirectional(w, l, profile, from, to, max, dir, max_match_distance, blocked, sharing); //TODO what's with a star
+      return route_bidirectional(w, l, profile, from, to, max, dir, max_match_distance, blocked, sharing);
   }
   throw utl::fail("not implemented");
 }
