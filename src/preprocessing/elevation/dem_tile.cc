@@ -30,10 +30,10 @@ constexpr auto const kNoData = std::int16_t{-32768};
 using str_map = std::unordered_map<std::string, std::string>;
 using dem_exception = std::runtime_error;
 
-str_map read_hdr_file(fs::path const& filename) {
+str_map read_hdr_file(fs::path const& path) {
   str_map map;
 
-  auto f = std::ifstream{filename};
+  auto f = std::ifstream{path};
   while (f.good()) {
     std::string key, value;
     f >> key >> value;
@@ -212,8 +212,8 @@ struct dem_tile::impl {
   cista::mmap mapped_file_;
 };
 
-dem_tile::dem_tile(fs::path const& filename)
-    : impl_(std::make_unique<impl>(filename)) {}
+dem_tile::dem_tile(fs::path const& path)
+    : impl_(std::make_unique<impl>(path)) {}
 
 dem_tile::dem_tile(dem_tile&& grid) noexcept : impl_(std::move(grid.impl_)) {}
 

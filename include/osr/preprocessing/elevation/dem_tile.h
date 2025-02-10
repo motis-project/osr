@@ -22,7 +22,7 @@ union pixel_value {
 };
 
 struct dem_tile {
-  explicit dem_tile(fs::path const& filename);
+  explicit dem_tile(fs::path const&);
   ~dem_tile();
   dem_tile(dem_tile&& grid) noexcept;
   dem_tile(dem_tile const&) = delete;
