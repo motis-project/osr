@@ -59,7 +59,7 @@ bool hgt_driver::add_tile(fs::path const& path) {
   }
 }
 
-elevation_meters_t hgt_driver::get(point const& point) const {
+elevation_meters_t hgt_driver::get(point const point) const {
   auto const p = decltype(rtree_)::coord_t{static_cast<float>(point.lat()),
                                            static_cast<float>(point.lng())};
   auto meters = elevation_meters_t::invalid();
@@ -75,7 +75,7 @@ elevation_meters_t hgt_driver::get(point const& point) const {
   return meters;
 }
 
-tile_idx_t hgt_driver::tile_idx(point const& point) const {
+tile_idx_t hgt_driver::tile_idx(point const point) const {
   auto const p = decltype(rtree_)::coord_t{static_cast<float>(point.lat()),
                                            static_cast<float>(point.lng())};
   auto idx = tile_idx_t::invalid();

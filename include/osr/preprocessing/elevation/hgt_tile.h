@@ -25,8 +25,8 @@ struct hgt_tile {
   hgt_tile& operator=(hgt_tile const&) = delete;
   hgt_tile& operator=(hgt_tile&&) = delete;
 
-  elevation_meters_t get(point const&) const;
-  tile_idx_t tile_idx(point const&) const;
+  elevation_meters_t get(point const) const;
+  tile_idx_t tile_idx(point const) const;
 
   resolution max_resolution() const;
 

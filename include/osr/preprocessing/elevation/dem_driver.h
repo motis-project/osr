@@ -16,8 +16,8 @@ namespace osr::preprocessing::elevation {
 struct dem_driver {
   dem_driver() = default;
   bool add_tile(fs::path const&);
-  elevation_meters_t get(point const&) const;
-  tile_idx_t tile_idx(point const&) const;
+  elevation_meters_t get(point const) const;
+  tile_idx_t tile_idx(point const) const;
   resolution max_resolution() const;
   std::size_t n_tiles() const;
 

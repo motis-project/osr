@@ -48,7 +48,7 @@ static_assert(sizeof(tile_idx_t) == sizeof(tile_idx_t::data_t));
 
 template <typename ElevationProvider>
 concept IsProvider =
-    requires(ElevationProvider const& provider, point const& p) {
+    requires(ElevationProvider const& provider, point const p) {
       { provider.get(p) } -> std::same_as<elevation_meters_t>;
       { provider.tile_idx(p) } -> std::same_as<tile_idx_t>;
       { provider.max_resolution() } -> std::same_as<resolution>;

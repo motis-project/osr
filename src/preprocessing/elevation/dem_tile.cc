@@ -175,7 +175,7 @@ struct dem_tile::impl {
         mapped_file_{cista::mmap{data_file_.string().data(),
                                  cista::mmap::protection::READ}} {}
 
-  pixel_value get(point const& p) const {
+  pixel_value get(point const p) const {
     auto const lng = p.lng();
     auto const lat = p.lat();
 
@@ -219,7 +219,7 @@ dem_tile::dem_tile(dem_tile&& grid) noexcept : impl_(std::move(grid.impl_)) {}
 
 dem_tile::~dem_tile() = default;
 
-elevation_meters_t dem_tile::get(point const& p) const {
+elevation_meters_t dem_tile::get(point const p) const {
   auto const val = get_raw(p);
   switch (impl_->hdr_.pixel_type_) {
     case pixel_type::int16:
@@ -243,7 +243,7 @@ elevation_meters_t dem_tile::get(point const& p) const {
   throw std::runtime_error{"dem_grid: invalid pixel type"};
 }
 
-tile_idx_t dem_tile::tile_idx(point const&) const {
+tile_idx_t dem_tile::tile_idx(point const) const {
   // TODO Return non trivial sub tile index
   return tile_idx_t::from_sub_tile(0U);
 }
@@ -261,7 +261,7 @@ geo::box dem_tile::get_box() const {
   };
 }
 
-pixel_value dem_tile::get_raw(point const& p) const { return impl_->get(p); }
+pixel_value dem_tile::get_raw(point const p) const { return impl_->get(p); }
 
 pixel_type dem_tile::get_pixel_type() const { return impl_->hdr_.pixel_type_; }
 

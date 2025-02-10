@@ -78,8 +78,8 @@ std::unique_ptr<elevation_storage> elevation_storage::try_open(
 }
 
 elevation_storage::elevation get_way_elevation(ev::provider const& provider,
-                                               point const& from,
-                                               point const& to,
+                                               point const from,
+                                               point const to,
                                                ev::resolution const& res) {
   auto elevation = elevation_storage::elevation{};
   auto a = provider.get(from);
