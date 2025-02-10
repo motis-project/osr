@@ -4,6 +4,8 @@
 #include <filesystem>
 #include <memory>
 
+#include "geo/box.h"
+
 #include "osr/point.h"
 #include "osr/preprocessing/elevation/resolution.h"
 #include "osr/preprocessing/elevation/shared.h"
@@ -29,7 +31,7 @@ struct dem_tile {
 
   elevation_meters_t get(point const&) const;
   tile_idx_t tile_idx(point const&) const;
-  coord_box get_coord_box() const;
+  geo::box get_box() const;
 
   pixel_value get_raw(point const&) const;
   pixel_type get_pixel_type() const;

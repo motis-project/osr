@@ -45,10 +45,12 @@ bool hgt_driver::add_tile(fs::path const& path) {
   }
   auto tile = open(path);
   if (tile.has_value()) {
-    auto const box = std::visit(
-        [](IsTile auto const& t) { return t.get_coord_box(); }, *tile);
-    auto const min = decltype(rtree_)::coord_t{box.min_lat_, box.min_lng_};
-    auto const max = decltype(rtree_)::coord_t{box.max_lat_, box.max_lng_};
+    auto const box =
+        std::visit([](IsTile auto const& t) { return t.get_box(); }, *tile);
+    auto const min = decltype(rtree_)::coord_t{
+        static_cast<float>(box.min_.lat_), static_cast<float>(box.min_.lng_)};
+    auto const max = decltype(rtree_)::coord_t{
+        static_cast<float>(box.max_.lat_), static_cast<float>(box.max_.lng_)};
     rtree_.insert(min, max, static_cast<std::size_t>(tiles_.size()));
     tiles_.emplace_back(std::move(tile.value()));
     return true;

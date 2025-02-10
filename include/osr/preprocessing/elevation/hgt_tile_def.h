@@ -54,21 +54,21 @@ struct hgt_tile<RasterSize>::hgt_tile<RasterSize>::impl {
   std::size_t get_offset(point const& p) const {
     auto const lat = p.lat();
     auto const lng = p.lng();
-    auto const box = get_coord_box();
-    if (box.min_lng_ <= lng && lng < box.max_lng_ &&  //
-        box.min_lat_ <= lat && lat < box.max_lat_) {
+    auto const box = get_box();
+    if (box.min_.lng_ <= lng && lng < box.max_.lng_ &&  //
+        box.min_.lat_ <= lat && lat < box.max_.lat_) {
       // Column: Left to right
-      auto const column =
-          std::clamp(static_cast<std::size_t>(
-                         std::floor(((lng - box.min_lng_) * (RasterSize - 1U)) /
-                                    RasterSize * UpperBound)),
-                     std::size_t{0U}, UpperBound - 1U);
+      auto const column = std::clamp(
+          static_cast<std::size_t>(
+              std::floor(((lng - box.min_.lng_) * (RasterSize - 1U)) /
+                         RasterSize * UpperBound)),
+          std::size_t{0U}, UpperBound - 1U);
       // Row: Top to bottom
-      auto const row =
-          std::clamp(static_cast<std::size_t>(
-                         std::floor(((box.max_lat_ - lat) * (RasterSize - 1U)) /
-                                    RasterSize * UpperBound)),
-                     std::size_t{0U}, (UpperBound - 1U));
+      auto const row = std::clamp(
+          static_cast<std::size_t>(
+              std::floor(((box.max_.lat_ - lat) * (RasterSize - 1U)) /
+                         RasterSize * UpperBound)),
+          std::size_t{0U}, (UpperBound - 1U));
       // Data in row major order
       return UpperBound * row + column;
     }
@@ -104,12 +104,16 @@ struct hgt_tile<RasterSize>::hgt_tile<RasterSize>::impl {
                      static_cast<tile_idx_t::data_t>(offset));
   }
 
-  coord_box get_coord_box() const {
+  geo::box get_box() const {
     return {
-        .min_lat_ = static_cast<float>(sw_lat_ - kCenterOffset),
-        .min_lng_ = static_cast<float>(sw_lng_ - kCenterOffset),
-        .max_lat_ = static_cast<float>(sw_lat_ + 1.F + kCenterOffset),
-        .max_lng_ = static_cast<float>(sw_lng_ + 1.F + kCenterOffset),
+        {
+            sw_lat_ - kCenterOffset,
+            sw_lng_ - kCenterOffset,
+        },
+        {
+            sw_lat_ + 1. + kCenterOffset,
+            sw_lng_ + 1. + kCenterOffset,
+        },
     };
   }
 
@@ -151,8 +155,8 @@ resolution hgt_tile<RasterSize>::max_resolution() const {
 }
 
 template <size_t RasterSize>
-coord_box hgt_tile<RasterSize>::get_coord_box() const {
-  return impl_->get_coord_box();
+geo::box hgt_tile<RasterSize>::get_box() const {
+  return impl_->get_box();
 }
 
 }  // namespace osr::preprocessing::elevation

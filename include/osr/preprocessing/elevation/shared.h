@@ -2,10 +2,10 @@
 
 #include <compare>
 #include <concepts>
-#include <limits>
-#include <utility>
 
 #include "cista/strong.h"
+
+#include "geo/box.h"
 
 #include "osr/point.h"
 #include "osr/preprocessing/elevation/resolution.h"
@@ -14,13 +14,6 @@ namespace osr::preprocessing::elevation {
 
 using elevation_meters_t =
     cista::strong<std::int16_t, struct elevation_meters_>;
-
-struct coord_box {
-  float min_lat_;
-  float min_lng_;
-  float max_lat_;
-  float max_lng_;
-};
 
 struct tile_idx_t {
   using data_t = std::uint32_t;
@@ -63,7 +56,7 @@ concept IsProvider =
 
 template <typename Tile>
 concept IsTile = IsProvider<Tile> && requires(Tile const& tile) {
-  { tile.get_coord_box() } -> std::same_as<coord_box>;
+  { tile.get_box() } -> std::same_as<geo::box>;
 };
 
 template <typename Driver>

@@ -248,12 +248,16 @@ tile_idx_t dem_tile::tile_idx(point const&) const {
   return tile_idx_t::from_sub_tile(0U);
 }
 
-coord_box dem_tile::get_coord_box() const {
+geo::box dem_tile::get_box() const {
   return {
-      .min_lat_ = static_cast<float>(impl_->hdr_.bry_),
-      .min_lng_ = static_cast<float>(impl_->hdr_.ulx_),
-      .max_lat_ = static_cast<float>(impl_->hdr_.uly_),
-      .max_lng_ = static_cast<float>(impl_->hdr_.brx_),
+      {
+          impl_->hdr_.bry_,
+          impl_->hdr_.ulx_,
+      },
+      {
+          impl_->hdr_.uly_,
+          impl_->hdr_.brx_,
+      },
   };
 }
 

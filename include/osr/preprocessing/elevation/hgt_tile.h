@@ -4,6 +4,8 @@
 #include <memory>
 #include <string>
 
+#include "geo/box.h"
+
 #include "osr/point.h"
 #include "osr/preprocessing/elevation/resolution.h"
 #include "osr/preprocessing/elevation/shared.h"
@@ -28,7 +30,7 @@ struct hgt_tile {
 
   resolution max_resolution() const;
 
-  coord_box get_coord_box() const;
+  geo::box get_box() const;
 
   static constexpr std::size_t file_size() {
     return RasterSize * RasterSize * kBytesPerPixel;
