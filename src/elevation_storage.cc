@@ -69,7 +69,7 @@ std::unique_ptr<elevation_storage> elevation_storage::try_open(
        {elevation_files::kDataName, elevation_files::kIndexName}) {
     auto const full_path = path / filename;
     if (!fs::exists(full_path)) {
-      std::cout << full_path << " does not exist\n";
+      std::clog << "Elevation file " << full_path << " does not exist\n";
       return nullptr;
     }
   }
