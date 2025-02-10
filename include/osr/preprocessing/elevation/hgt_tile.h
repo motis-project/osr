@@ -41,7 +41,4 @@ private:
   std::unique_ptr<impl> impl_;
 };
 
-extern template struct hgt_tile<3601U>;
-extern template struct hgt_tile<1201U>;
-
 }  // namespace osr::preprocessing::elevation
