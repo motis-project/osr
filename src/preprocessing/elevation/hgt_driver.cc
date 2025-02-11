@@ -11,13 +11,13 @@ namespace fs = std::filesystem;
 namespace osr::preprocessing::elevation {
 
 struct grid_point {
-  explicit grid_point(std::string const& filename) {
+  explicit grid_point(std::string const& path) {
     auto lat_dir = char{};
     auto lng_dir = char{};
     auto lat = int{};
     auto lng = int{};
 
-    auto s = std::stringstream{filename};
+    auto s = std::stringstream{path};
     s >> lat_dir >> lat >> lng_dir >> lng;
 
     utl::verify(lat_dir == 'S' || lat_dir == 'N', "Invalid direction '{}'",

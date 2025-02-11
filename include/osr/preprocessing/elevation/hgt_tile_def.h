@@ -127,10 +127,10 @@ struct hgt_tile<RasterSize>::hgt_tile<RasterSize>::impl {
 };
 
 template <std::size_t RasterSize>
-hgt_tile<RasterSize>::hgt_tile(std::string const& filename,
+hgt_tile<RasterSize>::hgt_tile(std::string const& path,
                                std::int8_t const lat,
                                std::int16_t const lng)
-    : impl_{std::make_unique<impl>(filename, lat, lng)} {}
+    : impl_{std::make_unique<impl>(path, lat, lng)} {}
 
 template <std::size_t RasterSize>
 hgt_tile<RasterSize>::~hgt_tile() = default;

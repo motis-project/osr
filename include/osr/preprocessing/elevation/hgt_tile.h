@@ -16,7 +16,7 @@ template <std::size_t RasterSize>
 struct hgt_tile {
   constexpr static auto const kBytesPerPixel = std::size_t{2U};
 
-  explicit hgt_tile(std::string const& filename,
+  explicit hgt_tile(std::string const& path,
                     std::int8_t const lat,
                     std::int16_t const lng);
   ~hgt_tile();
