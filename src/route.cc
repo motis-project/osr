@@ -1,6 +1,7 @@
 #include "osr/routing/route.h"
 
 #include "boost/thread/tss.hpp"
+#include <algorithm>
 
 #include "utl/concat.h"
 #include "utl/timing.h"
@@ -321,7 +322,6 @@ best_candidate(ways const& w,
                                       opposite(dir))) {
         return;
       }
-
       auto const target_cost = d.get_cost(node);
       if (target_cost == kInfeasible) {
         return;
@@ -377,7 +377,7 @@ std::optional<path> try_direct(osr::location const& from,
                                   .uses_elevator_ = false}}
              : std::nullopt;
 }
-
+//********** BIDIRECTIONAL ROUTE
 template <typename Profile>
 std::optional<path> route(ways const& w,
                           bidirectional<Profile>& b,
@@ -392,37 +392,62 @@ std::optional<path> route(ways const& w,
   if (auto const direct = try_direct(from, to); direct.has_value()) {
     return *direct;
   }
+  std::vector<way_candidate> to_sort(to_match.begin(), to_match.end());
+  std::vector<way_candidate> from_sort(from_match.begin(), from_match.end());
+
+  std::sort(to_sort.begin(), to_sort.end());
+  std::sort(from_sort.begin(), from_sort.begin());
 
   b.reset(max, from, to);
 
-  for (auto const& start : from_match) {
+  for (auto const& start : from_sort) {
+    auto valid_start = false;
     for (auto const* nc : {&start.left_, &start.right_}) {
       if (nc->valid() && nc->cost_ < max) {
-        Profile::resolve_start_node(
-            *w.r_, start.way_, nc->node_, from.lvl_, dir,
-            [&](auto const node) { b.add_start(w, {node, nc->cost_}); });
+        valid_start = true;
+        break;
       }
     }
-    if (b.pq1_.empty()) {
+    std::cout << "Valid start: " << valid_start << std::endl;
+        if (!valid_start) {
       continue;
     }
-    for (auto const& end : to_match) {
+    for (auto const& end : to_sort) {
+      auto valid_end = false;
       for (auto const* nc : {&end.left_, &end.right_}) {
         if (nc->valid() && nc->cost_ < max) {
+          valid_end = true;
+          break;
+        }
+      }
+      std::cout << "Valid end: " << valid_end << std::endl;
+      if (!valid_end) {
+        continue;
+      }
+      b.reset(max, from, to);
+      for (auto const* nc : {&start.left_, &start.right_}) {
+        if (nc->valid() && nc->cost_ < max) {
           Profile::resolve_start_node(
-              *w.r_, start.way_, nc->node_, from.lvl_, opposite(dir),
+              *w.r_, start.way_, nc->node_, from.lvl_, dir,
+              [&](auto const node) { b.add_start(w, {node, nc->cost_}); });
+        }
+      }
+      for (auto const* nc : {&end.left_, &end.right_}) {
+        std::cout << "before if: " << valid_end << std::endl;
+        if (nc->valid() && nc->cost_ < max) {
+          std::cout << "in if: " << valid_end << std::endl;
+          Profile::resolve_start_node(
+              *w.r_, end.way_, nc->node_, from.lvl_, opposite(dir),
               [&](auto const node) { b.add_end(w, {node, nc->cost_}); });
         }
       }
-      if (b.pq2_.empty()) {
-        continue;
-      }
       b.clear_mp();
-      std::cout << "Running bidirectional in route" << std::endl;
+      std::cout << "before run: " << std::endl;
       b.run(w, *w.r_, max, blocked, sharing, dir);
       cost_t cost = 0U;
       if (b.meet_point.get_node() == node_idx_t::invalid() ||
           static_cast<uint32_t>(b.meet_point.get_node()) == 0) {
+        std::cout << "couldn't find a route" << std::endl;
         continue;
       }
 
@@ -432,6 +457,7 @@ std::optional<path> route(ways const& w,
       if (b.cost2_.find(b.meet_point.get_key()) != b.cost2_.end()) {
         cost += b.cost2_.at(b.meet_point.get_key()).cost(b.meet_point);
       }
+      std::cout << "Succsesfully found a route" << std::endl;
       return reconstruct_bi(w, blocked, sharing, b, start, end, cost, dir);
     }
   }

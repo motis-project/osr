@@ -32,16 +32,19 @@ struct bidirectional{
            cost_map& cost_map,
            dial<node_h, get_bucket>& d){
     if (cost_map[l.get_node().get_key()].update(l, l.get_node(), l.cost(), node::invalid())){
+        std::cout << "in the add" << std::endl;
         d.push(node_h{l, l.cost(), heuristic(w, l, loc)});
     }
   }
 
   void add_start(ways const& w, label const l){
     add(w, l, end_loc_, cost1_, pq1_);
+    std::cout << l.get_node().n_ << " added as start" << std::endl;
   }
 
   void add_end(ways const& w, label const l){
     add(w, l, start_loc_, cost2_, pq2_);
+    std::cout << l.get_node().n_ << " added as end" << std::endl;
   }
 
   void clear_mp() {meet_point = meet_point.invalid();}
@@ -58,15 +61,6 @@ struct bidirectional{
     expanded_.clear();
     start_loc_ = start_loc;
     end_loc_ = end_loc;
-
-    auto const start_coord = geo::latlng_to_merc(start_loc.pos_);
-    auto const end_coord = geo::latlng_to_merc(end_loc.pos_);
-
-    auto const dx = start_coord.x_ - end_coord.x_;
-    auto const dy = start_coord.y_ - end_coord.y_;
-    auto const dist = std::sqrt(dx * dx + dy * dy);
-
-    PI = Profile::heuristic(dist) / 2;
   }
 
   cost_t heuristic(ways const& w, label const l, location const& loc){
@@ -78,16 +72,7 @@ struct bidirectional{
 
     auto const dist = std::sqrt(dx * dx + dy * dy);
 
-    auto const other_loc = loc == start_loc_ ? end_loc_ : start_loc_;
-    auto const other_coord = geo::latlng_to_merc(other_loc.pos_);
-
-    auto const other_dx = node_coord.x_ - other_coord.x_;
-    auto const other_dy = node_coord.y_ - other_coord.y_;
-
-    auto const other_dist =
-        std::sqrt(other_dx * other_dx + other_dy * other_dy);
-
-    return Profile::heuristic(0.5 * (dist) - (other_dist)) + PI; //p. 15
+    return Profile::heuristic(dist);
   }
 
   cost_t get_cost_from_start(node const n) const {
@@ -156,23 +141,19 @@ struct bidirectional{
            cost_t const max,
            bitvec<node_idx_t> const* blocked,
            sharing_data const* sharing){
-    std::cout << "in run" << std::endl;
-
-    auto best_cost = kInfeasible - PI*2;
+    auto best_cost = kInfeasible;
 
     // update top priorities on every loop iteration
 
     // next_item is are top heap values (forward and reverse)
     auto next_item_f = pq1_.buckets_[pq1_.get_next_bucket()].back(); //forward
     auto next_item_r = pq2_.buckets_[pq2_.get_next_bucket()].back(); //reverse
-    std::cout << "after next item" << std::endl;
     auto top_f = next_item_f.priority(); //cost + heuristic forward top
     auto top_r = next_item_r.priority(); //cost + heuristic reverse top
-    std::cout << "while next" << std::endl;
 
     while (!pq1_.empty() && !pq2_.empty()){
 
-      if (!((top_f + top_r < best_cost + PI * 2) || best_cost == kInfeasible))
+      if ((top_f + top_r > best_cost) && best_cost != kInfeasible)
         break;
 
       auto curr1 = run<SearchDir, WithBlocked>(w, r, max, blocked, sharing, pq1_, cost1_, [this](auto curr){return get_cost_from_start(curr);}, end_loc_);
@@ -184,10 +165,9 @@ struct bidirectional{
           std::cout << "pq1 expands " << static_cast<uint32_t>(curr1.value().n_) << std::endl;
           expanded_.emplace(curr1.value().n_);
         } else if (get_cost_to_mp(curr1.value()) < best_cost) {
-          std::cout << "-----meet point has been found by pq1 " << static_cast<uint32_t>(meet_point.n_) << std::endl;
-          meet_point = curr2.value();
+          meet_point = curr1.value();
+         // std::cout << "-----meet point has been found by pq1 " << static_cast<uint32_t>(meet_point.get_node()) << std::endl;
           best_cost = get_cost_to_mp(curr1.value());
-          std::cout << "best cost " << static_cast<uint32_t>(best_cost) << std::endl;
         }
       }
       if (curr2 != std::nullopt) {
@@ -195,23 +175,22 @@ struct bidirectional{
           std::cout << "pq2 expands " << static_cast<uint32_t>(curr2.value().n_) << std::endl;
           expanded_.emplace(curr2.value().n_);
         } else if (get_cost_to_mp(curr2.value()) < best_cost) {
-          std::cout << "-----meet point has been found by pq2 " << static_cast<uint32_t>(meet_point.n_) << std::endl;
           meet_point = curr2.value();
+          //std::cout << "-----meet point has been found by pq2 " << static_cast<uint32_t>(meet_point.get_node()) << std::endl;
           best_cost = get_cost_to_mp(curr2.value());
-          std::cout << "best cost " << static_cast<uint32_t>(best_cost) << std::endl;
         }
       }
+      //std::cout << "Infisieable " << static_cast<uint32_t>(kInfeasible) << std::endl;
       // Debugging code
       auto next_bucket_idx = pq1_.get_next_bucket();
-      std::cout << "pq1 bucket " << next_bucket_idx << " has size " << pq1_.buckets_[next_bucket_idx].size() << std::endl;
-      if(pq1_.buckets_[next_bucket_idx].empty()){
+      /*if(pq1_.buckets_[next_bucket_idx].empty()){
         std::cout << "pq1 bucket empty, breaking out" << std::endl;
         break;
-      }
+      }*/
       top_f = pq1_.buckets_[next_bucket_idx].back().priority();
-      std::cout << "top_f - " << static_cast<uint32_t>(top_f) << std::endl;
+      //std::cout << "top_f - " << static_cast<uint32_t>(top_f) << std::endl;
       top_r = pq2_.buckets_[pq2_.get_next_bucket()].back().priority();
-      std::cout << "top_r - " << static_cast<uint32_t>(top_r) << std::endl;
+      //std::cout << "top_r - " << static_cast<uint32_t>(top_r) << std::endl;
     }
   }
 
@@ -241,7 +220,6 @@ struct bidirectional{
   node meet_point;
   ankerl::unordered_dense::map<key, entry, hash> cost1_;
   ankerl::unordered_dense::map<key, entry, hash> cost2_;
-  cost_t PI{};
 
 };
 
