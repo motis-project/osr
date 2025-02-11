@@ -14,6 +14,8 @@
 #include "cista/mmap.h"
 #include "cista/strong.h"
 
+#include "utl/verify.h"
+
 #include "osr/preprocessing/elevation/shared.h"
 
 // EHdr / BIL File Format:
@@ -173,7 +175,13 @@ struct dem_tile::impl {
       : data_file_{get_bil_path(path)},
         hdr_{data_file_},
         mapped_file_{cista::mmap{data_file_.string().data(),
-                                 cista::mmap::protection::READ}} {}
+                                 cista::mmap::protection::READ}} {
+    auto const expected_size = hdr_.row_size_ * hdr_.rows_;
+    utl::verify(mapped_file_.size() == expected_size,
+                "BIL tile '{}' ({}x{}) has incorrect file size ({} != {})",
+                data_file_.string(), hdr_.cols_, hdr_.rows_,
+                mapped_file_.size(), expected_size);
+  }
 
   pixel_value get(geo::latlng const& pos) const {
     auto const box = geo::box{{hdr_.bry_, hdr_.brx_}, {hdr_.uly_, hdr_.ulx_}};
@@ -181,15 +189,14 @@ struct dem_tile::impl {
       return hdr_.nodata_;
     }
 
-    auto const pix_x =
-        static_cast<unsigned>((pos.lng_ - hdr_.ulx_) / hdr_.xdim_);
-    auto const pix_y =
-        static_cast<unsigned>((hdr_.uly_ - pos.lat_) / hdr_.ydim_);
-    assert(pix_x < hdr_.cols_);
-    assert(pix_y < hdr_.rows_);
+    auto const pix_x = std::clamp(
+        0U, static_cast<unsigned>((pos.lng_ - hdr_.ulx_) / hdr_.xdim_),
+        hdr_.cols_ - 1U);
+    auto const pix_y = std::clamp(
+        0U, static_cast<unsigned>((hdr_.uly_ - pos.lat_) / hdr_.ydim_),
+        hdr_.rows_ - 1U);
     auto const byte_pos = hdr_.row_size_ * pix_y + hdr_.pixel_size_ * pix_x;
 
-    assert(byte_pos < mapped_file_.size());
     auto const* byte_ptr = mapped_file_.data() + byte_pos;
 
     pixel_value val{};
