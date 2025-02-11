@@ -2,12 +2,13 @@
 
 #include "osr/preprocessing/elevation/hgt_tile.h"
 
-#include <cassert>
 #include <algorithm>
 #include <bit>
 #include <limits>
 
 #include "cista/mmap.h"
+
+#include "utl/verify.h"
 
 // SRTM HGT File Format
 //
@@ -43,12 +44,14 @@ struct hgt_tile<RasterSize>::hgt_tile<RasterSize>::impl {
   constexpr static auto kStepWidth = double{1. / (RasterSize - 1U)};
   constexpr static auto kCenterOffset = kStepWidth / 2.;
 
-  impl(std::string const& filename,
-       std::int8_t const lat,
-       std::int16_t const lng)
-      : file_{cista::mmap{filename.data(), cista::mmap::protection::READ}},
+  impl(std::string const& path, std::int8_t const lat, std::int16_t const lng)
+      : file_{cista::mmap{path.data(), cista::mmap::protection::READ}},
         sw_lat_(lat),
-        sw_lng_(lng) {}
+        sw_lng_(lng) {
+    utl::verify(file_.size() == file_size(),
+                "HGT tile '{}' ({}x{}) has incorrect file size ({} != {})",
+                path, RasterSize, RasterSize, file_.size(), file_size());
+  }
 
   template <std::size_t UpperBound>
   std::size_t get_offset(geo::latlng const& pos) const {
@@ -81,7 +84,6 @@ struct hgt_tile<RasterSize>::hgt_tile<RasterSize>::impl {
   }
 
   elevation_meters_t get(std::size_t const offset) const {
-    assert(offset < kBytesPerPixel * RasterSize * RasterSize);
     auto const byte_ptr = file_.data() + offset;
     auto const raw_value = *reinterpret_cast<std::int16_t const*>(byte_ptr);
     // Byte is stored in big-endian
