@@ -286,7 +286,7 @@ struct bike_sharing {
               std::uint16_t const from, std::uint16_t const to,
               elevation_storage::elevation const elevation) {
             fn(to_node(neighbor, nt), cost + switch_penalty, dist, way, from,
-               to, std::move(elevation));
+               to, elevation);
           });
       if (include_additional_edges) {
         // walk to station or free-floating bike
@@ -313,7 +313,7 @@ struct bike_sharing {
               std::uint16_t const to,
               elevation_storage::elevation const elevation) {
             fn(to_node(neighbor, kNoLevel), cost + switch_penalty, dist, way,
-               from, to, std::move(elevation));
+               from, to, elevation);
           });
       if (include_additional_edges) {
         // drive to station

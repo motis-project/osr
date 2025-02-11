@@ -243,7 +243,7 @@ encoding_result_t calculate_way_encodings(
               get_way_elevation(provider, points[from], points[to], res)};
           if (elevation) {
             elevations.resize(elevations_idx);
-            elevations.push_back(std::move(elevation));
+            elevations.push_back(elevation);
           }
           ++elevations_idx;
         }
