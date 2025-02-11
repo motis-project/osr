@@ -176,7 +176,7 @@ struct dem_tile::impl {
                                  cista::mmap::protection::READ}} {}
 
   pixel_value get(geo::latlng const& pos) const {
-    auto const box = geo::box{{hdr_.bry_, hdr_.brx_}, {hdr_.uly_, hdr_.uly_}};
+    auto const box = geo::box{{hdr_.bry_, hdr_.brx_}, {hdr_.uly_, hdr_.ulx_}};
     if (!box.contains(pos)) {
       return hdr_.nodata_;
     }
