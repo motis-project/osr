@@ -52,21 +52,19 @@ struct hgt_tile<RasterSize>::hgt_tile<RasterSize>::impl {
 
   template <std::size_t UpperBound>
   std::size_t get_offset(point const p) const {
-    auto const lat = p.lat();
-    auto const lng = p.lng();
+    auto const pos = p.as_latlng();
     auto const box = get_box();
-    if (box.min_.lng_ <= lng && lng < box.max_.lng_ &&  //
-        box.min_.lat_ <= lat && lat < box.max_.lat_) {
+    if (box.contains(pos)) {
       // Column: Left to right
       auto const column = std::clamp(
           static_cast<std::size_t>(
-              std::floor(((lng - box.min_.lng_) * (RasterSize - 1U)) /
+              std::floor(((pos.lng_ - box.min_.lng_) * (RasterSize - 1U)) /
                          RasterSize * UpperBound)),
           std::size_t{0U}, UpperBound - 1U);
       // Row: Top to bottom
       auto const row = std::clamp(
           static_cast<std::size_t>(
-              std::floor(((box.max_.lat_ - lat) * (RasterSize - 1U)) /
+              std::floor(((box.max_.lat_ - pos.lat_) * (RasterSize - 1U)) /
                          RasterSize * UpperBound)),
           std::size_t{0U}, (UpperBound - 1U));
       // Data in row major order
