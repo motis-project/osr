@@ -13,17 +13,12 @@ bool dem_driver::add_tile(fs::path const& path) {
   auto const idx = static_cast<std::size_t>(tiles_.size());
   auto const& tile = tiles_.emplace_back(dem_tile{path});
   auto const box = tile.get_box();
-  auto const min = decltype(rtree_)::coord_t{static_cast<float>(box.min_.lat_),
-                                             static_cast<float>(box.min_.lng_)};
-  auto const max = decltype(rtree_)::coord_t{static_cast<float>(box.max_.lat_),
-                                             static_cast<float>(box.max_.lng_)};
-  rtree_.insert(min, max, idx);
+  rtree_.insert(box.min_.lnglat_float(), box.max_.lnglat_float(), idx);
   return true;
 }
 
 elevation_meters_t dem_driver::get(point const point) const {
-  auto const p = decltype(rtree_)::coord_t{static_cast<float>(point.lat()),
-                                           static_cast<float>(point.lng())};
+  auto const p = point.as_latlng().lnglat_float();
   auto meters = elevation_meters_t::invalid();
   rtree_.search(p, p,
                 [&](auto const&, auto const&, std::size_t const& tile_idx) {
@@ -34,8 +29,7 @@ elevation_meters_t dem_driver::get(point const point) const {
 }
 
 tile_idx_t dem_driver::tile_idx(point const point) const {
-  auto const p = decltype(rtree_)::coord_t{static_cast<float>(point.lat()),
-                                           static_cast<float>(point.lng())};
+  auto const p = point.as_latlng().lnglat_float();
   auto idx = tile_idx_t::invalid();
   rtree_.search(p, p,
                 [&](auto const&, auto const&, std::size_t const& tile_idx) {

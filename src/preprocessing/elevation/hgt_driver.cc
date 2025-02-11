@@ -47,11 +47,8 @@ bool hgt_driver::add_tile(fs::path const& path) {
   if (tile.has_value()) {
     auto const box =
         std::visit([](IsTile auto const& t) { return t.get_box(); }, *tile);
-    auto const min = decltype(rtree_)::coord_t{
-        static_cast<float>(box.min_.lat_), static_cast<float>(box.min_.lng_)};
-    auto const max = decltype(rtree_)::coord_t{
-        static_cast<float>(box.max_.lat_), static_cast<float>(box.max_.lng_)};
-    rtree_.insert(min, max, static_cast<std::size_t>(tiles_.size()));
+    rtree_.insert(box.min_.lnglat_float(), box.max_.lnglat_float(),
+                  static_cast<std::size_t>(tiles_.size()));
     tiles_.emplace_back(std::move(tile.value()));
     return true;
   } else {
@@ -60,8 +57,7 @@ bool hgt_driver::add_tile(fs::path const& path) {
 }
 
 elevation_meters_t hgt_driver::get(point const point) const {
-  auto const p = decltype(rtree_)::coord_t{static_cast<float>(point.lat()),
-                                           static_cast<float>(point.lng())};
+  auto const p = point.as_latlng().lnglat_float();
   auto meters = elevation_meters_t::invalid();
   rtree_.search(p, p,
                 [&](auto const&, auto const&, std::size_t const& tile_idx) {
@@ -76,8 +72,7 @@ elevation_meters_t hgt_driver::get(point const point) const {
 }
 
 tile_idx_t hgt_driver::tile_idx(point const point) const {
-  auto const p = decltype(rtree_)::coord_t{static_cast<float>(point.lat()),
-                                           static_cast<float>(point.lng())};
+  auto const p = point.as_latlng().lnglat_float();
   auto idx = tile_idx_t::invalid();
   rtree_.search(p, p,
                 [&](auto const&, auto const&, std::size_t const& tile_idx) {
