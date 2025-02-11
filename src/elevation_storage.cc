@@ -110,8 +110,8 @@ elevation_storage::elevation get_way_elevation(ev::provider const& provider,
       auto const way_dir =
           ev::resolution{.x_ = min_lng_diff / steps, .y_ = lat_diff / steps};
       for (auto s = 1; s < steps; ++s) {
-        auto const m = provider.get(point::from_latlng(
-            from_lat + s * way_dir.y_, adjust_lng(from_lng + s * way_dir.x_)));
+        auto const m = provider.get(
+            {from_lat + s * way_dir.y_, adjust_lng(from_lng + s * way_dir.x_)});
         if (m != ev::elevation_meters_t::invalid()) {
           if (a < m) {
             elevation.up_ += static_cast<cista::base_t<elevation_monotonic_t>>(

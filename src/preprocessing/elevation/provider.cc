@@ -24,10 +24,10 @@ struct provider::impl {
     drivers_.emplace_back(std::move(driver));
   }
 
-  elevation_meters_t get(point const p) const {
+  elevation_meters_t get(geo::latlng const& pos) const {
     for (auto const& driver : drivers_) {
-      auto const meters =
-          std::visit([&](IsDriver auto const& d) { return d.get(p); }, driver);
+      auto const meters = std::visit(
+          [&](IsDriver auto const& d) { return d.get(pos); }, driver);
       if (meters != elevation_meters_t::invalid()) {
         return meters;
       }
@@ -35,10 +35,10 @@ struct provider::impl {
     return elevation_meters_t::invalid();
   }
 
-  tile_idx_t tile_idx(point const p) const {
+  tile_idx_t tile_idx(geo::latlng const& pos) const {
     for (auto const [driver_idx, driver] : utl::enumerate(drivers_)) {
       auto idx = std::visit(
-          [&](IsDriver auto const& d) { return d.tile_idx(p); }, driver);
+          [&](IsDriver auto const& d) { return d.tile_idx(pos); }, driver);
       if (idx != tile_idx_t::invalid()) {
         idx.driver_idx_ = static_cast<tile_idx_t::data_t>(driver_idx);
         return idx;
@@ -80,10 +80,12 @@ provider::provider(std::filesystem::path const& p)
 
 provider::~provider() = default;
 
-elevation_meters_t provider::get(point const p) const { return impl_->get(p); }
+elevation_meters_t provider::get(geo::latlng const& pos) const {
+  return impl_->get(pos);
+}
 
-tile_idx_t provider::tile_idx(point const p) const {
-  return impl_->tile_idx(p);
+tile_idx_t provider::tile_idx(geo::latlng const& pos) const {
+  return impl_->tile_idx(pos);
 }
 
 std::size_t provider::driver_count() const { return impl_->drivers_.size(); }

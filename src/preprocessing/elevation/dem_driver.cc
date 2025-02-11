@@ -17,23 +17,23 @@ bool dem_driver::add_tile(fs::path const& path) {
   return true;
 }
 
-elevation_meters_t dem_driver::get(point const point) const {
-  auto const p = point.as_latlng().lnglat_float();
+elevation_meters_t dem_driver::get(geo::latlng const& pos) const {
+  auto const p = pos.lnglat_float();
   auto meters = elevation_meters_t::invalid();
   rtree_.search(p, p,
                 [&](auto const&, auto const&, std::size_t const& tile_idx) {
-                  meters = tiles_[tile_idx].get(point);
+                  meters = tiles_[tile_idx].get(pos);
                   return meters != elevation_meters_t::invalid();
                 });
   return meters;
 }
 
-tile_idx_t dem_driver::tile_idx(point const point) const {
-  auto const p = point.as_latlng().lnglat_float();
+tile_idx_t dem_driver::tile_idx(geo::latlng const& pos) const {
+  auto const p = pos.lnglat_float();
   auto idx = tile_idx_t::invalid();
   rtree_.search(p, p,
                 [&](auto const&, auto const&, std::size_t const& tile_idx) {
-                  idx = tiles_[tile_idx].tile_idx(point);
+                  idx = tiles_[tile_idx].tile_idx(pos);
                   if (idx == tile_idx_t::invalid()) {
                     return false;
                   }

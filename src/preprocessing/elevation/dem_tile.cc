@@ -175,17 +175,16 @@ struct dem_tile::impl {
         mapped_file_{cista::mmap{data_file_.string().data(),
                                  cista::mmap::protection::READ}} {}
 
-  pixel_value get(point const p) const {
-    auto const lng = p.lng();
-    auto const lat = p.lat();
-
-    if (lng < hdr_.ulx_ || lat > hdr_.uly_ || lng >= hdr_.brx_ ||
-        lat <= hdr_.bry_) {
+  pixel_value get(geo::latlng const& pos) const {
+    auto const box = geo::box{{hdr_.bry_, hdr_.brx_}, {hdr_.uly_, hdr_.uly_}};
+    if (!box.contains(pos)) {
       return hdr_.nodata_;
     }
 
-    auto const pix_x = static_cast<unsigned>((lng - hdr_.ulx_) / hdr_.xdim_);
-    auto const pix_y = static_cast<unsigned>((hdr_.uly_ - lat) / hdr_.ydim_);
+    auto const pix_x =
+        static_cast<unsigned>((pos.lng_ - hdr_.ulx_) / hdr_.xdim_);
+    auto const pix_y =
+        static_cast<unsigned>((hdr_.uly_ - pos.lat_) / hdr_.ydim_);
     assert(pix_x < hdr_.cols_);
     assert(pix_y < hdr_.rows_);
     auto const byte_pos = hdr_.row_size_ * pix_y + hdr_.pixel_size_ * pix_x;
@@ -219,8 +218,8 @@ dem_tile::dem_tile(dem_tile&& grid) noexcept : impl_(std::move(grid.impl_)) {}
 
 dem_tile::~dem_tile() = default;
 
-elevation_meters_t dem_tile::get(point const p) const {
-  auto const val = get_raw(p);
+elevation_meters_t dem_tile::get(geo::latlng const& pos) const {
+  auto const val = get_raw(pos);
   switch (impl_->hdr_.pixel_type_) {
     case pixel_type::int16:
       if (val.int16_ == impl_->hdr_.nodata_.int16_) {
@@ -243,7 +242,7 @@ elevation_meters_t dem_tile::get(point const p) const {
   throw std::runtime_error{"dem_grid: invalid pixel type"};
 }
 
-tile_idx_t dem_tile::tile_idx(point const) const {
+tile_idx_t dem_tile::tile_idx(geo::latlng const&) const {
   // TODO Return non trivial sub tile index
   return tile_idx_t::from_sub_tile(0U);
 }
@@ -261,7 +260,9 @@ geo::box dem_tile::get_box() const {
   };
 }
 
-pixel_value dem_tile::get_raw(point const p) const { return impl_->get(p); }
+pixel_value dem_tile::get_raw(geo::latlng const& pos) const {
+  return impl_->get(pos);
+}
 
 pixel_type dem_tile::get_pixel_type() const { return impl_->hdr_.pixel_type_; }
 

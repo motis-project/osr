@@ -2,7 +2,8 @@
 
 #include <filesystem>
 
-#include "osr/point.h"
+#include "geo/latlng.h"
+
 #include "osr/preprocessing/elevation/resolution.h"
 #include "osr/preprocessing/elevation/shared.h"
 
@@ -16,8 +17,8 @@ struct provider {
   provider(provider&&) = delete;
   provider& operator=(provider&&) = delete;
 
-  elevation_meters_t get(point const) const;
-  tile_idx_t tile_idx(point const) const;
+  elevation_meters_t get(geo::latlng const&) const;
+  tile_idx_t tile_idx(geo::latlng const&) const;
   std::size_t driver_count() const;
   resolution max_resolution() const;
 

@@ -51,8 +51,7 @@ struct hgt_tile<RasterSize>::hgt_tile<RasterSize>::impl {
         sw_lng_(lng) {}
 
   template <std::size_t UpperBound>
-  std::size_t get_offset(point const p) const {
-    auto const pos = p.as_latlng();
+  std::size_t get_offset(geo::latlng const& pos) const {
     auto const box = get_box();
     if (box.contains(pos)) {
       // Column: Left to right
@@ -73,8 +72,8 @@ struct hgt_tile<RasterSize>::hgt_tile<RasterSize>::impl {
     return std::numeric_limits<std::size_t>::max();
   }
 
-  elevation_meters_t get(point const p) const {
-    auto const offset = get_offset<RasterSize>(p);
+  elevation_meters_t get(geo::latlng const& pos) const {
+    auto const offset = get_offset<RasterSize>(pos);
     if (offset == std::numeric_limits<std::size_t>::max()) {
       return elevation_meters_t::invalid();
     }
@@ -93,9 +92,9 @@ struct hgt_tile<RasterSize>::hgt_tile<RasterSize>::impl {
                                   : elevation_meters_t{meters};
   }
 
-  tile_idx_t tile_idx(point const p) const {
+  tile_idx_t tile_idx(geo::latlng const& pos) const {
     constexpr auto const kSegments = 1 << (tile_idx_t::kSubTileIdxSize / 2);
-    auto const offset = get_offset<kSegments>(p);
+    auto const offset = get_offset<kSegments>(pos);
     return (offset == std::numeric_limits<std::size_t>::max())
                ? tile_idx_t::invalid()
                : tile_idx_t::from_sub_tile(
@@ -138,13 +137,13 @@ template <std::size_t RasterSize>
 hgt_tile<RasterSize>::hgt_tile(hgt_tile&& grid) noexcept = default;
 
 template <std::size_t RasterSize>
-elevation_meters_t hgt_tile<RasterSize>::get(point const p) const {
-  return impl_->get(p);
+elevation_meters_t hgt_tile<RasterSize>::get(geo::latlng const& pos) const {
+  return impl_->get(pos);
 }
 
 template <std::size_t RasterSize>
-tile_idx_t hgt_tile<RasterSize>::tile_idx(point const p) const {
-  return impl_->tile_idx(p);
+tile_idx_t hgt_tile<RasterSize>::tile_idx(geo::latlng const& pos) const {
+  return impl_->tile_idx(pos);
 }
 
 template <std::size_t RasterSize>

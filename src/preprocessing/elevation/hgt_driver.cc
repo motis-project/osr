@@ -56,14 +56,14 @@ bool hgt_driver::add_tile(fs::path const& path) {
   }
 }
 
-elevation_meters_t hgt_driver::get(point const point) const {
-  auto const p = point.as_latlng().lnglat_float();
+elevation_meters_t hgt_driver::get(geo::latlng const& pos) const {
+  auto const p = pos.lnglat_float();
   auto meters = elevation_meters_t::invalid();
   rtree_.search(p, p,
                 [&](auto const&, auto const&, std::size_t const& tile_idx) {
                   meters = std::visit(
                       [&](IsTile auto const& t) -> elevation_meters_t {
-                        return t.get(point);
+                        return t.get(pos);
                       },
                       tiles_[tile_idx]);
                   return meters != elevation_meters_t::invalid();
@@ -71,22 +71,20 @@ elevation_meters_t hgt_driver::get(point const point) const {
   return meters;
 }
 
-tile_idx_t hgt_driver::tile_idx(point const point) const {
-  auto const p = point.as_latlng().lnglat_float();
+tile_idx_t hgt_driver::tile_idx(geo::latlng const& pos) const {
+  auto const p = pos.lnglat_float();
   auto idx = tile_idx_t::invalid();
-  rtree_.search(p, p,
-                [&](auto const&, auto const&, std::size_t const& tile_idx) {
-                  idx = std::visit(
-                      [&](IsTile auto const& t) -> tile_idx_t {
-                        return t.tile_idx(point);
-                      },
-                      tiles_[tile_idx]);
-                  if (idx == tile_idx_t::invalid()) {
-                    return false;
-                  }
-                  idx.tile_idx_ = static_cast<tile_idx_t::data_t>(tile_idx);
-                  return true;
-                });
+  rtree_.search(
+      p, p, [&](auto const&, auto const&, std::size_t const& tile_idx) {
+        idx = std::visit(
+            [&](IsTile auto const& t) -> tile_idx_t { return t.tile_idx(pos); },
+            tiles_[tile_idx]);
+        if (idx == tile_idx_t::invalid()) {
+          return false;
+        }
+        idx.tile_idx_ = static_cast<tile_idx_t::data_t>(tile_idx);
+        return true;
+      });
   return idx;
 }
 
