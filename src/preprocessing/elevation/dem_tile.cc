@@ -184,8 +184,7 @@ struct dem_tile::impl {
   }
 
   pixel_value get(geo::latlng const& pos) const {
-    auto const box = geo::box{{hdr_.bry_, hdr_.brx_}, {hdr_.uly_, hdr_.ulx_}};
-    if (!box.contains(pos)) {
+    if (!get_box().contains(pos)) {
       return hdr_.nodata_;
     }
 
@@ -211,6 +210,10 @@ struct dem_tile::impl {
     }
 
     return val;
+  }
+
+  geo::box get_box() const {
+    return {{hdr_.bry_, hdr_.brx_}, {hdr_.uly_, hdr_.ulx_}};
   }
 
   fs::path data_file_;
@@ -254,18 +257,7 @@ tile_idx_t dem_tile::tile_idx(geo::latlng const&) const {
   return tile_idx_t::from_sub_tile(0U);
 }
 
-geo::box dem_tile::get_box() const {
-  return {
-      {
-          impl_->hdr_.bry_,
-          impl_->hdr_.ulx_,
-      },
-      {
-          impl_->hdr_.uly_,
-          impl_->hdr_.brx_,
-      },
-  };
-}
+geo::box dem_tile::get_box() const { return impl_->get_box(); }
 
 pixel_value dem_tile::get_raw(geo::latlng const& pos) const {
   return impl_->get(pos);
