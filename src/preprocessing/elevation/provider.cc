@@ -51,7 +51,7 @@ struct provider::impl {
 };
 
 provider::provider(std::filesystem::path const& p)
-    : impl_(std::make_unique<impl>()) {
+    : impl_{std::make_unique<impl>()} {
   if (std::filesystem::is_directory(p)) {
     auto dem = dem_driver{};
     auto hgt = hgt_driver{};
