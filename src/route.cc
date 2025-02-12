@@ -433,21 +433,18 @@ std::optional<path> route(ways const& w,
         }
       }
       for (auto const* nc : {&end.left_, &end.right_}) {
-        std::cout << "before if: " << valid_end << std::endl;
         if (nc->valid() && nc->cost_ < max) {
-          std::cout << "in if: " << valid_end << std::endl;
           Profile::resolve_start_node(
               *w.r_, end.way_, nc->node_, from.lvl_, opposite(dir),
               [&](auto const node) { b.add_end(w, {node, nc->cost_}); });
         }
       }
       b.clear_mp();
-      std::cout << "before run: " << std::endl;
       b.run(w, *w.r_, max, blocked, sharing, dir);
       cost_t cost = 0U;
       if (b.meet_point.get_node() == node_idx_t::invalid() ||
           static_cast<uint32_t>(b.meet_point.get_node()) == 0) {
-        std::cout << "couldn't find a route" << std::endl;
+        std::cout << "Couldn't find a route" << std::endl;
         continue;
       }
 

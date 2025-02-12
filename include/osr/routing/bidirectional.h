@@ -61,10 +61,20 @@ struct bidirectional{
     expanded_.clear();
     start_loc_ = start_loc;
     end_loc_ = end_loc;
+
+    auto const start_coord = geo::latlng_to_merc(start_loc.pos_);
+    auto const end_coord = geo::latlng_to_merc(end_loc.pos_);
+
+    auto const dx = start_coord.x_ - end_coord.x_;
+    auto const dy = start_coord.y_ - end_coord.y_;
+    auto const dist = std::sqrt(dx * dx + dy * dy);
+
+    PI = Profile::heuristic(dist) / 2;
   }
 
   cost_t heuristic(ways const& w, label const l, location const& loc){
-    auto const node_coord = geo::latlng_to_merc(w.get_node_pos(l.n_).as_latlng());
+    auto const node_coord =
+        geo::latlng_to_merc(w.get_node_pos(l.n_).as_latlng());
     auto const loc_coord = geo::latlng_to_merc(loc.pos_);
 
     auto const dx = node_coord.x_ - loc_coord.x_;
@@ -72,7 +82,16 @@ struct bidirectional{
 
     auto const dist = std::sqrt(dx * dx + dy * dy);
 
-    return Profile::heuristic(dist);
+    auto const other_loc = loc == start_loc_ ? end_loc_ : start_loc_;
+    auto const other_coord = geo::latlng_to_merc(other_loc.pos_);
+
+    auto const other_dx = node_coord.x_ - other_coord.x_;
+    auto const other_dy = node_coord.y_ - other_coord.y_;
+
+    auto const other_dist =
+        std::sqrt(other_dx * other_dx + other_dy * other_dy);
+
+    return Profile::heuristic(0.5 * (dist - other_dist)) + PI;
   }
 
   cost_t get_cost_from_start(node const n) const {
@@ -141,7 +160,7 @@ struct bidirectional{
            cost_t const max,
            bitvec<node_idx_t> const* blocked,
            sharing_data const* sharing){
-    auto best_cost = kInfeasible;
+    auto best_cost = kInfeasible - PI*2;
 
     // update top priorities on every loop iteration
 
@@ -153,9 +172,9 @@ struct bidirectional{
 
     while (!pq1_.empty() && !pq2_.empty()){
 
-      if ((top_f + top_r > best_cost) && best_cost != kInfeasible)
+      if (top_f + top_r >= best_cost + PI * 2){
         break;
-
+      }
       auto curr1 = run<SearchDir, WithBlocked>(w, r, max, blocked, sharing, pq1_, cost1_, [this](auto curr){return get_cost_from_start(curr);}, end_loc_);
       auto curr2 = run<opposite(SearchDir), WithBlocked>(w, r, max, blocked, sharing, pq2_, cost2_, [this](auto curr){return get_cost_from_end(curr);}, start_loc_);
 
@@ -180,14 +199,7 @@ struct bidirectional{
           best_cost = get_cost_to_mp(curr2.value());
         }
       }
-      //std::cout << "Infisieable " << static_cast<uint32_t>(kInfeasible) << std::endl;
-      // Debugging code
-      auto next_bucket_idx = pq1_.get_next_bucket();
-      /*if(pq1_.buckets_[next_bucket_idx].empty()){
-        std::cout << "pq1 bucket empty, breaking out" << std::endl;
-        break;
-      }*/
-      top_f = pq1_.buckets_[next_bucket_idx].back().priority();
+      top_f = pq1_.buckets_[pq1_.get_next_bucket()].back().priority();
       //std::cout << "top_f - " << static_cast<uint32_t>(top_f) << std::endl;
       top_r = pq2_.buckets_[pq2_.get_next_bucket()].back().priority();
       //std::cout << "top_r - " << static_cast<uint32_t>(top_r) << std::endl;
@@ -220,7 +232,7 @@ struct bidirectional{
   node meet_point;
   ankerl::unordered_dense::map<key, entry, hash> cost1_;
   ankerl::unordered_dense::map<key, entry, hash> cost2_;
-
+  cost_t PI;
 };
 
 }  // namespace osr
