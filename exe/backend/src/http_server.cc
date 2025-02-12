@@ -376,7 +376,7 @@ http_server::http_server(boost::asio::io_context& ioc,
                          platforms const* pl,
                          elevation_storage const* elevation,
                          std::string const& static_file_path)
-    : impl_(new impl(ioc, thread_pool, w, l, pl, elevation, static_file_path)) {
+    : impl_{new impl(ioc, thread_pool, w, l, pl, elevation, static_file_path)} {
 }
 
 http_server::~http_server() = default;
