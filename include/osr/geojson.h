@@ -14,9 +14,7 @@
 
 namespace osr {
 
-inline boost::json::array to_array(point const p) {
-  return {p.lng(), p.lat()};
-}
+inline boost::json::array to_array(point const p) { return {p.lng(), p.lat()}; }
 
 inline boost::json::array to_array(geo::latlng const& p) {
   return {p.lng(), p.lat()};
