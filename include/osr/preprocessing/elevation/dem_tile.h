@@ -10,8 +10,6 @@
 #include "osr/preprocessing/elevation/resolution.h"
 #include "osr/preprocessing/elevation/shared.h"
 
-namespace fs = std::filesystem;
-
 namespace osr::preprocessing::elevation {
 
 enum class pixel_type : std::uint8_t { int16, float32 };
@@ -22,7 +20,7 @@ union pixel_value {
 };
 
 struct dem_tile {
-  explicit dem_tile(fs::path const&);
+  explicit dem_tile(std::filesystem::path const&);
   ~dem_tile();
   dem_tile(dem_tile&& grid) noexcept;
   dem_tile(dem_tile const&) = delete;

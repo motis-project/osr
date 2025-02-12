@@ -10,13 +10,11 @@
 #include "osr/preprocessing/elevation/resolution.h"
 #include "osr/preprocessing/elevation/shared.h"
 
-namespace fs = std::filesystem;
-
 namespace osr::preprocessing::elevation {
 
 struct dem_driver {
   dem_driver() = default;
-  bool add_tile(fs::path const&);
+  bool add_tile(std::filesystem::path const&);
   elevation_meters_t get(geo::latlng const&) const;
   tile_idx_t tile_idx(geo::latlng const&) const;
   resolution max_resolution() const;
