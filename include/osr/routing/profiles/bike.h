@@ -14,11 +14,16 @@ constexpr auto const kElevationNoCost = 0U;
 constexpr auto const kElevationLowCost = 570U;
 constexpr auto const kElevationHighCost = 3700U;
 
-// Some configurations (cost, exp):
-// (250, 1000)
-// (800, 1000)
-// (570, 2100)
-// (3700, 2100)
+// Routing const configuration (cost, exp)
+// cost:
+// Higher costs will favor flatter routes, even if these take way longer.
+// exp:
+// Increase cost to more penalize ways with higher incline
+// Examples:
+// (250, 1000)  // Low costs, penalize total elevation
+// (800, 1000)  // Higher costs, penalize total elevation
+// (570, 2100)  // Low costs, penalize ways with higher incline
+// (3700, 2100)  // Higher costs, penalize ways with higher incline
 
 template <unsigned int ElevationUpCost,
           unsigned int ElevationExponentThousandth = 2100U>
