@@ -216,6 +216,17 @@ struct dem_tile::impl {
     return {{hdr_.bry_, hdr_.brx_}, {hdr_.uly_, hdr_.ulx_}};
   }
 
+  template <unsigned PixelX, unsigned PixelY>
+  std::array<unsigned, 2> get_pixel(geo::latlng const& pos) {
+    auto const pix_x =
+        std::clamp(0U, static_cast<unsigned>((pos.lng_ - hdr_.ulx_) * PixelX),
+                   PixelX - 1U);
+    auto const pix_y =
+        std::clamp(0U, static_cast<unsigned>((hdr_.uly_ - pos.lat_) * PixelY),
+                   PixelY - 1U);
+    return {pix_x, pix_y};
+  }
+
   fs::path data_file_;
   bil_header hdr_;
   cista::mmap mapped_file_;
@@ -252,9 +263,14 @@ elevation_meters_t dem_tile::get(geo::latlng const& pos) const {
   throw std::runtime_error{"dem_grid: invalid pixel type"};
 }
 
-tile_idx_t dem_tile::tile_idx(geo::latlng const&) const {
-  // TODO Return non trivial sub tile index
-  return tile_idx_t::from_sub_tile(0U);
+tile_idx_t dem_tile::tile_idx(geo::latlng const& pos) const {
+  constexpr auto const kPixelSize = 1 << (tile_idx_t::kSubTileIdxSize / 2);
+  if (impl_->get_box().contains(pos)) {
+    auto const [pix_x, pix_y] = impl_->get_pixel<kPixelSize, kPixelSize>(pos);
+    return tile_idx_t::from_sub_tile(pix_x * kPixelSize + pix_y);
+  } else {
+    return tile_idx_t::from_sub_tile(0U);
+  }
 }
 
 geo::box dem_tile::get_box() const { return impl_->get_box(); }
