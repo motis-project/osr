@@ -18,10 +18,11 @@ struct config : public conf::configuration {
       : configuration{"Options"}, in_{std::move(in)}, out_{std::move(out)} {
     param(in_, "in,i", "OpenStreetMap .osm.pbf input path");
     param(out_, "out,o", "output directory");
+    param(elevation_data_, "elevation_data,e", "directory with elevation data");
     param(with_platforms_, "with_platforms,p", "extract platform info");
   }
 
-  std::filesystem::path in_, out_;
+  std::filesystem::path in_, out_, elevation_data_;
   bool with_platforms_{false};
 };
 
@@ -44,5 +45,5 @@ int main(int ac, char const** av) {
   utl::activate_progress_tracker("osr");
   auto const silencer = utl::global_progress_bars{false};
 
-  extract(c.with_platforms_, c.in_, c.out_);
+  extract(c.with_platforms_, c.in_, c.out_, c.elevation_data_);
 }

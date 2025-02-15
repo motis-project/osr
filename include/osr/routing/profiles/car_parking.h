@@ -6,6 +6,7 @@
 
 #include "utl/helpers/algorithm.h"
 
+#include "osr/elevation_storage.h"
 #include "osr/routing/mode.h"
 #include "osr/routing/profiles/car.h"
 #include "osr/routing/profiles/foot.h"
@@ -240,6 +241,7 @@ struct car_parking {
                        node const n,
                        bitvec<node_idx_t> const* blocked,
                        sharing_data const*,
+                       elevation_storage const* elevations,
                        Fn&& fn) {
     static constexpr auto const kFwd = SearchDir == direction::kForward;
     static constexpr auto const kBwd = SearchDir == direction::kBackward;
@@ -248,26 +250,28 @@ struct car_parking {
 
     if (n.is_foot_node() || (kFwd && n.is_car_node() && is_parking)) {
       footp::template adjacent<SearchDir, WithBlocked>(
-          w, to_foot(n), blocked, nullptr,
+          w, to_foot(n), blocked, nullptr, elevations,
           [&](footp::node const neighbor, std::uint32_t const cost,
               distance_t const dist, way_idx_t const way,
-              std::uint16_t const from, std::uint16_t const to) {
+              std::uint16_t const from, std::uint16_t const to,
+              elevation_storage::elevation const elevation) {
             fn(to_node(neighbor),
                cost + (n.is_foot_node() ? 0 : kSwitchPenalty), dist, way, from,
-               to);
+               to, elevation);
           });
     }
 
     if (n.is_car_node() || (kBwd && n.is_foot_node() && is_parking)) {
       car::template adjacent<SearchDir, WithBlocked>(
-          w, to_car(n), blocked, nullptr,
+          w, to_car(n), blocked, nullptr, elevations,
           [&](car::node const neighbor, std::uint32_t const cost,
               distance_t const dist, way_idx_t const way,
-              std::uint16_t const from, std::uint16_t const to) {
+              std::uint16_t const from, std::uint16_t const to,
+              elevation_storage::elevation const elevation) {
             auto const way_prop = w.way_properties_[way];
             fn(to_node(neighbor, way_prop.from_level()),
                cost + (n.is_car_node() ? 0 : kSwitchPenalty), dist, way, from,
-               to);
+               to, elevation);
           });
     }
   }

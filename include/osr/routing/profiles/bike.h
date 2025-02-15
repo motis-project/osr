@@ -1,13 +1,32 @@
 #pragma once
 
+#include "osr/elevation_storage.h"
 #include "osr/routing/mode.h"
 #include "osr/routing/route.h"
+#include "osr/types.h"
 #include "osr/ways.h"
 
 namespace osr {
 
 struct sharing_data;
 
+constexpr auto const kElevationNoCost = 0U;
+constexpr auto const kElevationLowCost = 570U;
+constexpr auto const kElevationHighCost = 3700U;
+
+// Routing const configuration (cost, exp)
+// cost:
+// Higher costs will favor flatter routes, even if these take way longer.
+// exp:
+// Increase cost to more penalize ways with higher incline
+// Examples:
+// (250, 1000)  // Low costs, penalize total elevation
+// (800, 1000)  // Higher costs, penalize total elevation
+// (570, 2100)  // Low costs, penalize ways with higher incline
+// (3700, 2100)  // Higher costs, penalize ways with higher incline
+
+template <unsigned int ElevationUpCost,
+          unsigned int ElevationExponentThousandth = 2100U>
 struct bike {
   static constexpr auto const kMaxMatchDistance = 100U;
   static constexpr auto const kOffroadPenalty = 1U;
@@ -107,6 +126,7 @@ struct bike {
                        node const n,
                        bitvec<node_idx_t> const* blocked,
                        sharing_data const*,
+                       elevation_storage const* elevations,
                        Fn&& fn) {
     for (auto const [way, i] :
          utl::zip_unchecked(w.node_ways_[n.n_], w.node_in_way_idx_[n.n_])) {
@@ -130,10 +150,27 @@ struct bike {
         }
 
         auto const dist = w.way_node_dist_[way][std::min(from, to)];
+        auto const elevation = [&]() {
+          auto const e = (from < to) ? get_elevations(elevations, way, from)
+                                     : get_elevations(elevations, way, to);
+          auto const in_direction =
+              (SearchDir == direction::kForward) == (from < to);
+          return in_direction ? e : e.swapped();
+        }();
+        auto const elevation_cost = static_cast<cost_t>(
+            ElevationUpCost > 0U && dist > 0U
+                ? (ElevationExponentThousandth > 1000U
+                       ? ElevationUpCost *
+                             std::pow(
+                                 static_cast<double>(to_idx(elevation.up_)) /
+                                     dist,
+                                 ElevationExponentThousandth / 1000.0)
+                       : ElevationUpCost * to_idx(elevation.up_) / dist)
+                : 0);
         auto const cost = way_cost(target_way_prop, way_dir, dist) +
-                          node_cost(target_node_prop);
+                          node_cost(target_node_prop) + elevation_cost;
         fn(node{target_node}, static_cast<std::uint32_t>(cost), dist, way, from,
-           to);
+           to, elevation);
       };
 
       if (i != 0U) {

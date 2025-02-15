@@ -2,6 +2,7 @@
 
 #include "utl/for_each_bit_set.h"
 
+#include "osr/elevation_storage.h"
 #include "osr/routing/mode.h"
 #include "osr/routing/tracking.h"
 #include "osr/ways.h"
@@ -149,6 +150,7 @@ struct foot {
                        node const n,
                        bitvec<node_idx_t> const* blocked,
                        sharing_data const*,
+                       elevation_storage const*,
                        Fn&& fn) {
     for (auto const [way, i] :
          utl::zip_unchecked(w.node_ways_[n.n_], w.node_in_way_idx_[n.n_])) {
@@ -179,7 +181,8 @@ struct foot {
                 auto const cost = way_cost(target_way_prop, way_dir, dist) +
                                   node_cost(target_node_prop);
                 fn(node{target_node, target_lvl},
-                   static_cast<std::uint32_t>(cost), dist, way, from, to);
+                   static_cast<std::uint32_t>(cost), dist, way, from, to,
+                   elevation_storage::elevation{});
               });
         } else {
           auto const target_lvl = get_target_level(w, n.n_, n.lvl_, way);
@@ -191,7 +194,7 @@ struct foot {
           auto const cost = way_cost(target_way_prop, way_dir, dist) +
                             node_cost(target_node_prop);
           fn(node{target_node, *target_lvl}, static_cast<std::uint32_t>(cost),
-             dist, way, from, to);
+             dist, way, from, to, elevation_storage::elevation{});
         }
       };
 

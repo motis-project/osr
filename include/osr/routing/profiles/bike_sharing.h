@@ -9,6 +9,7 @@
 
 #include "utl/helpers/algorithm.h"
 
+#include "osr/elevation_storage.h"
 #include "osr/routing/additional_edge.h"
 #include "osr/routing/mode.h"
 #include "osr/routing/profiles/bike.h"
@@ -218,13 +219,15 @@ struct bike_sharing {
     return {.n_ = n.n_, .lvl_ = n.lvl_};
   }
 
-  static bike::node to_bike(node const n) { return {.n_ = n.n_}; }
+  static bike<kElevationNoCost>::node to_bike(node const n) {
+    return {.n_ = n.n_};
+  }
 
   static node to_node(footp::node const n, node_type const type) {
     return {.n_ = n.n_, .type_ = type, .lvl_ = n.lvl_};
   }
 
-  static node to_node(bike::node const n, level_t const lvl) {
+  static node to_node(bike<kElevationNoCost>::node const n, level_t const lvl) {
     return {.n_ = n.n_, .type_ = node_type::kBike, .lvl_ = lvl};
   }
 
@@ -260,6 +263,7 @@ struct bike_sharing {
                        node const n,
                        bitvec<node_idx_t> const* blocked,
                        sharing_data const* sharing,
+                       elevation_storage const* elevations,
                        Fn&& fn) {
     assert(sharing != nullptr);
 
@@ -268,19 +272,21 @@ struct bike_sharing {
           fn(node{.n_ = ae.node_,
                   .type_ = nt,
                   .lvl_ = nt == node_type::kBike ? kNoLevel : n.lvl_},
-             cost, ae.distance_, way_idx_t::invalid(), 0, 1);
+             cost, ae.distance_, way_idx_t::invalid(), 0, 1,
+             elevation_storage::elevation{});
         };
 
     auto const& continue_on_foot = [&](node_type const nt,
                                        bool const include_additional_edges,
                                        cost_t const switch_penalty = 0) {
       footp::template adjacent<SearchDir, WithBlocked>(
-          w, to_foot(n), blocked, nullptr,
+          w, to_foot(n), blocked, nullptr, elevations,
           [&](footp::node const neighbor, std::uint32_t const cost,
               distance_t const dist, way_idx_t const way,
-              std::uint16_t const from, std::uint16_t const to) {
+              std::uint16_t const from, std::uint16_t const to,
+              elevation_storage::elevation const elevation) {
             fn(to_node(neighbor, nt), cost + switch_penalty, dist, way, from,
-               to);
+               to, elevation);
           });
       if (include_additional_edges) {
         // walk to station or free-floating bike
@@ -299,24 +305,26 @@ struct bike_sharing {
 
     auto const& continue_on_bike = [&](bool const include_additional_edges,
                                        cost_t const switch_penalty = 0) {
-      bike::adjacent<SearchDir, WithBlocked>(
-          w, to_bike(n), blocked, nullptr,
-          [&](bike::node const neighbor, std::uint32_t const cost,
-              distance_t const dist, way_idx_t const way,
-              std::uint16_t const from, std::uint16_t const to) {
+      bike<kElevationNoCost>::adjacent<SearchDir, WithBlocked>(
+          w, to_bike(n), blocked, nullptr, elevations,
+          [&](bike<kElevationNoCost>::node const neighbor,
+              std::uint32_t const cost, distance_t const dist,
+              way_idx_t const way, std::uint16_t const from,
+              std::uint16_t const to,
+              elevation_storage::elevation const elevation) {
             fn(to_node(neighbor, kNoLevel), cost + switch_penalty, dist, way,
-               from, to);
+               from, to, elevation);
           });
       if (include_additional_edges) {
         // drive to station
         if (auto const it = sharing->additional_edges_.find(n.n_);
             it != end(sharing->additional_edges_)) {
           for (auto const& ae : it->second) {
-            handle_additional_edge(
-                ae, node_type::kBike,
-                bike::way_cost(kAdditionalWayProperties, direction::kForward,
-                               ae.distance_) +
-                    switch_penalty);
+            handle_additional_edge(ae, node_type::kBike,
+                                   bike<kElevationNoCost>::way_cost(
+                                       kAdditionalWayProperties,
+                                       direction::kForward, ae.distance_) +
+                                       switch_penalty);
           }
         }
       }
@@ -332,11 +340,11 @@ struct bike_sharing {
           for (auto const& ae : it->second) {
             if (n.is_initial_foot_node() &&
                 sharing->start_allowed_.test(n.n_)) {
-              handle_additional_edge(
-                  ae, node_type::kBike,
-                  bike::way_cost(kAdditionalWayProperties, direction::kForward,
-                                 ae.distance_) +
-                      kStartSwitchPenalty);
+              handle_additional_edge(ae, node_type::kBike,
+                                     bike<kElevationNoCost>::way_cost(
+                                         kAdditionalWayProperties,
+                                         direction::kForward, ae.distance_) +
+                                         kStartSwitchPenalty);
             } else if (n.is_bike_node() && sharing->end_allowed_.test(n.n_)) {
               handle_additional_edge(
                   ae, node_type::kTrailingFoot,
@@ -368,11 +376,11 @@ struct bike_sharing {
             it != end(sharing->additional_edges_)) {
           for (auto const& ae : it->second) {
             if (n.is_trailing_foot_node() && sharing->end_allowed_.test(n.n_)) {
-              handle_additional_edge(
-                  ae, node_type::kBike,
-                  bike::way_cost(kAdditionalWayProperties, direction::kForward,
-                                 ae.distance_) +
-                      kEndSwitchPenalty);
+              handle_additional_edge(ae, node_type::kBike,
+                                     bike<kElevationNoCost>::way_cost(
+                                         kAdditionalWayProperties,
+                                         direction::kForward, ae.distance_) +
+                                         kEndSwitchPenalty);
             } else if (n.is_bike_node() && sharing->start_allowed_.test(n.n_)) {
               handle_additional_edge(
                   ae, node_type::kInitialFoot,

@@ -16,6 +16,7 @@
 
 #include "utl/timer.h"
 
+#include "osr/elevation_storage.h"
 #include "osr/lookup.h"
 #include "osr/routing/dijkstra.h"
 #include "osr/routing/profile.h"
@@ -124,6 +125,7 @@ int main(int argc, char const* argv[]) {
   }
 
   auto const w = ways{opt.data_dir_, cista::mmap::protection::READ};
+  auto const elevations = elevation_storage::try_open(opt.data_dir_);
 
   auto threads = std::vector<std::thread>(std::max(1U, opt.threads_));
   auto results = std::vector<benchmark_result>{};
@@ -144,8 +146,8 @@ int main(int argc, char const* argv[]) {
               node_idx_t{cista::hash_combine(h, ++n, i.load()) % w.n_nodes()};
           d.reset(opt.max_dist_);
           set_start<T>(d, w, start);
-          d.template run<direction::kForward, false>(w, *w.r_, opt.max_dist_,
-                                                     nullptr, nullptr);
+          d.template run<direction::kForward, false>(
+              w, *w.r_, opt.max_dist_, nullptr, nullptr, elevations.get());
           auto const end_time = std::chrono::steady_clock::now();
           {
             auto const guard = std::lock_guard{m};
@@ -168,5 +170,10 @@ int main(int argc, char const* argv[]) {
   };
 
   run_benchmark.template operator()<car>("car");
-  run_benchmark.template operator()<bike>("bike");
+  run_benchmark.template operator()<bike<kElevationNoCost>>(
+      "bike (no elevation costs)");
+  run_benchmark.template operator()<bike<kElevationLowCost>>(
+      "bike (low elevation costs)");
+  run_benchmark.template operator()<bike<kElevationHighCost>>(
+      "bike (high elevation costs)");
 }
