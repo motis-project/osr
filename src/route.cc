@@ -396,7 +396,7 @@ std::optional<path> route(ways const& w,
   std::vector<way_candidate> from_sort(from_match.begin(), from_match.end());
 
   std::sort(to_sort.begin(), to_sort.end());
-  std::sort(from_sort.begin(), from_sort.begin());
+  std::sort(from_sort.begin(), from_sort.end());
 
   b.reset(max, from, to);
 
@@ -408,8 +408,8 @@ std::optional<path> route(ways const& w,
         break;
       }
     }
-    std::cout << "Valid start: " << valid_start << std::endl;
-        if (!valid_start) {
+     std::cout << "Valid start: " << valid_start << std::endl;
+    if (!valid_start) {
       continue;
     }
     for (auto const& end : to_sort) {

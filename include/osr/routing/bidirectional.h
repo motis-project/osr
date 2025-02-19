@@ -58,7 +58,8 @@ struct bidirectional{
     meet_point = meet_point.invalid();
     cost1_.clear();
     cost2_.clear();
-    expanded_.clear();
+    expanded_start_.clear();
+    expanded_end_.clear();
     start_loc_ = start_loc;
     end_loc_ = end_loc;
 
@@ -94,6 +95,11 @@ struct bidirectional{
     return Profile::heuristic(0.5 * (dist - other_dist)) + PI;
   }
 
+  /*constexpr node make_opposite_node(node const& n) noexcept {
+    return node{ n.n_, n.way_,
+                (n.dir_ == direction::kForward ? direction::kBackward : direction::kForward) };
+  }*/
+
   cost_t get_cost_from_start(node const n) const {
     auto const it = cost1_.find(n.get_key());
     return it == cost1_.end() ? kInfeasible : it->second.cost(n);
@@ -108,11 +114,12 @@ struct bidirectional{
     auto const cost1 = get_cost_from_start(n);
     auto const cost2 = get_cost_from_end(n);
     if (cost1 == kInfeasible || cost2 == kInfeasible) {
+      std::cout << "one of the costs is infeaseble" << std::endl;
+      std::cout << cost1 << " + " << cost2 << std::endl;
       return kInfeasible;
     }
     return cost1 + cost2;
   }
-
 
   // Single-step expansion function
   template <direction SearchDir, bool WithBlocked, typename fn>
@@ -153,6 +160,7 @@ struct bidirectional{
     return curr_node;
   }
 
+
   // Bidirectional run loop
   template <direction SearchDir, bool WithBlocked>
   void run(ways const& w,
@@ -171,38 +179,42 @@ struct bidirectional{
     auto top_r = next_item_r.priority(); //cost + heuristic reverse top
 
     while (!pq1_.empty() && !pq2_.empty()){
-
       if (top_f + top_r >= best_cost + PI * 2){
         break;
       }
       auto curr1 = run<SearchDir, WithBlocked>(w, r, max, blocked, sharing, pq1_, cost1_, [this](auto curr){return get_cost_from_start(curr);}, end_loc_);
       auto curr2 = run<opposite(SearchDir), WithBlocked>(w, r, max, blocked, sharing, pq2_, cost2_, [this](auto curr){return get_cost_from_end(curr);}, start_loc_);
-
       // When a node is found that is already expanded from the other search, we have a meeting point
       if (curr1 != std::nullopt){
-        if  (!expanded_.contains(curr1.value().n_)){
-          std::cout << "pq1 expands " << static_cast<uint32_t>(curr1.value().n_) << std::endl;
-          expanded_.emplace(curr1.value().n_);
-        } else if (get_cost_to_mp(curr1.value()) < best_cost) {
-          meet_point = curr1.value();
-         // std::cout << "-----meet point has been found by pq1 " << static_cast<uint32_t>(meet_point.get_node()) << std::endl;
-          best_cost = get_cost_to_mp(curr1.value());
+        if(expanded_end_.contains(curr1.value().n_)) {
+          std::cout << "potential meet point found " << std::endl;
+          if (get_cost_to_mp(curr1.value()) < best_cost) {
+            meet_point = curr1.value();
+            std::cout << "-------meet point has been found by pq1 "
+                      << static_cast<uint32_t>(meet_point.get_node())
+                      << std::endl;
+            best_cost = get_cost_to_mp(curr1.value());
+          }
         }
+        std::cout << "- Start expands " << static_cast<uint32_t>(curr1.value().n_) << std::endl;
+        expanded_start_.emplace(curr1.value().n_);
       }
       if (curr2 != std::nullopt) {
-        if (!expanded_.contains(curr2.value().n_)) {
-          std::cout << "pq2 expands " << static_cast<uint32_t>(curr2.value().n_) << std::endl;
-          expanded_.emplace(curr2.value().n_);
-        } else if (get_cost_to_mp(curr2.value()) < best_cost) {
-          meet_point = curr2.value();
-          //std::cout << "-----meet point has been found by pq2 " << static_cast<uint32_t>(meet_point.get_node()) << std::endl;
-          best_cost = get_cost_to_mp(curr2.value());
+        if (expanded_start_.contains(curr2.value().n_)){
+          std::cout << "potential meet point found " << std::endl;
+          if (get_cost_to_mp(curr2.value()) < best_cost) {
+            meet_point = curr2.value();
+            std::cout << "-------meet point has been found by pq2 "
+                      << static_cast<uint32_t>(meet_point.get_node())
+                      << std::endl;
+            best_cost = get_cost_to_mp(curr2.value());
+          }
         }
+        std::cout << "*End expands " << static_cast<uint32_t>(curr2.value().n_) << std::endl;
+        expanded_end_.emplace(curr2.value().n_);
       }
       top_f = pq1_.buckets_[pq1_.get_next_bucket()].back().priority();
-      //std::cout << "top_f - " << static_cast<uint32_t>(top_f) << std::endl;
       top_r = pq2_.buckets_[pq2_.get_next_bucket()].back().priority();
-      //std::cout << "top_r - " << static_cast<uint32_t>(top_r) << std::endl;
     }
   }
 
@@ -228,7 +240,8 @@ struct bidirectional{
   dial<node_h, get_bucket> pq2_{get_bucket{}};
   location start_loc_;
   location end_loc_;
-  hash_set<node_idx_t> expanded_;
+  hash_set<node_idx_t> expanded_start_;
+  hash_set<node_idx_t> expanded_end_;
   node meet_point;
   ankerl::unordered_dense::map<key, entry, hash> cost1_;
   ankerl::unordered_dense::map<key, entry, hash> cost2_;
