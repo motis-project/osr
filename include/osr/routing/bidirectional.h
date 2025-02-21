@@ -111,8 +111,16 @@ struct bidirectional{
   }
 
   cost_t get_cost_to_mp(node const n) const {
-    auto const cost1 = get_cost_from_start(n);
-    auto const cost2 = get_cost_from_end(n);
+    auto cost1 = get_cost_from_start(n);
+    if (cost1 == kInfeasible){
+      auto rev_node = Profile::get_reverse(n);
+      cost1 = get_cost_from_start(rev_node);
+    }
+    auto cost2 = get_cost_from_end(n);
+    if (cost2 == kInfeasible){
+      auto rev_node = Profile::get_reverse(n);
+      cost2 = get_cost_from_end(rev_node);
+    }
     if (cost1 == kInfeasible || cost2 == kInfeasible) {
       std::cout << "one of the costs is infeaseble" << std::endl;
       std::cout << cost1 << " + " << cost2 << std::endl;
@@ -120,6 +128,7 @@ struct bidirectional{
     }
     return cost1 + cost2;
   }
+
 
   // Single-step expansion function
   template <direction SearchDir, bool WithBlocked, typename fn>
@@ -146,6 +155,10 @@ struct bidirectional{
       r, curr_node, blocked, sharing,
       [&](node const neighbor, std::uint32_t const cost, distance_t,
           way_idx_t const way, std::uint16_t, std::uint16_t) {
+          if (l.cost() > max - cost) {
+            std::cout << "Overflow happend " << std::endl;
+            return;
+          }
         auto const total = l.cost() + cost;
         if(total < max && cost_map[neighbor.get_key()].update(
           l, neighbor, static_cast<cost_t>(total), curr_node)){

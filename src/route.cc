@@ -458,7 +458,6 @@ std::optional<path> route(ways const& w,
       return reconstruct_bi(w, blocked, sharing, b, start, end, cost, dir);
     }
   }
-
   return std::nullopt;
 }
 

@@ -317,6 +317,10 @@ struct car_parking {
   static constexpr cost_t heuristic(double dist) {
     return car::heuristic(dist);
   }
+
+  static constexpr node get_reverse(node n){
+    return {n.n_, n.type_, n.lvl_, opposite(n.dir_), n.way_};
+  }
 };
 
 }  // namespace osr
