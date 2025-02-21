@@ -88,10 +88,7 @@ struct car {
                           node const pred) noexcept {
       auto const idx = get_index(n);
       if (c < cost_[idx]) {
-        std::cout << "node idx - " << n.n_ << std::endl;
-        std::cout << "pred node idx - " << pred.n_ << std::endl;
         cost_[idx] = c;
-        std::cout << "cost- " << c << std::endl;
         pred_[idx] = pred.n_;
         pred_way_[idx] = pred.way_;
         pred_dir_[idx] = to_bool(pred.dir_);
@@ -108,7 +105,7 @@ struct car {
                   to_dir((index / kMaxWays) == 0U)};
     }
 
-    static constexpr std::size_t get_index(node const n) {
+    static std::size_t get_index(node const n) {
       return (n.dir_ == direction::kForward ? 0 : 1) * kMaxWays + n.way_;
     }
 
@@ -250,7 +247,7 @@ struct car {
   }
 
   static constexpr cost_t heuristic(double dist) {
-    return dist / (150U/3.6);
+    return dist*0 / (150U/3.6);
   }
   static constexpr node get_reverse(node const n){
     return {n.n_, n.way_, opposite(n.dir_)};

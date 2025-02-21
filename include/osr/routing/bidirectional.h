@@ -95,11 +95,6 @@ struct bidirectional{
     return Profile::heuristic(0.5 * (dist - other_dist)) + PI;
   }
 
-  /*constexpr node make_opposite_node(node const& n) noexcept {
-    return node{ n.n_, n.way_,
-                (n.dir_ == direction::kForward ? direction::kBackward : direction::kForward) };
-  }*/
-
   cost_t get_cost_from_start(node const n) const {
     auto const it = cost1_.find(n.get_key());
     return it == cost1_.end() ? kInfeasible : it->second.cost(n);
@@ -110,19 +105,21 @@ struct bidirectional{
     return it == cost2_.end() ? kInfeasible : it->second.cost(n);
   }
 
-  cost_t get_cost_to_mp(node const n) const {
+  cost_t get_cost_to_mp(node const n, bool first) const {
     auto cost1 = get_cost_from_start(n);
-    if (cost1 == kInfeasible){
+    auto cost2 = get_cost_from_end(n);
+    auto const cost1_t = cost1;
+    auto const cost2_t = cost2;
+    if (cost1_t == kInfeasible || !first){
       auto rev_node = Profile::get_reverse(n);
       cost1 = get_cost_from_start(rev_node);
     }
-    auto cost2 = get_cost_from_end(n);
-    if (cost2 == kInfeasible){
+    else if (cost2_t == kInfeasible || first){
       auto rev_node = Profile::get_reverse(n);
       cost2 = get_cost_from_end(rev_node);
     }
     if (cost1 == kInfeasible || cost2 == kInfeasible) {
-      std::cout << "one of the costs is infeaseble" << std::endl;
+      std::cout << "one of the costs is infeasible" << std::endl;
       std::cout << cost1 << " + " << cost2 << std::endl;
       return kInfeasible;
     }
@@ -156,7 +153,7 @@ struct bidirectional{
       [&](node const neighbor, std::uint32_t const cost, distance_t,
           way_idx_t const way, std::uint16_t, std::uint16_t) {
           if (l.cost() > max - cost) {
-            std::cout << "Overflow happend " << std::endl;
+            std::cout << "Overflow happened " << std::endl;
             return;
           }
         auto const total = l.cost() + cost;
@@ -201,12 +198,13 @@ struct bidirectional{
       if (curr1 != std::nullopt){
         if(expanded_end_.contains(curr1.value().n_)) {
           std::cout << "potential meet point found " << std::endl;
-          if (get_cost_to_mp(curr1.value()) < best_cost) {
+          auto meet_cost = get_cost_to_mp(curr1.value(), true);
+          if (meet_cost < best_cost) {
             meet_point = curr1.value();
             std::cout << "-------meet point has been found by pq1 "
                       << static_cast<uint32_t>(meet_point.get_node())
                       << std::endl;
-            best_cost = get_cost_to_mp(curr1.value());
+            best_cost = meet_cost;
           }
         }
         std::cout << "- Start expands " << static_cast<uint32_t>(curr1.value().n_) << std::endl;
@@ -215,12 +213,13 @@ struct bidirectional{
       if (curr2 != std::nullopt) {
         if (expanded_start_.contains(curr2.value().n_)){
           std::cout << "potential meet point found " << std::endl;
-          if (get_cost_to_mp(curr2.value()) < best_cost) {
+          auto meet_cost = get_cost_to_mp(curr2.value(), false);
+          if (meet_cost < best_cost) {
             meet_point = curr2.value();
             std::cout << "-------meet point has been found by pq2 "
                       << static_cast<uint32_t>(meet_point.get_node())
                       << std::endl;
-            best_cost = get_cost_to_mp(curr2.value());
+            best_cost = meet_cost;
           }
         }
         std::cout << "*End expands " << static_cast<uint32_t>(curr2.value().n_) << std::endl;
