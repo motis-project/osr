@@ -279,20 +279,22 @@ best_candidate(ways const& w,
 std::optional<path> try_direct(osr::location const& from,
                                osr::location const& to) {
   auto const dist = geo::distance(from.pos_, to.pos_);
-  return dist < 8.0
-             ? std::optional{path{.cost_ = 60U,
-                                  .dist_ = dist,
-                                  .segments_ = {path::segment{
-                                      .polyline_ = {from.pos_, to.pos_},
-                                      .from_level_ = from.lvl_,
-                                      .to_level_ = to.lvl_,
-                                      .from_ = node_idx_t::invalid(),
-                                      .to_ = node_idx_t::invalid(),
-                                      .way_ = way_idx_t::invalid(),
-                                      .cost_ = 60U,
-                                      .dist_ = static_cast<distance_t>(dist)}},
-                                  .uses_elevator_ = false}}
-             : std::nullopt;
+  if (dist < 8.0) {
+    return std::optional{path{
+        .cost_ = 60U,
+        .dist_ = dist,
+        .segments_ = {path::segment{.polyline_ = {from.pos_, to.pos_},
+                                    .from_level_ = from.lvl_,
+                                    .to_level_ = to.lvl_,
+                                    .from_ = node_idx_t::invalid(),
+                                    .to_ = node_idx_t::invalid(),
+                                    .way_ = way_idx_t::invalid(),
+                                    .cost_ = 60U,
+                                    .dist_ = static_cast<distance_t>(dist)}},
+        .uses_elevator_ = false}};
+  } else {
+    return std::nullopt;
+  }
 }
 
 template <typename Profile>
