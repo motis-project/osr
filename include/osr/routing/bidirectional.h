@@ -105,21 +105,19 @@ struct bidirectional{
     return it == cost2_.end() ? kInfeasible : it->second.cost(n);
   }
 
-  cost_t get_cost_to_mp(node const n, bool first) const {
+  cost_t get_cost_to_mp(node const n) const {
     auto cost1 = get_cost_from_start(n);
-    auto cost2 = get_cost_from_end(n);
-    auto const cost1_t = cost1;
-    auto const cost2_t = cost2;
-    if (cost1_t == kInfeasible || !first){
+    if (cost1 == kInfeasible){
       auto rev_node = Profile::get_reverse(n);
       cost1 = get_cost_from_start(rev_node);
     }
-    else if (cost2_t == kInfeasible || first){
+    auto cost2 = get_cost_from_end(n);
+    if (cost2 == kInfeasible){
       auto rev_node = Profile::get_reverse(n);
       cost2 = get_cost_from_end(rev_node);
     }
     if (cost1 == kInfeasible || cost2 == kInfeasible) {
-      std::cout << "one of the costs is infeasible" << std::endl;
+      std::cout << "one of the costs is infeaseble" << std::endl;
       std::cout << cost1 << " + " << cost2 << std::endl;
       return kInfeasible;
     }
@@ -196,30 +194,36 @@ struct bidirectional{
       auto curr2 = run<opposite(SearchDir), WithBlocked>(w, r, max, blocked, sharing, pq2_, cost2_, [this](auto curr){return get_cost_from_end(curr);}, start_loc_);
       // When a node is found that is already expanded from the other search, we have a meeting point
       if (curr1 != std::nullopt){
-        if(expanded_end_.contains(curr1.value().n_)) {
+        if (expanded_end_.contains(curr1.value().n_)) {
           std::cout << "potential meet point found " << std::endl;
-          auto meet_cost = get_cost_to_mp(curr1.value(), true);
-          if (meet_cost < best_cost) {
-            meet_point = curr1.value();
-            std::cout << "-------meet point has been found by pq1 "
-                      << static_cast<uint32_t>(meet_point.get_node())
-                      << std::endl;
-            best_cost = meet_cost;
+          // Check if this is a valid meeting point by looking at both cost maps
+          if (cost2_.find(curr1.value().get_key()) != cost2_.end()) {
+            // This node has been expanded from both directions and has entries in both cost maps
+            if (get_cost_to_mp(curr1.value()) < best_cost) {
+              meet_point = curr1.value();
+              std::cout << "-------meet point has been found by pq1 "
+                        << static_cast<uint32_t>(meet_point.get_node())
+                        << std::endl;
+              best_cost = get_cost_to_mp(curr1.value());
+            }
           }
         }
         std::cout << "- Start expands " << static_cast<uint32_t>(curr1.value().n_) << std::endl;
         expanded_start_.emplace(curr1.value().n_);
       }
       if (curr2 != std::nullopt) {
-        if (expanded_start_.contains(curr2.value().n_)){
+        if (expanded_start_.contains(curr2.value().n_)) {
           std::cout << "potential meet point found " << std::endl;
-          auto meet_cost = get_cost_to_mp(curr2.value(), false);
-          if (meet_cost < best_cost) {
-            meet_point = curr2.value();
-            std::cout << "-------meet point has been found by pq2 "
-                      << static_cast<uint32_t>(meet_point.get_node())
-                      << std::endl;
-            best_cost = meet_cost;
+          // Check if this is a valid meeting point by looking at both cost maps
+          if (cost1_.find(curr2.value().get_key()) != cost1_.end()) {
+            // This node has been expanded from both directions and has entries in both cost maps
+            if (get_cost_to_mp(curr2.value()) < best_cost) {
+              meet_point = curr2.value();
+              std::cout << "-------meet point has been found by pq2 "
+                        << static_cast<uint32_t>(meet_point.get_node())
+                        << std::endl;
+              best_cost = get_cost_to_mp(curr2.value());
+            }
           }
         }
         std::cout << "*End expands " << static_cast<uint32_t>(curr2.value().n_) << std::endl;
