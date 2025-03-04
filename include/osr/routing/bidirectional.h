@@ -37,6 +37,7 @@ struct bidirectional{
   }
 
   void add_start(ways const& w, label const l){
+    std::cout << "cost- " << l.cost() << std::endl;
     add(w, l, end_loc_, cost1_, pq1_);
     std::cout << l.get_node().n_ << " added as start" << std::endl;
   }
@@ -90,8 +91,7 @@ struct bidirectional{
 
     auto const other_dist =
         std::sqrt(other_dx * other_dx + other_dy * other_dy);
-
-    return Profile::heuristic(0.5 * (dist - other_dist)) + PI;
+    return 0.5 * (Profile::heuristic(dist) - Profile::heuristic(other_dist)); //deleted + pi/2
   }
 
   cost_t get_cost_from_start(node const n) const {
@@ -123,7 +123,6 @@ struct bidirectional{
     return cost1 + cost2;
   }
 
-
   // Single-step expansion function
   template <direction SearchDir, bool WithBlocked, typename fn>
   std::optional<node> run(ways const& w,
@@ -153,15 +152,15 @@ struct bidirectional{
             std::cout << "Overflow happened " << std::endl;
             return;
           }
-        auto const total = l.cost() + cost;
-        if(total < max && cost_map[neighbor.get_key()].update(
-          l, neighbor, static_cast<cost_t>(total), curr_node)){
-            auto next = label{neighbor, static_cast<cost_t>(total)};
-            next.track(l, r, way, neighbor.get_node());
-            node_h next_h = node_h{next, next.cost_, heuristic(w, next, loc)};
-            if(next_h.cost + next_h.heuristic < max){
-              d.push(std::move(next_h));
-            }
+          auto const total = l.cost() + cost;
+          if(total < max && cost_map[neighbor.get_key()].update(
+            l, neighbor, static_cast<cost_t>(total), curr_node)){
+              auto next = label{neighbor, static_cast<cost_t>(total)};
+              next.track(l, r, way, neighbor.get_node());
+              node_h next_h = node_h{next, next.cost_, heuristic(w, next, loc)};
+              if(next_h.cost + next_h.heuristic < max){
+                d.push(std::move(next_h));
+              }
         }
       });
     return curr_node;
@@ -177,18 +176,15 @@ struct bidirectional{
            sharing_data const* sharing){
     auto best_cost = kInfeasible - PI*2;
 
-    // update top priorities on every loop iteration
-
     // next_item is are top heap values (forward and reverse)
-    auto next_item_f = pq1_.buckets_[pq1_.get_next_bucket()].back(); //forward
-    auto next_item_r = pq2_.buckets_[pq2_.get_next_bucket()].back(); //reverse
-    auto top_f = next_item_f.priority(); //cost + heuristic forward top
-    auto top_r = next_item_r.priority(); //cost + heuristic reverse top
+    cost_t top_f; //cost + heuristic forward top
+    cost_t top_r; //cost + heuristic reverse top
 
     while (!pq1_.empty() && !pq2_.empty()){
       top_f = pq1_.buckets_[pq1_.get_next_bucket()].back().priority();
       top_r = pq2_.buckets_[pq2_.get_next_bucket()].back().priority();
       if (top_f + top_r >= best_cost + PI * 2){
+        std::cout << "breaking out of loop: " << top_f << " " << top_r << " " << best_cost << " " << PI << std::endl;
         break;
       }
       auto curr1 = run<SearchDir, WithBlocked>(w, r, max, blocked, sharing, pq1_, cost1_, [this](auto curr){return get_cost_from_start(curr);}, end_loc_);
@@ -209,7 +205,7 @@ struct bidirectional{
             }
           }
         }
-        std::cout << "- Start expands " << static_cast<uint32_t>(curr1.value().n_) << std::endl;
+        std::cout << "- Start expands " << static_cast<uint32_t>(curr1.value().n_) << " with cost " << get_cost_from_start(curr1.value()) << std::endl;
         expanded_start_.emplace(curr1.value().n_);
       }
       if (curr2 != std::nullopt) {
@@ -227,15 +223,9 @@ struct bidirectional{
             }
           }
         }
-        std::cout << "*End expands " << static_cast<uint32_t>(curr2.value().n_) << std::endl;
+        std::cout << "*End expands " << static_cast<uint32_t>(curr2.value().n_) << " with cost " << get_cost_from_end(curr2.value()) << std::endl;
         expanded_end_.emplace(curr2.value().n_);
       }
-      std::cout << "before top_f" << std::endl;
-      //std::cout << "dial 1 size - " << pq1_.size() << std::endl;
-      //top_f = pq1_.buckets_[pq1_.get_next_bucket()].back().priority();
-      std::cout << "before top_r" << std::endl;
-      //std::cout << "dial 2 size - " << pq2_.size() << std::endl;
-      //top_r = pq2_.buckets_[pq2_.get_next_bucket()].back().priority();
     }
   }
 
