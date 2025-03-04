@@ -32,7 +32,6 @@ struct bidirectional{
            cost_map& cost_map,
            dial<node_h, get_bucket>& d){
     if (cost_map[l.get_node().get_key()].update(l, l.get_node(), l.cost(), node::invalid())){
-        std::cout << "in the add" << std::endl;
         d.push(node_h{l, l.cost(), heuristic(w, l, loc)});
     }
   }
@@ -117,7 +116,7 @@ struct bidirectional{
       cost2 = get_cost_from_end(rev_node);
     }
     if (cost1 == kInfeasible || cost2 == kInfeasible) {
-      std::cout << "one of the costs is infeaseble" << std::endl;
+      std::cout << "one of the costs is infeasible" << std::endl;
       std::cout << cost1 << " + " << cost2 << std::endl;
       return kInfeasible;
     }
@@ -187,6 +186,8 @@ struct bidirectional{
     auto top_r = next_item_r.priority(); //cost + heuristic reverse top
 
     while (!pq1_.empty() && !pq2_.empty()){
+      top_f = pq1_.buckets_[pq1_.get_next_bucket()].back().priority();
+      top_r = pq2_.buckets_[pq2_.get_next_bucket()].back().priority();
       if (top_f + top_r >= best_cost + PI * 2){
         break;
       }
@@ -229,8 +230,12 @@ struct bidirectional{
         std::cout << "*End expands " << static_cast<uint32_t>(curr2.value().n_) << std::endl;
         expanded_end_.emplace(curr2.value().n_);
       }
-      top_f = pq1_.buckets_[pq1_.get_next_bucket()].back().priority();
-      top_r = pq2_.buckets_[pq2_.get_next_bucket()].back().priority();
+      std::cout << "before top_f" << std::endl;
+      //std::cout << "dial 1 size - " << pq1_.size() << std::endl;
+      //top_f = pq1_.buckets_[pq1_.get_next_bucket()].back().priority();
+      std::cout << "before top_r" << std::endl;
+      //std::cout << "dial 2 size - " << pq2_.size() << std::endl;
+      //top_r = pq2_.buckets_[pq2_.get_next_bucket()].back().priority();
     }
   }
 
