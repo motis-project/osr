@@ -1,7 +1,5 @@
 <p align="center"><img src="docs/screenshot.png"></p>
 
-Demo (currently limited to 1h radius): https://osr.motis-project.de
-
 # Open Street Router
 
 This router is the most memory-efficient multi-profile routing for planet wide street routing (pedestrian, bike, car, etc.) on OpenStreetMap. The
