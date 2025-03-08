@@ -45,7 +45,7 @@
 [rapidjson]
   url=git@github.com:motis-project/rapidjson.git
   branch=master
-  commit=e7a1ac95c7840c6f4351abead02b1f7a02874197
+  commit=8b92de0bfdcf2127e67903959c9c48d580829da7
 [rtree.c]
   url=git@github.com:triptix-tech/rtree.c.git
   branch=master
