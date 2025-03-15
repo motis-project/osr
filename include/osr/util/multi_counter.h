@@ -10,6 +10,14 @@ struct multi_counter {
   using size_type = bitvec64::size_type;
 
   bool is_multi(size_type const i) const { return multi_[i]; }
+  
+  // Force a node to be included in the graph as if it were at multiple ways intersection
+  void make_multi(size_type const i) {
+    once_.resize(std::max(once_.size(), i + 1U));
+    multi_.resize(std::max(multi_.size(), i + 1U));
+    once_.set(i, true);  // Mark as encountered once
+    multi_.set(i, true); // Mark as encountered multiple times
+  }
 
   void increment(size_type const i) {
     once_.resize(std::max(once_.size(), i + 1U));
