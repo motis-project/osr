@@ -73,13 +73,13 @@ speed_limit get_speed_limit(tags const& t) {
         return t.name_.empty() ? get_speed_limit(80) : get_speed_limit(40);
       case cista::hash("primary_link"): return get_speed_limit(30);
       case cista::hash("secondary"):
-        return t.name_.empty() ? get_speed_limit(75) : get_speed_limit(55);
+        return t.name_.empty() ? get_speed_limit(80) : get_speed_limit(60);
       case cista::hash("secondary_link"): return get_speed_limit(25);
       case cista::hash("tertiary"):
         return t.name_.empty() ? get_speed_limit(70) : get_speed_limit(40);
       case cista::hash("tertiary_link"): return get_speed_limit(20);
       case cista::hash("unclassified"): return get_speed_limit(40);
-      case cista::hash("residential"): return get_speed_limit(25);
+      case cista::hash("residential"): return get_speed_limit(30);
       case cista::hash("living_street"): return get_speed_limit(10);
       case cista::hash("service"): return get_speed_limit(15);
       case cista::hash("track"): return get_speed_limit(12);
