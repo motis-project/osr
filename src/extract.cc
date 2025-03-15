@@ -580,52 +580,34 @@ void extract(bool const with_platforms,
                                  osmium::io::read_meta::no};
       auto h = node_handler{w, pl.get(), r, elevator_nodes};
       
-      // Process all nodes sequentially for deterministic results
-      size_t node_counter = 0;
-      size_t buffer_counter = 0;
-      
       // Process nodes sequentially
       while (auto buffer = reader.read()) {
-        buffer_counter++;
         pt->update(reader.offset());
         
         // Apply only to nodes in sequential order
         for (auto const& node : buffer.select<osmium::Node>()) {
-          node_counter++;
           h.node(node);
         }
       }
-      std::cout << "DEBUG: Processed " << node_counter << " nodes in " << buffer_counter << " buffers" << std::endl;
       reader.close();
     }
     
     // Second pass: Process only restrictions from relations
     // This happens after all nodes have been processed
-    std::cout << "DEBUG: Second pass - Processing relations sequentially for deterministic extraction..." << std::endl;
     {
       auto reader = osm_io::Reader{input_file, osm_eb::relation,
                                   osmium::io::read_meta::no};
       auto h = node_handler{w, pl.get(), r, elevator_nodes};
-      
-      size_t relation_counter = 0;
-      size_t buffer_counter = 0;
       
       // Store pending restrictions (those with via nodes not yet in graph)
       std::vector<std::tuple<resolved_restriction::type, way_idx_t, way_idx_t, osm_node_idx_t>> pending;
       
       // Process all relations sequentially for determinism
       while (auto buffer = reader.read()) {
-        buffer_counter++;
         pt->update(reader.offset());
-        std::cout << "DEBUG: Processing buffer " << buffer_counter << " at offset " << reader.offset() << std::endl;
         
         // Apply only to relations in sequential order
         for (auto const& relation : buffer.select<osmium::Relation>()) {
-          relation_counter++;
-          if (relation_counter % 1000 == 0) {
-            std::cout << "DEBUG: Processed " << relation_counter << " relations so far" << std::endl;
-          }
-          
           // Process the relation
           h.relation(relation);
           
@@ -679,23 +661,16 @@ void extract(bool const with_platforms,
           }
         }
       }
-      std::cout << "DEBUG: Completed processing " << relation_counter << " relations in " << buffer_counter << " buffers" << std::endl;
       reader.close();
       
       // Post-processing: Try to resolve pending restrictions after graph is built
-      std::cout << "DEBUG: Found " << pending.size() << " pending restrictions to resolve" << std::endl;
-      size_t resolved_count = 0;
-      
       for (const auto& [type, from, to, via_osm] : pending) {
         // Try to find the via node now that the graph is built
         auto via_node = w.find_node_idx(via_osm);
         if (via_node) {
           r.emplace_back(resolved_restriction{type, from, to, *via_node});
-          resolved_count++;
         }
       }
-      
-      std::cout << "DEBUG: Resolved " << resolved_count << " additional restrictions from pending list" << std::endl;
     }
     
     pt->update(pt->in_high_);
@@ -708,11 +683,8 @@ void extract(bool const with_platforms,
               [](auto&& a, auto&& b) { return a.first < b.first; });
   }
 
-  std::cout << "DEBUG: About to add " << r.size() << " restrictions" << std::endl;
+  std::cout << "Number of restrictions extracted: " << r.size() << std::endl;
   w.add_restriction(r);
-  std::cout << "DEBUG: Restrictions added successfully" << std::endl;
-
-  std::cout << "DEBUG: Writing routing data to disk" << std::endl;
   w.r_->write(out);
 
   lookup{w, out, cista::mmap::protection::WRITE}.build_rtree();

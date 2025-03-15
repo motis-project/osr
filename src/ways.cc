@@ -66,6 +66,8 @@ void ways::add_restriction(std::vector<resolved_restriction>& rs) {
                 }
               }
             }
+          } catch (...) {
+            // Skip invalid restrictions
           }
         }
       });
