@@ -18,7 +18,7 @@ struct bidirectional{
   using node_h = typename a_star<Profile>::node_h;
   using cost_map = typename ankerl::unordered_dense::map<key, entry, hash>;
 
-  constexpr static auto const kDebug = false;
+  constexpr static auto const kDebug = true;
 
   // "get_bucket" function for the dial priority queue
   struct get_bucket {
@@ -144,6 +144,12 @@ struct bidirectional{
       return std::nullopt;
     }
 
+    if constexpr (kDebug) {
+      std::cout << "EXTRACT ";
+      l.get_node().print(std::cout, w);
+      std::cout << "\n";
+    }
+
     Profile::template adjacent<SearchDir, WithBlocked>(
       r, curr_node, blocked, sharing,
       [&](node const neighbor, std::uint32_t const cost, distance_t,
@@ -152,16 +158,27 @@ struct bidirectional{
             std::cout << "Overflow happened " << std::endl;
             return;
           }
+          if constexpr (kDebug) {
+            std::cout << "  NEIGHBOR ";
+            neighbor.print(std::cout, w);
+          }
           auto const total = l.cost() + cost;
           if(total < max && cost_map[neighbor.get_key()].update(
-            l, neighbor, static_cast<cost_t>(total), curr_node)){
-              auto next = label{neighbor, static_cast<cost_t>(total)};
-              next.track(l, r, way, neighbor.get_node());
-              node_h next_h = node_h{next, next.cost_, heuristic(w, next, loc)};
-              if(next_h.cost + next_h.heuristic < max){
-                d.push(std::move(next_h));
+            l, neighbor, static_cast<cost_t>(total), curr_node)) {
+            auto next = label{neighbor, static_cast<cost_t>(total)};
+            next.track(l, r, way, neighbor.get_node());
+            node_h next_h = node_h{next, next.cost_, heuristic(w, next, loc)};
+            if (next_h.cost + next_h.heuristic < max) {
+              d.push(std::move(next_h));
+              if constexpr (kDebug) {
+                std::cout << " -> PUSH\n";
               }
-        }
+            }
+          } else {
+            if constexpr (kDebug) {
+                std::cout << " -> DOMINATED\n";
+            }
+          }
       });
     return curr_node;
   }
