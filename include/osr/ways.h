@@ -144,6 +144,7 @@ struct ways {
 
   void add_restriction(std::vector<resolved_restriction>&);
   void connect_ways();
+  void build_components();
 
   std::optional<way_idx_t> find_way(osm_way_idx_t const i) {
     auto const it = std::lower_bound(begin(way_osm_idx_), end(way_osm_idx_), i);
@@ -251,6 +252,8 @@ struct ways {
     vecvec<node_idx_t, restriction> node_restrictions_;
 
     vec<pair<node_idx_t, level_bits_t>> multi_level_elevators_;
+
+    vec_map<way_idx_t, component_idx_t> way_component_;
   };
 
   cista::wrapped<routing> r_;

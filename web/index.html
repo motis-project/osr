@@ -118,12 +118,12 @@
 <a id="graph-toggle" href="#" onclick="toggleGraph()">G</a>
 <div id="levels"></div>
 <select id="profile" onchange="selectProfile(event)">
-    <option value="foot" selected>foot</option>
+    <option value="foot">foot</option>
     <option value="wheelchair">wheelchair</option>
     <option value="bike">bike</option>
     <option value="bike_elevation_low">bike (low elevation)</option>
     <option value="bike_elevation_high">bike (high elevation)</option>
-    <option value="car">car</option>
+    <option value="car" selected>car</option>
 </select>
 <select id="direction" onchange="selectDirection(event)">
     <option value="forward" selected>forward</option>
@@ -136,12 +136,11 @@
 <script type="module">
     import {style} from "./style.js";
 
-    const start = [9.182124, 48.782888]
-    const destination = [9.183369, 48.784705];
+    const start = [10.1808016, 47.9863099]
+    const destination = [9.1800132, 48.7784485];
     const query = {
         start, destination,
-        start_level: 0.0,
-        destination_level: 1.0,
+        max: 14400,
         profile: document.getElementById('profile').value,
         direction: document.getElementById('direction').value
     };
@@ -226,16 +225,15 @@
             body: JSON.stringify({
                 start: {
                     lat: query.start[1],
-                    lng: query.start[0],
-                    level: query.start_level
+                    lng: query.start[0]
                 },
                 destination: {
                     lat: query.destination[1],
-                    lng: query.destination[0],
-                    level: query.destination_level
+                    lng: query.destination[0]
                 },
                 profile: query.profile,
-                direction: query.direction
+                direction: query.direction,
+                max: 14400
             })
         });
         const r = await response.json();
