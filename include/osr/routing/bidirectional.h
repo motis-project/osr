@@ -88,8 +88,9 @@ struct bidirectional {
 
     auto const other_dist =
         std::sqrt(other_dx * other_dx + other_dy * other_dy);
-    return 0.5 * (Profile::heuristic(dist) -
-                  Profile::heuristic(other_dist));  // deleted + PI*2
+    return static_cast<cost_t>(
+        0.5 * (Profile::heuristic(dist) -
+               Profile::heuristic(other_dist)));  // deleted + PI*2
   }
 
   cost_t get_cost_from_start(node const n) const {
