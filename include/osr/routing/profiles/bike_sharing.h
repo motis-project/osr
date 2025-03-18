@@ -420,7 +420,8 @@ struct bike_sharing {
   }
 
   static constexpr cost_t heuristic(double dist) {
-    return dist / to_meters_per_second(speed_limit::kmh_30);
+    return static_cast<cost_t>(dist /
+                               to_meters_per_second(speed_limit::kmh_30));
   }
   static constexpr node get_reverse(node const n) { return n; }
 };
