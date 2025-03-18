@@ -81,7 +81,6 @@ struct a_star{
     if (it != end(cost_))
       return it->second.cost(n);
     else{
-      std::cout << "Not found in a" << std::endl;
       return kInfeasible;
     }
   }

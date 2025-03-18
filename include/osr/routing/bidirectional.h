@@ -196,7 +196,7 @@ struct bidirectional{
       }
       auto curr1 = run<SearchDir, WithBlocked>(w, r, max, blocked, sharing, pq1_, cost1_, [this](auto curr){return get_cost_from_start(curr);}, end_loc_);
       auto curr2 = run<opposite(SearchDir), WithBlocked>(w, r, max, blocked, sharing, pq2_, cost2_, [this](auto curr){return get_cost_from_end(curr);}, start_loc_);
-      // When a node is found that is already expanded from the other search, we have a meeting point
+      //A meeting point is identified, when a node is already expanded by the other search
       if (curr1 != std::nullopt){
         if (expanded_end_.contains(curr1.value().n_)) {
           if constexpr (kDebug) {
@@ -228,7 +228,6 @@ struct bidirectional{
             curr2.value().print(std::cout, w);
           }
           if (cost1_.find(curr2.value().get_key()) != cost1_.end()) {
-            // This node has been expanded from both directions and has entries in both cost maps
             if (get_cost_to_mp(curr2.value()) < best_cost) {
               meet_point = curr2.value();
               best_cost = get_cost_to_mp(curr2.value());

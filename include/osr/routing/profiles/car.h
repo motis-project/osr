@@ -88,10 +88,6 @@ struct car {
                           node const pred) noexcept {
       auto const idx = get_index(n);
       if (c < cost_[idx]) {
-        //std::cout << "updating: " << std::endln;
-        //std::cout << "node idx - " << n.n_ << std::endl;
-        //std::cout << "pred node idx - " << pred.n_ << std::endl;
-        //std::cout << "cost - " << c << std::endl;
         cost_[idx] = c;
         pred_[idx] = pred.n_;
         pred_way_[idx] = pred.way_;

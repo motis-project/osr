@@ -176,7 +176,7 @@
         zoom: 18,
         transformRequest: (url, resourceType) => {
             if (url.startsWith('/')) {
-                return {url: `http://localhost:8080/tiles${url}`}
+                return {url: ` https://europe.motis-project.de/tiles${url}`}
             }
         }
     });

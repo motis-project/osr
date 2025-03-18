@@ -377,7 +377,7 @@ std::optional<path> try_direct(osr::location const& from,
                                   .uses_elevator_ = false}}
              : std::nullopt;
 }
-//********** BIDIRECTIONAL ROUTE
+
 template <typename Profile>
 std::optional<path> route(ways const& w,
                           bidirectional<Profile>& b,
@@ -568,7 +568,6 @@ std::vector<std::optional<path>> route(
   return result;
 }
 
-//bidirectional routes here ***********************
 
 std::optional<path> route_bidirectional(ways const& w,
                                    lookup const& l,
@@ -606,14 +605,12 @@ std::optional<path> route_bidirectional(ways const& w,
       return r(get_bidirectional<car_parking<false>>());
     case search_profile::kCarParkingWheelchair:
       return r(get_bidirectional<car_parking<true>>());
-    case search_profile::kBikeSharing: return r(get_bidirectional<bike_sharing>());
+    case search_profile::kBikeSharing:
+      return r(get_bidirectional<bike_sharing>());
   }
 
   throw utl::fail("not implemented");
 }
-
-
-//dijkstra routes here ***********************
 
 one_to_many_result route(
     ways const& w,
