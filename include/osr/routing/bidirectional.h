@@ -1,15 +1,15 @@
 #pragma once
 
 #include "osr/elevation_storage.h"
-#include "osr/types.h"
 #include "osr/routing/a_star.h"
+#include "osr/types.h"
 
 namespace osr {
 
 struct sharing_data;
 
 template <typename Profile>
-struct bidirectional{
+struct bidirectional {
   using profile_t = Profile;
   using key = typename Profile::key;
   using label = typename Profile::label;
@@ -29,23 +29,24 @@ struct bidirectional{
            label const l,
            location const& loc,
            cost_map& cost_map,
-           dial<node_h, get_bucket>& d){
-    if (cost_map[l.get_node().get_key()].update(l, l.get_node(), l.cost(), node::invalid())){
-        d.push(node_h{l, l.cost(), heuristic(w, l, loc)});
+           dial<node_h, get_bucket>& d) {
+    if (cost_map[l.get_node().get_key()].update(l, l.get_node(), l.cost(),
+                                                node::invalid())) {
+      d.push(node_h{l, l.cost(), heuristic(w, l, loc)});
     }
   }
 
-  void add_start(ways const& w, label const l){
+  void add_start(ways const& w, label const l) {
     add(w, l, end_loc_, cost1_, pq1_);
   }
 
-  void add_end(ways const& w, label const l){
+  void add_end(ways const& w, label const l) {
     add(w, l, start_loc_, cost2_, pq2_);
   }
 
-  void clear_mp() {meet_point = meet_point.invalid();}
+  void clear_mp() { meet_point = meet_point.invalid(); }
 
-  void reset(cost_t max, location const& start_loc, location const& end_loc){
+  void reset(cost_t max, location const& start_loc, location const& end_loc) {
     pq1_.clear();
     pq2_.clear();
     pq1_.n_buckets(max + 1U);
@@ -69,7 +70,7 @@ struct bidirectional{
     PI = Profile::heuristic(dist) / 2;
   }
 
-  cost_t heuristic(ways const& w, label const l, location const& loc){
+  cost_t heuristic(ways const& w, label const l, location const& loc) {
     auto const node_coord =
         geo::latlng_to_merc(w.get_node_pos(l.n_).as_latlng());
     auto const loc_coord = geo::latlng_to_merc(loc.pos_);
@@ -87,7 +88,8 @@ struct bidirectional{
 
     auto const other_dist =
         std::sqrt(other_dx * other_dx + other_dy * other_dy);
-    return 0.5 * (Profile::heuristic(dist) - Profile::heuristic(other_dist)); //deleted + PI*2
+    return 0.5 * (Profile::heuristic(dist) -
+                  Profile::heuristic(other_dist));  // deleted + PI*2
   }
 
   cost_t get_cost_from_start(node const n) const {
@@ -102,12 +104,12 @@ struct bidirectional{
 
   cost_t get_cost_to_mp(node const n) const {
     auto cost1 = get_cost_from_start(n);
-    if (cost1 == kInfeasible){
+    if (cost1 == kInfeasible) {
       auto rev_node = Profile::get_reverse(n);
       cost1 = get_cost_from_start(rev_node);
     }
     auto cost2 = get_cost_from_end(n);
-    if (cost2 == kInfeasible){
+    if (cost2 == kInfeasible) {
       auto rev_node = Profile::get_reverse(n);
       cost2 = get_cost_from_end(rev_node);
     }
@@ -122,22 +124,22 @@ struct bidirectional{
 
   template <direction SearchDir, bool WithBlocked, typename fn>
   std::optional<node> run(ways const& w,
-           ways::routing const& r,
-           cost_t const max,
-           bitvec<node_idx_t> const* blocked,
-           sharing_data const* sharing,
-           elevation_storage const* elevations,
-           dial<node_h, get_bucket>& d,
-           cost_map& cost_map,
-           fn get_cost,
-           location& loc){
+                          ways::routing const& r,
+                          cost_t const max,
+                          bitvec<node_idx_t> const* blocked,
+                          sharing_data const* sharing,
+                          elevation_storage const* elevations,
+                          dial<node_h, get_bucket>& d,
+                          cost_map& cost_map,
+                          fn get_cost,
+                          location& loc) {
 
     auto curr_node_h = d.pop();
 
     auto l = curr_node_h.l;
     auto curr_node = l.get_node();
 
-    if(get_cost(curr_node) < l.cost()) {
+    if (get_cost(curr_node) < l.cost()) {
       return std::nullopt;
     }
 
@@ -148,9 +150,10 @@ struct bidirectional{
     }
 
     Profile::template adjacent<SearchDir, WithBlocked>(
-      r, curr_node, blocked, sharing, elevations,
-      [&](node const neighbor, std::uint32_t const cost, distance_t,
-          way_idx_t const way, std::uint16_t, std::uint16_t, elevation_storage::elevation const) {
+        r, curr_node, blocked, sharing, elevations,
+        [&](node const neighbor, std::uint32_t const cost, distance_t,
+            way_idx_t const way, std::uint16_t, std::uint16_t,
+            elevation_storage::elevation const) {
           if (l.cost() > max - cost) {
             std::cout << "Overflow " << std::endl;
             return;
@@ -160,8 +163,9 @@ struct bidirectional{
             neighbor.print(std::cout, w);
           }
           auto const total = l.cost() + cost;
-          if(total < max && cost_map[neighbor.get_key()].update(
-            l, neighbor, static_cast<cost_t>(total), curr_node)) {
+          if (total < max &&
+              cost_map[neighbor.get_key()].update(
+                  l, neighbor, static_cast<cost_t>(total), curr_node)) {
             auto next = label{neighbor, static_cast<cost_t>(total)};
             next.track(l, r, way, neighbor.get_node());
             node_h next_h = node_h{next, next.cost_, heuristic(w, next, loc)};
@@ -173,10 +177,10 @@ struct bidirectional{
             }
           } else {
             if constexpr (kDebug) {
-                std::cout << " -> DOMINATED\n";
+              std::cout << " -> DOMINATED\n";
             }
           }
-      });
+        });
     return curr_node;
   }
 
@@ -186,30 +190,36 @@ struct bidirectional{
            cost_t const max,
            bitvec<node_idx_t> const* blocked,
            sharing_data const* sharing,
-           elevation_storage const* elevations){
-    auto best_cost = kInfeasible - PI*2;
+           elevation_storage const* elevations) {
+    auto best_cost = kInfeasible - PI * 2;
 
     // next_item is are top heap values (forward and reverse)
-    cost_t top_f; //cost + heuristic forward top
-    cost_t top_r; //cost + heuristic reverse top
+    cost_t top_f;  // cost + heuristic forward top
+    cost_t top_r;  // cost + heuristic reverse top
 
-    while (!pq1_.empty() && !pq2_.empty()){
+    while (!pq1_.empty() && !pq2_.empty()) {
       top_f = pq1_.buckets_[pq1_.get_next_bucket()].back().priority();
       top_r = pq2_.buckets_[pq2_.get_next_bucket()].back().priority();
-      if (top_f + top_r >= best_cost + PI * 2){
+      if (top_f + top_r >= best_cost + PI * 2) {
         break;
       }
-      auto curr1 = run<SearchDir, WithBlocked>(w, r, max, blocked, sharing, elevations, pq1_, cost1_, [this](auto curr){return get_cost_from_start(curr);}, end_loc_);
-      auto curr2 = run<opposite(SearchDir), WithBlocked>(w, r, max, blocked, sharing, elevations, pq2_, cost2_, [this](auto curr){return get_cost_from_end(curr);}, start_loc_);
-      //A meeting point is identified, when a node is already expanded by the other search
-      if (curr1 != std::nullopt){
+      auto curr1 = run<SearchDir, WithBlocked>(
+          w, r, max, blocked, sharing, elevations, pq1_, cost1_,
+          [this](auto curr) { return get_cost_from_start(curr); }, end_loc_);
+      auto curr2 = run<opposite(SearchDir), WithBlocked>(
+          w, r, max, blocked, sharing, elevations, pq2_, cost2_,
+          [this](auto curr) { return get_cost_from_end(curr); }, start_loc_);
+      // A meeting point is identified, when a node is already expanded by the
+      // other search
+      if (curr1 != std::nullopt) {
         if (expanded_end_.contains(curr1.value().n_)) {
           if constexpr (kDebug) {
             std::cout << "  potential MEETPOINT found by start ";
             curr1.value().print(std::cout, w);
           }
           if (cost2_.find(curr1.value().get_key()) != cost2_.end()) {
-            // This node has been expanded from both directions and has entries in both cost maps
+            // This node has been expanded from both directions and has entries
+            // in both cost maps
             if (get_cost_to_mp(curr1.value()) < best_cost) {
               meet_point = curr1.value();
               best_cost = get_cost_to_mp(curr1.value());
@@ -219,10 +229,9 @@ struct bidirectional{
             } else if constexpr (kDebug) {
               std::cout << " -> DOMINATED\n";
             }
-          } else if constexpr (kDebug){
-              std::cout << " -> DOMINATED\n";
+          } else if constexpr (kDebug) {
+            std::cout << " -> DOMINATED\n";
           }
-
         }
         expanded_start_.emplace(curr1.value().n_);
       }
@@ -259,13 +268,15 @@ struct bidirectional{
            elevation_storage const* elevations,
            direction const dir) {
     if (blocked == nullptr) {
-      dir == direction::kForward
-          ? run<direction::kForward, false>(w, r, max, blocked, sharing, elevations)
-          : run<direction::kBackward, false>(w, r, max, blocked, sharing, elevations);
+      dir == direction::kForward ? run<direction::kForward, false>(
+                                       w, r, max, blocked, sharing, elevations)
+                                 : run<direction::kBackward, false>(
+                                       w, r, max, blocked, sharing, elevations);
     } else {
-      dir == direction::kForward
-          ? run<direction::kForward, true>(w, r, max, blocked, sharing, elevations)
-          : run<direction::kBackward, true>(w, r, max, blocked, sharing, elevations);
+      dir == direction::kForward ? run<direction::kForward, true>(
+                                       w, r, max, blocked, sharing, elevations)
+                                 : run<direction::kBackward, true>(
+                                       w, r, max, blocked, sharing, elevations);
     }
   }
 

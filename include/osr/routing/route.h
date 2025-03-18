@@ -9,9 +9,9 @@
 #include "osr/elevation_storage.h"
 #include "osr/location.h"
 #include "osr/lookup.h"
+#include "osr/routing/algorithms.h"
 #include "osr/routing/mode.h"
 #include "osr/routing/profile.h"
-#include "osr/routing/algorithms.h"
 #include "osr/types.h"
 
 namespace osr {
@@ -67,18 +67,6 @@ std::vector<std::optional<path>> route(
     });
 
 std::optional<path> route_dijkstra(ways const&,
-                          lookup const&,
-                          search_profile,
-                          location const& from,
-                          location const& to,
-                          cost_t max,
-                          direction,
-                          double max_match_distance,
-                          bitvec<node_idx_t> const* blocked = nullptr,
-                          sharing_data const* sharing = nullptr,
-                          elevation_storage const* = nullptr);
-
-std::optional<path> route_bidirectional(ways const&,
                                    lookup const&,
                                    search_profile,
                                    location const& from,
@@ -87,19 +75,32 @@ std::optional<path> route_bidirectional(ways const&,
                                    direction,
                                    double max_match_distance,
                                    bitvec<node_idx_t> const* blocked = nullptr,
-                                   sharing_data const* sharing = nullptr);
+                                   sharing_data const* sharing = nullptr,
+                                   elevation_storage const* = nullptr);
+
+std::optional<path> route_bidirectional(
+    ways const&,
+    lookup const&,
+    search_profile,
+    location const& from,
+    location const& to,
+    cost_t max,
+    direction,
+    double max_match_distance,
+    bitvec<node_idx_t> const* blocked = nullptr,
+    sharing_data const* sharing = nullptr);
 
 std::optional<path> route_dijkstra(ways const&,
-                          search_profile,
-                          location const& from,
-                          location const& to,
-                          match_view_t from_match,
-                          match_view_t to_match,
-                          cost_t const max,
-                          direction,
-                          bitvec<node_idx_t> const* blocked = nullptr,
-                          sharing_data const* sharing = nullptr,
-                          elevation_storage const* = nullptr);
+                                   search_profile,
+                                   location const& from,
+                                   location const& to,
+                                   match_view_t from_match,
+                                   match_view_t to_match,
+                                   cost_t const max,
+                                   direction,
+                                   bitvec<node_idx_t> const* blocked = nullptr,
+                                   sharing_data const* sharing = nullptr,
+                                   elevation_storage const* = nullptr);
 
 std::vector<std::optional<path>> route(
     ways const&,

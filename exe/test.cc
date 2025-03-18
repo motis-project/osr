@@ -13,8 +13,8 @@
 #include "utl/timer.h"
 
 #include "osr/lookup.h"
-#include "osr/routing/dijkstra.h"
 #include "osr/routing/a_star.h"
+#include "osr/routing/dijkstra.h"
 #include "osr/routing/profiles/car.h"
 #include "osr/routing/route.h"
 #include "osr/ways.h"
@@ -42,7 +42,8 @@ std::vector<int> generate_random_vector(int upperBound, int n) {
   int lowerBound = 0;
   std::vector<int> random_numbers(n);
   for (int i = 0; i < n; ++i) {
-    random_numbers[i] = lowerBound + std::rand() % (upperBound - lowerBound + 1);
+    random_numbers[i] =
+        lowerBound + std::rand() % (upperBound - lowerBound + 1);
   }
   return random_numbers;
 }
@@ -83,7 +84,8 @@ int main(int argc, char const* argv[]) {
   d.reset(opt.max_dist_);
   d.add_start(w, start_lf);
   d.add_start(w, start_lb);
-  d.run<direction::kForward, false>(w, *w.r_, opt.max_dist_, nullptr, nullptr, elevations.get());
+  d.run<direction::kForward, false>(w, *w.r_, opt.max_dist_, nullptr, nullptr,
+                                    elevations.get());
 
   std::vector<int> random_numbers =
       generate_random_vector(d.cost_.size(), opt.n_queries_);
@@ -100,10 +102,12 @@ int main(int argc, char const* argv[]) {
         auto it = d.cost_.begin();
         std::advance(it, random_numbers[i]);
         auto const end_idx = it->first;
-        auto end_lf = car::label{car::node{end_idx, 0, direction::kForward}, 0U};
-        //auto end_lb = car::label{car::node{end_idx, 0, direction::kBackward}, 0U};
+        auto end_lf =
+            car::label{car::node{end_idx, 0, direction::kForward}, 0U};
+        // auto end_lb = car::label{car::node{end_idx, 0, direction::kBackward},
+        // 0U};
 
-        if (it->second.cost(end_lf.get_node()) == kInfeasible){
+        if (it->second.cost(end_lf.get_node()) == kInfeasible) {
           continue;
         }
         auto a = a_star<car>{};
@@ -114,7 +118,8 @@ int main(int argc, char const* argv[]) {
         a.add_end(w, end_lf.get_node());
         a.add_start(w, start_lf);
         a.add_start(w, start_lb);
-        a.run<direction::kForward, false>(w, *w.r_, opt.max_dist_, nullptr, nullptr, elevations.get());
+        a.run<direction::kForward, false>(w, *w.r_, opt.max_dist_, nullptr,
+                                          nullptr, elevations.get());
 
         auto end_node = a.found_node_.value();
         auto it_a = a.cost_.find(end_idx);
@@ -126,8 +131,9 @@ int main(int argc, char const* argv[]) {
           std::cout << "Dijkstra end cost: " << d.get_cost(end_lf.get_node())
                     << " A* end cost: " << a.get_cost(end_lf.get_node())
                     << " end_idx: " << static_cast<std::uint32_t>(end_idx)
-                    << " end_lf index: " << static_cast<std::uint32_t>(end_lf.n_) << std::endl;
-                throw std::runtime_error("Costs are not equal");
+                    << " end_lf index: "
+                    << static_cast<std::uint32_t>(end_lf.n_) << std::endl;
+          throw std::runtime_error("Costs are not equal");
         }
       }
     });
@@ -137,4 +143,3 @@ int main(int argc, char const* argv[]) {
   }
   std::cout << "Success: Costs are equal \n";
 }
-

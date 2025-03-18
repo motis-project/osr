@@ -105,8 +105,8 @@ struct http_server::impl {
 
   static routing_algorithm get_routing_algorithm_from_request(
       boost::json::object const& q) {
-        auto const routing_it = q.find("routing");
-        return routing_it == q.end() || !routing_it->value().is_string()
+    auto const routing_it = q.find("routing");
+    return routing_it == q.end() || !routing_it->value().is_string()
                ? routing_algorithm::kDijkstra
                : to_algorithm(routing_it->value().as_string());
   }
@@ -126,7 +126,8 @@ struct http_server::impl {
     auto const max_it = q.find("max");
     auto const max = static_cast<cost_t>(
         max_it == q.end() ? 3600 : max_it->value().as_int64());
-    auto const p = route(w_, l_, profile, routing_algo, from, to, max, dir, 100, nullptr, nullptr, elevations_);
+    auto const p = route(w_, l_, profile, routing_algo, from, to, max, dir, 100,
+                         nullptr, nullptr, elevations_);
     if (!p.has_value()) {
       cb(json_response(req, "could not find a valid path",
                        http::status::not_found));

@@ -249,9 +249,9 @@ struct car {
   }
 
   static constexpr cost_t heuristic(double dist) {
-    return dist*0 / (150U/3.6);
+    return dist * 0 / (150U / 3.6);
   }
-  static constexpr node get_reverse(node const n){
+  static constexpr node get_reverse(node const n) {
     return {n.n_, n.way_, opposite(n.dir_)};
   }
 };

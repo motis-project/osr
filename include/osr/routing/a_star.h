@@ -1,8 +1,8 @@
 #pragma once
 
-#include "osr/elevation_storage.h"
 #include <unordered_set>
 #include "geo/webmercator.h"
+#include "osr/elevation_storage.h"
 #include "osr/lookup.h"
 #include "osr/routing/dial.h"
 #include "osr/types.h"
@@ -13,7 +13,7 @@ namespace osr {
 struct sharing_data;
 
 template <typename Profile>
-struct a_star{
+struct a_star {
   using profile_t = Profile;
   using key = typename Profile::key;
   using label = typename Profile::label;
@@ -46,7 +46,7 @@ struct a_star{
     cost_.clear();
   }
 
-  struct node_h{
+  struct node_h {
     cost_t priority() const {
       return static_cast<std::uint16_t>(cost + heuristic);
     }
@@ -62,7 +62,8 @@ struct a_star{
   };
 
   cost_t heuristic(label const l, ways const& w) {
-    auto const start_coord = geo::latlng_to_merc(w.get_node_pos(l.n_).as_latlng());
+    auto const start_coord =
+        geo::latlng_to_merc(w.get_node_pos(l.n_).as_latlng());
     auto const end_coord = geo::latlng_to_merc(end_loc_.as_latlng());
     auto const dx = end_coord.x_ - start_coord.x_;
     auto const dy = end_coord.y_ - start_coord.y_;
@@ -72,16 +73,14 @@ struct a_star{
   }
 
   struct get_bucket {
-    cost_t operator()(node_h const& n) {
-      return n.cost + n.heuristic;
-    }
+    cost_t operator()(node_h const& n) { return n.cost + n.heuristic; }
   };
 
   cost_t get_cost(node const n) const {
     auto const it = cost_.find(n.get_key());
     if (it != end(cost_))
       return it->second.cost(n);
-    else{
+    else {
       return kInfeasible;
     }
   }
@@ -93,55 +92,55 @@ struct a_star{
            bitvec<node_idx_t> const* blocked,
            sharing_data const* sharing,
            elevation_storage const* elevations) {
-        while (!pq_.empty()) {
-          auto curr_node_h = pq_.pop();
-          auto l = curr_node_h.l;
+    while (!pq_.empty()) {
+      auto curr_node_h = pq_.pop();
+      auto l = curr_node_h.l;
 
-          if(l.get_node().get_node() == end_node_.value().get_node()){
-            found_node_ = l.get_node();
-            return;
-          }
-          if (get_cost(l.get_node()) < l.cost()) {
-            continue;
-          }
+      if (l.get_node().get_node() == end_node_.value().get_node()) {
+        found_node_ = l.get_node();
+        return;
+      }
+      if (get_cost(l.get_node()) < l.cost()) {
+        continue;
+      }
 
-          if constexpr (kDebug) {
-            std::cout << "EXTRACT ";
-            l.get_node().print(std::cout, w);
-            std::cout << "\n";
-          }
+      if constexpr (kDebug) {
+        std::cout << "EXTRACT ";
+        l.get_node().print(std::cout, w);
+        std::cout << "\n";
+      }
 
-          auto const curr = l.get_node();
-          Profile::template adjacent<SearchDir, WithBlocked>(
-              r, curr, blocked, sharing, elevations,
-              [&](node const neighbor, std::uint32_t const cost, distance_t,
-                  way_idx_t const way, std::uint16_t, std::uint16_t, elevation_storage::elevation const) {
-                if constexpr (kDebug) {
-                  std::cout << "  NEIGHBOR ";
-                  neighbor.print(std::cout, w);
-                }
+      auto const curr = l.get_node();
+      Profile::template adjacent<SearchDir, WithBlocked>(
+          r, curr, blocked, sharing, elevations,
+          [&](node const neighbor, std::uint32_t const cost, distance_t,
+              way_idx_t const way, std::uint16_t, std::uint16_t,
+              elevation_storage::elevation const) {
+            if constexpr (kDebug) {
+              std::cout << "  NEIGHBOR ";
+              neighbor.print(std::cout, w);
+            }
 
-                auto const total = l.cost() + cost;
-                if (total <= max &&
-                    cost_[neighbor.get_key()].update(
-                        l, neighbor, static_cast<cost_t>(total), curr)) {
-                  auto next = label{neighbor, static_cast<cost_t>(total)};
-                  next.track(l, r, way, neighbor.get_node());
-                  node_h next_h = node_h{next, next.cost_, heuristic(next, w)};
-                  if (next_h.cost + next_h.heuristic < max) {
-                    pq_.push(std::move(next_h));
-                  }
-                  if constexpr (kDebug) {
-                    std::cout << " -> PUSH\n";
-                  }
-                } else {
-                  if constexpr (kDebug) {
-                    std::cout << " -> DOMINATED\n";
-                  }
-                }
-              });
-
-        }
+            auto const total = l.cost() + cost;
+            if (total <= max &&
+                cost_[neighbor.get_key()].update(
+                    l, neighbor, static_cast<cost_t>(total), curr)) {
+              auto next = label{neighbor, static_cast<cost_t>(total)};
+              next.track(l, r, way, neighbor.get_node());
+              node_h next_h = node_h{next, next.cost_, heuristic(next, w)};
+              if (next_h.cost + next_h.heuristic < max) {
+                pq_.push(std::move(next_h));
+              }
+              if constexpr (kDebug) {
+                std::cout << " -> PUSH\n";
+              }
+            } else {
+              if constexpr (kDebug) {
+                std::cout << " -> DOMINATED\n";
+              }
+            }
+          });
+    }
   }
 
   void run(ways const& w,
@@ -152,13 +151,15 @@ struct a_star{
            elevation_storage const* elevations,
            direction const dir) {
     if (blocked == nullptr) {
-      dir == direction::kForward
-          ? run<direction::kForward, false>(w, r, max, blocked, sharing, elevations)
-          : run<direction::kBackward, false>(w, r, max, blocked, sharing, elevations);
+      dir == direction::kForward ? run<direction::kForward, false>(
+                                       w, r, max, blocked, sharing, elevations)
+                                 : run<direction::kBackward, false>(
+                                       w, r, max, blocked, sharing, elevations);
     } else {
-      dir == direction::kForward
-          ? run<direction::kForward, true>(w, r, max, blocked, sharing, elevations)
-          : run<direction::kBackward, true>(w, r, max, blocked, sharing, elevations);
+      dir == direction::kForward ? run<direction::kForward, true>(
+                                       w, r, max, blocked, sharing, elevations)
+                                 : run<direction::kBackward, true>(
+                                       w, r, max, blocked, sharing, elevations);
     }
   }
 
