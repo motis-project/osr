@@ -6,7 +6,6 @@
 #include "boost/thread/tss.hpp"
 
 #include "utl/concat.h"
-#include "utl/timing.h" //TODO: check if needed
 #include "utl/to_vec.h"
 #include "utl/verify.h"
 
@@ -165,11 +164,11 @@ double add_path(ways const& w,
   return distance;
 }
 
-//TODO: add elevation
 template <typename Profile>
 path reconstruct_bi(ways const& w,
                     bitvec<node_idx_t> const* blocked,
                     sharing_data const* sharing,
+                    elevation_storage const* elevations,
                     bidirectional<Profile> const& b,
                     way_candidate const& start,
                     way_candidate const& dest,
@@ -186,7 +185,7 @@ path reconstruct_bi(ways const& w,
         if (pred.has_value()) {
           auto const expected_cost =
                   static_cast<cost_t>(e.cost(forward_n) - b.get_cost_from_start(*pred));
-          forward_dist += add_path<Profile>(w, *w.r_, blocked, sharing, *pred,
+          forward_dist += add_path<Profile>(w, *w.r_, blocked, sharing, elevations, *pred,
                                                 forward_n, expected_cost, forward_segments,
                                                 dir);
         } else {
@@ -219,7 +218,7 @@ path reconstruct_bi(ways const& w,
         if (pred.has_value()) {
           auto const expected_cost =
                   static_cast<cost_t>(e.cost(backward_n) - b.get_cost_from_end(*pred));
-          backward_dist += add_path<Profile>(w, *w.r_, blocked, nullptr, *pred,
+          backward_dist += add_path<Profile>(w, *w.r_, blocked, nullptr, elevations, *pred,
                                                  backward_n, expected_cost, backward_segments,
                                              opposite(dir));
         } else {
@@ -396,7 +395,7 @@ std::optional<path> try_direct(osr::location const& from,
     return std::nullopt;
   }
 }
-//TODO: add elevation
+
 template <typename Profile>
 std::optional<path> route(ways const& w,
                           bidirectional<Profile>& b,
@@ -407,7 +406,8 @@ std::optional<path> route(ways const& w,
                           cost_t const max,
                           direction const dir,
                           bitvec<node_idx_t> const* blocked,
-                          sharing_data const* sharing) {
+                          sharing_data const* sharing,
+                          elevation_storage const* elevations) {
   if (auto const direct = try_direct(from, to); direct.has_value()) {
     return *direct;
   }
@@ -457,11 +457,10 @@ std::optional<path> route(ways const& w,
         }
       }
       b.clear_mp();
-      b.run(w, *w.r_, max, blocked, sharing, dir);
+      b.run(w, *w.r_, max, blocked, sharing, elevations, dir);
       cost_t cost = 0U;
       if (b.meet_point.get_node() == node_idx_t::invalid() ||
           static_cast<uint32_t>(b.meet_point.get_node()) == 0) {
-        std::cout << "Couldn't find a route" << std::endl;
         continue;
       }
 
@@ -471,7 +470,7 @@ std::optional<path> route(ways const& w,
       if (b.cost2_.find(b.meet_point.get_key()) != b.cost2_.end()) {
         cost += b.cost2_.at(b.meet_point.get_key()).cost(b.meet_point);
       }
-      return reconstruct_bi(w, blocked, sharing, b, start, end, cost, dir);
+      return reconstruct_bi(w, blocked, sharing, elevations, b, start, end, cost, dir);
     }
   }
   return std::nullopt;
@@ -589,7 +588,6 @@ std::vector<std::optional<path>> route(
   return result;
 }
 
-//TODO: elevation
 std::optional<path> route_bidirectional(ways const& w,
                                    lookup const& l,
                                    search_profile const profile,
@@ -599,7 +597,8 @@ std::optional<path> route_bidirectional(ways const& w,
                                    direction const dir,
                                    double const max_match_distance,
                                    bitvec<node_idx_t> const* blocked,
-                                   sharing_data const* sharing) {
+                                   sharing_data const* sharing,
+                                   elevation_storage const* elevations) {
   auto const r =
       [&]<typename Profile>(bidirectional<Profile>& b) -> std::optional<path> {
     auto const from_match =
@@ -612,7 +611,7 @@ std::optional<path> route_bidirectional(ways const& w,
     }
 
     return route(w, b, from, to, from_match, to_match, max, dir, blocked,
-                 sharing);
+                 sharing, elevations);
   };
 
   switch (profile) {
@@ -620,7 +619,12 @@ std::optional<path> route_bidirectional(ways const& w,
       return r(get_bidirectional<foot<false, elevator_tracking>>());
     case search_profile::kWheelchair:
       return r(get_bidirectional<foot<true, elevator_tracking>>());
-    case search_profile::kBike: return r(get_bidirectional<bike>());
+    case search_profile::kBike:
+      return r(get_bidirectional<bike<kElevationNoCost>>());
+    case search_profile::kBikeElevationLow:
+      return r(get_bidirectional<bike<kElevationLowCost>>());
+    case search_profile::kBikeElevationHigh:
+      return r(get_bidirectional<bike<kElevationHighCost>>());
     case search_profile::kCar: return r(get_bidirectional<car>());
     case search_profile::kCarParking:
       return r(get_bidirectional<car_parking<false>>());
@@ -629,11 +633,10 @@ std::optional<path> route_bidirectional(ways const& w,
     case search_profile::kBikeSharing:
       return r(get_bidirectional<bike_sharing>());
   }
-
   throw utl::fail("not implemented");
 }
-//TODO: delete timing, change func type, add elevation
-one_to_many_result route(
+
+std::vector<std::optional<path>> route(
     ways const& w,
     lookup const& l,
     search_profile const profile,
@@ -646,9 +649,8 @@ one_to_many_result route(
     sharing_data const* sharing,
     elevation_storage const* elevations,
     std::function<bool(path const&)> const& do_reconstruct) {
-  auto const r =
-      [&]<typename Profile>(dijkstra<Profile>& d) -> one_to_many_result {
-    UTL_START_TIMING(lookup);
+  auto const r = [&]<typename Profile>(
+                     dijkstra<Profile>& d) -> std::vector<std::optional<path>> {
     auto const from_match =
         l.match<Profile>(from, false, dir, max_match_distance, blocked);
     if (from_match.empty()) {
@@ -657,12 +659,8 @@ one_to_many_result route(
     auto const to_match = utl::to_vec(to, [&](auto&& x) {
       return l.match<Profile>(x, true, dir, max_match_distance, blocked);
     });
-    UTL_STOP_TIMING(lookup);
-    return one_to_many_result{
-        std::chrono::duration_cast<std::chrono::milliseconds>(lookup_stop -
-                                                              lookup_start),
-        route(w, d, from, to, from_match, to_match, max, dir, blocked, sharing,
-              do_reconstruct)};
+    return route(w, d, from, to, from_match, to_match, max, dir, blocked,
+                 sharing, elevations, do_reconstruct);
   };
 
   switch (profile) {
@@ -833,17 +831,18 @@ std::optional<path> route(ways const& w,
                           direction const dir,
                           double const max_match_distance,
                           bitvec<node_idx_t> const* blocked,
-                          sharing_data const* sharing) {
+                          sharing_data const* sharing,
+                          elevation_storage const* elevations) {
   switch (algo) {
     case routing_algorithm::kDijkstra:
       return route_dijkstra(w, l, profile, from, to, max, dir,
-                            max_match_distance, blocked, sharing);
+                            max_match_distance, blocked, sharing, elevations);
     case routing_algorithm::kAStarBi:
       return route_bidirectional(w, l, profile, from, to, max, dir,
-                             max_match_distance, blocked, sharing);
+                             max_match_distance, blocked, sharing, elevations);
     //placeholder for future AStar implementation
     case routing_algorithm::kAStar:
-      return route_bidirectional(w, l, profile, from, to, max, dir, max_match_distance, blocked, sharing);
+      return route_bidirectional(w, l, profile, from, to, max, dir, max_match_distance, blocked, sharing, elevations);
   }
   throw utl::fail("not implemented");
 }

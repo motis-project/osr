@@ -126,8 +126,7 @@ struct http_server::impl {
     auto const max_it = q.find("max");
     auto const max = static_cast<cost_t>(
         max_it == q.end() ? 3600 : max_it->value().as_int64());
-    auto const p = route(w_, l_, profile, routing_algo, from, to, max, dir, 100, nullptr,
-                         nullptr, elevations_);
+    auto const p = route(w_, l_, profile, routing_algo, from, to, max, dir, 100, nullptr, nullptr, elevations_);
     if (!p.has_value()) {
       cb(json_response(req, "could not find a valid path",
                        http::status::not_found));

@@ -1,5 +1,6 @@
 #pragma once
 
+#include "osr/elevation_storage.h"
 #include "osr/types.h"
 #include "osr/routing/a_star.h"
 
@@ -18,7 +19,7 @@ struct bidirectional{
   using node_h = typename a_star<Profile>::node_h;
   using cost_map = typename ankerl::unordered_dense::map<key, entry, hash>;
 
-  constexpr static auto const kDebug = false;
+  constexpr static auto const kDebug = true;
 
   struct get_bucket {
     cost_t operator()(node_h const& n) { return n.cost + n.heuristic; }
@@ -86,7 +87,7 @@ struct bidirectional{
 
     auto const other_dist =
         std::sqrt(other_dx * other_dx + other_dy * other_dy);
-    return 0.5 * (Profile::heuristic(dist) - Profile::heuristic(other_dist)) + PI*2;
+    return 0.5 * (Profile::heuristic(dist) - Profile::heuristic(other_dist)); //deleted + PI*2
   }
 
   cost_t get_cost_from_start(node const n) const {
@@ -110,8 +111,10 @@ struct bidirectional{
       auto rev_node = Profile::get_reverse(n);
       cost2 = get_cost_from_end(rev_node);
     }
+    if constexpr (kDebug) {
+      std::cout << "\n Costs: " << cost1 << " + " << cost2 << std::endl;
+    }
     if (cost1 == kInfeasible || cost2 == kInfeasible) {
-      std::cout << "\nOne of the costs is infeasible: " << cost1 << " + " << cost2 << std::endl;
       return kInfeasible;
     }
     return cost1 + cost2;
@@ -123,6 +126,7 @@ struct bidirectional{
            cost_t const max,
            bitvec<node_idx_t> const* blocked,
            sharing_data const* sharing,
+           elevation_storage const* elevations,
            dial<node_h, get_bucket>& d,
            cost_map& cost_map,
            fn get_cost,
@@ -144,9 +148,9 @@ struct bidirectional{
     }
 
     Profile::template adjacent<SearchDir, WithBlocked>(
-      r, curr_node, blocked, sharing,
+      r, curr_node, blocked, sharing, elevations,
       [&](node const neighbor, std::uint32_t const cost, distance_t,
-          way_idx_t const way, std::uint16_t, std::uint16_t) {
+          way_idx_t const way, std::uint16_t, std::uint16_t, elevation_storage::elevation const) {
           if (l.cost() > max - cost) {
             std::cout << "Overflow " << std::endl;
             return;
@@ -181,7 +185,8 @@ struct bidirectional{
            ways::routing const& r,
            cost_t const max,
            bitvec<node_idx_t> const* blocked,
-           sharing_data const* sharing){
+           sharing_data const* sharing,
+           elevation_storage const* elevations){
     auto best_cost = kInfeasible - PI*2;
 
     // next_item is are top heap values (forward and reverse)
@@ -194,8 +199,8 @@ struct bidirectional{
       if (top_f + top_r >= best_cost + PI * 2){
         break;
       }
-      auto curr1 = run<SearchDir, WithBlocked>(w, r, max, blocked, sharing, pq1_, cost1_, [this](auto curr){return get_cost_from_start(curr);}, end_loc_);
-      auto curr2 = run<opposite(SearchDir), WithBlocked>(w, r, max, blocked, sharing, pq2_, cost2_, [this](auto curr){return get_cost_from_end(curr);}, start_loc_);
+      auto curr1 = run<SearchDir, WithBlocked>(w, r, max, blocked, sharing, elevations, pq1_, cost1_, [this](auto curr){return get_cost_from_start(curr);}, end_loc_);
+      auto curr2 = run<opposite(SearchDir), WithBlocked>(w, r, max, blocked, sharing, elevations, pq2_, cost2_, [this](auto curr){return get_cost_from_end(curr);}, start_loc_);
       //A meeting point is identified, when a node is already expanded by the other search
       if (curr1 != std::nullopt){
         if (expanded_end_.contains(curr1.value().n_)) {
@@ -209,7 +214,7 @@ struct bidirectional{
               meet_point = curr1.value();
               best_cost = get_cost_to_mp(curr1.value());
               if constexpr (kDebug) {
-                std::cout << " -> ACCEPTED\n";
+                std::cout << " with cost " << best_cost << " -> ACCEPTED\n";
               }
             } else if constexpr (kDebug) {
               std::cout << " -> DOMINATED\n";
@@ -232,7 +237,7 @@ struct bidirectional{
               meet_point = curr2.value();
               best_cost = get_cost_to_mp(curr2.value());
               if constexpr (kDebug) {
-                std::cout << " -> ACCEPTED\n";
+                std::cout << " with cost " << best_cost << " -> ACCEPTED\n";
               }
             } else if constexpr (kDebug) {
               std::cout << " -> DOMINATED\n";
@@ -251,15 +256,16 @@ struct bidirectional{
            cost_t const max,
            bitvec<node_idx_t> const* blocked,
            sharing_data const* sharing,
+           elevation_storage const* elevations,
            direction const dir) {
     if (blocked == nullptr) {
       dir == direction::kForward
-          ? run<direction::kForward, false>(w, r, max, blocked, sharing)
-          : run<direction::kBackward, false>(w, r, max, blocked, sharing);
+          ? run<direction::kForward, false>(w, r, max, blocked, sharing, elevations)
+          : run<direction::kBackward, false>(w, r, max, blocked, sharing, elevations);
     } else {
       dir == direction::kForward
-          ? run<direction::kForward, true>(w, r, max, blocked, sharing)
-          : run<direction::kBackward, true>(w, r, max, blocked, sharing);
+          ? run<direction::kForward, true>(w, r, max, blocked, sharing, elevations)
+          : run<direction::kBackward, true>(w, r, max, blocked, sharing, elevations);
     }
   }
 

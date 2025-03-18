@@ -349,8 +349,6 @@ struct node_handler : public osm::handler::Handler {
     }
 
     auto via = node_idx_t::invalid();
-    osm_node_idx_t via_osm = osm_node_idx_t::invalid();
-
     for (auto const& m : r.members()) {
       switch (cista::hash(std::string_view{m.role()})) {
         case cista::hash("to"): {
@@ -371,35 +369,23 @@ struct node_handler : public osm::handler::Handler {
 
         case cista::hash("via"):
           if (m.type() == osmium::item_type::node) {
-            via_osm = osm_node_idx_t{m.positive_ref()};
-            
-            // First try to find the node in the existing index
-            auto const v = w_.find_node_idx(via_osm);
+            auto const v = w_.find_node_idx(osm_node_idx_t{m.positive_ref()});
             if (v.has_value()) {
               via = *v;
-            } else {
-              // For consistency, still mark the via node for inclusion
-              w_.node_way_counter_.make_multi(to_idx(via_osm));
             }
           }
           break;
       }
     }
 
-    // Create the restriction if we have from and to ways
-    if (!c->from_.empty() && !c->to_.empty()) {
-      // Case 1: The via node is already in the routing graph
-      if (via != node_idx_t::invalid()) {
-        auto const l = std::scoped_lock{r_mutex_};
-        for (auto const& from : c->from_) {
-          for (auto const& to : c->to_) {
-            r_.emplace_back(resolved_restriction{restriction_type, from, to, via});
-          }
-        }
-      } 
-      // Case 2: The node wasn't in the graph, but we've marked it to be included
-      else if (via_osm != osm_node_idx_t::invalid()) {
-        // For sequential consistency, wait until more nodes are processed
+    if (via == node_idx_t::invalid() || c->from_.empty() || c->to_.empty()) {
+      return;
+    }
+
+    auto const l = std::scoped_lock{r_mutex_};
+    for (auto const& from : c->from_) {
+      for (auto const& to : c->to_) {
+        r_.emplace_back(resolved_restriction{restriction_type, from, to, via});
       }
     }
   }
@@ -516,17 +502,7 @@ void extract(bool const with_platforms,
                                  osmium::io::read_meta::no};
     while (auto buffer = reader.read()) {
       pt->update(reader.offset());
-      
-      // Process in a deterministic order
-      for (auto const& item : buffer) {
-        // Apply handlers based on item type
-        if (item.type() == osmium::item_type::node) {
-          node_idx_builder.node(static_cast<const osmium::Node&>(item));
-          inaccessible_handler.node(static_cast<const osmium::Node&>(item));
-        } else if (item.type() == osmium::item_type::relation) {
-          rel_ways_h.relation(static_cast<const osmium::Relation&>(item));
-        }
-      }
+      osm::apply(buffer, node_idx_builder, inaccessible_handler, rel_ways_h);
     }
     reader.close();
     node_idx_builder.finish();
@@ -539,27 +515,23 @@ void extract(bool const with_platforms,
     auto h = way_handler{w, pl.get(), rel_ways, elevator_nodes};
     auto reader =
         osm_io::Reader{input_file, osm_eb::way, osmium::io::read_meta::no};
-        
-    // Process ways sequentially for deterministic results
-    std::cout << "DEBUG: Processing ways sequentially..." << std::endl;
-    size_t way_counter = 0;
-    size_t buffer_counter = 0;
-    
-    // Process ways in a sequential manner
-    while (auto buffer = reader.read()) {
-      buffer_counter++;
-      pt->update(reader.offset());
-      
-      // Update locations and apply handler
-      update_locations(node_idx, buffer);
-      
-      // Process ways one at a time
-      for (auto const& way : buffer.select<osmium::Way>()) {
-        way_counter++;
-        h.way(way);
-      }
-    }
-    std::cout << "DEBUG: Processed " << way_counter << " ways in " << buffer_counter << " buffers" << std::endl;
+    oneapi::tbb::parallel_pipeline(
+        std::thread::hardware_concurrency() * 4U,
+        oneapi::tbb::make_filter<void, osm_mem::Buffer>(
+            oneapi::tbb::filter_mode::serial_in_order,
+            [&](oneapi::tbb::flow_control& fc) {
+              auto buf = reader.read();
+              pt->update(reader.offset());
+              if (!buf) {
+                fc.stop();
+              }
+              return buf;
+            }) &
+            oneapi::tbb::make_filter<osm_mem::Buffer, void>(
+                oneapi::tbb::filter_mode::parallel, [&](osm_mem::Buffer&& buf) {
+                  update_locations(node_idx, buf);
+                  osm::apply(buf, h);
+                }));
 
     pt->update(pt->in_high_);
     reader.close();
@@ -584,120 +556,38 @@ void extract(bool const with_platforms,
     pt->status("Load OSM / Node Properties")
         .in_high(file_size)
         .out_bounds(90, 100);
-    
-    // First pass: Process only nodes (not relations)
-    // This ensures all nodes are processed before any restrictions
-    std::cout << "DEBUG: First pass - Processing all nodes..." << std::endl;
-    {
-      auto reader = osm_io::Reader{input_file, osm_eb::node,
+    auto reader = osm_io::Reader{input_file, osm_eb::node | osm_eb::relation,
                                  osmium::io::read_meta::no};
-      auto h = node_handler{w, pl.get(), r, elevator_nodes};
-      
-      // Process nodes sequentially
-      while (auto buffer = reader.read()) {
-        pt->update(reader.offset());
-        
-        // Apply only to nodes in sequential order
-        for (auto const& node : buffer.select<osmium::Node>()) {
-          h.node(node);
-        }
-      }
-      reader.close();
-    }
-    
-    // Second pass: Process only restrictions from relations
-    // This happens after all nodes have been processed
-    {
-      auto reader = osm_io::Reader{input_file, osm_eb::relation,
-                                  osmium::io::read_meta::no};
-      auto h = node_handler{w, pl.get(), r, elevator_nodes};
-      
-      // Store pending restrictions (those with via nodes not yet in graph)
-      std::vector<std::tuple<resolved_restriction::type, way_idx_t, way_idx_t, osm_node_idx_t>> pending;
-      
-      // Process all relations sequentially for determinism
-      while (auto buffer = reader.read()) {
-        pt->update(reader.offset());
-        
-        // Apply only to relations in sequential order
-        for (auto const& relation : buffer.select<osmium::Relation>()) {
-          // Process the relation
-          h.relation(relation);
-          
-          // Also check for and store pending restrictions
-          auto const type = relation.tags()["type"];
-          if (type != nullptr && type == "restriction"sv) {
-            auto const restriction_ptr = relation.tags()["restriction"];
-            if (restriction_ptr != nullptr) {
-              auto const restriction_sv = std::string_view{restriction_ptr};
-              auto restriction_type = resolved_restriction::type::kNo;
-              if (restriction_sv.starts_with("no")) {
-                restriction_type = resolved_restriction::type::kNo;
-              } else if (restriction_sv.starts_with("only")) {
-                restriction_type = resolved_restriction::type::kOnly;
-              } else {
-                continue;
+    auto h = node_handler{w, pl.get(), r, elevator_nodes};
+    oneapi::tbb::parallel_pipeline(
+        std::thread::hardware_concurrency() * 4U,
+        oneapi::tbb::make_filter<void, osm_mem::Buffer>(
+            oneapi::tbb::filter_mode::serial_in_order,
+            [&](oneapi::tbb::flow_control& fc) {
+              auto buf = reader.read();
+              pt->update(reader.offset());
+              if (!buf) {
+                fc.stop();
               }
-              
-              // Same logic as in relation handler but store for later processing
-              osm_way_idx_t from_osm = osm_way_idx_t::invalid();
-              osm_way_idx_t to_osm = osm_way_idx_t::invalid();
-              osm_node_idx_t via_osm = osm_node_idx_t::invalid();
-              
-              for (auto const& m : relation.members()) {
-                if (std::string_view{m.role()} == "from") {
-                  from_osm = osm_way_idx_t{m.positive_ref()};
-                } else if (std::string_view{m.role()} == "to") {
-                  to_osm = osm_way_idx_t{m.positive_ref()};
-                } else if (std::string_view{m.role()} == "via" && m.type() == osmium::item_type::node) {
-                  via_osm = osm_node_idx_t{m.positive_ref()};
-                }
-              }
-              
-              // If all parts are valid, store for post-processing
-              if (from_osm != osm_way_idx_t::invalid() && 
-                  to_osm != osm_way_idx_t::invalid() && 
-                  via_osm != osm_node_idx_t::invalid()) {
-                auto from_way = w.find_way(from_osm);
-                auto to_way = w.find_way(to_osm);
-                
-                // Both ways found, but via might be pending
-                if (from_way && to_way) {
-                  auto via_node = w.find_node_idx(via_osm);
-                  if (!via_node) {
-                    // Store for post-processing when graph is built
-                    pending.emplace_back(restriction_type, *from_way, *to_way, via_osm);
-                  }
-                }
-              }
-            }
-          }
-        }
-      }
-      reader.close();
-      
-      // Post-processing: Try to resolve pending restrictions after graph is built
-      for (const auto& [type, from, to, via_osm] : pending) {
-        // Try to find the via node now that the graph is built
-        auto via_node = w.find_node_idx(via_osm);
-        if (via_node) {
-          r.emplace_back(resolved_restriction{type, from, to, *via_node});
-        }
-      }
-    }
-    
+              return buf;
+            }) &
+            oneapi::tbb::make_filter<osm_mem::Buffer, void>(
+                oneapi::tbb::filter_mode::parallel,
+                [&](osm_mem::Buffer&& buf) { osm::apply(buf, h); }));
+
+    reader.close();
     pt->update(pt->in_high_);
   }
 
-    utl::sort(w.r_->multi_level_elevators_);
+  w.add_restriction(r);
+
+  utl::sort(w.r_->multi_level_elevators_);
 
   if (pl) {
     utl::sort(pl->node_pos_,
               [](auto&& a, auto&& b) { return a.first < b.first; });
   }
 
-  std::cout << "Number of restrictions extracted: " << r.size() << std::endl;
-  w.add_restriction(r);
   w.r_->write(out);
 
   lookup{w, out, cista::mmap::protection::WRITE}.build_rtree();

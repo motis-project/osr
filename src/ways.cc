@@ -27,56 +27,29 @@ void ways::add_restriction(std::vector<resolved_restriction>& rs) {
       begin(rs), end(rs), [](auto&& a, auto&& b) { return a.via_ == b.via_; },
       [&](it_t const& lb, it_t const& ub) {
         auto const range = std::span{lb, ub};
-        // 3. Ensure node_restrictions_ has enough space
-        auto via_idx = to_idx(range.front().via_);
-        if (via_idx >= r_->node_restrictions_.size()) {
-          r_->node_restrictions_.resize(via_idx + 1U);
-        }
-        
-        if (via_idx >= r_->node_is_restricted_.size()) {
-          r_->node_is_restricted_.resize(via_idx + 1U);
-        }
-        
-        // 4. Mark this node as having restrictions
+        r_->node_restrictions_.resize(to_idx(range.front().via_) + 1U);
         r_->node_is_restricted_.set(range.front().via_, true);
-        // 5. Process each restriction in this group
+
         for (auto const& x : range) {
-          try {
-            if (x.type_ == resolved_restriction::type::kNo) {
-              // Handle "no" restriction - add specific from→to ban
-              auto from_pos = r_->get_way_pos(x.via_, x.from_);
-              auto to_pos = r_->get_way_pos(x.via_, x.to_);
-              r_->node_restrictions_[x.via_].push_back(
-                  restriction{from_pos, to_pos});
-            } else /* kOnly */ {
-              // Handle "only" restriction - ban all turns except the allowed one
-              auto allowed_from = r_->get_way_pos(x.via_, x.from_);
-              auto allowed_to = r_->get_way_pos(x.via_, x.to_);
-              
-              if (x.via_ < r_->node_ways_.size()) {
-                for (auto const [i, from] : utl::enumerate(r_->node_ways_[x.via_])) {
-                  if (i == allowed_from) {
-                    for (auto const [j, to] : utl::enumerate(r_->node_ways_[x.via_])) {
-                      if (j != allowed_to) {
-                        r_->node_restrictions_[x.via_].push_back(
-                            restriction{static_cast<way_pos_t>(i), static_cast<way_pos_t>(j)});
-                      }
-                    }
-                  }
+          if (x.type_ == resolved_restriction::type::kNo) {
+            r_->node_restrictions_[x.via_].push_back(
+                restriction{r_->get_way_pos(x.via_, x.from_),
+                            r_->get_way_pos(x.via_, x.to_)});
+          } else /* kOnly */ {
+            for (auto const [i, from] :
+                 utl::enumerate(r_->node_ways_[x.via_])) {
+              for (auto const [j, to] :
+                   utl::enumerate(r_->node_ways_[x.via_])) {
+                if (x.from_ == from && x.to_ != to) {
+                  r_->node_restrictions_[x.via_].push_back(restriction{
+                      static_cast<way_pos_t>(i), static_cast<way_pos_t>(j)});
                 }
               }
             }
-          } catch (...) {
-            // Skip invalid restrictions
           }
         }
       });
-
-  // 6. Final resize to ensure all nodes have a restriction entry
-  if (node_to_osm_.size() > r_->node_restrictions_.size() && 
-      node_to_osm_.size() < 100000000) { // 100M limit as sanity check
-    r_->node_restrictions_.resize(node_to_osm_.size());
-  }
+  r_->node_restrictions_.resize(node_to_osm_.size());
 }
 
 void ways::connect_ways() {

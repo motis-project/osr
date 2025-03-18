@@ -1,5 +1,6 @@
 #pragma once
 
+#include "osr/elevation_storage.h"
 #include <unordered_set>
 #include "geo/webmercator.h"
 #include "osr/lookup.h"
@@ -90,7 +91,8 @@ struct a_star{
            ways::routing const& r,
            cost_t const max,
            bitvec<node_idx_t> const* blocked,
-           sharing_data const* sharing) {
+           sharing_data const* sharing,
+           elevation_storage const* elevations) {
         while (!pq_.empty()) {
           auto curr_node_h = pq_.pop();
           auto l = curr_node_h.l;
@@ -111,9 +113,9 @@ struct a_star{
 
           auto const curr = l.get_node();
           Profile::template adjacent<SearchDir, WithBlocked>(
-              r, curr, blocked, sharing,
+              r, curr, blocked, sharing, elevations,
               [&](node const neighbor, std::uint32_t const cost, distance_t,
-                  way_idx_t const way, std::uint16_t, std::uint16_t) {
+                  way_idx_t const way, std::uint16_t, std::uint16_t, elevation_storage::elevation const) {
                 if constexpr (kDebug) {
                   std::cout << "  NEIGHBOR ";
                   neighbor.print(std::cout, w);
@@ -147,15 +149,16 @@ struct a_star{
            cost_t const max,
            bitvec<node_idx_t> const* blocked,
            sharing_data const* sharing,
+           elevation_storage const* elevations,
            direction const dir) {
     if (blocked == nullptr) {
       dir == direction::kForward
-          ? run<direction::kForward, false>(w, r, max, blocked, sharing)
-          : run<direction::kBackward, false>(w, r, max, blocked, sharing);
+          ? run<direction::kForward, false>(w, r, max, blocked, sharing, elevations)
+          : run<direction::kBackward, false>(w, r, max, blocked, sharing, elevations);
     } else {
       dir == direction::kForward
-          ? run<direction::kForward, true>(w, r, max, blocked, sharing)
-          : run<direction::kBackward, true>(w, r, max, blocked, sharing);
+          ? run<direction::kForward, true>(w, r, max, blocked, sharing, elevations)
+          : run<direction::kBackward, true>(w, r, max, blocked, sharing, elevations);
     }
   }
 

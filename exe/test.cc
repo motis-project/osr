@@ -75,6 +75,7 @@ int main(int argc, char const* argv[]) {
   auto d = dijkstra<car>{};
   auto h = cista::BASE_HASH;
   auto n = 0U;
+  auto const elevations = elevation_storage::try_open(opt.data_dir_);
   auto const start =
       node_idx_t{cista::hash_combine(h, ++n, i.load()) % w.n_nodes()};
   auto start_lf = car::label{car::node{start, 0, direction::kForward}, 0U};
@@ -82,7 +83,7 @@ int main(int argc, char const* argv[]) {
   d.reset(opt.max_dist_);
   d.add_start(w, start_lf);
   d.add_start(w, start_lb);
-  d.run<direction::kForward, false>(w, *w.r_, opt.max_dist_, nullptr, nullptr);
+  d.run<direction::kForward, false>(w, *w.r_, opt.max_dist_, nullptr, nullptr, elevations.get());
 
   std::vector<int> random_numbers =
       generate_random_vector(d.cost_.size(), opt.n_queries_);
@@ -113,8 +114,7 @@ int main(int argc, char const* argv[]) {
         a.add_end(w, end_lf.get_node());
         a.add_start(w, start_lf);
         a.add_start(w, start_lb);
-        a.run<direction::kForward, false>(w, *w.r_, opt.max_dist_, nullptr,
-                                          nullptr);
+        a.run<direction::kForward, false>(w, *w.r_, opt.max_dist_, nullptr, nullptr, elevations.get());
 
         auto end_node = a.found_node_.value();
         auto it_a = a.cost_.find(end_idx);
