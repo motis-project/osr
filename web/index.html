@@ -81,7 +81,7 @@
             background: #bdffb1;
         }
 
-        #profile, #direction {
+        #profile, #direction, #routing-algorithm {
             position: absolute;
             top: 5px;
             right: 5px;
@@ -93,6 +93,10 @@
 
         #direction {
             top: 48px;
+        }
+
+        #routing-algorithm {
+            top: 91px;
         }
 
         #journey-info {
@@ -129,6 +133,10 @@
     <option value="forward" selected>forward</option>
     <option value="backward">backward</option>
 </select>
+<select id="routing-algorithm" onchange="selectRoutingAlgorithm(event)">
+    <option value="dijkstra" selected>dijkstra</option>
+    <option value="bidirectional">bidirectional A*</option>
+</select>
 <div id="journey-info">
     Test
 </div>
@@ -136,14 +144,15 @@
 <script type="module">
     import {style} from "./style.js";
 
-    const start = [9.182124, 48.782888]
-    const destination = [9.183369, 48.784705];
+    const start = [8.65749737, 50.10416625]
+    const destination = [8.65750757, 50.10417645];
     const query = {
         start, destination,
         start_level: 0.0,
         destination_level: 1.0,
         profile: document.getElementById('profile').value,
-        direction: document.getElementById('direction').value
+        direction: document.getElementById('direction').value,
+        routing: document.getElementById('routing-algorithm').value
     };
 
     const meta = document.getElementById('journey-info');
@@ -169,7 +178,7 @@
         zoom: 18,
         transformRequest: (url, resourceType) => {
             if (url.startsWith('/')) {
-                return {url: `https://europe.motis-project.de/tiles${url}`}
+                return {url: ` https://europe.motis-project.de/tiles${url}`}
             }
         }
     });
@@ -235,7 +244,8 @@
                     level: query.destination_level
                 },
                 profile: query.profile,
-                direction: query.direction
+                direction: query.direction,
+                routing: query.routing
             })
         });
         const r = await response.json();
@@ -464,6 +474,11 @@
 
     window.selectDirection = async (e) => {
         query.direction = e.target.value;
+        map.getSource('path').setData(await getRoute());
+    }
+
+    window.selectRoutingAlgorithm = async (e) => {
+        query.routing = e.target.value;
         map.getSource('path').setData(await getRoute());
     }
 
