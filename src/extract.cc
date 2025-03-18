@@ -28,9 +28,11 @@
 #include "tiles/osm/hybrid_node_idx.h"
 #include "tiles/osm/tmp_file.h"
 
+#include "osr/elevation_storage.h"
 #include "osr/extract/tags.h"
 #include "osr/lookup.h"
 #include "osr/platforms.h"
+#include "osr/preprocessing/elevation/provider.h"
 #include "osr/ways.h"
 
 namespace osm = osmium;
@@ -71,13 +73,13 @@ speed_limit get_speed_limit(tags const& t) {
         return t.name_.empty() ? get_speed_limit(80) : get_speed_limit(40);
       case cista::hash("primary_link"): return get_speed_limit(30);
       case cista::hash("secondary"):
-        return t.name_.empty() ? get_speed_limit(75) : get_speed_limit(55);
+        return t.name_.empty() ? get_speed_limit(80) : get_speed_limit(60);
       case cista::hash("secondary_link"): return get_speed_limit(25);
       case cista::hash("tertiary"):
         return t.name_.empty() ? get_speed_limit(70) : get_speed_limit(40);
       case cista::hash("tertiary_link"): return get_speed_limit(20);
-      case cista::hash("unclassified"): [[fallthrough]];
-      case cista::hash("residential"): return get_speed_limit(25);
+      case cista::hash("unclassified"): return get_speed_limit(40);
+      case cista::hash("residential"): return get_speed_limit(30);
       case cista::hash("living_street"): return get_speed_limit(10);
       case cista::hash("service"): return get_speed_limit(15);
       case cista::hash("track"): return get_speed_limit(12);
@@ -116,6 +118,7 @@ way_properties get_way_properties(tags const& t) {
   p.from_level_ = to_idx(from);
   p.to_level_ = to_idx(to);
   p.is_platform_ = t.is_platform_;
+  p.is_ramp_ = t.is_ramp_;
   return p;
 }
 
@@ -466,7 +469,8 @@ struct rel_ways_handler : public osm::handler::Handler {
 
 void extract(bool const with_platforms,
              fs::path const& in,
-             fs::path const& out) {
+             fs::path const& out,
+             fs::path const& elevation_dir) {
   auto ec = std::error_code{};
   fs::remove_all(out, ec);
   if (!fs::is_directory(out)) {
@@ -502,7 +506,7 @@ void extract(bool const with_platforms,
 
   w.node_way_counter_.reserve(12000000000);
   {  // Collect node coordinates.
-    pt->status("Load OSM / Coordinates").in_high(file_size).out_bounds(0, 20);
+    pt->status("Load OSM / Coordinates").in_high(file_size).out_bounds(0, 15);
 
     auto node_idx_builder = tiles::hybrid_node_idx_builder{node_idx};
 
@@ -530,7 +534,7 @@ void extract(bool const with_platforms,
 
   auto elevator_nodes = hash_map<osm_node_idx_t, level_bits_t>{};
   {  // Extract streets, places, and areas.
-    pt->status("Load OSM / Ways").in_high(file_size).out_bounds(20, 50);
+    pt->status("Load OSM / Ways").in_high(file_size).out_bounds(15, 40);
 
     auto h = way_handler{w, pl.get(), rel_ways, elevator_nodes};
     auto reader =
@@ -565,6 +569,15 @@ void extract(bool const with_platforms,
   w.sync();
 
   w.connect_ways();
+
+  if (!elevation_dir.empty()) {
+    auto const provider =
+        osr::preprocessing::elevation::provider{elevation_dir};
+    if (provider.driver_count() > 0) {
+      auto elevations = elevation_storage{out, cista::mmap::protection::WRITE};
+      elevations.set_elevations(w, provider);
+    }
+  }
 
   auto r = std::vector<resolved_restriction>{};
   {

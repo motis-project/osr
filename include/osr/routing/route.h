@@ -6,6 +6,7 @@
 #include "geo/polyline.h"
 
 #include "bidirectional.h"
+#include "osr/elevation_storage.h"
 #include "osr/location.h"
 #include "osr/lookup.h"
 #include "osr/routing/mode.h"
@@ -32,11 +33,13 @@ struct path {
     way_idx_t way_{way_idx_t::invalid()};
     cost_t cost_{kInfeasible};
     distance_t dist_{0};
+    elevation_storage::elevation elevation_{};
     mode mode_{mode::kFoot};
   };
 
   cost_t cost_{kInfeasible};
   double dist_{0.0};
+  elevation_storage::elevation elevation_{};
   std::vector<segment> segments_{};
   bool uses_elevator_{false};
 };
@@ -70,6 +73,7 @@ one_to_many_result route(
     double max_match_distance,
     bitvec<node_idx_t> const* blocked = nullptr,
     sharing_data const* sharing = nullptr,
+    elevation_storage const* = nullptr,
     std::function<bool(path const&)> const& do_reconstruct = [](path const&) {
       return false;
     });
@@ -83,7 +87,8 @@ std::optional<path> route_dijkstra(ways const&,
                           direction,
                           double max_match_distance,
                           bitvec<node_idx_t> const* blocked = nullptr,
-                          sharing_data const* sharing = nullptr);
+                          sharing_data const* sharing = nullptr,
+                          elevation_storage const* = nullptr);
 
 std::optional<path> route_bidirectional(ways const&,
                                    lookup const&,
@@ -105,7 +110,8 @@ std::optional<path> route_dijkstra(ways const&,
                           cost_t const max,
                           direction,
                           bitvec<node_idx_t> const* blocked = nullptr,
-                          sharing_data const* sharing = nullptr);
+                          sharing_data const* sharing = nullptr,
+                          elevation_storage const* = nullptr);
 
 std::vector<std::optional<path>> route(
     ways const&,
@@ -118,6 +124,7 @@ std::vector<std::optional<path>> route(
     direction const,
     bitvec<node_idx_t> const* blocked = nullptr,
     sharing_data const* sharing = nullptr,
+    elevation_storage const* = nullptr,
     std::function<bool(path const&)> const& do_reconstruct = [](path const&) {
       return false;
     });

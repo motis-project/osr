@@ -5,6 +5,7 @@
 
 #include "boost/asio/io_context.hpp"
 
+#include "osr/elevation_storage.h"
 #include "osr/lookup.h"
 #include "osr/platforms.h"
 #include "osr/ways.h"
@@ -17,6 +18,7 @@ struct http_server {
               ways const&,
               lookup const&,
               platforms const*,
+              elevation_storage const*,
               std::string const& static_file_path);
   ~http_server();
   http_server(http_server const&) = delete;
