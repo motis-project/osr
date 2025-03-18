@@ -139,7 +139,7 @@ target_link_libraries(osr-test-aStar osr)
 
 file(GLOB_RECURSE osr-backend-src exe/backend/*.cc)
 add_executable(osr-backend ${osr-backend-src})
-target_link_libraries(osr-backend osr web-server conf boost-json TBB::tbb)
+target_link_libraries(osr-backend osr web-server conf boost-json)
 target_include_directories(osr-backend PRIVATE exe/backend/include)
 
 # --- TEST ---
