@@ -408,7 +408,6 @@ std::optional<path> route(ways const& w,
         break;
       }
     }
-     std::cout << "Valid start: " << valid_start << std::endl;
     if (!valid_start) {
       continue;
     }
@@ -420,7 +419,6 @@ std::optional<path> route(ways const& w,
           break;
         }
       }
-      std::cout << "Valid end: " << valid_end << std::endl;
       if (!valid_end) {
         continue;
       }
@@ -454,7 +452,6 @@ std::optional<path> route(ways const& w,
       if (b.cost2_.find(b.meet_point.get_key()) != b.cost2_.end()) {
         cost += b.cost2_.at(b.meet_point.get_key()).cost(b.meet_point);
       }
-      std::cout << "Succsesfully found a route" << std::endl;
       return reconstruct_bi(w, blocked, sharing, b, start, end, cost, dir);
     }
   }

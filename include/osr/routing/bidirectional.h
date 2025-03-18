@@ -18,14 +18,12 @@ struct bidirectional{
   using node_h = typename a_star<Profile>::node_h;
   using cost_map = typename ankerl::unordered_dense::map<key, entry, hash>;
 
-  constexpr static auto const kDebug = true;
+  constexpr static auto const kDebug = false;
 
-  // "get_bucket" function for the dial priority queue
   struct get_bucket {
     cost_t operator()(node_h const& n) { return n.cost + n.heuristic; }
   };
 
-  // Add a label to the cost:map and the dial f it improved
   void add(ways const& w,
            label const l,
            location const& loc,
@@ -37,14 +35,11 @@ struct bidirectional{
   }
 
   void add_start(ways const& w, label const l){
-    std::cout << "cost- " << l.cost() << std::endl;
     add(w, l, end_loc_, cost1_, pq1_);
-    std::cout << l.get_node().n_ << " added as start" << std::endl;
   }
 
   void add_end(ways const& w, label const l){
     add(w, l, start_loc_, cost2_, pq2_);
-    std::cout << l.get_node().n_ << " added as end" << std::endl;
   }
 
   void clear_mp() {meet_point = meet_point.invalid();}
@@ -91,7 +86,7 @@ struct bidirectional{
 
     auto const other_dist =
         std::sqrt(other_dx * other_dx + other_dy * other_dy);
-    return 0.5 * (Profile::heuristic(dist) - Profile::heuristic(other_dist)); //deleted + pi/2
+    return 0.5 * (Profile::heuristic(dist) - Profile::heuristic(other_dist)) + PI*2;
   }
 
   cost_t get_cost_from_start(node const n) const {
@@ -116,14 +111,12 @@ struct bidirectional{
       cost2 = get_cost_from_end(rev_node);
     }
     if (cost1 == kInfeasible || cost2 == kInfeasible) {
-      std::cout << "one of the costs is infeasible" << std::endl;
-      std::cout << cost1 << " + " << cost2 << std::endl;
+      std::cout << "\nOne of the costs is infeasible: " << cost1 << " + " << cost2 << std::endl;
       return kInfeasible;
     }
     return cost1 + cost2;
   }
 
-  // Single-step expansion function
   template <direction SearchDir, bool WithBlocked, typename fn>
   std::optional<node> run(ways const& w,
            ways::routing const& r,
@@ -155,7 +148,7 @@ struct bidirectional{
       [&](node const neighbor, std::uint32_t const cost, distance_t,
           way_idx_t const way, std::uint16_t, std::uint16_t) {
           if (l.cost() > max - cost) {
-            std::cout << "Overflow happened " << std::endl;
+            std::cout << "Overflow " << std::endl;
             return;
           }
           if constexpr (kDebug) {
@@ -183,8 +176,6 @@ struct bidirectional{
     return curr_node;
   }
 
-
-  // Bidirectional run loop
   template <direction SearchDir, bool WithBlocked>
   void run(ways const& w,
            ways::routing const& r,
@@ -201,7 +192,6 @@ struct bidirectional{
       top_f = pq1_.buckets_[pq1_.get_next_bucket()].back().priority();
       top_r = pq2_.buckets_[pq2_.get_next_bucket()].back().priority();
       if (top_f + top_r >= best_cost + PI * 2){
-        std::cout << "breaking out of loop: " << top_f << " " << top_r << " " << best_cost << " " << PI << std::endl;
         break;
       }
       auto curr1 = run<SearchDir, WithBlocked>(w, r, max, blocked, sharing, pq1_, cost1_, [this](auto curr){return get_cost_from_start(curr);}, end_loc_);
@@ -209,44 +199,54 @@ struct bidirectional{
       // When a node is found that is already expanded from the other search, we have a meeting point
       if (curr1 != std::nullopt){
         if (expanded_end_.contains(curr1.value().n_)) {
-          std::cout << "potential meet point found " << std::endl;
-          // Check if this is a valid meeting point by looking at both cost maps
+          if constexpr (kDebug) {
+            std::cout << "  potential MEETPOINT found by start ";
+            curr1.value().print(std::cout, w);
+          }
           if (cost2_.find(curr1.value().get_key()) != cost2_.end()) {
             // This node has been expanded from both directions and has entries in both cost maps
             if (get_cost_to_mp(curr1.value()) < best_cost) {
               meet_point = curr1.value();
-              std::cout << "-------meet point has been found by pq1 "
-                        << static_cast<uint32_t>(meet_point.get_node())
-                        << std::endl;
               best_cost = get_cost_to_mp(curr1.value());
+              if constexpr (kDebug) {
+                std::cout << " -> ACCEPTED\n";
+              }
+            } else if constexpr (kDebug) {
+              std::cout << " -> DOMINATED\n";
             }
+          } else if constexpr (kDebug){
+              std::cout << " -> DOMINATED\n";
           }
+
         }
-        std::cout << "- Start expands " << static_cast<uint32_t>(curr1.value().n_) << " with cost " << get_cost_from_start(curr1.value()) << std::endl;
         expanded_start_.emplace(curr1.value().n_);
       }
       if (curr2 != std::nullopt) {
         if (expanded_start_.contains(curr2.value().n_)) {
-          std::cout << "potential meet point found " << std::endl;
-          // Check if this is a valid meeting point by looking at both cost maps
+          if constexpr (kDebug) {
+            std::cout << "  potential MEETPOINT found by end ";
+            curr2.value().print(std::cout, w);
+          }
           if (cost1_.find(curr2.value().get_key()) != cost1_.end()) {
             // This node has been expanded from both directions and has entries in both cost maps
             if (get_cost_to_mp(curr2.value()) < best_cost) {
               meet_point = curr2.value();
-              std::cout << "-------meet point has been found by pq2 "
-                        << static_cast<uint32_t>(meet_point.get_node())
-                        << std::endl;
               best_cost = get_cost_to_mp(curr2.value());
+              if constexpr (kDebug) {
+                std::cout << " -> ACCEPTED\n";
+              }
+            } else if constexpr (kDebug) {
+              std::cout << " -> DOMINATED\n";
             }
+          } else if constexpr (kDebug) {
+            std::cout << " -> DOMINATED\n";
           }
         }
-        std::cout << "*End expands " << static_cast<uint32_t>(curr2.value().n_) << " with cost " << get_cost_from_end(curr2.value()) << std::endl;
         expanded_end_.emplace(curr2.value().n_);
       }
     }
   }
 
-  // a wrapper to select whether blocked edges should be considered
   void run(ways const& w,
            ways::routing const& r,
            cost_t const max,
