@@ -516,11 +516,27 @@ void extract(bool const with_platforms,
     auto reader =
         osm_io::Reader{input_file, osm_eb::way, osmium::io::read_meta::no};
 
-    while (auto b = reader.read()) {
-      pt->update(reader.offset());
-      update_locations(node_idx, b);
-      osm::apply(b, h);
-    }
+    oneapi::tbb::parallel_pipeline(
+        std::thread::hardware_concurrency() * 4U,
+        oneapi::tbb::make_filter<void, osm_mem::Buffer>(
+            oneapi::tbb::filter_mode::serial_in_order,
+            [&](oneapi::tbb::flow_control& fc) {
+              auto buf = reader.read();
+              pt->update(reader.offset());
+              if (!buf) {
+                fc.stop();
+              }
+              return buf;
+            }) &
+            oneapi::tbb::make_filter<osm_mem::Buffer, osm_mem::Buffer>(
+                oneapi::tbb::filter_mode::parallel,
+                [&](osm_mem::Buffer&& buf) {
+                  update_locations(node_idx, buf);
+                  return std::move(buf);
+                }) &
+            oneapi::tbb::make_filter<osm_mem::Buffer, void>(
+                oneapi::tbb::filter_mode::serial_in_order,
+                [&](osm_mem::Buffer&& buf) { osm::apply(buf, h); }));
 
     pt->update(pt->in_high_);
     reader.close();
