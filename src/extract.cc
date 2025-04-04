@@ -119,6 +119,7 @@ way_properties get_way_properties(tags const& t) {
   p.to_level_ = to_idx(to);
   p.is_platform_ = t.is_platform_;
   p.is_ramp_ = t.is_ramp_;
+  p.is_sidewalk_separate_ = t.sidewalk_separate_;
   return p;
 }
 

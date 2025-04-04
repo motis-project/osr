@@ -315,7 +315,8 @@ struct foot {
   static constexpr cost_t way_cost(way_properties const e,
                                    direction,
                                    std::uint16_t const dist) {
-    if ((e.is_foot_accessible() || e.is_bike_accessible()) &&
+    if ((e.is_foot_accessible() ||
+         (!e.is_sidewalk_separate() && e.is_bike_accessible())) &&
         (!IsWheelchair || !e.is_steps())) {
       return (!e.is_foot_accessible() ? 90 : 0) +
              static_cast<cost_t>(
