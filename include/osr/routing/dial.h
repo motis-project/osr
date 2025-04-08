@@ -53,7 +53,7 @@ struct dial {
 
   dist_t n_buckets() const { return static_cast<dist_t>(buckets_.size()); }
 
-private:
+public:
   dist_t get_next_bucket() const {
     assert(size_ != 0);
     auto bucket = current_bucket_;
