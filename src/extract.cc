@@ -112,7 +112,7 @@ way_properties get_way_properties(tags const& t) {
   p.is_oneway_car_ = t.oneway_;
   p.is_oneway_bike_ = t.oneway_ && !t.not_oneway_bike_;
   p.is_elevator_ = t.is_elevator_;
-  p.is_steps_ = (t.highway_ == "steps"sv);
+  p.is_steps_ = (t.highway_ == "steps"sv) || t.is_stairs_room_;
   p.is_parking_ = t.is_parking_;
   p.speed_limit_ = get_speed_limit(t);
   p.from_level_ = to_idx(from);
@@ -198,15 +198,19 @@ struct way_handler : public osm::handler::Handler {
 
     if (!t.is_elevator_ &&  // elevators tagged as building would be landuse
         !t.is_parking_ &&
-        ((it == end(rel_ways_) && t.highway_.empty() && !t.is_platform_) ||
-         (t.highway_.empty() && !t.is_platform_ && it != end(rel_ways_) &&
-          t.landuse_))) {
+        t.indoor_ != indoor::kCorridor &&  // enable routing for indoor=corridor
+        !t.is_stairs_room_  // enable routing for and room=stairs
+        && ((it == end(rel_ways_) && t.highway_.empty() && !t.is_platform_) ||
+            (t.highway_.empty() && !t.is_platform_ && it != end(rel_ways_) &&
+             t.landuse_))) {
       return;
     }
 
-    auto p = (t.is_platform_ || t.is_parking_ || !t.highway_.empty())
-                 ? get_way_properties(t)
-                 : it->second.p_;
+    auto p =
+        (t.is_platform_ || t.is_parking_ || t.indoor_ == indoor::kCorridor ||
+         t.is_stairs_room_ || !t.highway_.empty())
+            ? get_way_properties(t)
+            : it->second.p_;
     if (!p.is_accessible()) {
       return;
     }
