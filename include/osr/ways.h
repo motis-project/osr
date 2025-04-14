@@ -98,6 +98,8 @@ struct way_properties {
 
   bool is_ramp_ : 1;
   bool is_sidewalk_separate_ : 1;
+  bool is_indoor_ : 1;
+  bool is_corridor_ : 1;
 };
 
 static_assert(sizeof(way_properties) == 4);

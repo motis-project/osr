@@ -97,7 +97,9 @@ struct geojson_writer {
             {"is_elevator", p.is_elevator()},
             {"is_steps", p.is_steps()},
             {"is_parking", p.is_parking()},
-            {"is_ramp", p.is_ramp()}}},
+            {"is_ramp", p.is_ramp()},
+            {"indoor", p.is_indoor_},
+            {"corridor", p.is_corridor_}}},
           {"geometry", to_line_string(std::initializer_list<geo::latlng>{
                            w_.get_node_pos(from), w_.get_node_pos(to)})}});
     }
@@ -120,7 +122,9 @@ struct geojson_writer {
                              {"is_elevator", p.is_elevator()},
                              {"is_steps", p.is_steps()},
                              {"is_parking", p.is_parking()},
-                             {"is_ramp", p.is_ramp()}}},
+                             {"is_ramp", p.is_ramp()},
+                             {"indoor", p.is_indoor_},
+                             {"corridor", p.is_corridor_}}},
                            {"geometry", to_line_string(w_.way_polylines_[i])}});
 
     nodes_.insert(begin(nodes), end(nodes));

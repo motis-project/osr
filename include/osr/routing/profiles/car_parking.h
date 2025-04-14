@@ -203,7 +203,7 @@ struct car_parking {
   }
 
   static footp::node to_foot(node const n) {
-    return {.n_ = n.n_, .lvl_ = n.lvl_};
+    return {.n_ = n.n_, .lvl_ = n.lvl_, .indoor_ = false};
   }
 
   static node to_node(car::node const n, level_t const lvl) {
