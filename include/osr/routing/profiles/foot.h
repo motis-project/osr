@@ -22,11 +22,12 @@ struct foot {
         return l == kNoLevel || l == level_t{0.F};
       };
       return a.n_ == b.n_ &&
-             (a.lvl_ == b.lvl_ || (is_zero(a.lvl_) && is_zero(b.lvl_)));
+             (a.lvl_ == b.lvl_ || (is_zero(a.lvl_) && is_zero(b.lvl_))) &&
+             a.indoor_ == b.indoor_;
     }
 
     static constexpr node invalid() noexcept {
-      return {.n_ = node_idx_t::invalid(), .lvl_{kNoLevel}};
+      return {.n_ = node_idx_t::invalid(), .lvl_{kNoLevel}, .indoor_ = false};
     }
     constexpr node_idx_t get_node() const noexcept { return n_; }
 
@@ -40,6 +41,7 @@ struct foot {
 
     node_idx_t n_;
     level_t lvl_;
+    bool indoor_;
   };
 
   using key = node;
@@ -47,7 +49,7 @@ struct foot {
   struct label {
     label(node const n, cost_t const c) : n_{n.n_}, cost_{c}, lvl_{n.lvl_} {}
 
-    constexpr node get_node() const noexcept { return {n_, lvl_}; }
+    constexpr node get_node() const noexcept { return {n_, lvl_, indoor_}; }
     constexpr cost_t cost() const noexcept { return cost_; }
 
     void track(label const& l,
@@ -60,6 +62,7 @@ struct foot {
     node_idx_t n_;
     cost_t cost_;
     level_t lvl_;
+    bool indoor_;
     [[no_unique_address]] Tracking tracking_;
   };
 
@@ -67,7 +70,7 @@ struct foot {
     constexpr std::optional<node> pred(node) const noexcept {
       return pred_ == node_idx_t::invalid()
                  ? std::nullopt
-                 : std::optional{node{pred_, pred_lvl_}};
+                 : std::optional{node{pred_, pred_lvl_, pred_indoor_}};
     }
     constexpr cost_t cost(node) const noexcept { return cost_; }
     constexpr bool update(label const& l,
@@ -89,6 +92,7 @@ struct foot {
     node_idx_t pred_{node_idx_t::invalid()};
     cost_t cost_{kInfeasible};
     level_t pred_lvl_;
+    bool pred_indoor_;
     [[no_unique_address]] Tracking tracking_;
   };
 
@@ -99,7 +103,8 @@ struct foot {
       return wyhash::mix(
           wyhash::hash(static_cast<std::uint64_t>(
               to_idx(n.lvl_ == kNoLevel ? level_t{0.F} : n.lvl_))),
-          wyhash::hash(static_cast<std::uint64_t>(to_idx(n.n_))));
+          wyhash::mix(wyhash::hash(static_cast<std::uint64_t>(to_idx(n.n_))),
+                      wyhash::hash(n.indoor_)));
     }
   };
 
@@ -111,12 +116,15 @@ struct foot {
                                  direction,
                                  Fn&& f) {
     auto const p = w.way_properties_[way];
+    if (p.is_corridor_) {
+      return;
+    }
     if (lvl == kNoLevel ||
         (p.from_level() == lvl || p.to_level() == lvl ||
          can_use_elevator(w, n, lvl)) ||
         (lvl == level_t{0.F} &&
          (p.from_level() == kNoLevel && p.to_level() == kNoLevel))) {
-      f(node{n, p.from_level()});
+      f(node{n, p.from_level(), false});
     }
   }
 
@@ -132,15 +140,15 @@ struct foot {
       auto const p = w.way_properties_[w.node_ways_[n][i]];
       if (lvl == kNoLevel) {
         if (levels.emplace(p.from_level()).second) {
-          f(node{n, p.from_level()});
+          f(node{n, p.from_level(), p.is_indoor_});
         }
         if (levels.emplace(p.to_level()).second) {
-          f(node{n, p.to_level()});
+          f(node{n, p.to_level(), p.is_indoor_});
         }
       } else if ((p.from_level() == lvl || p.to_level() == lvl ||
                   p.from_level() == kNoLevel || can_use_elevator(w, n, lvl)) &&
                  levels.emplace(lvl).second) {
-        f(node{n, lvl});
+        f(node{n, lvl, p.is_indoor_});
       }
     }
   }
@@ -174,13 +182,23 @@ struct foot {
           return;
         }
 
+        if (target_way_prop.is_corridor_ && !n.indoor_ &&
+            !w.node_properties_[n.n_].is_entrance_) {
+          return;
+        }
+
+        if (!n.indoor_ && target_way_prop.is_corridor_ &&
+            !w.node_properties_[n.n_].is_entrance_) {
+          return;
+        }
+
         if (can_use_elevator(w, target_node, n.lvl_)) {
           for_each_elevator_level(
               w, target_node, [&](level_t const target_lvl) {
                 auto const dist = w.way_node_dist_[way][std::min(from, to)];
                 auto const cost = way_cost(target_way_prop, way_dir, dist) +
                                   node_cost(target_node_prop);
-                fn(node{target_node, target_lvl},
+                fn(node{target_node, target_lvl, target_way_prop.is_indoor_},
                    static_cast<std::uint32_t>(cost), dist, way, from, to,
                    elevation_storage::elevation{});
               });
@@ -193,8 +211,9 @@ struct foot {
           auto const dist = w.way_node_dist_[way][std::min(from, to)];
           auto const cost = way_cost(target_way_prop, way_dir, dist) +
                             node_cost(target_node_prop);
-          fn(node{target_node, *target_lvl}, static_cast<std::uint32_t>(cost),
-             dist, way, from, to, elevation_storage::elevation{});
+          fn(node{target_node, *target_lvl, target_way_prop.is_indoor_},
+             static_cast<std::uint32_t>(cost), dist, way, from, to,
+             elevation_storage::elevation{});
         }
       };
 

@@ -43,7 +43,9 @@ struct bike_sharing {
                      .is_platform_ = 0,
                      .is_parking_ = 0,
                      .is_ramp_ = 0,
-                     .is_sidewalk_separate_ = false};
+                     .is_sidewalk_separate_ = false,
+                     .is_indoor_ = false,
+                     .is_corridor_ = false};
 
   static constexpr auto const kAdditionalNodeProperties =
       node_properties{.from_level_ = 0,
@@ -84,6 +86,7 @@ struct bike_sharing {
 
     node_idx_t n_{node_idx_t::invalid()};
     level_t lvl_{};
+    bool indoor_{};
   };
 
   using hash = footp::hash;
@@ -145,6 +148,7 @@ struct bike_sharing {
     node_idx_t n_{node_idx_t::invalid()};
     node_type type_{node_type::kInvalid};
     level_t lvl_{};
+    bool indoor_{false};
   };
 
   struct label {
@@ -217,7 +221,7 @@ struct bike_sharing {
   };
 
   static footp::node to_foot(node const n) {
-    return {.n_ = n.n_, .lvl_ = n.lvl_};
+    return {.n_ = n.n_, .lvl_ = n.lvl_, .indoor_ = false};
   }
 
   static bike<kElevationNoCost>::node to_bike(node const n) {
