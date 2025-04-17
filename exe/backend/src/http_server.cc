@@ -21,6 +21,7 @@
 #include "osr/lookup.h"
 #include "osr/routing/profiles/bike.h"
 #include "osr/routing/profiles/bike_sharing.h"
+#include "osr/routing/profiles/car_sharing.h"
 #include "osr/routing/profiles/car.h"
 #include "osr/routing/profiles/car_parking.h"
 #include "osr/routing/profiles/foot.h"
@@ -210,6 +211,9 @@ struct http_server::impl {
         break;
       case search_profile::kBikeSharing:
         send_graph_response<bike_sharing>(req, cb, gj);
+        break;
+      case search_profile::kCarSharing:
+        send_graph_response<car_sharing>(req, cb, gj);
         break;
       default: throw utl::fail("not implemented");
     }
