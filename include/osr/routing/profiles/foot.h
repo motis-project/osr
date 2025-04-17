@@ -32,7 +32,9 @@ struct foot {
 
     constexpr node get_key() const noexcept { return *this; }
 
-    static constexpr mode get_mode() noexcept { return mode::kFoot; }
+    static constexpr mode get_mode() noexcept {
+      return IsWheelchair ? mode::kWheelchair : mode::kFoot;
+    }
 
     std::ostream& print(std::ostream& out, ways const& w) const {
       return out << "(node=" << w.node_to_osm_[n_] << ", level=" << lvl_ << ")";

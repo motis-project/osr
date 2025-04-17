@@ -20,6 +20,7 @@ search_profile to_profile(std::string_view s) {
     case cista::hash("car_parking_wheelchair"):
       return search_profile::kCarParkingWheelchair;
     case cista::hash("bike_sharing"): return search_profile::kBikeSharing;
+    case cista::hash("car_sharing"): return search_profile::kCarSharing;
   }
   throw utl::fail("{} is not a valid profile", s);
 }
@@ -35,8 +36,13 @@ std::string_view to_str(search_profile const p) {
     case search_profile::kCarParking: return "car_parking";
     case search_profile::kCarParkingWheelchair: return "car_parking_wheelchair";
     case search_profile::kBikeSharing: return "bike_sharing";
+    case search_profile::kCarSharing: return "car_sharing";
   }
   throw utl::fail("{} is not a valid profile", static_cast<std::uint8_t>(p));
+}
+
+bool is_rental_profile(search_profile const p) {
+  return p == search_profile::kBikeSharing || p == search_profile::kCarSharing;
 }
 
 }  // namespace osr
