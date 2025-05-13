@@ -67,8 +67,8 @@ match_t lookup::match(location const& query,
       return match<bike_sharing>(query, reverse, search_dir, max_match_distance,
                                  blocked);
     case search_profile::kCarSharing:
-      return match<car_sharing>(query, reverse, search_dir, max_match_distance,
-                                blocked);
+      return match<car_sharing<noop_tracking>>(query, reverse, search_dir,
+                                               max_match_distance, blocked);
   }
   throw utl::fail("{} is not a valid profile", static_cast<std::uint8_t>(p));
 }

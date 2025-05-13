@@ -72,7 +72,7 @@ struct dijkstra {
           r, curr, blocked, sharing, elevations,
           [&](node const neighbor, std::uint32_t const cost, distance_t,
               way_idx_t const way, std::uint16_t, std::uint16_t,
-              elevation_storage::elevation const) {
+              elevation_storage::elevation, bool const track) {
             if constexpr (kDebug) {
               std::cout << "  NEIGHBOR ";
               neighbor.print(std::cout, w);
@@ -83,7 +83,7 @@ struct dijkstra {
                 cost_[neighbor.get_key()].update(
                     l, neighbor, static_cast<cost_t>(total), curr)) {
               auto next = label{neighbor, static_cast<cost_t>(total)};
-              next.track(l, r, way, neighbor.get_node());
+              next.track(l, r, way, neighbor.get_node(), track);
               pq_.push(std::move(next));
 
               if constexpr (kDebug) {

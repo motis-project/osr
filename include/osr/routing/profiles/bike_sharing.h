@@ -157,7 +157,8 @@ struct bike_sharing {
 
     constexpr cost_t cost() const noexcept { return cost_; }
 
-    void track(label const&, ways::routing const&, way_idx_t, node_idx_t) {}
+    void track(
+        label const&, ways::routing const&, way_idx_t, node_idx_t, bool) {}
 
     node_idx_t n_;
     node_type type_;
@@ -274,7 +275,7 @@ struct bike_sharing {
                   .type_ = nt,
                   .lvl_ = nt == node_type::kBike ? kNoLevel : n.lvl_},
              cost, ae.distance_, way_idx_t::invalid(), 0, 1,
-             elevation_storage::elevation{});
+             elevation_storage::elevation{}, false);
         };
 
     auto const& continue_on_foot = [&](node_type const nt,
@@ -285,14 +286,14 @@ struct bike_sharing {
           [&](footp::node const neighbor, std::uint32_t const cost,
               distance_t const dist, way_idx_t const way,
               std::uint16_t const from, std::uint16_t const to,
-              elevation_storage::elevation const elevation) {
+              elevation_storage::elevation const elevation, bool) {
             fn(to_node(neighbor, nt), cost + switch_penalty, dist, way, from,
-               to, elevation);
+               to, elevation, false);
           });
       if (include_additional_edges) {
         // walk to station or free-floating bike
-        if (auto const it = sharing->additional_edges_.find(n.n_);
-            it != end(sharing->additional_edges_)) {
+        if (auto const it = sharing->additional_edges_->find(n.n_);
+            it != end(*sharing->additional_edges_)) {
           for (auto const& ae : it->second) {
             handle_additional_edge(
                 ae, nt,
@@ -312,14 +313,14 @@ struct bike_sharing {
               std::uint32_t const cost, distance_t const dist,
               way_idx_t const way, std::uint16_t const from,
               std::uint16_t const to,
-              elevation_storage::elevation const elevation) {
+              elevation_storage::elevation const elevation, bool) {
             fn(to_node(neighbor, kNoLevel), cost + switch_penalty, dist, way,
-               from, to, elevation);
+               from, to, elevation, false);
           });
       if (include_additional_edges) {
         // drive to station
-        if (auto const it = sharing->additional_edges_.find(n.n_);
-            it != end(sharing->additional_edges_)) {
+        if (auto const it = sharing->additional_edges_->find(n.n_);
+            it != end(*sharing->additional_edges_)) {
           for (auto const& ae : it->second) {
             handle_additional_edge(ae, node_type::kBike,
                                    bike<kElevationNoCost>::way_cost(
@@ -336,17 +337,17 @@ struct bike_sharing {
       if (n.is_additional_node(sharing)) {
         // additional node - station or free-floating bike
         // switch mode and use additional edge
-        if (auto const it = sharing->additional_edges_.find(n.n_);
-            it != end(sharing->additional_edges_)) {
+        if (auto const it = sharing->additional_edges_->find(n.n_);
+            it != end(*sharing->additional_edges_)) {
           for (auto const& ae : it->second) {
             if (n.is_initial_foot_node() &&
-                sharing->start_allowed_.test(n.n_)) {
+                sharing->start_allowed_->test(n.n_)) {
               handle_additional_edge(ae, node_type::kBike,
                                      bike<kElevationNoCost>::way_cost(
                                          kAdditionalWayProperties,
                                          direction::kForward, ae.distance_) +
                                          kStartSwitchPenalty);
-            } else if (n.is_bike_node() && sharing->end_allowed_.test(n.n_)) {
+            } else if (n.is_bike_node() && sharing->end_allowed_->test(n.n_)) {
               handle_additional_edge(
                   ae, node_type::kTrailingFoot,
                   footp::way_cost(kAdditionalWayProperties, direction::kForward,
@@ -360,7 +361,7 @@ struct bike_sharing {
           continue_on_foot(n.type_, n.is_initial_foot_node());
         } else if (n.is_bike_node()) {
           continue_on_bike(true);
-          if (sharing->end_allowed_.test(n.n_)) {
+          if (sharing->end_allowed_->test(n.n_)) {
             // switch to foot
             continue_on_foot(node_type::kTrailingFoot, false,
                              kEndSwitchPenalty);
@@ -373,16 +374,18 @@ struct bike_sharing {
       if (n.is_additional_node(sharing)) {
         // additional node - station or free-floating bike
         // switch mode and use additional edge
-        if (auto const it = sharing->additional_edges_.find(n.n_);
-            it != end(sharing->additional_edges_)) {
+        if (auto const it = sharing->additional_edges_->find(n.n_);
+            it != end(*sharing->additional_edges_)) {
           for (auto const& ae : it->second) {
-            if (n.is_trailing_foot_node() && sharing->end_allowed_.test(n.n_)) {
+            if (n.is_trailing_foot_node() &&
+                sharing->end_allowed_->test(n.n_)) {
               handle_additional_edge(ae, node_type::kBike,
                                      bike<kElevationNoCost>::way_cost(
                                          kAdditionalWayProperties,
                                          direction::kForward, ae.distance_) +
                                          kEndSwitchPenalty);
-            } else if (n.is_bike_node() && sharing->start_allowed_.test(n.n_)) {
+            } else if (n.is_bike_node() &&
+                       sharing->start_allowed_->test(n.n_)) {
               handle_additional_edge(
                   ae, node_type::kInitialFoot,
                   footp::way_cost(kAdditionalWayProperties, direction::kForward,
@@ -394,7 +397,7 @@ struct bike_sharing {
       } else {
         if (n.is_initial_foot_node() || n.is_trailing_foot_node()) {
           continue_on_foot(n.type_, n.is_trailing_foot_node());
-          if (n.is_trailing_foot_node() && sharing->end_allowed_.test(n.n_)) {
+          if (n.is_trailing_foot_node() && sharing->end_allowed_->test(n.n_)) {
             // switch to bike
             continue_on_bike(false, kEndSwitchPenalty);
           }
