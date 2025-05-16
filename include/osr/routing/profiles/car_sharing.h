@@ -336,8 +336,10 @@ struct car_sharing {
               distance_t const dist, way_idx_t const way,
               std::uint16_t const from, std::uint16_t const to,
               elevation_storage::elevation const elevation, bool) {
-            fn(to_node(neighbor, nt), cost + switch_penalty, dist, way, from,
-               to, elevation, switch_penalty != 0);
+            if (sharing->through_allowed_.test(neighbor.n_)) {
+              fn(to_node(neighbor, nt), cost + switch_penalty, dist, way, from,
+                 to, elevation, switch_penalty != 0);
+            }
           });
       if (include_additional_edges) {
         // walk to station or free-floating vehicle
@@ -362,8 +364,10 @@ struct car_sharing {
               distance_t const dist, way_idx_t const way,
               std::uint16_t const from, std::uint16_t const to,
               elevation_storage::elevation const elevation, bool) {
-            fn(to_node(neighbor, kNoLevel), cost + switch_penalty, dist, way,
-               from, to, elevation, false);
+            if (sharing->through_allowed_.test(neighbor.n_)) {
+              fn(to_node(neighbor, kNoLevel), cost + switch_penalty, dist, way,
+                 from, to, elevation, false);
+            }
           });
       if (include_additional_edges) {
         // drive to station
