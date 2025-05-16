@@ -407,6 +407,10 @@ struct car_sharing {
       } else {
         if (n.is_initial_foot_node() || n.is_trailing_foot_node()) {
           continue_on_foot(n.type_, n.is_initial_foot_node());
+          if (sharing->end_allowed_.test(n.n_)) {
+            // switch to vehicle
+            continue_with_vehicle(false);
+          }
         } else if (n.is_rental_node()) {
           continue_with_vehicle(true);
           if (sharing->end_allowed_.test(n.n_)) {
@@ -450,6 +454,10 @@ struct car_sharing {
           }
         } else if (n.is_rental_node()) {
           continue_with_vehicle(true);
+          if (sharing->start_allowed_.test(n.n_)) {
+            // switch to foot
+            continue_on_foot(n.type_, false);
+          }
         }
       }
     }
