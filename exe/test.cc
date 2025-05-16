@@ -98,7 +98,7 @@ int main(int argc, char const* argv[]) {
   auto threads = std::vector<std::thread>(std::max(1U, opt.threads_));
   for (auto& t : threads) {
     t = std::thread([&]() {
-      while (i.fetch_add(1U) < opt.n_queries_) {
+      while (i.fetch_add(1U) < opt.n_queries_ - 1) {
         auto it = d.cost_.begin();
         std::advance(it, random_numbers[i]);
         auto const end_idx = it->first;

@@ -48,7 +48,7 @@ struct a_star {
 
   struct node_h {
     cost_t priority() const {
-      return static_cast<std::uint16_t>(cost + heuristic);
+      return static_cast<std::uint16_t>(cost_ + heuristic_);
     }
     bool operator<(const node_h& other) const {
       return this->priority() < other.priority();
@@ -57,8 +57,8 @@ struct a_star {
       return this->priority() > other.priority();
     }
     Profile::label l;
-    cost_t cost;
-    cost_t heuristic;
+    cost_t cost_;
+    cost_t heuristic_;
   };
 
   cost_t heuristic(label const l, ways const& w) {
@@ -73,7 +73,7 @@ struct a_star {
   }
 
   struct get_bucket {
-    cost_t operator()(node_h const& n) { return n.cost + n.heuristic; }
+    cost_t operator()(node_h const& n) { return n.cost_ + n.heuristic_; }
   };
 
   cost_t get_cost(node const n) const {
@@ -128,7 +128,7 @@ struct a_star {
               auto next = label{neighbor, static_cast<cost_t>(total)};
               next.track(l, r, way, neighbor.get_node());
               node_h next_h = node_h{next, next.cost_, heuristic(next, w)};
-              if (next_h.cost + next_h.heuristic < max) {
+              if (next_h.cost_ + next_h.heuristic_ < max) {
                 pq_.push(std::move(next_h));
               }
               if constexpr (kDebug) {

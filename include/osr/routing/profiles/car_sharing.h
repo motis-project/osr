@@ -461,6 +461,15 @@ struct car_sharing {
                                    std::uint16_t const dist) {
     return footp::way_cost(e, dir, dist);
   }
+
+  static constexpr double heuristic(double dist) { return dist * (150U / 3.6); }
+  static constexpr node get_reverse(node const n) {
+    return {.n_ = n.n_,
+            .type_ = n.type_,
+            .lvl_ = n.lvl_,
+            .dir_ = opposite(n.dir_),
+            .way_ = n.way_};
+  }
 };
 
 }  // namespace osr

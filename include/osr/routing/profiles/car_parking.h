@@ -318,7 +318,7 @@ struct car_parking {
     return footp::way_cost(e, dir, dist);
   }
 
-  static constexpr cost_t heuristic(double dist) {
+  static constexpr double heuristic(double dist) {
     return car::heuristic(dist);
   }
 
