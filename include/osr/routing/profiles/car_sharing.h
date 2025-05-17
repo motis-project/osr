@@ -187,7 +187,7 @@ struct car_sharing {
     level_t lvl_;
     direction dir_;
     way_pos_t way_;
-    [[no_unique_address]] Tracking tracking_;
+    [[no_unique_address]] Tracking tracking_{};
   };
 
   struct entry {
@@ -218,7 +218,7 @@ struct car_sharing {
       return cost_[get_index(n)];
     }
 
-    constexpr bool update(label const,
+    constexpr bool update(label const& l,
                           node const n,
                           cost_t const c,
                           node const pred) noexcept {
@@ -230,6 +230,7 @@ struct car_sharing {
         pred_way_[idx] = pred.way_;
         pred_dir_[idx] = to_bool(pred.dir_);
         pred_type_[idx] = pred.type_;
+        tracking_[idx] = l.tracking_;
         return true;
       }
       return false;
@@ -252,7 +253,9 @@ struct car_sharing {
       return d == direction::kBackward;
     }
 
-    void write(node, path&) const {}
+    void write(node const n, path& p) const {
+      tracking_[get_index(n)].write(p);
+    }
 
     std::array<node_idx_t, kN> pred_{};
     std::array<cost_t, kN> cost_{};
@@ -260,6 +263,7 @@ struct car_sharing {
     std::array<way_pos_t, kN> pred_way_{};
     std::bitset<kN> pred_dir_{};
     std::array<node_type, kN> pred_type_{};
+    [[no_unique_address]] std::array<Tracking, kN> tracking_;
   };
 
   static footp::node to_foot(node const n) {
