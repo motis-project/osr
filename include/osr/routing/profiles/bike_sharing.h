@@ -157,7 +157,8 @@ struct bike_sharing {
 
     constexpr cost_t cost() const noexcept { return cost_; }
 
-    void track(label const&, ways::routing const&, way_idx_t, node_idx_t) {}
+    void track(
+        label const&, ways::routing const&, way_idx_t, node_idx_t, bool) {}
 
     node_idx_t n_;
     node_type type_;
@@ -274,7 +275,7 @@ struct bike_sharing {
                   .type_ = nt,
                   .lvl_ = nt == node_type::kBike ? kNoLevel : n.lvl_},
              cost, ae.distance_, way_idx_t::invalid(), 0, 1,
-             elevation_storage::elevation{});
+             elevation_storage::elevation{}, false);
         };
 
     auto const& continue_on_foot = [&](node_type const nt,
@@ -285,9 +286,11 @@ struct bike_sharing {
           [&](footp::node const neighbor, std::uint32_t const cost,
               distance_t const dist, way_idx_t const way,
               std::uint16_t const from, std::uint16_t const to,
-              elevation_storage::elevation const elevation) {
-            fn(to_node(neighbor, nt), cost + switch_penalty, dist, way, from,
-               to, elevation);
+              elevation_storage::elevation const elevation, bool) {
+            if (sharing->through_allowed_.test(neighbor.n_)) {
+              fn(to_node(neighbor, nt), cost + switch_penalty, dist, way, from,
+                 to, elevation, false);
+            }
           });
       if (include_additional_edges) {
         // walk to station or free-floating bike
@@ -312,9 +315,11 @@ struct bike_sharing {
               std::uint32_t const cost, distance_t const dist,
               way_idx_t const way, std::uint16_t const from,
               std::uint16_t const to,
-              elevation_storage::elevation const elevation) {
-            fn(to_node(neighbor, kNoLevel), cost + switch_penalty, dist, way,
-               from, to, elevation);
+              elevation_storage::elevation const elevation, bool) {
+            if (sharing->through_allowed_.test(neighbor.n_)) {
+              fn(to_node(neighbor, kNoLevel), cost + switch_penalty, dist, way,
+                 from, to, elevation, false);
+            }
           });
       if (include_additional_edges) {
         // drive to station

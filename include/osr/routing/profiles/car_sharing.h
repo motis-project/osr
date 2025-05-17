@@ -20,6 +20,7 @@
 
 namespace osr {
 
+template <typename Tracking = noop_tracking>
 struct car_sharing {
   using footp = foot<false>;
 
@@ -172,7 +173,13 @@ struct car_sharing {
 
     constexpr cost_t cost() const noexcept { return cost_; }
 
-    void track(label const&, ways::routing const&, way_idx_t, node_idx_t) {}
+    void track(label const& l,
+               ways::routing const& r,
+               way_idx_t const w,
+               node_idx_t const n,
+               bool const track) {
+      tracking_.track(l.tracking_, r, w, n, track);
+    }
 
     node_idx_t n_;
     cost_t cost_;
@@ -180,6 +187,7 @@ struct car_sharing {
     level_t lvl_;
     direction dir_;
     way_pos_t way_;
+    [[no_unique_address]] Tracking tracking_{};
   };
 
   struct entry {
@@ -210,7 +218,7 @@ struct car_sharing {
       return cost_[get_index(n)];
     }
 
-    constexpr bool update(label const,
+    constexpr bool update(label const& l,
                           node const n,
                           cost_t const c,
                           node const pred) noexcept {
@@ -222,6 +230,7 @@ struct car_sharing {
         pred_way_[idx] = pred.way_;
         pred_dir_[idx] = to_bool(pred.dir_);
         pred_type_[idx] = pred.type_;
+        tracking_[idx] = l.tracking_;
         return true;
       }
       return false;
@@ -244,7 +253,9 @@ struct car_sharing {
       return d == direction::kBackward;
     }
 
-    void write(node, path&) const {}
+    void write(node const n, path& p) const {
+      tracking_[get_index(n)].write(p);
+    }
 
     std::array<node_idx_t, kN> pred_{};
     std::array<cost_t, kN> cost_{};
@@ -252,6 +263,7 @@ struct car_sharing {
     std::array<way_pos_t, kN> pred_way_{};
     std::bitset<kN> pred_dir_{};
     std::array<node_type, kN> pred_type_{};
+    [[no_unique_address]] std::array<Tracking, kN> tracking_;
   };
 
   static footp::node to_foot(node const n) {
@@ -316,7 +328,7 @@ struct car_sharing {
                   .type_ = nt,
                   .lvl_ = nt == node_type::kRental ? kNoLevel : n.lvl_},
              cost, ae.distance_, way_idx_t::invalid(), 0, 1,
-             elevation_storage::elevation{});
+             elevation_storage::elevation{}, false);
         };
 
     auto const& continue_on_foot = [&](node_type const nt,
@@ -327,9 +339,11 @@ struct car_sharing {
           [&](footp::node const neighbor, std::uint32_t const cost,
               distance_t const dist, way_idx_t const way,
               std::uint16_t const from, std::uint16_t const to,
-              elevation_storage::elevation const elevation) {
-            fn(to_node(neighbor, nt), cost + switch_penalty, dist, way, from,
-               to, elevation);
+              elevation_storage::elevation const elevation, bool) {
+            if (sharing->through_allowed_.test(neighbor.n_)) {
+              fn(to_node(neighbor, nt), cost + switch_penalty, dist, way, from,
+                 to, elevation, switch_penalty != 0);
+            }
           });
       if (include_additional_edges) {
         // walk to station or free-floating vehicle
@@ -353,9 +367,11 @@ struct car_sharing {
           [&](car::node const neighbor, std::uint32_t const cost,
               distance_t const dist, way_idx_t const way,
               std::uint16_t const from, std::uint16_t const to,
-              elevation_storage::elevation const elevation) {
-            fn(to_node(neighbor, kNoLevel), cost + switch_penalty, dist, way,
-               from, to, elevation);
+              elevation_storage::elevation const elevation, bool) {
+            if (sharing->through_allowed_.test(neighbor.n_)) {
+              fn(to_node(neighbor, kNoLevel), cost + switch_penalty, dist, way,
+                 from, to, elevation, false);
+            }
           });
       if (include_additional_edges) {
         // drive to station
@@ -399,6 +415,10 @@ struct car_sharing {
       } else {
         if (n.is_initial_foot_node() || n.is_trailing_foot_node()) {
           continue_on_foot(n.type_, n.is_initial_foot_node());
+          if (n.is_initial_foot_node() && sharing->start_allowed_.test(n.n_)) {
+            // switch to vehicle
+            continue_with_vehicle(false, kStartSwitchPenalty);
+          }
         } else if (n.is_rental_node()) {
           continue_with_vehicle(true);
           if (sharing->end_allowed_.test(n.n_)) {
@@ -442,6 +462,10 @@ struct car_sharing {
           }
         } else if (n.is_rental_node()) {
           continue_with_vehicle(true);
+          if (sharing->start_allowed_.test(n.n_)) {
+            // switch to foot
+            continue_on_foot(n.type_, false, kEndSwitchPenalty);
+          }
         }
       }
     }

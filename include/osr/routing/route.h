@@ -40,6 +40,7 @@ struct path {
   elevation_storage::elevation elevation_{};
   std::vector<segment> segments_{};
   bool uses_elevator_{false};
+  node_idx_t track_node_{node_idx_t::invalid()};
 };
 
 template <typename Profile>

@@ -57,7 +57,8 @@ struct car {
     constexpr node get_node() const noexcept { return {n_, way_, dir_}; }
     constexpr cost_t cost() const noexcept { return cost_; }
 
-    void track(label const&, ways::routing const&, way_idx_t, node_idx_t) {}
+    void track(
+        label const&, ways::routing const&, way_idx_t, node_idx_t, bool) {}
 
     node_idx_t n_;
     way_pos_t way_;
@@ -201,7 +202,8 @@ struct car {
         auto const cost = way_cost(target_way_prop, way_dir, dist) +
                           node_cost(target_node_prop) +
                           (is_u_turn ? kUturnPenalty : 0U);
-        fn(target, cost, dist, way, from, to, elevation_storage::elevation{});
+        fn(target, cost, dist, way, from, to, elevation_storage::elevation{},
+           false);
       };
 
       if (i != 0U) {

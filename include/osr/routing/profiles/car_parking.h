@@ -108,7 +108,8 @@ struct car_parking {
 
     constexpr cost_t cost() const noexcept { return cost_; }
 
-    void track(label const&, ways::routing const&, way_idx_t, node_idx_t) {}
+    void track(
+        label const&, ways::routing const&, way_idx_t, node_idx_t, bool) {}
 
     node_idx_t n_;
     cost_t cost_;
@@ -254,10 +255,10 @@ struct car_parking {
           [&](footp::node const neighbor, std::uint32_t const cost,
               distance_t const dist, way_idx_t const way,
               std::uint16_t const from, std::uint16_t const to,
-              elevation_storage::elevation const elevation) {
+              elevation_storage::elevation const elevation, bool) {
             fn(to_node(neighbor),
                cost + (n.is_foot_node() ? 0 : kSwitchPenalty), dist, way, from,
-               to, elevation);
+               to, elevation, false);
           });
     }
 
@@ -267,11 +268,11 @@ struct car_parking {
           [&](car::node const neighbor, std::uint32_t const cost,
               distance_t const dist, way_idx_t const way,
               std::uint16_t const from, std::uint16_t const to,
-              elevation_storage::elevation const elevation) {
+              elevation_storage::elevation const elevation, bool) {
             auto const way_prop = w.way_properties_[way];
             fn(to_node(neighbor, way_prop.from_level()),
                cost + (n.is_car_node() ? 0 : kSwitchPenalty), dist, way, from,
-               to, elevation);
+               to, elevation, false);
           });
     }
   }
