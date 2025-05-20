@@ -14,6 +14,8 @@
 
 #include "conf/options_parser.h"
 
+#include "osr/location.h"
+#include "osr/routing/bidirectional.h"
 #include "utl/timer.h"
 
 #include "osr/elevation_storage.h"
@@ -40,7 +42,7 @@ public:
 
   fs::path data_dir_{"osr"};
   unsigned n_queries_{50};
-  unsigned max_dist_{1200};
+  unsigned max_dist_{50000};
   unsigned threads_{std::thread::hardware_concurrency()};
 };
 
@@ -103,6 +105,30 @@ void set_start<car>(dijkstra<car>& d, ways const& w, node_idx_t const start) {
   d.add_start(w, car::label{car::node{start, 0, direction::kBackward}, 0U});
 };
 
+template <typename T>
+void set_start(bidirectional<T>& d, ways const& w, node_idx_t const start) {
+  d.add_start(w, typename T::label{typename T::node{start}, 0U});
+}
+
+template <>
+void set_start<car>(bidirectional<car>& d,
+                    ways const& w,
+                    node_idx_t const start) {
+  d.add_start(w, car::label{car::node{start, 0, direction::kForward}, 0U});
+  d.add_start(w, car::label{car::node{start, 0, direction::kBackward}, 0U});
+};
+
+template <typename T>
+void set_end(bidirectional<T>& d, ways const& w, node_idx_t const end) {
+  d.add_end(w, typename T::label{typename T::node{end}, 0U});
+}
+
+template <>
+void set_end<car>(bidirectional<car>& d, ways const& w, node_idx_t const end) {
+  d.add_end(w, car::label{car::node{end, 0, direction::kForward}, 0U});
+  d.add_end(w, car::label{car::node{end, 0, direction::kBackward}, 0U});
+};
+
 int main(int argc, char const* argv[]) {
   auto opt = settings{};
   auto parser = conf::options_parser({&opt});
@@ -138,15 +164,30 @@ int main(int argc, char const* argv[]) {
     for (auto& t : threads) {
       t = std::thread([&]() {
         auto d = dijkstra<T>{};
+        auto b = bidirectional<T>{};
         auto h = cista::BASE_HASH;
         auto n = 0U;
-        while (i.fetch_add(1U) < opt.n_queries_) {
-          auto const start_time = std::chrono::steady_clock::now();
+        while (i.fetch_add(1U) < opt.n_queries_ - 1) {
           auto const start =
               node_idx_t{cista::hash_combine(h, ++n, i.load()) % w.n_nodes()};
+          auto const end =
+              node_idx_t{cista::hash_combine(h, ++n, i.load()) % w.n_nodes()};
+
+          if (w.r_->node_ways_[start].empty() ||
+              w.r_->node_ways_[end].empty()) {
+            continue;
+          }
           d.reset(opt.max_dist_);
+          b.reset(opt.max_dist_,
+                  location{w.get_node_pos(start).as_latlng(), level_t{0.F}},
+                  location{w.get_node_pos(end).as_latlng(), level_t{0.F}});
           set_start<T>(d, w, start);
+          set_start<T>(b, w, start);
+          set_end<T>(b, w, end);
           d.template run<direction::kForward, false>(
+              w, *w.r_, opt.max_dist_, nullptr, nullptr, elevations.get());
+          auto const start_time = std::chrono::steady_clock::now();
+          b.template run<direction::kForward, false>(
               w, *w.r_, opt.max_dist_, nullptr, nullptr, elevations.get());
           auto const end_time = std::chrono::steady_clock::now();
           {

@@ -183,6 +183,8 @@ path reconstruct_bi(ways const& w,
                     direction const dir) {
   auto forward_n = b.meet_point_;
 
+  // TODO subtact meetpoint node cost
+
   auto forward_segments = std::vector<path::segment>{};
   auto forward_dist = 0.0;
 
@@ -427,31 +429,30 @@ std::optional<path> route(ways const& w,
   if (auto const direct = try_direct(from, to); direct.has_value()) {
     return *direct;
   }
-  std::vector<way_candidate> to_sort(to_match.begin(), to_match.end());
-  std::vector<way_candidate> from_sort(from_match.begin(), from_match.end());
-
-  std::sort(to_sort.begin(), to_sort.end());
-  std::sort(from_sort.begin(), from_sort.end());
 
   b.reset(max, from, to);
-
-  for (auto const& start : from_sort) {
-    for (auto const& end : to_sort) {
+  auto init = 0;
+  for (auto const& start : from_match) {
+    for (auto const& end : to_match) {
       for (auto const* nc : {&start.left_, &start.right_}) {
         if (nc->valid() && nc->cost_ < max) {
-          Profile::resolve_start_node(
-              *w.r_, start.way_, nc->node_, from.lvl_, dir,
-              [&](auto const node) { b.add_start(w, {node, nc->cost_}); });
+          Profile::resolve_start_node(*w.r_, start.way_, nc->node_, from.lvl_,
+                                      dir, [&](auto const node) {
+                                        b.add_start(w, {node, nc->cost_});
+                                        ++init;
+                                      });
         }
       }
       for (auto const* nc : {&end.left_, &end.right_}) {
         if (nc->valid() && nc->cost_ < max) {
-          Profile::resolve_start_node(
-              *w.r_, end.way_, nc->node_, from.lvl_, opposite(dir),
-              [&](auto const node) { b.add_end(w, {node, nc->cost_}); });
+          Profile::resolve_start_node(*w.r_, end.way_, nc->node_, from.lvl_,
+                                      opposite(dir), [&](auto const node) {
+                                        b.add_end(w, {node, nc->cost_});
+                                        init++;
+                                      });
         }
       }
-      if (b.pq1_.empty() && b.pq2_.empty()) {
+      if ((b.pq1_.empty() && b.pq2_.empty()) || init < 2) {
         continue;
       }
       b.clear_mp();
@@ -469,12 +470,6 @@ std::optional<path> route(ways const& w,
 
       auto const cost = b.get_cost_to_mp(b.meet_point_);
 
-      /* if (b.cost1_.find(b.meet_point_.get_key()) != b.cost1_.end()) {
-         cost += b.cost1_.at(b.meet_point_.get_key()).cost(b.meet_point_);
-       }
-       if (b.cost2_.find(b.meet_point_.get_key()) != b.cost2_.end()) {
-         cost += b.cost2_.at(b.meet_point_.get_key()).cost(b.meet_point_);
-       }*/
       std::cout << "cost " << cost << " "
                 << b.cost1_.at(b.meet_point_.get_key()).cost(b.meet_point_)
                 << " "
