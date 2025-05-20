@@ -464,7 +464,7 @@ struct car_sharing {
           continue_with_vehicle(true);
           if (sharing->start_allowed_.test(n.n_)) {
             // switch to foot
-            continue_on_foot(n.type_, false, kEndSwitchPenalty);
+            continue_on_foot(node_type::kInitialFoot, false, kEndSwitchPenalty);
           }
         }
       }
