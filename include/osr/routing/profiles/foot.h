@@ -55,8 +55,9 @@ struct foot {
     void track(label const& l,
                ways::routing const& r,
                way_idx_t const w,
-               node_idx_t const n) {
-      tracking_.track(l.tracking_, r, w, n);
+               node_idx_t const n,
+               bool) {
+      tracking_.track(l.tracking_, r, w, n, false);
     }
 
     node_idx_t n_;
@@ -184,7 +185,7 @@ struct foot {
                                   node_cost(target_node_prop);
                 fn(node{target_node, target_lvl},
                    static_cast<std::uint32_t>(cost), dist, way, from, to,
-                   elevation_storage::elevation{});
+                   elevation_storage::elevation{}, false);
               });
         } else {
           auto const target_lvl = get_target_level(w, n.n_, n.lvl_, way);
@@ -196,7 +197,7 @@ struct foot {
           auto const cost = way_cost(target_way_prop, way_dir, dist) +
                             node_cost(target_node_prop);
           fn(node{target_node, *target_lvl}, static_cast<std::uint32_t>(cost),
-             dist, way, from, to, elevation_storage::elevation{});
+             dist, way, from, to, elevation_storage::elevation{}, false);
         }
       };
 
