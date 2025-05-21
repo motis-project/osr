@@ -264,8 +264,9 @@ best_candidate(ways const& w,
     return std::pair{best_node, best_cost};
   };
 
+  auto checked = 0U;
   for (auto const& dest : m) {
-    auto best_node = typename Profile::node{};
+    auto best_node = Profile::node::invalid();
     auto best_cost = path{.cost_ = std::numeric_limits<cost_t>::max()};
     auto best = static_cast<node_candidate const*>(nullptr);
 
@@ -280,12 +281,13 @@ best_candidate(ways const& w,
       }
     }
 
+    ++checked;
     if (best != nullptr) {
       return best_cost.cost_ < max
                  ? std::optional{std::tuple{best, &dest, best_node, best_cost}}
                  : std::nullopt;
-    } else {
-      return std::nullopt;
+    } else if (checked == 10U) {
+      break;
     }
   }
   return std::nullopt;
