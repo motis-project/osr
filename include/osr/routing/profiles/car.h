@@ -249,6 +249,13 @@ struct car {
   static constexpr cost_t node_cost(node_properties const& n) {
     return n.is_car_accessible() ? 0U : kInfeasible;
   }
+
+  static constexpr cost_t heuristic(double dist) {
+    return static_cast<cost_t>(dist * 0 / (150U / 3.6));
+  }
+  static constexpr node get_reverse(node const n) {
+    return {n.n_, n.way_, opposite(n.dir_)};
+  }
 };
 
 }  // namespace osr

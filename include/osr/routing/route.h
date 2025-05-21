@@ -5,9 +5,11 @@
 
 #include "geo/polyline.h"
 
+#include "bidirectional.h"
 #include "osr/elevation_storage.h"
 #include "osr/location.h"
 #include "osr/lookup.h"
+#include "osr/routing/algorithms.h"
 #include "osr/routing/mode.h"
 #include "osr/routing/profile.h"
 #include "osr/types.h"
@@ -44,6 +46,9 @@ struct path {
 };
 
 template <typename Profile>
+bidirectional<Profile>& get_bidirectional();
+
+template <typename Profile>
 dijkstra<Profile>& get_dijkstra();
 
 std::vector<std::optional<path>> route(
@@ -62,29 +67,41 @@ std::vector<std::optional<path>> route(
       return false;
     });
 
-std::optional<path> route(ways const&,
-                          lookup const&,
-                          search_profile,
-                          location const& from,
-                          location const& to,
-                          cost_t max,
-                          direction,
-                          double max_match_distance,
-                          bitvec<node_idx_t> const* blocked = nullptr,
-                          sharing_data const* sharing = nullptr,
-                          elevation_storage const* = nullptr);
+std::optional<path> route_dijkstra(ways const&,
+                                   lookup const&,
+                                   search_profile,
+                                   location const& from,
+                                   location const& to,
+                                   cost_t max,
+                                   direction,
+                                   double max_match_distance,
+                                   bitvec<node_idx_t> const* blocked = nullptr,
+                                   sharing_data const* sharing = nullptr,
+                                   elevation_storage const* = nullptr);
 
-std::optional<path> route(ways const&,
-                          search_profile,
-                          location const& from,
-                          location const& to,
-                          match_view_t from_match,
-                          match_view_t to_match,
-                          cost_t const max,
-                          direction,
-                          bitvec<node_idx_t> const* blocked = nullptr,
-                          sharing_data const* sharing = nullptr,
-                          elevation_storage const* = nullptr);
+std::optional<path> route_bidirectional(
+    ways const&,
+    lookup const&,
+    search_profile,
+    location const& from,
+    location const& to,
+    cost_t max,
+    direction,
+    double max_match_distance,
+    bitvec<node_idx_t> const* blocked = nullptr,
+    sharing_data const* sharing = nullptr);
+
+std::optional<path> route_dijkstra(ways const&,
+                                   search_profile,
+                                   location const& from,
+                                   location const& to,
+                                   match_view_t from_match,
+                                   match_view_t to_match,
+                                   cost_t const max,
+                                   direction,
+                                   bitvec<node_idx_t> const* blocked = nullptr,
+                                   sharing_data const* sharing = nullptr,
+                                   elevation_storage const* = nullptr);
 
 std::vector<std::optional<path>> route(
     ways const&,
@@ -102,4 +119,16 @@ std::vector<std::optional<path>> route(
       return false;
     });
 
+std::optional<path> route(ways const&,
+                          lookup const&,
+                          search_profile,
+                          routing_algorithm,
+                          location const& from,
+                          location const& to,
+                          cost_t max,
+                          direction,
+                          double max_match_distance,
+                          bitvec<node_idx_t> const* blocked = nullptr,
+                          sharing_data const* sharing = nullptr,
+                          elevation_storage const* = nullptr);
 }  // namespace osr

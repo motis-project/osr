@@ -187,7 +187,7 @@ struct bike {
                                    direction,
                                    std::uint16_t const dist) {
     if (e.is_bike_accessible()) {
-      return static_cast<cost_t>(std::round(dist / 2.8F));
+      return static_cast<cost_t>(std::round(dist / 4.F));
     } else {
       return kInfeasible;
     }
@@ -196,6 +196,13 @@ struct bike {
   static constexpr cost_t node_cost(node_properties const n) {
     return n.is_bike_accessible() ? 0U : kInfeasible;
   }
+
+  static constexpr cost_t heuristic(double dist) {
+    return static_cast<cost_t>(dist /
+                               to_meters_per_second(speed_limit::kmh_30));
+  }
+
+  static constexpr node get_reverse(node const n) { return n; }
 };
 
 }  // namespace osr
