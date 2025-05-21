@@ -59,7 +59,8 @@ struct bike {
     constexpr node get_node() const noexcept { return {n_}; }
     constexpr cost_t cost() const noexcept { return cost_; }
 
-    void track(label const&, ways::routing const&, way_idx_t, node_idx_t) {}
+    void track(
+        label const&, ways::routing const&, way_idx_t, node_idx_t, bool) {}
 
     node_idx_t n_;
     level_t lvl_;
@@ -170,7 +171,7 @@ struct bike {
         auto const cost = way_cost(target_way_prop, way_dir, dist) +
                           node_cost(target_node_prop) + elevation_cost;
         fn(node{target_node}, static_cast<std::uint32_t>(cost), dist, way, from,
-           to, elevation);
+           to, elevation, false);
       };
 
       if (i != 0U) {

@@ -155,6 +155,10 @@ struct ways {
                : std::nullopt;
   }
 
+  bool is_additional_node(osr::node_idx_t const n) const {
+    return n != node_idx_t::invalid() && n >= n_nodes();
+  }
+
   std::optional<node_idx_t> find_node_idx(osm_node_idx_t const i) const {
     auto const it = std::lower_bound(begin(node_to_osm_), end(node_to_osm_), i,
                                      [](auto&& a, auto&& b) { return a < b; });

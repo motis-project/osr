@@ -222,7 +222,7 @@ struct http_server::impl {
         send_graph_response<bike_sharing>(req, cb, gj);
         break;
       case search_profile::kCarSharing:
-        send_graph_response<car_sharing>(req, cb, gj);
+        send_graph_response<car_sharing<track_node_tracking>>(req, cb, gj);
         break;
       default: throw utl::fail("not implemented");
     }
