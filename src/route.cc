@@ -241,7 +241,7 @@ best_candidate(ways const& w,
                direction const dir) {
   auto const get_best = [&](way_candidate const& dest,
                             node_candidate const* x) {
-    auto best_node = typename Profile::node{};
+    auto best_node = Profile::node::invalid();
     auto best_cost = path{.cost_ = std::numeric_limits<cost_t>::max()};
     Profile::resolve_all(*w.r_, x->node_, lvl, [&](auto&& node) {
       if (!Profile::is_dest_reachable(*w.r_, node, dest.way_,
@@ -256,7 +256,7 @@ best_candidate(ways const& w,
       }
 
       auto const total_cost = target_cost + x->cost_;
-      if (total_cost < max && total_cost < best_cost.cost_) {
+      if (total_cost < best_cost.cost_) {
         best_node = node;
         best_cost.cost_ = static_cast<cost_t>(total_cost);
       }
@@ -264,15 +264,16 @@ best_candidate(ways const& w,
     return std::pair{best_node, best_cost};
   };
 
+  auto checked = 0U;
   for (auto const& dest : m) {
-    auto best_node = typename Profile::node{};
+    auto best_node = Profile::node::invalid();
     auto best_cost = path{.cost_ = std::numeric_limits<cost_t>::max()};
     auto best = static_cast<node_candidate const*>(nullptr);
 
     for (auto const x : {&dest.left_, &dest.right_}) {
-      if (x->valid() && x->cost_ < max) {
+      if (x->valid()) {
         auto const [x_node, x_cost] = get_best(dest, x);
-        if (x_cost.cost_ < max && x_cost.cost_ < best_cost.cost_) {
+        if (x_cost.cost_ < best_cost.cost_) {
           best = x;
           best_node = x_node;
           best_cost = x_cost;
@@ -280,8 +281,13 @@ best_candidate(ways const& w,
       }
     }
 
+    ++checked;
     if (best != nullptr) {
-      return std::tuple{best, &dest, best_node, best_cost};
+      return best_cost.cost_ < max
+                 ? std::optional{std::tuple{best, &dest, best_node, best_cost}}
+                 : std::nullopt;
+    } else if (checked == 10U) {
+      break;
     }
   }
   return std::nullopt;
