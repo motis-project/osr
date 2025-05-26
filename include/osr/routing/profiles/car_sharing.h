@@ -340,7 +340,7 @@ struct car_sharing {
               distance_t const dist, way_idx_t const way,
               std::uint16_t const from, std::uint16_t const to,
               elevation_storage::elevation const elevation, bool) {
-            if (sharing->through_allowed_.test(neighbor.n_)) {
+            if (is_allowed(sharing->through_allowed_, neighbor.n_)) {
               fn(to_node(neighbor, nt), cost + switch_penalty, dist, way, from,
                  to, elevation, switch_penalty != 0);
             }
@@ -368,7 +368,7 @@ struct car_sharing {
               distance_t const dist, way_idx_t const way,
               std::uint16_t const from, std::uint16_t const to,
               elevation_storage::elevation const elevation, bool) {
-            if (sharing->through_allowed_.test(neighbor.n_)) {
+            if (is_allowed(sharing->through_allowed_, neighbor.n_)) {
               fn(to_node(neighbor, kNoLevel), cost + switch_penalty, dist, way,
                  from, to, elevation, false);
             }
@@ -397,13 +397,14 @@ struct car_sharing {
             it != end(sharing->additional_edges_)) {
           for (auto const& ae : it->second) {
             if (n.is_initial_foot_node() &&
-                sharing->start_allowed_.test(n.n_)) {
+                is_allowed(sharing->start_allowed_, n.n_)) {
               handle_additional_edge(
                   ae, node_type::kRental,
                   car::way_cost(kAdditionalWayProperties, direction::kForward,
                                 ae.distance_) +
                       kStartSwitchPenalty);
-            } else if (n.is_rental_node() && sharing->end_allowed_.test(n.n_)) {
+            } else if (n.is_rental_node() &&
+                       is_allowed(sharing->end_allowed_, n.n_)) {
               handle_additional_edge(
                   ae, node_type::kTrailingFoot,
                   footp::way_cost(kAdditionalWayProperties, direction::kForward,
@@ -415,13 +416,14 @@ struct car_sharing {
       } else {
         if (n.is_initial_foot_node() || n.is_trailing_foot_node()) {
           continue_on_foot(n.type_, n.is_initial_foot_node());
-          if (n.is_initial_foot_node() && sharing->start_allowed_.test(n.n_)) {
+          if (n.is_initial_foot_node() &&
+              is_allowed(sharing->start_allowed_, n.n_)) {
             // switch to vehicle
             continue_with_vehicle(false, kStartSwitchPenalty);
           }
         } else if (n.is_rental_node()) {
           continue_with_vehicle(true);
-          if (sharing->end_allowed_.test(n.n_)) {
+          if (is_allowed(sharing->end_allowed_, n.n_)) {
             // switch to foot
             continue_on_foot(node_type::kTrailingFoot, false,
                              kEndSwitchPenalty);
@@ -437,14 +439,15 @@ struct car_sharing {
         if (auto const it = sharing->additional_edges_.find(n.n_);
             it != end(sharing->additional_edges_)) {
           for (auto const& ae : it->second) {
-            if (n.is_trailing_foot_node() && sharing->end_allowed_.test(n.n_)) {
+            if (n.is_trailing_foot_node() &&
+                is_allowed(sharing->end_allowed_, n.n_)) {
               handle_additional_edge(
                   ae, node_type::kRental,
                   car::way_cost(kAdditionalWayProperties, direction::kForward,
                                 ae.distance_) +
                       kEndSwitchPenalty);
             } else if (n.is_rental_node() &&
-                       sharing->start_allowed_.test(n.n_)) {
+                       is_allowed(sharing->start_allowed_, n.n_)) {
               handle_additional_edge(
                   ae, node_type::kInitialFoot,
                   footp::way_cost(kAdditionalWayProperties, direction::kForward,
@@ -456,13 +459,14 @@ struct car_sharing {
       } else {
         if (n.is_initial_foot_node() || n.is_trailing_foot_node()) {
           continue_on_foot(n.type_, n.is_trailing_foot_node());
-          if (n.is_trailing_foot_node() && sharing->end_allowed_.test(n.n_)) {
+          if (n.is_trailing_foot_node() &&
+              is_allowed(sharing->end_allowed_, n.n_)) {
             // switch to vehicle
             continue_with_vehicle(false, kEndSwitchPenalty);
           }
         } else if (n.is_rental_node()) {
           continue_with_vehicle(true);
-          if (sharing->start_allowed_.test(n.n_)) {
+          if (is_allowed(sharing->start_allowed_, n.n_)) {
             // switch to foot
             continue_on_foot(node_type::kInitialFoot, false, kEndSwitchPenalty);
           }
