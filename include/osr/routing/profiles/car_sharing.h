@@ -403,7 +403,9 @@ struct car_sharing {
                   car::way_cost(kAdditionalWayProperties, direction::kForward,
                                 ae.distance_) +
                       kStartSwitchPenalty);
-            } else if (n.is_rental_node() && sharing->end_allowed_.test(n.n_)) {
+            } else if (n.is_rental_node() &&
+                       (sharing->ignore_return_constraints_ ||
+                        sharing->end_allowed_.test(n.n_))) {
               handle_additional_edge(
                   ae, node_type::kTrailingFoot,
                   footp::way_cost(kAdditionalWayProperties, direction::kForward,
@@ -421,7 +423,8 @@ struct car_sharing {
           }
         } else if (n.is_rental_node()) {
           continue_with_vehicle(true);
-          if (sharing->end_allowed_.test(n.n_)) {
+          if (sharing->ignore_return_constraints_ ||
+              sharing->end_allowed_.test(n.n_)) {
             // switch to foot
             continue_on_foot(node_type::kTrailingFoot, false,
                              kEndSwitchPenalty);
@@ -437,7 +440,9 @@ struct car_sharing {
         if (auto const it = sharing->additional_edges_.find(n.n_);
             it != end(sharing->additional_edges_)) {
           for (auto const& ae : it->second) {
-            if (n.is_trailing_foot_node() && sharing->end_allowed_.test(n.n_)) {
+            if (n.is_trailing_foot_node() &&
+                (sharing->ignore_return_constraints_ ||
+                 sharing->end_allowed_.test(n.n_))) {
               handle_additional_edge(
                   ae, node_type::kRental,
                   car::way_cost(kAdditionalWayProperties, direction::kForward,
@@ -456,7 +461,9 @@ struct car_sharing {
       } else {
         if (n.is_initial_foot_node() || n.is_trailing_foot_node()) {
           continue_on_foot(n.type_, n.is_trailing_foot_node());
-          if (n.is_trailing_foot_node() && sharing->end_allowed_.test(n.n_)) {
+          if (n.is_trailing_foot_node() &&
+              (sharing->ignore_return_constraints_ ||
+               sharing->end_allowed_.test(n.n_))) {
             // switch to vehicle
             continue_with_vehicle(false, kEndSwitchPenalty);
           }

@@ -11,6 +11,7 @@ struct sharing_data {
   bitvec<node_idx_t> const& start_allowed_;
   bitvec<node_idx_t> const& end_allowed_;
   bitvec<node_idx_t> const& through_allowed_;
+  bool ignore_return_constraints_{};
 
   geo::latlng get_additional_node_coordinates(node_idx_t const n) const {
     return additional_node_coordinates_.at(to_idx(n) - additional_node_offset_);
