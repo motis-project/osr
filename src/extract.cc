@@ -97,8 +97,7 @@ struct rel_way {
 using rel_ways_t = hash_map<osm_way_idx_t, rel_way>;
 
 std::tuple<level_t, level_t, bool> get_levels(tags const& t) {
-  return t.has_level_ ? get_levels(t.has_level_, t.level_bits_)
-                      : get_levels(t.has_layer_, t.layer_bits_);
+  return get_levels(t.has_level_, t.level_bits_);
 }
 
 way_properties get_way_properties(tags const& t) {
