@@ -191,7 +191,7 @@ path reconstruct_bi(ways const& w,
                     way_candidate const& dest,
                     cost_t const cost,
                     direction const dir) {
-  auto forward_n = b.meet_point_;
+  auto forward_n = b.meet_point_1_;
 
   // TODO subtact meetpoint node cost
 
@@ -231,9 +231,7 @@ path reconstruct_bi(ways const& w,
        .mode_ = forward_n.get_mode()});
 
   auto backward_segments = std::vector<path::segment>{};
-  auto backward_n = b.meet_point_;
-  backward_n.print(std::cout, w);
-  std::cout << " " << w.node_to_osm_[backward_n.n_] << "\n";
+  auto backward_n = b.meet_point_2_;
   auto backward_dist = 0.0;
 
   while (true) {
@@ -255,17 +253,17 @@ path reconstruct_bi(ways const& w,
       backward_n.get_node() == dest.left_.node_ ? dest.left_ : dest.right_;
 
   backward_segments.push_back(
-      {.polyline_ = dest_node_candidate.path_,
-       .from_level_ = dest_node_candidate.lvl_,
-       .to_level_ = dest_node_candidate.lvl_,
-       .from_ = dir == direction::kForward ? backward_n.get_node()
+       {.polyline_ = dest_node_candidate.path_,
+        .from_level_ = dest_node_candidate.lvl_,
+        .to_level_ = dest_node_candidate.lvl_,
+        .from_ = dir == direction::kForward ? backward_n.get_node()
+                                            : node_idx_t::invalid(),
+        .to_ = dir == direction::kBackward ? backward_n.get_node()
                                            : node_idx_t::invalid(),
-       .to_ = dir == direction::kBackward ? backward_n.get_node()
-                                          : node_idx_t::invalid(),
-       .way_ = way_idx_t::invalid(),
-       .cost_ = dest_node_candidate.cost_,
-       .dist_ = static_cast<distance_t>(dest_node_candidate.dist_to_node_),
-       .mode_ = backward_n.get_mode()});
+        .way_ = way_idx_t::invalid(),
+        .cost_ = dest_node_candidate.cost_,
+        .dist_ = static_cast<distance_t>(dest_node_candidate.dist_to_node_),
+        .mode_ = backward_n.get_mode()});
 
   std::reverse(forward_segments.begin(), forward_segments.end());
   forward_segments.insert(forward_segments.end(), backward_segments.begin(),
@@ -447,53 +445,57 @@ std::optional<path> route(ways const& w,
   }
 
   b.reset(max, from, to);
-  auto init = 0;
+  if (b.PI_ == max) {
+    return std::nullopt;
+  }
+  auto init = true;
   for (auto const& start : from_match) {
-    for (auto const& end : to_match) {
-      for (auto const* nc : {&start.left_, &start.right_}) {
-        if (nc->valid() && nc->cost_ < max) {
-          Profile::resolve_start_node(*w.r_, start.way_, nc->node_, from.lvl_,
-                                      dir, [&](auto const node) {
-                                        b.add_start(w, {node, nc->cost_});
-                                        ++init;
-                                      });
-        }
+    for (auto const* nc : {&start.left_, &start.right_}) {
+      if (nc->valid() && nc->cost_ < max) {
+        Profile::resolve_start_node(
+            *w.r_, start.way_, nc->node_, from.lvl_, dir,
+            [&](auto const node) { b.add_start(w, {node, nc->cost_}); });
       }
+    }
+    for (auto const& end : to_match) {
       for (auto const* nc : {&end.left_, &end.right_}) {
         if (nc->valid() && nc->cost_ < max) {
-          Profile::resolve_start_node(*w.r_, end.way_, nc->node_, from.lvl_,
-                                      opposite(dir), [&](auto const node) {
-                                        b.add_end(w, {node, nc->cost_});
-                                        init++;
-                                      });
+          Profile::resolve_start_node(
+              *w.r_, end.way_, nc->node_, from.lvl_, opposite(dir),
+              [&](auto const node) { b.add_end(w, {node, nc->cost_}); });
         }
       }
-      if ((b.pq1_.empty() && b.pq2_.empty()) || init < 2) {
+      if ((b.pq1_.empty() && b.pq2_.empty()) ||
+          (init && (b.pq1_.empty() || b.pq2_.empty()))) {
         continue;
       }
       b.clear_mp();
+      init = false;
       auto const init_start = std::chrono::steady_clock::now();
 
       b.run(w, *w.r_, max, blocked, sharing, elevations, dir);
       auto const millis = std::chrono::duration_cast<std::chrono::milliseconds>(
           std::chrono::steady_clock::now() - init_start);
-      std::cout << "run took " << millis << std::endl;
+      std::cout << "bidir run took " << millis << std::endl;
       // cost_t cost = 0U;
-      if (b.meet_point_.get_node() == node_idx_t::invalid() ||
-          static_cast<uint32_t>(b.meet_point_.get_node()) == 0) {
+      if (b.meet_point_1_.get_node() == node_idx_t::invalid() ||
+          static_cast<uint32_t>(b.meet_point_1_.get_node()) == 0) {
         continue;
       }
 
-      auto const cost = b.get_cost_to_mp(b.meet_point_);
+      auto const cost = b.get_cost_to_mp(b.meet_point_1_, b.meet_point_2_);
 
       std::cout << "cost " << cost << " "
-                << b.cost1_.at(b.meet_point_.get_key()).cost(b.meet_point_)
+                << b.cost1_.at(b.meet_point_1_.get_key()).cost(b.meet_point_1_)
                 << " "
-                << b.cost2_.at(b.meet_point_.get_key()).cost(b.meet_point_)
+                << b.cost2_.at(b.meet_point_2_.get_key()).cost(b.meet_point_2_)
                 << "\n";
       return reconstruct_bi(w, blocked, sharing, elevations, b, start, end,
                             cost, dir);
     }
+    b.pq2_.clear();
+    b.pq2_.n_buckets(max + 1U);
+    b.cost2_.clear();
   }
   return std::nullopt;
 }
@@ -657,7 +659,7 @@ std::optional<path> route_bidirectional(ways const& w,
     case search_profile::kBikeSharing:
       return r(get_bidirectional<bike_sharing>());
     case search_profile::kCarSharing:
-      return r(get_bidirectional<car_sharing>());
+      return r(get_bidirectional<car_sharing<track_node_tracking>>());
   }
   throw utl::fail("not implemented");
 }
