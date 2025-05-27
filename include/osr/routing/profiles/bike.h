@@ -187,7 +187,7 @@ struct bike {
                                    direction,
                                    std::uint16_t const dist) {
     if (e.is_bike_accessible()) {
-      return static_cast<cost_t>(std::round(dist / 4.F));
+      return static_cast<cost_t>(std::round(dist / 2.8F));
     } else {
       return kInfeasible;
     }
@@ -197,7 +197,7 @@ struct bike {
     return n.is_bike_accessible() ? 0U : kInfeasible;
   }
 
-  static constexpr double heuristic(double dist) { return dist / 4.F; }
+  static constexpr double heuristic(double dist) { return dist / 2.8F; }
 
   static constexpr node get_reverse(node const n) { return n; }
 };

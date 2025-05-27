@@ -50,11 +50,11 @@ TEST(extract, wa) {
   constexpr auto const kMaxCost = cost_t{3600};
   constexpr auto const kMaxMatchDistance = 100;
   auto const route_no_costs =
-      route(w, l, search_profile::kBike, routing_algorithm::kDijkstra, from, to,
+      route(w, l, search_profile::kBike, from, to,
             kMaxCost, direction::kForward, kMaxMatchDistance, nullptr, nullptr,
             elevations.get());
   auto const route_high_costs = route(
-      w, l, search_profile::kBikeElevationHigh, routing_algorithm::kDijkstra,
+      w, l, search_profile::kBikeElevationHigh,
       from, to, kMaxCost, direction::kForward, kMaxMatchDistance, nullptr,
       nullptr, elevations.get());
 
