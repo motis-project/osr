@@ -122,7 +122,6 @@ std::vector<std::optional<path>> route(
 std::optional<path> route(ways const&,
                           lookup const&,
                           search_profile,
-                          routing_algorithm,
                           location const& from,
                           location const& to,
                           cost_t max,
@@ -130,5 +129,6 @@ std::optional<path> route(ways const&,
                           double max_match_distance,
                           bitvec<node_idx_t> const* blocked = nullptr,
                           sharing_data const* sharing = nullptr,
-                          elevation_storage const* = nullptr);
+                          elevation_storage const* = nullptr,
+                          routing_algorithm = routing_algorithm::kDijkstra);
 }  // namespace osr

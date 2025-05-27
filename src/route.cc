@@ -202,15 +202,6 @@ path reconstruct_bi(ways const& w,
     auto const& e = b.cost1_.at(forward_n.get_key());
     auto const pred = e.pred(forward_n);
     if (pred.has_value()) {
-      /* auto const heur = heuristic(w, forward_n.n_, SearchDir) -
-                             heuristic(w, l.n_, SearchDir);
-           auto const static_cast<cost_t>(e.cost(forward_n)) -
-         static_cast<double>(pred.cost()) - heuristic(w, forward_n.n_,
-         SearchDir)=
-                + static_cast<double>(cost) +  -
-               heuristic(w, pred.n_, SearchDir);
- */
-
       auto const expected_cost =
           static_cast<cost_t>(e.cost(forward_n) - b.get_cost_from_start(*pred));
       forward_dist +=
@@ -281,6 +272,8 @@ path reconstruct_bi(ways const& w,
 
   auto total_dist = start_node_candidate.dist_to_node_ + forward_dist +
                     backward_dist + dest_node_candidate.dist_to_node_;
+
+  assert(total_dist == cost);
 
   auto p =
       path{.cost_ = cost, .dist_ = total_dist, .segments_ = forward_segments};
@@ -483,24 +476,15 @@ std::optional<path> route(ways const& w,
       }
       b.clear_mp();
       init = false;
-      auto const init_start = std::chrono::steady_clock::now();
 
       b.run(w, *w.r_, max, blocked, sharing, elevations, dir);
-      auto const millis = std::chrono::duration_cast<std::chrono::milliseconds>(
-          std::chrono::steady_clock::now() - init_start);
-      std::cout << "bidir run took " << millis << std::endl;
-      // cost_t cost = 0U;
+
       if (b.meet_point_1_.get_node() == node_idx_t::invalid()) {
         continue;
       }
 
       auto const cost = b.get_cost_to_mp(b.meet_point_1_, b.meet_point_2_);
 
-      std::cout << "cost " << cost << " "
-                << b.cost1_.at(b.meet_point_1_.get_key()).cost(b.meet_point_1_)
-                << " "
-                << b.cost2_.at(b.meet_point_2_.get_key()).cost(b.meet_point_2_)
-                << "\n";
       return reconstruct_bi(w, blocked, sharing, elevations, b, start, end,
                             cost, dir);
     }
@@ -871,7 +855,6 @@ std::optional<path> route_dijkstra(ways const& w,
 std::optional<path> route(ways const& w,
                           lookup const& l,
                           search_profile const profile,
-                          routing_algorithm const algo,
                           location const& from,
                           location const& to,
                           cost_t const max,
@@ -879,7 +862,8 @@ std::optional<path> route(ways const& w,
                           double const max_match_distance,
                           bitvec<node_idx_t> const* blocked,
                           sharing_data const* sharing,
-                          elevation_storage const* elevations) {
+                          elevation_storage const* elevations,
+                          routing_algorithm const algo) {
   switch (algo) {
     case routing_algorithm::kDijkstra:
       return route_dijkstra(w, l, profile, from, to, max, dir,

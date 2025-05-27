@@ -200,20 +200,16 @@ int main(int argc, char const* argv[]) {
           set_start<T>(d, w, start);
           set_start<T>(b, w, start);
           auto const ends = set_end<T>(b, w, end);
+          auto const start_time = std::chrono::steady_clock::now();
           d.template run<direction::kForward, false>(
               w, *w.r_, opt.max_dist_, nullptr, nullptr, elevations.get());
-          auto const start_time = std::chrono::steady_clock::now();
+          auto const end_time = std::chrono::steady_clock::now();
           b.template run<direction::kForward, false>(
               w, *w.r_, opt.max_dist_, nullptr, nullptr, elevations.get());
-          auto const end_time = std::chrono::steady_clock::now();
           if (!utl::any_of(ends, [&](auto&& e) {
                 auto const b_res =
                     b.get_cost_to_mp(b.meet_point_1_, b.meet_point_2_);
-
                 auto const it = d.cost_.find(e.get_node().get_key());
-                if (it != d.cost_.end()) {
-                  std::cout << "found node" << std::endl;
-                }
                 auto const d_res = d.get_cost(e.get_node());
                 std::cout << b_res << " vs " << d_res << std::endl;
                 return b_res == d_res;

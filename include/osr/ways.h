@@ -178,10 +178,9 @@ struct ways {
   point get_node_pos(node_idx_t const i) const {
     auto const osm_idx = node_to_osm_[i];
     auto const way = r_->node_ways_[i][0];
-    for (auto const [o, p] :
-         utl::zip(way_osm_nodes_[way], way_polylines_[way])) {
+    for (auto const [j, o] : utl::enumerate(way_osm_nodes_[way])) {
       if (o == osm_idx) {
-        return p;
+        return way_polylines_[way][j];
       }
     }
     throw utl::fail("unable to find node {} [osm={}] in way {} [osm={}]", i,

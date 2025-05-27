@@ -108,7 +108,6 @@ endif ()
 # --- LIB ---
 file(GLOB_RECURSE osr-src src/*.cc)
 add_library(osr ${osr-src}
-        include/osr/routing/a_star.h
         include/osr/routing/bidirectional.h
         include/osr/routing/algorithms.h)
 target_include_directories(osr PUBLIC include)
@@ -133,9 +132,7 @@ add_executable(osr-extract exe/extract.cc)
 target_link_libraries(osr-extract osr)
 
 add_executable(osr-benchmark exe/benchmark.cc)
-add_executable(osr-test-aStar exe/test.cc)
 target_link_libraries(osr-benchmark osr)
-target_link_libraries(osr-test-aStar osr)
 
 file(GLOB_RECURSE osr-backend-src exe/backend/*.cc)
 add_executable(osr-backend ${osr-backend-src})
