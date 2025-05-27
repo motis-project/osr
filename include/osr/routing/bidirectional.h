@@ -170,6 +170,9 @@ struct bidirectional {
             neighbor.print(std::cout, w);
           }
           auto const total = curr_cost + cost;
+          if (neighbor.n_ >= w.node_to_osm_.size()) {
+            return;
+          }
           auto const heur = total + heuristic(w, neighbor.n_, SearchDir);
           if (total < adjusted_max && heur < max &&
               costs[neighbor.get_key()].update(

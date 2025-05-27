@@ -460,7 +460,7 @@ std::optional<path> route_bidirectional(ways const& w,
       for (auto const* nc : {&end.left_, &end.right_}) {
         if (nc->valid() && nc->cost_ < max) {
           Profile::resolve_start_node(
-              *w.r_, end.way_, nc->node_, from.lvl_, opposite(dir),
+              *w.r_, end.way_, nc->node_, to.lvl_, opposite(dir),
               [&](auto const node) { b.add_end(w, {node, nc->cost_}); });
         }
       }
@@ -853,7 +853,11 @@ std::optional<path> route(ways const& w,
                           bitvec<node_idx_t> const* blocked,
                           sharing_data const* sharing,
                           elevation_storage const* elevations,
-                          routing_algorithm const algo) {
+                          routing_algorithm algo) {
+  if (profile == search_profile::kBikeSharing ||
+      profile == search_profile::kCarSharing) {
+    algo = routing_algorithm::kDijkstra;  // TODO
+  }
   switch (algo) {
     case routing_algorithm::kDijkstra:
       return route_dijkstra(w, l, profile, from, to, max, dir,

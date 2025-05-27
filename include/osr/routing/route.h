@@ -5,7 +5,6 @@
 
 #include "geo/polyline.h"
 
-#include "bidirectional.h"
 #include "osr/elevation_storage.h"
 #include "osr/location.h"
 #include "osr/lookup.h"
@@ -20,6 +19,9 @@ struct ways;
 
 template <typename Profile>
 struct dijkstra;
+
+template <typename Profile>
+struct bidirectional;
 
 struct sharing_data;
 

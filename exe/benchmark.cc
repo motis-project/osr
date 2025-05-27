@@ -14,12 +14,10 @@
 
 #include "conf/options_parser.h"
 
-#include "osr/location.h"
-#include "osr/routing/bidirectional.h"
-#include "utl/timer.h"
-
 #include "osr/elevation_storage.h"
+#include "osr/location.h"
 #include "osr/lookup.h"
+#include "osr/routing/bidirectional.h"
 #include "osr/routing/dijkstra.h"
 #include "osr/routing/profile.h"
 #include "osr/routing/profiles/bike.h"
@@ -27,6 +25,7 @@
 #include "osr/routing/route.h"
 #include "osr/types.h"
 #include "osr/ways.h"
+#include "utl/timer.h"
 
 namespace fs = std::filesystem;
 using namespace osr;
