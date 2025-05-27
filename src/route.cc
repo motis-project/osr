@@ -525,12 +525,8 @@ std::optional<path> route(ways const& w,
     if (d.pq_.empty()) {
       continue;
     }
-    auto const init_start = std::chrono::steady_clock::now();
 
     d.run(w, *w.r_, max, blocked, sharing, elevations, dir);
-    auto const millis = std::chrono::duration_cast<std::chrono::milliseconds>(
-        std::chrono::steady_clock::now() - init_start);
-    std::cout << "run took " << millis << std::endl;
 
     auto const c = best_candidate(w, d, to.lvl_, to_match, max, dir);
     if (c.has_value()) {
