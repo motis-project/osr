@@ -62,7 +62,8 @@ bool is_number(std::string_view s) {
 
 speed_limit get_speed_limit(tags const& t) {
   if (is_number(t.max_speed_) /* TODO: support units (kmh/mph) */) {
-    return get_speed_limit(utl::parse<unsigned>(t.max_speed_));
+    return get_speed_limit(
+        static_cast<unsigned>(utl::parse<unsigned>(t.max_speed_) * 0.9));
   } else {
     switch (cista::hash(t.highway_)) {
       case cista::hash("motorway"): return get_speed_limit(90);
