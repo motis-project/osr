@@ -72,11 +72,6 @@ struct tags {
           has_level_ = true;
           add_levels(t, level_bits_);
           break;
-        case cista::hash("layer"):
-          // not correct but layer seems to be used like level in some places :/
-          has_layer_ = true;
-          add_levels(t, layer_bits_);
-          break;
         case cista::hash("name"): name_ = t.value(); break;
         case cista::hash("ref"): ref_ = t.value(); break;
         case cista::hash("entrance"): is_entrance_ = true; break;
@@ -207,10 +202,6 @@ struct tags {
   // https://wiki.openstreetmap.org/wiki/Key:level
   bool has_level_{false};
   level_bits_t level_bits_{0U};
-
-  // https://wiki.openstreetmap.org/wiki/Key:layer
-  bool has_layer_{false};
-  level_bits_t layer_bits_{0U};
 };
 
 template <typename T>

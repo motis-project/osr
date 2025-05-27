@@ -124,10 +124,9 @@ private:
                              bitvec<node_idx_t> const* blocked) const {
     auto way_candidates = std::vector<way_candidate>{};
     find(geo::box{query.pos_, max_match_distance}, [&](way_idx_t const way) {
-      auto d = geo::distance_to_polyline<way_candidate>(
+      auto wc = geo::distance_to_polyline<way_candidate>(
           query.pos_, ways_.way_polylines_[way]);
-      if (d.dist_to_way_ < max_match_distance) {
-        auto& wc = way_candidates.emplace_back(std::move(d));
+      if (wc.dist_to_way_ < max_match_distance) {
         wc.query_ = query;
         wc.way_ = way;
         wc.left_ =
@@ -136,6 +135,9 @@ private:
         wc.right_ =
             find_next_node<Profile>(wc, query, direction::kForward, query.lvl_,
                                     reverse, search_dir, blocked);
+        if (wc.left_.valid() || wc.right_.valid()) {
+          way_candidates.emplace_back(std::move(wc));
+        }
       }
     });
     utl::sort(way_candidates);

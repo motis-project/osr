@@ -62,7 +62,8 @@ bool is_number(std::string_view s) {
 
 speed_limit get_speed_limit(tags const& t) {
   if (is_number(t.max_speed_) /* TODO: support units (kmh/mph) */) {
-    return get_speed_limit(utl::parse<unsigned>(t.max_speed_));
+    return get_speed_limit(
+        static_cast<unsigned>(utl::parse<unsigned>(t.max_speed_) * 0.9));
   } else {
     switch (cista::hash(t.highway_)) {
       case cista::hash("motorway"): return get_speed_limit(90);
@@ -97,8 +98,7 @@ struct rel_way {
 using rel_ways_t = hash_map<osm_way_idx_t, rel_way>;
 
 std::tuple<level_t, level_t, bool> get_levels(tags const& t) {
-  return t.has_level_ ? get_levels(t.has_level_, t.level_bits_)
-                      : get_levels(t.has_layer_, t.layer_bits_);
+  return get_levels(t.has_level_, t.level_bits_);
 }
 
 way_properties get_way_properties(tags const& t) {
