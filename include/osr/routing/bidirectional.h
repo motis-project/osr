@@ -60,9 +60,10 @@ struct bidirectional {
         kDistanceLatDegrees;
     auto const diameter =
         Profile::heuristic(distapprox(start_loc_.pos_, end_loc_.pos_));
-    PI_ = diameter < max && max + diameter < std::numeric_limits<cost_t>::max()
-              ? static_cast<cost_t>(diameter * 0.5)
-              : max;
+    radius_ =
+        diameter < max && max + diameter < std::numeric_limits<cost_t>::max()
+            ? static_cast<cost_t>(diameter * 0.5)
+            : max;
   }
 
   void add(ways const& w,
@@ -145,7 +146,7 @@ struct bidirectional {
                   elevation_storage const* elevations,
                   dial<label, get_bucket>& pq,
                   cost_map& costs) {
-    auto const adjusted_max = (max + PI_) / 2U;
+    auto const adjusted_max = (max + radius_) / 2U;
 
     auto const l = pq.pop();
     auto const curr = l.get_node();
@@ -228,12 +229,9 @@ struct bidirectional {
           }
           Profile::template adjacent<opposite(SearchDir), WithBlocked>(
               r, curr, blocked, sharing, elevations,
-              [&](node const neighbor, std::uint32_t const cost, distance_t,
-                  way_idx_t const way, std::uint16_t, std::uint16_t,
-                  elevation_storage::elevation const, bool const track) {
-                (void)way;
-                (void)cost;
-                (void)track;
+              [&](node const neighbor, std::uint32_t const, distance_t,
+                  way_idx_t const, std::uint16_t, std::uint16_t,
+                  elevation_storage::elevation const, bool const) {
                 if (neighbor.get_key() != pred->get_key()) {
                   return;
                 }
@@ -272,10 +270,10 @@ struct bidirectional {
       auto const top_r =
           pq2_.empty() ? get_cost_from_end(meet_point_2_)
                        : pq2_.buckets_[pq2_.get_next_bucket()].back().cost();
-      if (top_f + top_r >= best_cost_ + PI_) {
+      if (top_f + top_r >= best_cost_ + radius_) {
         if (kDebug) {
           std::cout << "stopping criterion met " << top_f << " " << top_r << " "
-                    << best_cost_ << " " << PI_ << std::endl;
+                    << best_cost_ << " " << radius_ << std::endl;
         }
         return false;
       }
@@ -290,7 +288,7 @@ struct bidirectional {
            bitvec<node_idx_t> const* blocked,
            sharing_data const* sharing,
            elevation_storage const* elevations) {
-    if (PI_ == max) {
+    if (radius_ == max) {
       return;
     }
     auto pq = &pq1_;
@@ -299,9 +297,9 @@ struct bidirectional {
     while (!pq->empty()) {
       auto const cont =
           dir == direction::kForward
-              ? run_single<direction::kForward, WithBlocked>(
-                    w, r, max, blocked, sharing, elevations, *pq, cost1_)
-              : run_single<direction::kBackward, WithBlocked>(
+              ? run_single<SearchDir, WithBlocked>(w, r, max, blocked, sharing,
+                                                   elevations, *pq, cost1_)
+              : run_single<opposite(SearchDir), WithBlocked>(
                     w, r, max, blocked, sharing, elevations, *pq, cost2_);
       if (!cont) {
         break;
@@ -343,7 +341,7 @@ struct bidirectional {
   cost_t best_cost_;
   ankerl::unordered_dense::map<key, entry, hash> cost1_;
   ankerl::unordered_dense::map<key, entry, hash> cost2_;
-  cost_t PI_;
+  cost_t radius_;
   double distance_lon_degrees_;
 };
 

@@ -30,6 +30,7 @@ template <unsigned int ElevationUpCost,
 struct bike {
   static constexpr auto const kMaxMatchDistance = 100U;
   static constexpr auto const kOffroadPenalty = 1U;
+  static constexpr auto const kSpeedMetersPerSecond = 2.8F;
 
   struct node {
     friend bool operator==(node, node) = default;
@@ -187,7 +188,7 @@ struct bike {
                                    direction,
                                    std::uint16_t const dist) {
     if (e.is_bike_accessible()) {
-      return static_cast<cost_t>(std::round(dist / 2.8F));
+      return static_cast<cost_t>(std::round(dist / kSpeedMetersPerSecond));
     } else {
       return kInfeasible;
     }
@@ -197,7 +198,9 @@ struct bike {
     return n.is_bike_accessible() ? 0U : kInfeasible;
   }
 
-  static constexpr double heuristic(double dist) { return dist / 2.8F; }
+  static constexpr double heuristic(double dist) {
+    return dist / kSpeedMetersPerSecond;
+  }
 
   static constexpr node get_reverse(node const n) { return n; }
 };

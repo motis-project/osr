@@ -107,9 +107,7 @@ endif ()
 
 # --- LIB ---
 file(GLOB_RECURSE osr-src src/*.cc)
-add_library(osr ${osr-src}
-        include/osr/routing/bidirectional.h
-        include/osr/routing/algorithms.h)
+add_library(osr ${osr-src})
 target_include_directories(osr PUBLIC include)
 target_compile_features(osr PUBLIC cxx_std_23)
 target_compile_options(osr PRIVATE ${osr-compile-options})

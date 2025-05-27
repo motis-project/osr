@@ -9,7 +9,6 @@
 
 #include "fmt/core.h"
 
-#include "osr/routing/algorithms.h"
 #include "utl/enumerate.h"
 #include "utl/pipes.h"
 #include "utl/to_vec.h"
@@ -20,6 +19,7 @@
 
 #include "osr/geojson.h"
 #include "osr/lookup.h"
+#include "osr/routing/algorithms.h"
 #include "osr/routing/profiles/bike.h"
 #include "osr/routing/profiles/bike_sharing.h"
 #include "osr/routing/profiles/car.h"

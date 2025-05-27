@@ -45,15 +45,14 @@ routing_algorithm to_algorithm(std::string_view s) {
 }
 
 template <direction SearchDir, bool WithBlocked, typename Profile>
-std::optional<connecting_way> find_connecting_way(
-    ways const& w,
-    ways::routing const& r,
-    bitvec<node_idx_t> const* blocked,
-    sharing_data const* sharing,
-    elevation_storage const* elevations,
-    typename Profile::node const from,
-    typename Profile::node const to,
-    cost_t const expected_cost) {
+connecting_way find_connecting_way(ways const& w,
+                                   ways::routing const& r,
+                                   bitvec<node_idx_t> const* blocked,
+                                   sharing_data const* sharing,
+                                   elevation_storage const* elevations,
+                                   typename Profile::node const from,
+                                   typename Profile::node const to,
+                                   cost_t const expected_cost) {
   auto conn = std::optional<connecting_way>{};
   Profile::template adjacent<SearchDir, WithBlocked>(
       r, from, blocked, sharing, elevations,
@@ -77,19 +76,18 @@ std::optional<connecting_way> find_connecting_way(
           ? to_idx(w.node_to_osm_[to.get_node()])
           : 0,
       expected_cost, expected_cost);
-  return conn;
+  return *conn;
 }
 
 template <typename Profile>
-std::optional<connecting_way> find_connecting_way(
-    ways const& w,
-    bitvec<node_idx_t> const* blocked,
-    sharing_data const* sharing,
-    elevation_storage const* elevations,
-    typename Profile::node const from,
-    typename Profile::node const to,
-    cost_t const expected_cost,
-    direction const dir) {
+connecting_way find_connecting_way(ways const& w,
+                                   bitvec<node_idx_t> const* blocked,
+                                   sharing_data const* sharing,
+                                   elevation_storage const* elevations,
+                                   typename Profile::node const from,
+                                   typename Profile::node const to,
+                                   cost_t const expected_cost,
+                                   direction const dir) {
   auto const call = [&]<bool WithBlocked>() {
     if (dir == direction::kForward) {
       return find_connecting_way<direction::kForward, WithBlocked, Profile>(
@@ -118,10 +116,9 @@ double add_path(ways const& w,
                 cost_t const expected_cost,
                 std::vector<path::segment>& path,
                 direction const dir) {
-  auto const p = find_connecting_way<Profile>(w, blocked, sharing, elevations,
-                                              from, to, expected_cost, dir);
-  if (!p.has_value()) return 0;
-  auto const& [way, from_idx, to_idx, is_loop, distance, elevation] = *p;
+  auto const& [way, from_idx, to_idx, is_loop, distance, elevation] =
+      find_connecting_way<Profile>(w, blocked, sharing, elevations, from, to,
+                                   expected_cost, dir);
 
   auto j = 0U;
   auto active = false;
@@ -193,7 +190,7 @@ path reconstruct_bi(ways const& w,
                     direction const dir) {
   auto forward_n = b.meet_point_1_;
 
-  // TODO subtact meetpoint node cost
+  // TODO subtract meetpoint node cost?
 
   auto forward_segments = std::vector<path::segment>{};
   auto forward_dist = 0.0;
@@ -272,8 +269,6 @@ path reconstruct_bi(ways const& w,
 
   auto total_dist = start_node_candidate.dist_to_node_ + forward_dist +
                     backward_dist + dest_node_candidate.dist_to_node_;
-
-  assert(total_dist == cost);
 
   auto p =
       path{.cost_ = cost, .dist_ = total_dist, .segments_ = forward_segments};
@@ -432,29 +427,28 @@ std::optional<path> try_direct(osr::location const& from,
 }
 
 template <typename Profile>
-std::optional<path> route(ways const& w,
-                          bidirectional<Profile>& b,
-                          location const& from,
-                          location const& to,
-                          match_view_t from_match,
-                          match_view_t to_match,
-                          cost_t const max,
-                          direction const dir,
-                          bitvec<node_idx_t> const* blocked,
-                          sharing_data const* sharing,
-                          elevation_storage const* elevations) {
+std::optional<path> route_bidirectional(ways const& w,
+                                        bidirectional<Profile>& b,
+                                        location const& from,
+                                        location const& to,
+                                        match_view_t from_match,
+                                        match_view_t to_match,
+                                        cost_t const max,
+                                        direction const dir,
+                                        bitvec<node_idx_t> const* blocked,
+                                        sharing_data const* sharing,
+                                        elevation_storage const* elevations) {
+  std::cout << "using bidir" << std::endl;
   if (auto const direct = try_direct(from, to); direct.has_value()) {
     return *direct;
   }
 
   b.reset(max, from, to);
-  if (b.PI_ == max) {
+  if (b.radius_ == max) {
     return std::nullopt;
   }
   auto init = true;
   for (auto const& start : from_match) {
-    b.reset(max, from, to);
-
     for (auto const& end : to_match) {
       for (auto const* nc : {&start.left_, &start.right_}) {
         if (nc->valid() && nc->cost_ < max) {
@@ -496,17 +490,17 @@ std::optional<path> route(ways const& w,
 }
 
 template <typename Profile>
-std::optional<path> route(ways const& w,
-                          dijkstra<Profile>& d,
-                          location const& from,
-                          location const& to,
-                          match_view_t from_match,
-                          match_view_t to_match,
-                          cost_t const max,
-                          direction const dir,
-                          bitvec<node_idx_t> const* blocked,
-                          sharing_data const* sharing,
-                          elevation_storage const* elevations) {
+std::optional<path> route_dijkstra(ways const& w,
+                                   dijkstra<Profile>& d,
+                                   location const& from,
+                                   location const& to,
+                                   match_view_t from_match,
+                                   match_view_t to_match,
+                                   cost_t const max,
+                                   direction const dir,
+                                   bitvec<node_idx_t> const* blocked,
+                                   sharing_data const* sharing,
+                                   elevation_storage const* elevations) {
   if (auto const direct = try_direct(from, to); direct.has_value()) {
     return *direct;
   }
@@ -627,8 +621,8 @@ std::optional<path> route_bidirectional(ways const& w,
       return std::nullopt;
     }
 
-    return route(w, b, from, to, from_match, to_match, max, dir, blocked,
-                 sharing, elevations);
+    return route_bidirectional(w, b, from, to, from_match, to_match, max, dir,
+                               blocked, sharing, elevations);
   };
 
   switch (profile) {
@@ -728,8 +722,8 @@ std::optional<path> route_dijkstra(ways const& w,
       return std::nullopt;
     }
 
-    return route(w, d, from, to, from_match, to_match, max, dir, blocked,
-                 sharing, elevations);
+    return route_dijkstra(w, d, from, to, from_match, to_match, max, dir,
+                          blocked, sharing, elevations);
   };
 
   switch (profile) {
@@ -803,25 +797,25 @@ std::vector<std::optional<path>> route(
   throw utl::fail("not implemented");
 }
 
-std::optional<path> route_dijkstra(ways const& w,
-                                   search_profile const profile,
-                                   location const& from,
-                                   location const& to,
-                                   match_view_t from_match,
-                                   match_view_t to_match,
-                                   cost_t const max,
-                                   direction const dir,
-                                   bitvec<node_idx_t> const* blocked,
-                                   sharing_data const* sharing,
-                                   elevation_storage const* elevations) {
+std::optional<path> route(ways const& w,
+                          search_profile const profile,
+                          location const& from,
+                          location const& to,
+                          match_view_t from_match,
+                          match_view_t to_match,
+                          cost_t const max,
+                          direction const dir,
+                          bitvec<node_idx_t> const* blocked,
+                          sharing_data const* sharing,
+                          elevation_storage const* elevations) {
   if (from_match.empty() || to_match.empty()) {
     return std::nullopt;
   }
 
   auto const r =
       [&]<typename Profile>(dijkstra<Profile>& d) -> std::optional<path> {
-    return route(w, d, from, to, from_match, to_match, max, dir, blocked,
-                 sharing, elevations);
+    return route_dijkstra(w, d, from, to, from_match, to_match, max, dir,
+                          blocked, sharing, elevations);
   };
 
   switch (profile) {

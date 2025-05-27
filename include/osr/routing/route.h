@@ -67,41 +67,30 @@ std::vector<std::optional<path>> route(
       return false;
     });
 
-std::optional<path> route_dijkstra(ways const&,
-                                   lookup const&,
-                                   search_profile,
-                                   location const& from,
-                                   location const& to,
-                                   cost_t max,
-                                   direction,
-                                   double max_match_distance,
-                                   bitvec<node_idx_t> const* blocked = nullptr,
-                                   sharing_data const* sharing = nullptr,
-                                   elevation_storage const* = nullptr);
+std::optional<path> route(ways const&,
+                          lookup const&,
+                          search_profile,
+                          location const& from,
+                          location const& to,
+                          cost_t max,
+                          direction,
+                          double max_match_distance,
+                          bitvec<node_idx_t> const* blocked = nullptr,
+                          sharing_data const* sharing = nullptr,
+                          elevation_storage const* = nullptr,
+                          routing_algorithm = routing_algorithm::kDijkstra);
 
-std::optional<path> route_bidirectional(
-    ways const&,
-    lookup const&,
-    search_profile,
-    location const& from,
-    location const& to,
-    cost_t max,
-    direction,
-    double max_match_distance,
-    bitvec<node_idx_t> const* blocked = nullptr,
-    sharing_data const* sharing = nullptr);
-
-std::optional<path> route_dijkstra(ways const&,
-                                   search_profile,
-                                   location const& from,
-                                   location const& to,
-                                   match_view_t from_match,
-                                   match_view_t to_match,
-                                   cost_t const max,
-                                   direction,
-                                   bitvec<node_idx_t> const* blocked = nullptr,
-                                   sharing_data const* sharing = nullptr,
-                                   elevation_storage const* = nullptr);
+std::optional<path> route(ways const&,
+                          search_profile,
+                          location const& from,
+                          location const& to,
+                          match_view_t from_match,
+                          match_view_t to_match,
+                          cost_t const max,
+                          direction,
+                          bitvec<node_idx_t> const* blocked = nullptr,
+                          sharing_data const* sharing = nullptr,
+                          elevation_storage const* = nullptr);
 
 std::vector<std::optional<path>> route(
     ways const&,
@@ -119,16 +108,4 @@ std::vector<std::optional<path>> route(
       return false;
     });
 
-std::optional<path> route(ways const&,
-                          lookup const&,
-                          search_profile,
-                          location const& from,
-                          location const& to,
-                          cost_t max,
-                          direction,
-                          double max_match_distance,
-                          bitvec<node_idx_t> const* blocked = nullptr,
-                          sharing_data const* sharing = nullptr,
-                          elevation_storage const* = nullptr,
-                          routing_algorithm = routing_algorithm::kDijkstra);
 }  // namespace osr
