@@ -250,7 +250,9 @@ struct car {
     return n.is_car_accessible() ? 0U : kInfeasible;
   }
 
-  static constexpr double heuristic(double dist) { return dist / (150U / 3.6); }
+  static constexpr double heuristic(double dist) {
+    return dist / (130U / 3.6);
+  }
   static constexpr node get_reverse(node const n) {
     return {n.n_, n.way_, opposite(n.dir_)};
   }

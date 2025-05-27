@@ -334,7 +334,7 @@ struct foot {
   }
 
   static constexpr double heuristic(double dist) {
-    return dist / to_meters_per_second(speed_limit::kmh_10);
+    return dist / (IsWheelchair ? 0.8 : 1.1F);
   }
 
   static constexpr node get_reverse(node const n) { return n; }
