@@ -2,15 +2,17 @@
 
 #include <limits>
 
+#include "utl/verify.h"
+
 #include "geo/constants.h"
 #include "geo/latlng.h"
+
 #include "osr/elevation_storage.h"
 #include "osr/location.h"
 #include "osr/routing/additional_edge.h"
 #include "osr/routing/dial.h"
 #include "osr/types.h"
 #include "osr/ways.h"
-#include "utl/verify.h"
 
 namespace osr {
 

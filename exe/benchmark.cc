@@ -14,6 +14,8 @@
 
 #include "conf/options_parser.h"
 
+#include "utl/timer.h"
+
 #include "osr/elevation_storage.h"
 #include "osr/location.h"
 #include "osr/lookup.h"
@@ -25,7 +27,6 @@
 #include "osr/routing/route.h"
 #include "osr/types.h"
 #include "osr/ways.h"
-#include "utl/timer.h"
 
 namespace fs = std::filesystem;
 using namespace osr;

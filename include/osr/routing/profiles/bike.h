@@ -13,6 +13,7 @@ struct sharing_data;
 constexpr auto const kElevationNoCost = 0U;
 constexpr auto const kElevationLowCost = 570U;
 constexpr auto const kElevationHighCost = 3700U;
+constexpr auto const kBikeSpeedMetersPerSecond = 2.8F;
 
 // Routing const configuration (cost, exp)
 // cost:
@@ -30,7 +31,6 @@ template <unsigned int ElevationUpCost,
 struct bike {
   static constexpr auto const kMaxMatchDistance = 100U;
   static constexpr auto const kOffroadPenalty = 1U;
-  static constexpr auto const kSpeedMetersPerSecond = 2.8F;
 
   struct node {
     friend bool operator==(node, node) = default;
@@ -188,7 +188,7 @@ struct bike {
                                    direction,
                                    std::uint16_t const dist) {
     if (e.is_bike_accessible()) {
-      return static_cast<cost_t>(std::round(dist / kSpeedMetersPerSecond));
+      return static_cast<cost_t>(std::round(dist / kBikeSpeedMetersPerSecond));
     } else {
       return kInfeasible;
     }
@@ -199,7 +199,7 @@ struct bike {
   }
 
   static constexpr double heuristic(double dist) {
-    return dist / kSpeedMetersPerSecond;
+    return dist / kBikeSpeedMetersPerSecond;
   }
 
   static constexpr node get_reverse(node const n) { return n; }
