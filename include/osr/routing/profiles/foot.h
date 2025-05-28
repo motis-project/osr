@@ -15,6 +15,8 @@ template <bool IsWheelchair, typename Tracking = noop_tracking>
 struct foot {
   static constexpr auto const kMaxMatchDistance = 100U;
   static constexpr auto const kOffroadPenalty = 3U;
+  static constexpr auto const kSpeedMetersPerSecond =
+      (IsWheelchair ? 0.8 : 1.1F);
 
   struct node {
     friend bool operator==(node const a, node const b) {
@@ -32,7 +34,9 @@ struct foot {
 
     constexpr node get_key() const noexcept { return *this; }
 
-    static constexpr mode get_mode() noexcept { return mode::kFoot; }
+    static constexpr mode get_mode() noexcept {
+      return IsWheelchair ? mode::kWheelchair : mode::kFoot;
+    }
 
     std::ostream& print(std::ostream& out, ways const& w) const {
       return out << "(node=" << w.node_to_osm_[n_] << ", level=" << lvl_ << ")";
@@ -53,8 +57,9 @@ struct foot {
     void track(label const& l,
                ways::routing const& r,
                way_idx_t const w,
-               node_idx_t const n) {
-      tracking_.track(l.tracking_, r, w, n);
+               node_idx_t const n,
+               bool) {
+      tracking_.track(l.tracking_, r, w, n, false);
     }
 
     node_idx_t n_;
@@ -182,7 +187,7 @@ struct foot {
                                   node_cost(target_node_prop);
                 fn(node{target_node, target_lvl},
                    static_cast<std::uint32_t>(cost), dist, way, from, to,
-                   elevation_storage::elevation{});
+                   elevation_storage::elevation{}, false);
               });
         } else {
           auto const target_lvl = get_target_level(w, n.n_, n.lvl_, way);
@@ -194,7 +199,7 @@ struct foot {
           auto const cost = way_cost(target_way_prop, way_dir, dist) +
                             node_cost(target_node_prop);
           fn(node{target_node, *target_lvl}, static_cast<std::uint32_t>(cost),
-             dist, way, from, to, elevation_storage::elevation{});
+             dist, way, from, to, elevation_storage::elevation{}, false);
         }
       };
 
@@ -315,11 +320,11 @@ struct foot {
   static constexpr cost_t way_cost(way_properties const e,
                                    direction,
                                    std::uint16_t const dist) {
-    if ((e.is_foot_accessible() || e.is_bike_accessible()) &&
+    if ((e.is_foot_accessible() ||
+         (!e.is_sidewalk_separate() && e.is_bike_accessible())) &&
         (!IsWheelchair || !e.is_steps())) {
       return (!e.is_foot_accessible() ? 90 : 0) +
-             static_cast<cost_t>(
-                 std::round(dist / (IsWheelchair ? 0.8 : 1.1F)));
+             static_cast<cost_t>(std::round(dist / kSpeedMetersPerSecond));
     } else {
       return kInfeasible;
     }
@@ -328,6 +333,12 @@ struct foot {
   static constexpr cost_t node_cost(node_properties const n) {
     return n.is_walk_accessible() ? (n.is_elevator() ? 90U : 0U) : kInfeasible;
   }
+
+  static constexpr double heuristic(double dist) {
+    return dist / kSpeedMetersPerSecond;
+  }
+
+  static constexpr node get_reverse(node const n) { return n; }
 };
 
 }  // namespace osr

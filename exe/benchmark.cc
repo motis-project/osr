@@ -17,7 +17,9 @@
 #include "utl/timer.h"
 
 #include "osr/elevation_storage.h"
+#include "osr/location.h"
 #include "osr/lookup.h"
+#include "osr/routing/bidirectional.h"
 #include "osr/routing/dijkstra.h"
 #include "osr/routing/profile.h"
 #include "osr/routing/profiles/bike.h"
@@ -40,7 +42,7 @@ public:
 
   fs::path data_dir_{"osr"};
   unsigned n_queries_{50};
-  unsigned max_dist_{1200};
+  unsigned max_dist_{50000};
   unsigned threads_{std::thread::hardware_concurrency()};
 };
 
@@ -103,6 +105,46 @@ void set_start<car>(dijkstra<car>& d, ways const& w, node_idx_t const start) {
   d.add_start(w, car::label{car::node{start, 0, direction::kBackward}, 0U});
 };
 
+template <typename T>
+void set_start(bidirectional<T>& d, ways const& w, node_idx_t const start) {
+  d.add_start(w, typename T::label{typename T::node{start}, 0U});
+}
+
+template <>
+void set_start<car>(bidirectional<car>& d,
+                    ways const& w,
+                    node_idx_t const start) {
+  d.add_start(w, car::label{car::node{start, 0, direction::kForward}, 0U});
+  d.add_start(w, car::label{car::node{start, 0, direction::kBackward}, 0U});
+};
+
+template <typename T>
+std::vector<typename T::label> set_end(bidirectional<T>& d,
+                                       ways const& w,
+                                       node_idx_t const end) {
+  auto const l = typename T::label{typename T::node{end}, 0U};
+  d.add_end(w, l);
+  return {l};
+}
+
+template <>
+std::vector<typename car::label> set_end<car>(bidirectional<car>& d,
+                                              ways const& w,
+                                              node_idx_t const end) {
+  std::vector<typename car::label> ends;
+  auto const ways = w.r_->node_ways_[end];
+
+  for (auto i = way_pos_t{0U}; i != ways.size(); ++i) {
+    auto const l1 = car::label{car::node{end, i, direction::kForward}, 0U};
+    auto const l2 = car::label{car::node{end, i, direction::kBackward}, 0U};
+    d.add_end(w, l1);
+    d.add_end(w, l2);
+    ends.push_back(l1);
+    ends.push_back(l2);
+  }
+  return ends;
+}
+
 int main(int argc, char const* argv[]) {
   auto opt = settings{};
   auto parser = conf::options_parser({&opt});
@@ -138,17 +180,42 @@ int main(int argc, char const* argv[]) {
     for (auto& t : threads) {
       t = std::thread([&]() {
         auto d = dijkstra<T>{};
+        auto b = bidirectional<T>{};
         auto h = cista::BASE_HASH;
         auto n = 0U;
-        while (i.fetch_add(1U) < opt.n_queries_) {
-          auto const start_time = std::chrono::steady_clock::now();
+        while (i.fetch_add(1U) < opt.n_queries_ - 1) {
           auto const start =
               node_idx_t{cista::hash_combine(h, ++n, i.load()) % w.n_nodes()};
+          auto const end =
+              node_idx_t{cista::hash_combine(h, ++n, i.load()) % w.n_nodes()};
+
+          if (w.r_->node_ways_[start].empty() ||
+              w.r_->node_ways_[end].empty()) {
+            continue;
+          }
           d.reset(opt.max_dist_);
+          b.reset(opt.max_dist_,
+                  location{w.get_node_pos(start).as_latlng(), level_t{0.F}},
+                  location{w.get_node_pos(end).as_latlng(), level_t{0.F}});
           set_start<T>(d, w, start);
+          set_start<T>(b, w, start);
+          auto const ends = set_end<T>(b, w, end);
+          auto const start_time = std::chrono::steady_clock::now();
           d.template run<direction::kForward, false>(
               w, *w.r_, opt.max_dist_, nullptr, nullptr, elevations.get());
           auto const end_time = std::chrono::steady_clock::now();
+          b.template run<direction::kForward, false>(
+              w, *w.r_, opt.max_dist_, nullptr, nullptr, elevations.get());
+          if (!utl::any_of(ends, [&](auto&& e) {
+                auto const b_res =
+                    b.get_cost_to_mp(b.meet_point_1_, b.meet_point_2_);
+                auto const it = d.cost_.find(e.get_node().get_key());
+                auto const d_res = d.get_cost(e.get_node());
+                std::cout << b_res << " vs " << d_res << std::endl;
+                return b_res == d_res;
+              })) {
+            std::cout << "not equal" << std::endl;
+          }
           {
             auto const guard = std::lock_guard{m};
             results.emplace_back(benchmark_result{std::chrono::duration_cast<

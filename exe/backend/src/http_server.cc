@@ -19,10 +19,12 @@
 
 #include "osr/geojson.h"
 #include "osr/lookup.h"
+#include "osr/routing/algorithms.h"
 #include "osr/routing/profiles/bike.h"
 #include "osr/routing/profiles/bike_sharing.h"
 #include "osr/routing/profiles/car.h"
 #include "osr/routing/profiles/car_parking.h"
+#include "osr/routing/profiles/car_sharing.h"
 #include "osr/routing/profiles/foot.h"
 #include "osr/routing/route.h"
 
@@ -103,11 +105,20 @@ struct http_server::impl {
                : to_profile(profile_it->value().as_string());
   }
 
+  static routing_algorithm get_routing_algorithm_from_request(
+      boost::json::object const& q) {
+    auto const routing_it = q.find("routing");
+    return routing_it == q.end() || !routing_it->value().is_string()
+               ? routing_algorithm::kDijkstra
+               : to_algorithm(routing_it->value().as_string());
+  }
+
   void handle_route(web_server::http_req_t const& req,
                     web_server::http_res_cb_t const& cb) {
     auto const q = boost::json::parse(req.body()).as_object();
     auto const profile = get_search_profile_from_request(q);
     auto const direction_it = q.find("direction");
+    auto const routing_algo = get_routing_algorithm_from_request(q);
     auto const dir = to_direction(direction_it == q.end() ||
                                           !direction_it->value().is_string()
                                       ? to_str(direction::kForward)
@@ -117,8 +128,9 @@ struct http_server::impl {
     auto const max_it = q.find("max");
     auto const max = static_cast<cost_t>(
         max_it == q.end() ? 3600 : max_it->value().as_int64());
+
     auto const p = route(w_, l_, profile, from, to, max, dir, 100, nullptr,
-                         nullptr, elevations_);
+                         nullptr, elevations_, routing_algo);
 
     auto const p1 = route(w_, l_, profile, from, std::vector{to}, max, dir, 100,
                           nullptr, nullptr, elevations_);
@@ -224,6 +236,9 @@ struct http_server::impl {
         break;
       case search_profile::kBikeSharing:
         send_graph_response<bike_sharing>(req, cb, gj);
+        break;
+      case search_profile::kCarSharing:
+        send_graph_response<car_sharing<track_node_tracking>>(req, cb, gj);
         break;
       default: throw utl::fail("not implemented");
     }

@@ -57,6 +57,7 @@ struct way_properties {
   constexpr bool is_steps() const { return is_steps_; }
   constexpr bool is_ramp() const { return is_ramp_; }
   constexpr bool is_parking() const { return is_parking_; }
+  constexpr bool is_sidewalk_separate() const { return is_sidewalk_separate_; }
   constexpr std::uint16_t max_speed_m_per_s() const {
     return to_meters_per_second(static_cast<speed_limit>(speed_limit_));
   }
@@ -96,9 +97,10 @@ struct way_properties {
   bool is_parking_ : 1;
 
   bool is_ramp_ : 1;
+  bool is_sidewalk_separate_ : 1;
 };
 
-static_assert(sizeof(way_properties) == 3);
+static_assert(sizeof(way_properties) == 4);
 
 struct node_properties {
   constexpr bool is_car_accessible() const { return is_car_accessible_; }
@@ -154,6 +156,10 @@ struct ways {
                : std::nullopt;
   }
 
+  bool is_additional_node(osr::node_idx_t const n) const {
+    return n != node_idx_t::invalid() && n >= n_nodes();
+  }
+
   std::optional<node_idx_t> find_node_idx(osm_node_idx_t const i) const {
     auto const it = std::lower_bound(begin(node_to_osm_), end(node_to_osm_), i,
                                      [](auto&& a, auto&& b) { return a < b; });
@@ -173,10 +179,9 @@ struct ways {
   point get_node_pos(node_idx_t const i) const {
     auto const osm_idx = node_to_osm_[i];
     auto const way = r_->node_ways_[i][0];
-    for (auto const [o, p] :
-         utl::zip(way_osm_nodes_[way], way_polylines_[way])) {
+    for (auto const [j, o] : utl::enumerate(way_osm_nodes_[way])) {
       if (o == osm_idx) {
-        return p;
+        return way_polylines_[way][j];
       }
     }
     throw utl::fail("unable to find node {} [osm={}] in way {} [osm={}]", i,
