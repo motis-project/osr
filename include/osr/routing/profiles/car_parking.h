@@ -318,6 +318,14 @@ struct car_parking {
                                    std::uint16_t const dist) {
     return footp::way_cost(e, dir, dist);
   }
+
+  static constexpr double heuristic(double dist) {
+    return car::heuristic(dist);
+  }
+
+  static constexpr node get_reverse(node n) {
+    return {n.n_, n.type_, n.lvl_, opposite(n.dir_), n.way_};
+  }
 };
 
 }  // namespace osr

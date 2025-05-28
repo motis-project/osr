@@ -8,6 +8,7 @@
 #include "osr/elevation_storage.h"
 #include "osr/location.h"
 #include "osr/lookup.h"
+#include "osr/routing/algorithms.h"
 #include "osr/routing/mode.h"
 #include "osr/routing/profile.h"
 #include "osr/types.h"
@@ -18,6 +19,9 @@ struct ways;
 
 template <typename Profile>
 struct dijkstra;
+
+template <typename Profile>
+struct bidirectional;
 
 struct sharing_data;
 
@@ -42,6 +46,9 @@ struct path {
   bool uses_elevator_{false};
   node_idx_t track_node_{node_idx_t::invalid()};
 };
+
+template <typename Profile>
+bidirectional<Profile>& get_bidirectional();
 
 template <typename Profile>
 dijkstra<Profile>& get_dijkstra();
@@ -72,7 +79,8 @@ std::optional<path> route(ways const&,
                           double max_match_distance,
                           bitvec<node_idx_t> const* blocked = nullptr,
                           sharing_data const* sharing = nullptr,
-                          elevation_storage const* = nullptr);
+                          elevation_storage const* = nullptr,
+                          routing_algorithm = routing_algorithm::kDijkstra);
 
 std::optional<path> route(ways const&,
                           search_profile,

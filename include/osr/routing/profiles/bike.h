@@ -13,6 +13,7 @@ struct sharing_data;
 constexpr auto const kElevationNoCost = 0U;
 constexpr auto const kElevationLowCost = 570U;
 constexpr auto const kElevationHighCost = 3700U;
+constexpr auto const kBikeSpeedMetersPerSecond = 2.8F;
 
 // Routing const configuration (cost, exp)
 // cost:
@@ -187,7 +188,7 @@ struct bike {
                                    direction,
                                    std::uint16_t const dist) {
     if (e.is_bike_accessible()) {
-      return static_cast<cost_t>(std::round(dist / 2.8F));
+      return static_cast<cost_t>(std::round(dist / kBikeSpeedMetersPerSecond));
     } else {
       return kInfeasible;
     }
@@ -196,6 +197,12 @@ struct bike {
   static constexpr cost_t node_cost(node_properties const n) {
     return n.is_bike_accessible() ? 0U : kInfeasible;
   }
+
+  static constexpr double heuristic(double dist) {
+    return dist / kBikeSpeedMetersPerSecond;
+  }
+
+  static constexpr node get_reverse(node const n) { return n; }
 };
 
 }  // namespace osr
