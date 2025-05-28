@@ -429,7 +429,9 @@ struct bike_sharing {
     return footp::way_cost(e, dir, dist);
   }
 
-  static constexpr double heuristic(double dist) { return dist / kBikeSpeedMetersPerSecond; }
+  static constexpr double heuristic(double dist) {
+    return dist / kBikeSpeedMetersPerSecond;
+  }
   static constexpr node get_reverse(node const n) { return n; }
 };
 
