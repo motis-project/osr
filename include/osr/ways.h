@@ -98,6 +98,7 @@ struct way_properties {
 
   bool is_ramp_ : 1;
   bool is_sidewalk_separate_ : 1;
+  bool motor_vehicle_no_ : 1;
 };
 
 static_assert(sizeof(way_properties) == 4);

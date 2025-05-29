@@ -13,7 +13,7 @@ struct sharing_data;
 constexpr auto const kElevationNoCost = 0U;
 constexpr auto const kElevationLowCost = 570U;
 constexpr auto const kElevationHighCost = 3700U;
-constexpr auto const kBikeSpeedMetersPerSecond = 2.8F;
+constexpr auto const kBikeSpeedMetersPerSecond = 3.8F;
 
 // Routing const configuration (cost, exp)
 // cost:
@@ -36,7 +36,7 @@ struct bike {
     friend bool operator==(node, node) = default;
 
     static constexpr node invalid() noexcept {
-      return {.n_ = node_idx_t::invalid()};
+      return {.n_ = node_idx_t::invalid(), .dir_ = direction::kForward};
     }
 
     constexpr node_idx_t get_node() const noexcept { return n_; }
@@ -46,10 +46,12 @@ struct bike {
     static constexpr mode get_mode() noexcept { return mode::kBike; }
 
     std::ostream& print(std::ostream& out, ways const& w) const {
-      return out << w.node_to_osm_[n_];
+      return out << "(node=" << w.node_to_osm_[n_] << ", dir=" << to_str(dir_)
+                 << ")";
     }
 
     node_idx_t n_;
+    direction dir_;
   };
 
   using key = node;
@@ -57,14 +59,14 @@ struct bike {
   struct label {
     label(node const n, cost_t const c) : n_{n.n_}, cost_{c} {}
 
-    constexpr node get_node() const noexcept { return {n_}; }
+    constexpr node get_node() const noexcept { return {n_, dir_}; }
     constexpr cost_t cost() const noexcept { return cost_; }
 
     void track(
         label const&, ways::routing const&, way_idx_t, node_idx_t, bool) {}
 
     node_idx_t n_;
-    level_t lvl_;
+    direction dir_;
     cost_t cost_;
   };
 
@@ -78,8 +80,9 @@ struct bike {
 
   struct entry {
     constexpr std::optional<node> pred(node) const noexcept {
-      return pred_ == node_idx_t::invalid() ? std::nullopt
-                                            : std::optional{node{pred_}};
+      return pred_ == node_idx_t::invalid()
+                 ? std::nullopt
+                 : std::optional{node{pred_, pred_dir_}};
     }
     constexpr cost_t cost(node) const noexcept { return cost_; }
     constexpr bool update(label const&,
@@ -87,8 +90,9 @@ struct bike {
                           cost_t const c,
                           node const pred) noexcept {
       if (c < cost_) {
-        cost_ = c;
         pred_ = pred.n_;
+        pred_dir_ = pred.dir_;
+        cost_ = c;
         return true;
       }
       return false;
@@ -97,6 +101,7 @@ struct bike {
     void write(node, path&) const {}
 
     node_idx_t pred_{node_idx_t::invalid()};
+    direction pred_dir_{direction::kForward};
     cost_t cost_{kInfeasible};
   };
 
@@ -105,9 +110,9 @@ struct bike {
                                  way_idx_t,
                                  node_idx_t const n,
                                  level_t,
-                                 direction,
+                                 direction const dir,
                                  Fn&& f) {
-    f(node{n});
+    f(node{n, dir});
   }
 
   template <typename Fn>
@@ -115,7 +120,8 @@ struct bike {
                           node_idx_t const n,
                           level_t,
                           Fn&& f) {
-    f(node{n});
+    f(node{n, direction::kForward});
+    f(node{n, direction::kBackward});
   }
 
   static bool is_dest_reachable(
@@ -171,8 +177,8 @@ struct bike {
                 : 0);
         auto const cost = way_cost(target_way_prop, way_dir, dist) +
                           node_cost(target_node_prop) + elevation_cost;
-        fn(node{target_node}, static_cast<std::uint32_t>(cost), dist, way, from,
-           to, elevation, false);
+        fn(node{target_node, way_dir}, static_cast<std::uint32_t>(cost), dist,
+           way, from, to, elevation, false);
       };
 
       if (i != 0U) {
@@ -185,10 +191,13 @@ struct bike {
   }
 
   static constexpr cost_t way_cost(way_properties const e,
-                                   direction,
+                                   direction const dir,
                                    std::uint16_t const dist) {
-    if (e.is_bike_accessible()) {
-      return static_cast<cost_t>(std::round(dist / kBikeSpeedMetersPerSecond));
+    if (e.is_bike_accessible() &&
+        (dir == direction::kForward || !e.is_oneway_bike())) {
+      return static_cast<cost_t>(
+          std::round(dist / (kBikeSpeedMetersPerSecond +
+                             (e.motor_vehicle_no_ ? 0.5 : 0.0))));
     } else {
       return kInfeasible;
     }
@@ -199,7 +208,7 @@ struct bike {
   }
 
   static constexpr double heuristic(double dist) {
-    return dist / kBikeSpeedMetersPerSecond;
+    return dist / (kBikeSpeedMetersPerSecond + 0.5);
   }
 
   static constexpr node get_reverse(node const n) { return n; }
