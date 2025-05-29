@@ -337,7 +337,7 @@ struct foot {
   }
 
   static constexpr double heuristic(double dist) {
-    return dist / kSpeedMetersPerSecond;
+    return dist / (kSpeedMetersPerSecond + 0.1);
   }
 
   static constexpr node get_reverse(node const n) { return n; }
