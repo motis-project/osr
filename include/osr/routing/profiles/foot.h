@@ -14,7 +14,6 @@ struct sharing_data;
 template <bool IsWheelchair, typename Tracking = noop_tracking>
 struct foot {
   static constexpr auto const kMaxMatchDistance = 100U;
-  static constexpr auto const kOffroadPenalty = 3U;
   static constexpr auto const kSpeedMetersPerSecond =
       (IsWheelchair ? 0.8 : 1.1F);
 
@@ -334,7 +333,7 @@ struct foot {
     return n.is_walk_accessible() ? (n.is_elevator() ? 90U : 0U) : kInfeasible;
   }
 
-  static constexpr double heuristic(double dist) {
+  static constexpr double heuristic(double const dist) {
     return dist / kSpeedMetersPerSecond;
   }
 

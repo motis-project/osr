@@ -490,7 +490,7 @@ struct car_sharing {
     return footp::way_cost(e, dir, dist);
   }
 
-  static constexpr double heuristic(double dist) {
+  static constexpr double heuristic(double const dist) {
     return car::heuristic(dist);
   }
 

@@ -222,7 +222,7 @@ struct bike_sharing {
   }
 
   static bike<kElevationNoCost>::node to_bike(node const n) {
-    return {.n_ = n.n_};
+    return {.n_ = n.n_, direction::kForward /* TODO */};
   }
 
   static node to_node(footp::node const n, node_type const type) {
@@ -429,9 +429,10 @@ struct bike_sharing {
     return footp::way_cost(e, dir, dist);
   }
 
-  static constexpr double heuristic(double dist) {
+  static constexpr double heuristic(double const dist) {
     return dist / kBikeSpeedMetersPerSecond;
   }
+
   static constexpr node get_reverse(node const n) { return n; }
 };
 
