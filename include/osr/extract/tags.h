@@ -77,6 +77,7 @@ struct tags {
         case cista::hash("ref"): ref_ = t.value(); break;
         case cista::hash("entrance"): is_entrance_ = true; break;
         case cista::hash("sidewalk"):
+        case cista::hash("sidewalk:both"):
         case cista::hash("sidewalk:left"): [[fallthrough]];
         case cista::hash("sidewalk:right"):
           if (t.value() == "separate"sv) {

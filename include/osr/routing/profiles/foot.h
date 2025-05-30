@@ -322,7 +322,7 @@ struct foot {
     if ((e.is_foot_accessible() ||
          (!e.is_sidewalk_separate() && e.is_bike_accessible())) &&
         (!IsWheelchair || !e.is_steps())) {
-      return (!e.is_foot_accessible() ? 90 : 0) +
+      return (!e.is_foot_accessible() || e.is_sidewalk_separate() ? 90 : 0) +
              static_cast<cost_t>(
                  std::round(dist / (kSpeedMetersPerSecond +
                                     (e.motor_vehicle_no_ ? 0.1 : 0.0))));
