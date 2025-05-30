@@ -456,7 +456,7 @@ std::optional<path> route_bidirectional(ways const& w,
             *w.r_, start.way_, nc->node_, from.lvl_, dir, [&](auto const node) {
               auto label = typename Profile::label{node, nc->cost_};
               label.track(label, *w.r_, start.way_, node.get_node(), false);
-              b.add_start(w, label);
+              b.add_start(w, label, sharing);
             });
       }
     }
@@ -464,6 +464,7 @@ std::optional<path> route_bidirectional(ways const& w,
       continue;
     }
     for (auto const& end : to_match) {
+      // TODO hard cut after first 10 matches like with dijkstra?
       if (w.r_->way_component_[start.way_] != w.r_->way_component_[end.way_]) {
         continue;
       }
@@ -474,7 +475,7 @@ std::optional<path> route_bidirectional(ways const& w,
               [&](auto const node) {
                 auto label = typename Profile::label{node, nc->cost_};
                 label.track(label, *w.r_, end.way_, node.get_node(), false);
-                b.add_end(w, label);
+                b.add_end(w, label, sharing);
               });
         }
       }
@@ -496,9 +497,11 @@ std::optional<path> route_bidirectional(ways const& w,
       return reconstruct_bi(w, blocked, sharing, elevations, b, start, end,
                             cost, dir);
     }
+    b.reset(max, from, to); // TODO
     b.pq2_.clear();
     b.pq2_.n_buckets(max + 1U);
     b.cost2_.clear();
+    b.max_reached_2_ = false;
   }
   return std::nullopt;
 }

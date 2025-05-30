@@ -110,15 +110,15 @@ void set_start<car>(dijkstra<car>& d, ways const& w, node_idx_t const start) {
 
 template <typename T>
 void set_start(bidirectional<T>& d, ways const& w, node_idx_t const start) {
-  d.add_start(w, typename T::label{typename T::node{start}, 0U});
+  d.add_start(w, typename T::label{typename T::node{start}, 0U}, nullptr);
 }
 
 template <>
 void set_start<car>(bidirectional<car>& d,
                     ways const& w,
                     node_idx_t const start) {
-  d.add_start(w, car::label{car::node{start, 0, direction::kForward}, 0U});
-  d.add_start(w, car::label{car::node{start, 0, direction::kBackward}, 0U});
+  d.add_start(w, car::label{car::node{start, 0, direction::kForward}, 0U}, nullptr);
+  d.add_start(w, car::label{car::node{start, 0, direction::kBackward}, 0U}, nullptr);
 };
 
 template <typename T>
@@ -126,7 +126,7 @@ std::vector<typename T::label> set_end(bidirectional<T>& d,
                                        ways const& w,
                                        node_idx_t const end) {
   auto const l = typename T::label{typename T::node{end}, 0U};
-  d.add_end(w, l);
+  d.add_end(w, l, nullptr);
   return {l};
 }
 
@@ -140,8 +140,8 @@ std::vector<typename car::label> set_end<car>(bidirectional<car>& d,
   for (auto i = way_pos_t{0U}; i != ways.size(); ++i) {
     auto const l1 = car::label{car::node{end, i, direction::kForward}, 0U};
     auto const l2 = car::label{car::node{end, i, direction::kBackward}, 0U};
-    d.add_end(w, l1);
-    d.add_end(w, l2);
+    d.add_end(w, l1, nullptr);
+    d.add_end(w, l2, nullptr);
     ends.push_back(l1);
     ends.push_back(l2);
   }
