@@ -125,7 +125,7 @@ struct bike {
                                  way_idx_t,
                                  node_idx_t const n,
                                  level_t,
-                                 direction const dir,
+                                 direction,
                                  Fn&& f) {
     f(node{n, direction::kForward});
     f(node{n, direction::kBackward});
