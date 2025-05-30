@@ -49,7 +49,7 @@ struct dijkstra {
   }
 
   template <direction SearchDir, bool WithBlocked>
-  void run(ways const& w,
+  bool run(ways const& w,
            ways::routing const& r,
            cost_t const max,
            bitvec<node_idx_t> const* blocked,
@@ -79,6 +79,10 @@ struct dijkstra {
             }
 
             auto const total = l.cost() + cost;
+            if (total >= max) {
+              max_reached_ = true;
+              return;
+            }
             if (total < max &&
                 cost_[neighbor.get_key()].update(
                     l, neighbor, static_cast<cost_t>(total), curr)) {
@@ -96,9 +100,10 @@ struct dijkstra {
             }
           });
     }
+    return !max_reached_;
   }
 
-  void run(ways const& w,
+  bool run(ways const& w,
            ways::routing const& r,
            cost_t const max,
            bitvec<node_idx_t> const* blocked,
@@ -106,20 +111,23 @@ struct dijkstra {
            elevation_storage const* elevations,
            direction const dir) {
     if (blocked == nullptr) {
-      dir == direction::kForward ? run<direction::kForward, false>(
-                                       w, r, max, blocked, sharing, elevations)
-                                 : run<direction::kBackward, false>(
-                                       w, r, max, blocked, sharing, elevations);
+      return dir == direction::kForward
+                 ? run<direction::kForward, false>(w, r, max, blocked, sharing,
+                                                   elevations)
+                 : run<direction::kBackward, false>(w, r, max, blocked, sharing,
+                                                    elevations);
     } else {
-      dir == direction::kForward ? run<direction::kForward, true>(
-                                       w, r, max, blocked, sharing, elevations)
-                                 : run<direction::kBackward, true>(
-                                       w, r, max, blocked, sharing, elevations);
+      return dir == direction::kForward
+                 ? run<direction::kForward, true>(w, r, max, blocked, sharing,
+                                                  elevations)
+                 : run<direction::kBackward, true>(w, r, max, blocked, sharing,
+                                                   elevations);
     }
   }
 
   dial<label, get_bucket> pq_{get_bucket{}};
   ankerl::unordered_dense::map<key, entry, hash> cost_;
+  bool max_reached_;
 };
 
 }  // namespace osr
