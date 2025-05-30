@@ -66,6 +66,8 @@ struct bidirectional {
         diameter < max && max + diameter < std::numeric_limits<cost_t>::max()
             ? static_cast<cost_t>(diameter * 0.5)
             : max;
+    max_reached_1_ = false;
+    max_reached_2_ = false;
   }
 
   void add(ways const& w,
@@ -176,7 +178,15 @@ struct bidirectional {
             return;
           }
           auto const heur = total + heuristic(w, neighbor.n_, SearchDir);
-          if (total < adjusted_max && heur < max &&
+          if (total >= adjusted_max) {
+            if (SearchDir == direction::kForward) {
+              max_reached_1_ = true;
+            } else {
+              max_reached_2_ = true;
+            }
+            return;
+          }
+          if (heur < max &&
               costs[neighbor.get_key()].update(
                   l, neighbor, static_cast<cost_t>(total), curr)) {
 
@@ -287,37 +297,35 @@ struct bidirectional {
   }
 
   template <direction SearchDir, bool WithBlocked>
-  void run(ways const& w,
+  bool run(ways const& w,
            ways::routing const& r,
            cost_t const max,
            bitvec<node_idx_t> const* blocked,
            sharing_data const* sharing,
            elevation_storage const* elevations) {
     if (radius_ == max) {
-      return;
+      return false;
     }
-    auto pq = &pq1_;
-    auto dir = direction::kForward;
-
-    while (!pq->empty()) {
-      auto const cont =
-          dir == direction::kForward
-              ? run_single<SearchDir, WithBlocked>(w, r, max, blocked, sharing,
-                                                   elevations, *pq, cost1_)
-              : run_single<opposite(SearchDir), WithBlocked>(
-                    w, r, max, blocked, sharing, elevations, *pq, cost2_);
-      if (!cont) {
+    while (!pq1_.empty() || !pq2_.empty()) {
+      if (!pq1_.empty() &&
+          !run_single<SearchDir, WithBlocked>(w, r, max, blocked, sharing,
+                                              elevations, pq1_, cost1_)) {
         break;
       }
-      pq = dir == direction::kForward ? &pq2_ : &pq1_;
-      dir = opposite(dir);
+      if (!pq2_.empty() &&
+          !run_single<opposite(SearchDir), WithBlocked>(
+              w, r, max, blocked, sharing, elevations, pq2_, cost2_)) {
+        break;
+      }
     }
     if (best_cost_ > max) {
       clear_mp();
+      return false;
     }
+    return !max_reached_1_ || !max_reached_2_;
   }
 
-  void run(ways const& w,
+  bool run(ways const& w,
            ways::routing const& r,
            cost_t const max,
            bitvec<node_idx_t> const* blocked,
@@ -325,15 +333,17 @@ struct bidirectional {
            elevation_storage const* elevations,
            direction const dir) {
     if (blocked == nullptr) {
-      dir == direction::kForward ? run<direction::kForward, false>(
-                                       w, r, max, blocked, sharing, elevations)
-                                 : run<direction::kBackward, false>(
-                                       w, r, max, blocked, sharing, elevations);
+      return dir == direction::kForward
+                 ? run<direction::kForward, false>(w, r, max, blocked, sharing,
+                                                   elevations)
+                 : run<direction::kBackward, false>(w, r, max, blocked, sharing,
+                                                    elevations);
     } else {
-      dir == direction::kForward ? run<direction::kForward, true>(
-                                       w, r, max, blocked, sharing, elevations)
-                                 : run<direction::kBackward, true>(
-                                       w, r, max, blocked, sharing, elevations);
+      return dir == direction::kForward
+                 ? run<direction::kForward, true>(w, r, max, blocked, sharing,
+                                                  elevations)
+                 : run<direction::kBackward, true>(w, r, max, blocked, sharing,
+                                                   elevations);
     }
   }
 
@@ -348,6 +358,8 @@ struct bidirectional {
   ankerl::unordered_dense::map<key, entry, hash> cost2_;
   cost_t radius_;
   double distance_lon_degrees_;
+  bool max_reached_1_;
+  bool max_reached_2_;
 };
 
 }  // namespace osr

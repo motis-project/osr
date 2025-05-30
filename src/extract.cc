@@ -547,6 +547,7 @@ void extract(bool const with_platforms,
   w.sync();
 
   w.connect_ways();
+  w.build_components();
 
   if (!elevation_dir.empty()) {
     auto const provider =

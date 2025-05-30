@@ -447,34 +447,45 @@ std::optional<path> route_bidirectional(ways const& w,
   if (b.radius_ == max) {
     return std::nullopt;
   }
-  auto init = true;
   for (auto const& start : from_match) {
+    for (auto const* nc : {&start.left_, &start.right_}) {
+      if (nc->valid() && nc->cost_ < max) {
+        Profile::resolve_start_node(
+            *w.r_, start.way_, nc->node_, from.lvl_, dir, [&](auto const node) {
+              auto label = typename Profile::label{node, nc->cost_};
+              label.track(label, *w.r_, start.way_, node.get_node(), false);
+              b.add_start(w, label);
+            });
+      }
+    }
+    if (b.pq1_.empty()) {
+      continue;
+    }
     for (auto const& end : to_match) {
-      for (auto const* nc : {&start.left_, &start.right_}) {
-        if (nc->valid() && nc->cost_ < max) {
-          Profile::resolve_start_node(
-              *w.r_, start.way_, nc->node_, from.lvl_, dir,
-              [&](auto const node) { b.add_start(w, {node, nc->cost_}); });
-        }
+      if (w.r_->way_component_[start.way_] != w.r_->way_component_[end.way_]) {
+        continue;
       }
       for (auto const* nc : {&end.left_, &end.right_}) {
         if (nc->valid() && nc->cost_ < max) {
           Profile::resolve_start_node(
               *w.r_, end.way_, nc->node_, to.lvl_, opposite(dir),
-              [&](auto const node) { b.add_end(w, {node, nc->cost_}); });
+              [&](auto const node) {
+                auto label = typename Profile::label{node, nc->cost_};
+                label.track(label, *w.r_, end.way_, node.get_node(), false);
+                b.add_end(w, label);
+              });
         }
       }
-      if ((b.pq1_.empty() && b.pq2_.empty()) ||
-          (init && (b.pq1_.empty() || b.pq2_.empty()))) {
+      if (b.pq2_.empty()) {
         continue;
       }
-      b.clear_mp();
-      init = false;
-
-      b.run(w, *w.r_, max, blocked, sharing, elevations, dir);
+      auto const cont = b.run(w, *w.r_, max, blocked, sharing, elevations, dir);
 
       if (b.meet_point_1_.get_node() == node_idx_t::invalid()) {
-        continue;
+        if (cont) {
+          continue;
+        }
+        return std::nullopt;
       }
 
       auto const cost = b.get_cost_to_mp(b.meet_point_1_, b.meet_point_2_);
