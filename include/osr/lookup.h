@@ -146,7 +146,7 @@ private:
 
   template <typename Profile>
   node_candidate find_next_node(way_candidate const& wc,
-                                location const& query,
+                                location const&,
                                 direction const dir,
                                 level_t const lvl,
                                 bool const reverse,
@@ -166,7 +166,7 @@ private:
                             .dist_to_node_ = wc.dist_to_way_,
                             .cost_ = offroad_cost,
                             .offroad_cost_ = offroad_cost,
-                            .path_ = {query.pos_, wc.best_}};
+                            .path_ = {wc.best_}};
     auto const polyline = ways_.way_polylines_[wc.way_];
     auto const osm_nodes = ways_.way_osm_nodes_[wc.way_];
 

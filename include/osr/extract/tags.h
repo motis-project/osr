@@ -52,6 +52,7 @@ struct tags {
         case cista::hash("oneway:bicycle"):
           not_oneway_bike_ = t.value() == "no"sv;
           break;
+        case cista::hash("motor_vehicle:forward"):
         case cista::hash("motor_vehicle"):
           motor_vehicle_ = t.value();
           is_destination_ |= motor_vehicle_ == "destination"sv;
