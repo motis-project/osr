@@ -290,6 +290,7 @@ struct node_handler : public osm::handler::Handler {
                hash_map<osm_node_idx_t, level_bits_t> const& elevator_nodes)
       : platforms_{platforms}, r_{r}, w_{w}, elevator_nodes_{elevator_nodes} {
     w_.r_->node_properties_.resize(w_.n_nodes());
+    w_.r_->node_positions_.resize(w_.n_nodes());
   }
 
   void node(osm::Node const& n) {
@@ -299,6 +300,7 @@ struct node_handler : public osm::handler::Handler {
       auto const t = tags{n};
       auto const [p, level_bits] = get_node_properties(t);
       w_.r_->node_properties_[*node_idx] = p;
+      w_.r_->node_positions_[*node_idx] = point::from_location(n.location());
 
       if (platforms_ != nullptr && t.is_platform_) {
         auto const l = std::lock_guard{platforms_mutex_};
@@ -549,6 +551,7 @@ void extract(bool const with_platforms,
   w.sync();
 
   w.connect_ways();
+  w.build_components();
 
   if (!elevation_dir.empty()) {
     auto const provider =

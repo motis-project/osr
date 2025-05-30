@@ -123,10 +123,14 @@ private:
                              double const max_match_distance,
                              bitvec<node_idx_t> const* blocked) const {
     auto way_candidates = std::vector<way_candidate>{};
+    auto const approx_distance_lng_degrees =
+        geo::approx_distance_lng_degrees(query.pos_);
+    auto const squared_max_dist = std::pow(max_match_distance, 2);
     find(geo::box{query.pos_, max_match_distance}, [&](way_idx_t const way) {
-      auto wc = geo::distance_to_polyline<way_candidate>(
-          query.pos_, ways_.way_polylines_[way]);
-      if (wc.dist_to_way_ < max_match_distance) {
+      auto wc = geo::approx_squared_distance_to_polyline<way_candidate>(
+          query.pos_, ways_.way_polylines_[way], approx_distance_lng_degrees);
+      if (wc.dist_to_way_ < squared_max_dist) {
+        wc.dist_to_way_ = std::sqrt(wc.dist_to_way_);
         wc.query_ = query;
         wc.way_ = way;
         wc.left_ =
