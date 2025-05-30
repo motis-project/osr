@@ -43,7 +43,8 @@ struct bike_sharing {
                      .is_platform_ = 0,
                      .is_parking_ = false,
                      .is_ramp_ = false,
-                     .is_sidewalk_separate_ = false};
+                     .is_sidewalk_separate_ = false,
+                     .motor_vehicle_no_ = false};
 
   static constexpr auto const kAdditionalNodeProperties =
       node_properties{.from_level_ = 0,
@@ -222,7 +223,7 @@ struct bike_sharing {
   }
 
   static bike<kElevationNoCost>::node to_bike(node const n) {
-    return {.n_ = n.n_, direction::kForward /* TODO */};
+    return {.n_ = n.n_, .dir_ = direction::kForward /* TODO */};
   }
 
   static node to_node(footp::node const n, node_type const type) {

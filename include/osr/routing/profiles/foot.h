@@ -15,7 +15,7 @@ template <bool IsWheelchair, typename Tracking = noop_tracking>
 struct foot {
   static constexpr auto const kMaxMatchDistance = 100U;
   static constexpr auto const kSpeedMetersPerSecond =
-      (IsWheelchair ? 0.8 : 1.1F);
+      (IsWheelchair ? 0.8 : 1.2F);
 
   struct node {
     friend bool operator==(node const a, node const b) {
@@ -323,7 +323,9 @@ struct foot {
          (!e.is_sidewalk_separate() && e.is_bike_accessible())) &&
         (!IsWheelchair || !e.is_steps())) {
       return (!e.is_foot_accessible() ? 90 : 0) +
-             static_cast<cost_t>(std::round(dist / kSpeedMetersPerSecond));
+             static_cast<cost_t>(
+                 std::round(dist / (kSpeedMetersPerSecond +
+                                    (e.motor_vehicle_no_ ? 0.1 : 0.0))));
     } else {
       return kInfeasible;
     }
@@ -334,7 +336,7 @@ struct foot {
   }
 
   static constexpr double heuristic(double const dist) {
-    return dist / kSpeedMetersPerSecond;
+    return dist / (kSpeedMetersPerSecond + 0.1);
   }
 
   static constexpr node get_reverse(node const n) { return n; }

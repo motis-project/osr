@@ -125,7 +125,7 @@ struct bike {
                                  way_idx_t,
                                  node_idx_t const n,
                                  level_t,
-                                 direction,
+                                 direction const dir,
                                  Fn&& f) {
     f(node{n, direction::kForward});
     f(node{n, direction::kBackward});
@@ -214,7 +214,9 @@ struct bike {
                                    std::uint16_t const dist) {
     if (e.is_bike_accessible() &&
         (dir == direction::kForward || !e.is_oneway_bike())) {
-      return static_cast<cost_t>(std::round(dist / kBikeSpeedMetersPerSecond));
+      return static_cast<cost_t>(
+          std::round(dist / (kBikeSpeedMetersPerSecond +
+                             (e.motor_vehicle_no_ ? 0.5 : 0.0))));
     } else {
       return kInfeasible;
     }
@@ -225,7 +227,7 @@ struct bike {
   }
 
   static constexpr double heuristic(double const dist) {
-    return dist / kBikeSpeedMetersPerSecond;
+    return dist / (kBikeSpeedMetersPerSecond + 0.5);
   }
 
   static constexpr node get_reverse(node const n) {
