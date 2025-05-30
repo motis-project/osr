@@ -177,15 +177,7 @@ struct ways {
   }
 
   point get_node_pos(node_idx_t const i) const {
-    auto const osm_idx = node_to_osm_[i];
-    auto const way = r_->node_ways_[i][0];
-    for (auto const [j, o] : utl::enumerate(way_osm_nodes_[way])) {
-      if (o == osm_idx) {
-        return way_polylines_[way][j];
-      }
-    }
-    throw utl::fail("unable to find node {} [osm={}] in way {} [osm={}]", i,
-                    osm_idx, way, way_osm_idx_[way]);
+    return r_->node_positions_[i];
   }
 
   cista::mmap mm(char const* file) {
@@ -255,6 +247,8 @@ struct ways {
 
     bitvec<node_idx_t> node_is_restricted_;
     vecvec<node_idx_t, restriction> node_restrictions_;
+
+    vec_map<node_idx_t, point> node_positions_;
 
     vec<pair<node_idx_t, level_bits_t>> multi_level_elevators_;
 
