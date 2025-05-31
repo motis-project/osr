@@ -33,6 +33,7 @@
 #include "osr/lookup.h"
 #include "osr/platforms.h"
 #include "osr/preprocessing/elevation/provider.h"
+#include "osr/routing/profiles/car_parking.h"
 #include "osr/ways.h"
 
 namespace osm = osmium;
@@ -406,9 +407,15 @@ struct node_handler : public osm::handler::Handler {
   hash_map<osm_node_idx_t, level_bits_t> const& elevator_nodes_;
 };
 
+struct parking {
+  using parking_idx_t = cista::strong<std::uint64_t, struct parking_idx_>;
+  vec_map<parking_idx_t, point> parking_pos_;
+  vec_map<parking_idx_t, osm_node_idx_t> osm_node_idx_;
+};
+
 struct mark_inaccessible_handler : public osm::handler::Handler {
-  explicit mark_inaccessible_handler(bool track_platforms, ways& w)
-      : track_platforms_{track_platforms}, w_{w} {}
+  explicit mark_inaccessible_handler(bool track_platforms, ways& w, parking& p)
+      : track_platforms_{track_platforms}, w_{w}, parking_{p} {}
 
   void node(osm::Node const& n) {
     auto const t = tags{n};
@@ -420,14 +427,20 @@ struct mark_inaccessible_handler : public osm::handler::Handler {
       w_.node_way_counter_.increment(n.positive_id());
     }
 
+    if (t.is_parking_) {
+      parking_.osm_node_idx_.emplace_back(osm_node_idx_t{n.positive_id()});
+      parking_.parking_pos_.emplace_back(point::from_location(n.location()));
+    }
+
     if (track_platforms_ && t.is_platform_) {
-      // Wnsure nodes are created even if they are not part of a routable way.
+      // Ensure nodes are created even if they are not part of a routable way.
       w_.node_way_counter_.increment(n.positive_id());
     }
   }
 
   bool track_platforms_;
   ways& w_;
+  parking& parking_;
 };
 
 struct rel_ways_handler : public osm::handler::Handler {
@@ -486,6 +499,7 @@ void extract(bool const with_platforms,
   auto node_idx =
       tiles::hybrid_node_idx{node_idx_file.fileno(), node_dat_file.fileno()};
 
+  auto p = parking{};
   auto rel_ways = rel_ways_t{};
   auto w = ways{out, cista::mmap::protection::WRITE};
   auto pl = std::unique_ptr<platforms>{};
@@ -499,7 +513,7 @@ void extract(bool const with_platforms,
 
     auto node_idx_builder = tiles::hybrid_node_idx_builder{node_idx};
 
-    auto inaccessible_handler = mark_inaccessible_handler{pl != nullptr, w};
+    auto inaccessible_handler = mark_inaccessible_handler{pl != nullptr, w, p};
     auto rel_ways_h = rel_ways_handler{pl.get(), rel_ways};
     auto reader = osm_io::Reader{input_file, osm_eb::node | osm_eb::relation,
                                  osmium::io::read_meta::no};
@@ -587,7 +601,47 @@ void extract(bool const with_platforms,
 
   w.r_->write(out);
 
-  lookup{w, out, cista::mmap::protection::WRITE}.build_rtree();
+  auto l = lookup{w, out, cista::mmap::protection::WRITE};
+  l.build_rtree();
+
+  // Connect parking nodes.
+  for (auto const [parking_pos, parking_osm_idx] :
+       utl::zip(p.parking_pos_, p.osm_node_idx_)) {
+    auto const n = w.find_node_idx(parking_osm_idx);
+    if (n.has_value()) {
+      continue;
+    }
+
+    auto const match =
+        l.match<car_parking<false>>(location{parking_pos.as_latlng(), kNoLevel},
+                                    false, direction::kForward, 25, nullptr);
+    if (match.empty()) {
+      continue;
+    }
+
+    for (auto const& m : match) {
+      auto const nodes = w.r_->way_nodes_[m.way_];
+      if (nodes.empty()) {
+        continue;
+      }
+      auto const closest_node = *std::min_element(
+          begin(nodes), end(nodes),
+          [&](node_idx_t const a, node_idx_t const b) {
+            return geo::distance(w.get_node_pos(a), parking_pos) <
+                   geo::distance(w.get_node_pos(b), parking_pos);
+          });
+      w.r_->node_properties_[closest_node].is_parking_ = true;
+    }
+  }
+
+  // Connect parking ways.
+  for (auto const [way, props] : utl::enumerate(w.r_->way_properties_)) {
+    auto const way_idx = way_idx_t{way};
+    // if (props.is_parking_ && w.component_size_[w.way_component_[way]] < 1000)
+    // {
+    // TODO connect to component with >1000
+  }
+}
 }
 
 }  // namespace osr
