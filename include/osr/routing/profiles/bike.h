@@ -214,9 +214,9 @@ struct bike {
                                    std::uint16_t const dist) {
     if (e.is_bike_accessible() &&
         (dir == direction::kForward || !e.is_oneway_bike())) {
-      return static_cast<cost_t>(
-          std::round(dist / (kBikeSpeedMetersPerSecond +
-                             (e.motor_vehicle_no_ ? 0.5 : 0.0))));
+      return static_cast<cost_t>(std::round(
+          dist / (kBikeSpeedMetersPerSecond + (e.is_big_street_ ? -0.5 : 0) +
+                  (e.motor_vehicle_no_ ? 0.5 : 0.0))));
     } else {
       return kInfeasible;
     }

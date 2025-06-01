@@ -60,6 +60,23 @@ bool is_number(std::string_view s) {
          utl::all_of(s, [](char const c) { return std::isdigit(c); });
 }
 
+bool is_big_street(tags const& t) {
+  switch (cista::hash(t.highway_)) {
+    case cista::hash("motorway"):
+    case cista::hash("motorway_link"):
+    case cista::hash("trunk"):
+    case cista::hash("trunk_link"):
+    case cista::hash("primary"):
+    case cista::hash("primary_link"):
+    case cista::hash("secondary"):
+    case cista::hash("secondary_link"):
+    case cista::hash("tertiary"):
+    case cista::hash("tertiary_link"):
+    case cista::hash("unclassified"): return true;
+    default: return false;
+  }
+}
+
 speed_limit get_speed_limit(tags const& t) {
   if (is_number(t.max_speed_) /* TODO: support units (kmh/mph) */) {
     return get_speed_limit(
@@ -123,6 +140,7 @@ way_properties get_way_properties(tags const& t) {
   p.motor_vehicle_no_ =
       (t.motor_vehicle_ == "no"sv) || (t.vehicle_ == override::kBlacklist);
   p.has_toll_ = t.toll_;
+  p.is_big_street_ = is_big_street(t);
   return p;
 }
 

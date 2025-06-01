@@ -101,6 +101,7 @@ struct way_properties {
   bool is_sidewalk_separate_ : 1;
   bool motor_vehicle_no_ : 1;
   bool has_toll_ : 1;
+  bool is_big_street_ : 1;
 };
 
 static_assert(sizeof(way_properties) == 4);
