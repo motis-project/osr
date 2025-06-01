@@ -45,7 +45,8 @@ struct car_sharing {
                      .is_parking_ = false,
                      .is_ramp_ = false,
                      .is_sidewalk_separate_ = false,
-                     .motor_vehicle_no_ = false};
+                     .motor_vehicle_no_ = false,
+                     .has_toll_ = false};
 
   static constexpr auto const kAdditionalNodeProperties =
       node_properties{.from_level_ = 0,

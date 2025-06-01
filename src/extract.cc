@@ -122,6 +122,7 @@ way_properties get_way_properties(tags const& t) {
   p.is_sidewalk_separate_ = t.sidewalk_separate_;
   p.motor_vehicle_no_ =
       (t.motor_vehicle_ == "no"sv) || (t.vehicle_ == override::kBlacklist);
+  p.has_toll_ = t.toll_;
   return p;
 }
 

@@ -129,6 +129,7 @@ struct tags {
           }
           break;
         case cista::hash("maxspeed"): max_speed_ = t.value(); break;
+        case cista::hash("toll"): toll_ = t.value() == "yes"sv; break;
       }
     }
   }
@@ -204,6 +205,9 @@ struct tags {
   // https://wiki.openstreetmap.org/wiki/Key:level
   bool has_level_{false};
   level_bits_t level_bits_{0U};
+
+  // https://wiki.openstreetmap.org/wiki/Key:toll
+  bool toll_{false};
 };
 
 template <typename T>
