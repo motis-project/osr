@@ -429,6 +429,16 @@ std::optional<path> try_direct(osr::location const& from,
   }
 }
 
+bool component_seen(ways const& w, match_view_t matches, size_t match_idx) {
+  auto this_component = w.r_->way_component_[matches[match_idx].way_];
+  for (auto j = 0U; j < match_idx; ++j) {
+    if (w.r_->way_component_[matches[j].way_] == this_component) {
+      return true;
+    }
+  }
+  return false;
+}
+
 template <typename Profile>
 std::optional<path> route_bidirectional(ways const& w,
                                         bidirectional<Profile>& b,
@@ -465,7 +475,6 @@ std::optional<path> route_bidirectional(ways const& w,
       continue;
     }
     for (auto const& end : to_match) {
-      // TODO hard cut after first 10 matches like with dijkstra?
       if (w.r_->way_component_[start.way_] != w.r_->way_component_[end.way_]) {
         continue;
       }
@@ -522,8 +531,11 @@ std::optional<path> route_dijkstra(ways const& w,
   }
 
   d.reset(max);
-
-  for (auto const& start : from_match) {
+  auto should_continue = true;
+  for (auto const [i, start] : utl::enumerate(from_match)) {
+    if (!should_continue && component_seen(w, from_match, i)) {
+      continue;
+    }
     if (utl::none_of(to_match, [&](way_candidate const& end) {
           return w.r_->way_component_[start.way_] ==
                  w.r_->way_component_[end.way_];
@@ -543,17 +555,14 @@ std::optional<path> route_dijkstra(ways const& w,
       continue;
     }
 
-    auto const should_continue =
-        d.run(w, *w.r_, max, blocked, sharing, elevations, dir);
+    should_continue = d.run(w, *w.r_, max, blocked, sharing, elevations, dir) &&
+                      should_continue;
 
     auto const c = best_candidate(w, d, to.lvl_, to_match, max, dir);
     if (c.has_value()) {
       auto const [nc, wc, node, p] = *c;
       return reconstruct<Profile>(w, blocked, sharing, elevations, d, start,
                                   *nc, node, p.cost_, dir);
-    }
-    if (!should_continue) {
-      return std::nullopt;
     }
   }
 
@@ -584,18 +593,8 @@ std::vector<std::optional<path>> route(
   d.reset(max);
   auto should_continue = true;
   for (auto const [i, start] : utl::enumerate(from_match)) {
-    if (!should_continue) {
-      auto component_seen = false;
-      auto this_component = w.r_->way_component_[start.way_];
-      for (auto j = 0U; j < i; ++j) {
-        if (w.r_->way_component_[from_match[j].way_] == this_component) {
-          component_seen = true;
-          break;
-        }
-      }
-      if (component_seen) {
-        continue;
-      }
+    if (!should_continue && component_seen(w, from_match, i)) {
+      continue;
     }
     for (auto const* nc : {&start.left_, &start.right_}) {
       if (nc->valid() && nc->cost_ < max) {
@@ -609,7 +608,8 @@ std::vector<std::optional<path>> route(
       }
     }
 
-    should_continue &= d.run(w, *w.r_, max, blocked, sharing, elevations, dir);
+    should_continue = d.run(w, *w.r_, max, blocked, sharing, elevations, dir) &&
+                      should_continue;
 
     auto found = 0U;
     for (auto const [m, t, r] : utl::zip(to_match, to, result)) {

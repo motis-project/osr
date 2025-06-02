@@ -29,6 +29,7 @@ struct dijkstra {
     pq_.clear();
     pq_.n_buckets(max + 1U);
     cost_.clear();
+    max_reached_ = false;
   }
 
   void add_start(ways const& w, label const l) {
