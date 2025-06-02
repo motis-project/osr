@@ -86,7 +86,7 @@ struct car_parking {
     }
 
     node_idx_t n_{node_idx_t::invalid()};
-    node_type type_;
+    node_type type_{node_type::kInvalid};
     level_t lvl_;
     direction dir_;
     way_pos_t way_;
@@ -247,7 +247,11 @@ struct car_parking {
     static constexpr auto const kFwd = SearchDir == direction::kForward;
     static constexpr auto const kBwd = SearchDir == direction::kBackward;
 
-    auto const is_parking = w.node_properties_[n.n_].is_parking();
+    auto const is_parking =
+        w.node_properties_[n.n_].is_parking() ||
+        utl::any_of(w.node_ways_[n.n_], [&](way_idx_t const way) {
+          return w.way_properties_[way].is_parking();
+        });
 
     if (n.is_foot_node() || (kFwd && n.is_car_node() && is_parking)) {
       footp::template adjacent<SearchDir, WithBlocked>(

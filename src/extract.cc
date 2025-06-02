@@ -60,6 +60,23 @@ bool is_number(std::string_view s) {
          utl::all_of(s, [](char const c) { return std::isdigit(c); });
 }
 
+bool is_big_street(tags const& t) {
+  switch (cista::hash(t.highway_)) {
+    case cista::hash("motorway"):
+    case cista::hash("motorway_link"):
+    case cista::hash("trunk"):
+    case cista::hash("trunk_link"):
+    case cista::hash("primary"):
+    case cista::hash("primary_link"):
+    case cista::hash("secondary"):
+    case cista::hash("secondary_link"):
+    case cista::hash("tertiary"):
+    case cista::hash("tertiary_link"):
+    case cista::hash("unclassified"): return true;
+    default: return false;
+  }
+}
+
 speed_limit get_speed_limit(tags const& t) {
   if (is_number(t.max_speed_) /* TODO: support units (kmh/mph) */) {
     return get_speed_limit(
@@ -120,6 +137,10 @@ way_properties get_way_properties(tags const& t) {
   p.is_platform_ = t.is_platform_;
   p.is_ramp_ = t.is_ramp_;
   p.is_sidewalk_separate_ = t.sidewalk_separate_;
+  p.motor_vehicle_no_ =
+      (t.motor_vehicle_ == "no"sv) || (t.vehicle_ == override::kBlacklist);
+  p.has_toll_ = t.toll_;
+  p.is_big_street_ = is_big_street(t);
   return p;
 }
 
@@ -225,6 +246,18 @@ struct way_handler : public osm::handler::Handler {
       return osm_node_idx_t{n.positive_ref()};
     };
 
+    auto const register_string = [&](std::string_view s) {
+      auto str_idx = string_idx_t::invalid();
+      if (auto const string_it = strings_set_.find(s);
+          string_it != end(strings_set_)) {
+        str_idx = *string_it;
+      } else {
+        str_idx = string_idx_t{w_.strings_.size()};
+        w_.strings_.emplace_back(s);
+      }
+      return str_idx;
+    };
+
     auto l = std::scoped_lock{mutex_};
     auto const way_idx = way_idx_t{w_.way_osm_idx_.size()};
 
@@ -247,17 +280,16 @@ struct way_handler : public osm::handler::Handler {
 
     auto const name = t.name_.empty() ? t.ref_ : t.name_;
     if (!name.empty()) {
-      auto str_idx = string_idx_t::invalid();
-      if (auto const string_it = strings_set_.find(name);
-          string_it != end(strings_set_)) {
-        str_idx = *string_it;
-      } else {
-        str_idx = string_idx_t{w_.strings_.size()};
-        w_.strings_.emplace_back(name);
-      }
-      w_.way_names_.emplace_back(str_idx);
+      w_.way_names_.emplace_back(register_string(name));
     } else {
       w_.way_names_.emplace_back(string_idx_t::invalid());
+    }
+
+    w_.way_has_conditional_access_no_.resize(to_idx(way_idx) + 1U);
+    if (!t.access_conditional_no_.empty()) {
+      w_.way_has_conditional_access_no_.set(way_idx, true);
+      w_.way_conditional_access_no_.emplace_back(
+          way_idx, register_string(t.access_conditional_no_));
     }
   }
 

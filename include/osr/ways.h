@@ -57,6 +57,7 @@ struct way_properties {
   constexpr bool is_steps() const { return is_steps_; }
   constexpr bool is_ramp() const { return is_ramp_; }
   constexpr bool is_parking() const { return is_parking_; }
+  constexpr bool has_toll() const { return has_toll_; }
   constexpr bool is_sidewalk_separate() const { return is_sidewalk_separate_; }
   constexpr std::uint16_t max_speed_m_per_s() const {
     return to_meters_per_second(static_cast<speed_limit>(speed_limit_));
@@ -98,6 +99,9 @@ struct way_properties {
 
   bool is_ramp_ : 1;
   bool is_sidewalk_separate_ : 1;
+  bool motor_vehicle_no_ : 1;
+  bool has_toll_ : 1;
+  bool is_big_street_ : 1;
 };
 
 static_assert(sizeof(way_properties) == 4);
@@ -189,6 +193,8 @@ struct ways {
   way_idx_t::value_t n_ways() const { return way_osm_idx_.size(); }
   node_idx_t::value_t n_nodes() const { return node_to_osm_.size(); }
 
+  std::optional<std::string_view> get_access_restriction(way_idx_t) const;
+
   std::filesystem::path p_;
   cista::mmap::protection mode_;
 
@@ -263,6 +269,9 @@ struct ways {
   mm_vecvec<way_idx_t, osm_node_idx_t, std::uint64_t> way_osm_nodes_;
   mm_vecvec<string_idx_t, char, std::uint64_t> strings_;
   mm_vec_map<way_idx_t, string_idx_t> way_names_;
+
+  mm_bitvec<way_idx_t> way_has_conditional_access_no_;
+  mm_vec<pair<way_idx_t, string_idx_t>> way_conditional_access_no_;
 
   multi_counter node_way_counter_;
 };

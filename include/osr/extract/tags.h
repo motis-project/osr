@@ -52,6 +52,7 @@ struct tags {
         case cista::hash("oneway:bicycle"):
           not_oneway_bike_ = t.value() == "no"sv;
           break;
+        case cista::hash("motor_vehicle:forward"):
         case cista::hash("motor_vehicle"):
           motor_vehicle_ = t.value();
           is_destination_ |= motor_vehicle_ == "destination"sv;
@@ -76,6 +77,7 @@ struct tags {
         case cista::hash("ref"): ref_ = t.value(); break;
         case cista::hash("entrance"): is_entrance_ = true; break;
         case cista::hash("sidewalk"):
+        case cista::hash("sidewalk:both"):
         case cista::hash("sidewalk:left"): [[fallthrough]];
         case cista::hash("sidewalk:right"):
           if (t.value() == "separate"sv) {
@@ -126,7 +128,18 @@ struct tags {
             case cista::hash("yes"): access_ = override::kWhitelist; break;
           }
           break;
+        case cista::hash("access:conditional"): {
+          constexpr auto const kPrefix = "no @ ("sv;
+          constexpr auto const kPostfix = ")"sv;
+          auto const value = std::string_view{t.value()};
+          if (value.starts_with(kPrefix) && value.ends_with(kPostfix)) {
+            access_conditional_no_ =
+                value.substr(kPrefix.size(), value.length() - kPrefix.length() -
+                                                 kPostfix.length());
+          }
+        } break;
         case cista::hash("maxspeed"): max_speed_ = t.value(); break;
+        case cista::hash("toll"): toll_ = t.value() == "yes"sv; break;
       }
     }
   }
@@ -202,6 +215,12 @@ struct tags {
   // https://wiki.openstreetmap.org/wiki/Key:level
   bool has_level_{false};
   level_bits_t level_bits_{0U};
+
+  // https://wiki.openstreetmap.org/wiki/Key:toll
+  bool toll_{false};
+
+  // https://wiki.openstreetmap.org/wiki/Conditional_restrictions
+  std::string_view access_conditional_no_;
 };
 
 template <typename T>

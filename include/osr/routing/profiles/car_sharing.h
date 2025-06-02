@@ -44,7 +44,10 @@ struct car_sharing {
                      .is_platform_ = 0,
                      .is_parking_ = false,
                      .is_ramp_ = false,
-                     .is_sidewalk_separate_ = false};
+                     .is_sidewalk_separate_ = false,
+                     .motor_vehicle_no_ = false,
+                     .has_toll_ = false,
+                     .is_big_street_ = false};
 
   static constexpr auto const kAdditionalNodeProperties =
       node_properties{.from_level_ = 0,
@@ -490,7 +493,7 @@ struct car_sharing {
     return footp::way_cost(e, dir, dist);
   }
 
-  static constexpr double heuristic(double dist) {
+  static constexpr double heuristic(double const dist) {
     return car::heuristic(dist);
   }
 

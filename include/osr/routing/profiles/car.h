@@ -29,12 +29,11 @@ struct car {
           .n_ = node_idx_t::invalid(), .way_ = 0U, .dir_ = direction::kForward};
     }
 
-    constexpr node_idx_t get_node() const noexcept { return n_; }
-
     boost::json::object geojson_properties(ways const&) const {
       return boost::json::object{{"node_id", n_.v_}, {"type", "car"}};
     }
 
+    constexpr node_idx_t get_node() const noexcept { return n_; }
     constexpr node_idx_t get_key() const noexcept { return n_; }
 
     static constexpr mode get_mode() noexcept { return mode::kCar; }
@@ -108,7 +107,7 @@ struct car {
     }
 
     static constexpr std::size_t get_index(node const n) {
-      return (n.dir_ == direction::kForward ? 0 : 1) * kMaxWays + n.way_;
+      return (n.dir_ == direction::kForward ? 0U : 1U) * kMaxWays + n.way_;
     }
 
     static constexpr direction to_dir(bool const b) {
@@ -250,7 +249,9 @@ struct car {
     return n.is_car_accessible() ? 0U : kInfeasible;
   }
 
-  static constexpr double heuristic(double dist) { return dist / (130U / 3.6); }
+  static constexpr double heuristic(double const dist) {
+    return dist / (130U / 3.6);
+  }
   static constexpr node get_reverse(node const n) {
     return {n.n_, n.way_, opposite(n.dir_)};
   }

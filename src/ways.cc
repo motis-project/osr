@@ -18,7 +18,10 @@ ways::ways(std::filesystem::path p, cista::mmap::protection const mode)
                      mm_vec<std::uint64_t>{mm("way_osm_nodes_index.bin")}},
       strings_{mm_vec<char>(mm("strings_data.bin")),
                mm_vec<std::uint64_t>(mm("strings_idx.bin"))},
-      way_names_{mm("way_names.bin")} {}
+      way_names_{mm("way_names.bin")},
+      way_has_conditional_access_no_{
+          mm_vec<std::uint64_t>(mm("way_has_conditional_access_no"))},
+      way_conditional_access_no_{mm("way_conditional_access_no")} {}
 
 void ways::build_components() {
   auto q = hash_set<way_idx_t>{};
@@ -184,6 +187,21 @@ void ways::sync() {
   strings_.data_.mmap_.sync();
   strings_.bucket_starts_.mmap_.sync();
   way_names_.mmap_.sync();
+}
+
+std::optional<std::string_view> ways::get_access_restriction(
+    way_idx_t const way) const {
+  if (!way_has_conditional_access_no_.test(way)) {
+    return std::nullopt;
+  }
+  auto const it = std::lower_bound(
+      begin(way_conditional_access_no_), end(way_conditional_access_no_), way,
+      [](auto&& a, auto&& b) { return a.first < b; });
+  utl::verify(
+      it != end(way_conditional_access_no_) && it->first == way,
+      "access restriction for way with access restriction not found way={}",
+      way_osm_idx_[way]);
+  return strings_[it->second].view();
 }
 
 cista::wrapped<ways::routing> ways::routing::read(
