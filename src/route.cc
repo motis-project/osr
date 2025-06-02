@@ -379,7 +379,6 @@ best_candidate(ways const& w,
     return std::pair{best_node, best_cost};
   };
 
-  auto checked = 0U;
   for (auto const& dest : m) {
     auto best_node = Profile::node::invalid();
     auto best_cost = path{.cost_ = std::numeric_limits<cost_t>::max()};
@@ -396,13 +395,10 @@ best_candidate(ways const& w,
       }
     }
 
-    ++checked;
     if (best != nullptr) {
       return best_cost.cost_ < max
                  ? std::optional{std::tuple{best, &dest, best_node, best_cost}}
                  : std::nullopt;
-    } else if (checked == 10U) {
-      break;
     }
   }
   return std::nullopt;
@@ -494,7 +490,8 @@ std::optional<path> route_bidirectional(ways const& w,
       }
       auto const should_continue =
           b.run(w, *w.r_, max, blocked, sharing, elevations, dir);
-
+      std::cout << "weird" << should_continue << b.max_reached_1_
+                << b.max_reached_2_ << std::endl;
       if (b.meet_point_1_.get_node() == node_idx_t::invalid()) {
         if (should_continue) {
           continue;
