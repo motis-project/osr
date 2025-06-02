@@ -133,12 +133,12 @@ private:
         wc.dist_to_way_ = std::sqrt(wc.dist_to_way_);
         wc.query_ = query;
         wc.way_ = way;
-        wc.left_ =
-            find_next_node<Profile>(wc, query, direction::kBackward, query.lvl_,
-                                    reverse, search_dir, blocked);
-        wc.right_ =
-            find_next_node<Profile>(wc, query, direction::kForward, query.lvl_,
-                                    reverse, search_dir, blocked);
+        wc.left_ = find_next_node<Profile>(
+            wc, query, direction::kBackward, query.lvl_, reverse, search_dir,
+            blocked, approx_distance_lng_degrees);
+        wc.right_ = find_next_node<Profile>(
+            wc, query, direction::kForward, query.lvl_, reverse, search_dir,
+            blocked, approx_distance_lng_degrees);
         if (wc.left_.valid() || wc.right_.valid()) {
           way_candidates.emplace_back(std::move(wc));
         }
@@ -155,7 +155,8 @@ private:
                                 level_t const lvl,
                                 bool const reverse,
                                 direction const search_dir,
-                                bitvec<node_idx_t> const* blocked) const {
+                                bitvec<node_idx_t> const* blocked,
+                                double approx_distance_lng_degrees) const {
     auto const way_prop = ways_.r_->way_properties_[wc.way_];
     auto const edge_dir = reverse ? opposite(dir) : dir;
     auto const offroad_cost =
@@ -174,26 +175,27 @@ private:
     auto const polyline = ways_.way_polylines_[wc.way_];
     auto const osm_nodes = ways_.way_osm_nodes_[wc.way_];
 
-    till_the_end(wc.segment_idx_ + (dir == direction::kForward ? 1U : 0U),
-                 utl::zip(polyline, osm_nodes), dir, [&](auto&& x) {
-                   auto const& [pos, osm_node_idx] = x;
+    till_the_end(
+        wc.segment_idx_ + (dir == direction::kForward ? 1U : 0U),
+        utl::zip(polyline, osm_nodes), dir, [&](auto&& x) {
+          auto const& [pos, osm_node_idx] = x;
 
-                   auto const segment_dist = geo::distance(c.path_.back(), pos);
-                   c.dist_to_node_ += segment_dist;
-                   c.cost_ +=
-                       Profile::way_cost(way_prop, flip(search_dir, edge_dir),
-                                         static_cast<distance_t>(segment_dist));
-                   c.path_.push_back(pos);
+          auto const segment_dist = std::sqrt(geo::approx_squared_distance(
+              c.path_.back(), pos, approx_distance_lng_degrees));
+          c.dist_to_node_ += segment_dist;
+          c.cost_ += Profile::way_cost(way_prop, flip(search_dir, edge_dir),
+                                       static_cast<distance_t>(segment_dist));
+          c.path_.push_back(pos);
 
-                   auto const way_node = ways_.find_node_idx(osm_node_idx);
-                   if (way_node.has_value() &&
-                       (blocked == nullptr || !blocked->test(*way_node))) {
-                     c.node_ = *way_node;
-                     return utl::cflow::kBreak;
-                   }
+          auto const way_node = ways_.find_node_idx(osm_node_idx);
+          if (way_node.has_value() &&
+              (blocked == nullptr || !blocked->test(*way_node))) {
+            c.node_ = *way_node;
+            return utl::cflow::kBreak;
+          }
 
-                   return utl::cflow::kContinue;
-                 });
+          return utl::cflow::kContinue;
+        });
 
     if (reverse) {
       std::reverse(begin(c.path_), end(c.path_));
