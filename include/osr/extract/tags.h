@@ -128,6 +128,16 @@ struct tags {
             case cista::hash("yes"): access_ = override::kWhitelist; break;
           }
           break;
+        case cista::hash("access:conditional"): {
+          constexpr auto const kPrefix = "no @ ("sv;
+          constexpr auto const kPostfix = ")"sv;
+          auto const value = std::string_view{t.value()};
+          if (value.starts_with(kPrefix) && value.ends_with(kPostfix)) {
+            access_conditional_no_ =
+                value.substr(kPrefix.size(), value.length() - kPrefix.length() -
+                                                 kPostfix.length());
+          }
+        } break;
         case cista::hash("maxspeed"): max_speed_ = t.value(); break;
         case cista::hash("toll"): toll_ = t.value() == "yes"sv; break;
       }
@@ -208,6 +218,9 @@ struct tags {
 
   // https://wiki.openstreetmap.org/wiki/Key:toll
   bool toll_{false};
+
+  // https://wiki.openstreetmap.org/wiki/Conditional_restrictions
+  std::string_view access_conditional_no_;
 };
 
 template <typename T>

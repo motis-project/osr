@@ -200,6 +200,8 @@ struct ways {
   way_idx_t::value_t n_ways() const { return way_osm_idx_.size(); }
   node_idx_t::value_t n_nodes() const { return node_to_osm_.size(); }
 
+  std::optional<std::string_view> get_access_restriction(way_idx_t) const;
+
   std::filesystem::path p_;
   cista::mmap::protection mode_;
 
@@ -270,6 +272,9 @@ struct ways {
   mm_vecvec<way_idx_t, osm_node_idx_t, std::uint64_t> way_osm_nodes_;
   mm_vecvec<string_idx_t, char, std::uint64_t> strings_;
   mm_vec_map<way_idx_t, string_idx_t> way_names_;
+
+  mm_bitvec<way_idx_t> way_has_conditional_access_no_;
+  mm_vec<pair<way_idx_t, string_idx_t>> way_conditional_access_no_;
 
   multi_counter node_way_counter_;
 };

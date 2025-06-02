@@ -246,6 +246,18 @@ struct way_handler : public osm::handler::Handler {
       return osm_node_idx_t{n.positive_ref()};
     };
 
+    auto const register_string = [&](std::string_view s) {
+      auto str_idx = string_idx_t::invalid();
+      if (auto const string_it = strings_set_.find(s);
+          string_it != end(strings_set_)) {
+        str_idx = *string_it;
+      } else {
+        str_idx = string_idx_t{w_.strings_.size()};
+        w_.strings_.emplace_back(s);
+      }
+      return str_idx;
+    };
+
     auto l = std::scoped_lock{mutex_};
     auto const way_idx = way_idx_t{w_.way_osm_idx_.size()};
 
@@ -268,17 +280,16 @@ struct way_handler : public osm::handler::Handler {
 
     auto const name = t.name_.empty() ? t.ref_ : t.name_;
     if (!name.empty()) {
-      auto str_idx = string_idx_t::invalid();
-      if (auto const string_it = strings_set_.find(name);
-          string_it != end(strings_set_)) {
-        str_idx = *string_it;
-      } else {
-        str_idx = string_idx_t{w_.strings_.size()};
-        w_.strings_.emplace_back(name);
-      }
-      w_.way_names_.emplace_back(str_idx);
+      w_.way_names_.emplace_back(register_string(name));
     } else {
       w_.way_names_.emplace_back(string_idx_t::invalid());
+    }
+
+    w_.way_has_conditional_access_no_.resize(to_idx(way_idx) + 1U);
+    if (!t.access_conditional_no_.empty()) {
+      w_.way_has_conditional_access_no_.set(way_idx, true);
+      w_.way_conditional_access_no_.emplace_back(
+          way_idx, register_string(t.access_conditional_no_));
     }
   }
 
