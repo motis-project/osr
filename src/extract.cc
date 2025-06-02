@@ -551,15 +551,6 @@ void extract(bool const with_platforms,
   w.connect_ways();
   w.build_components();
 
-  if (!elevation_dir.empty()) {
-    auto const provider =
-        osr::preprocessing::elevation::provider{elevation_dir};
-    if (provider.driver_count() > 0) {
-      auto elevations = elevation_storage{out, cista::mmap::protection::WRITE};
-      elevations.set_elevations(w, provider);
-    }
-  }
-
   auto r = std::vector<resolved_restriction>{};
   {
     pt->status("Load OSM / Node Properties")
@@ -584,6 +575,15 @@ void extract(bool const with_platforms,
   if (pl) {
     utl::sort(pl->node_pos_,
               [](auto&& a, auto&& b) { return a.first < b.first; });
+  }
+
+  if (!elevation_dir.empty()) {
+    auto const provider =
+        osr::preprocessing::elevation::provider{elevation_dir};
+    if (provider.driver_count() > 0) {
+      auto elevations = elevation_storage{out, cista::mmap::protection::WRITE};
+      elevations.set_elevations(w, provider);
+    }
   }
 
   w.r_->write(out);

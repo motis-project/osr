@@ -177,7 +177,7 @@ struct ways {
   }
 
   point get_node_pos(node_idx_t const i) const {
-    return r_->node_positions_[i];
+    return r_->node_positions_.at(i);
   }
 
   cista::mmap mm(char const* file) {
