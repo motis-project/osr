@@ -50,6 +50,7 @@ struct way_properties {
   constexpr bool is_car_accessible() const { return is_car_accessible_; }
   constexpr bool is_bike_accessible() const { return is_bike_accessible_; }
   constexpr bool is_foot_accessible() const { return is_foot_accessible_; }
+  constexpr bool is_big_street() const { return is_big_street_; }
   constexpr bool is_destination() const { return is_destination_; }
   constexpr bool is_oneway_car() const { return is_oneway_car_; }
   constexpr bool is_oneway_bike() const { return is_oneway_bike_; }
@@ -149,6 +150,7 @@ struct ways {
   ways(std::filesystem::path, cista::mmap::protection);
 
   void add_restriction(std::vector<resolved_restriction>&);
+  void compute_big_street_neighbors();
   void connect_ways();
 
   std::optional<way_idx_t> find_way(osm_way_idx_t const i) {

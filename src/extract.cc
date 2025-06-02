@@ -593,7 +593,7 @@ void extract(bool const with_platforms,
   {
     pt->status("Load OSM / Node Properties")
         .in_high(file_size)
-        .out_bounds(90, 100);
+        .out_bounds(90, 95);
     auto reader = osm_io::Reader{input_file, osm_eb::node | osm_eb::relation,
                                  osmium::io::read_meta::no};
     auto h = node_handler{w, pl.get(), r, elevator_nodes};
@@ -615,6 +615,10 @@ void extract(bool const with_platforms,
               [](auto&& a, auto&& b) { return a.first < b.first; });
   }
 
+  pt->status("Load OSM / Big Street Neighbors")
+      .in_high(w.n_ways())
+      .out_bounds(95, 100);
+  w.compute_big_street_neighbors();
   w.r_->write(out);
 
   lookup{w, out, cista::mmap::protection::WRITE}.build_rtree();
