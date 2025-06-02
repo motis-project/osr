@@ -100,10 +100,15 @@ struct bidirectional {
     add(w, l, direction::kBackward, cost2_, pq2_, sharing);
   }
 
-  cost_t get_cost(node const n, direction const dir) const {
-    auto const cost = dir == direction::kForward ? &cost1_ : &cost2_;  // TODO
-    auto const it = cost->find(n.get_key());
-    return it != end(*cost) ? it->second.cost(n) : kInfeasible;
+  template <direction SearchDir>
+  cost_t get_cost(node const n) const {
+    if (SearchDir == direction::kForward) {
+      auto const it = cost1_.find(n.get_key());
+      return it != end(cost1_) ? it->second.cost(n) : kInfeasible;
+    } else {
+      auto const it = cost2_.find(n.get_key());
+      return it != end(cost2_) ? it->second.cost(n) : kInfeasible;
+    }
   }
 
   double distapprox(geo::latlng const& p1, geo::latlng const& p2) const {
@@ -134,22 +139,9 @@ struct bidirectional {
            (dir == direction::kForward ? 1 : -1);
   }
 
-  cost_t get_cost_from_x(node const n, cost_map const& cost) const {
-    auto const it = cost.find(n.get_key());
-    return it == cost.end() ? kInfeasible : it->second.cost(n);
-  }
-
-  cost_t get_cost_from_start(node const n) const {
-    return get_cost_from_x(n, cost1_);
-  }
-
-  cost_t get_cost_from_end(node const n) const {
-    return get_cost_from_x(n, cost2_);
-  }
-
   cost_t get_cost_to_mp(node const n1, node const n2) const {
-    auto const f_cost = get_cost(n1, direction::kForward);
-    auto const b_cost = get_cost(n2, direction::kBackward);
+    auto const f_cost = get_cost<direction::kForward>(n1);
+    auto const b_cost = get_cost<direction::kBackward>(n2);
     if (f_cost == kInfeasible || b_cost == kInfeasible) {
       return kInfeasible;
     }
@@ -169,7 +161,7 @@ struct bidirectional {
 
     auto const l = pq.pop();
     auto const curr = l.get_node();
-    auto const curr_cost = get_cost(curr, SearchDir);
+    auto const curr_cost = get_cost<SearchDir>(curr);
     if (curr_cost < l.cost() - heuristic(w, l.n_, SearchDir, sharing)) {
       return true;
     }
@@ -293,10 +285,10 @@ struct bidirectional {
 
     if (best_cost_ != kInfeasible) {
       auto const top_f =
-          pq1_.empty() ? get_cost_from_start(meet_point_1_)
+          pq1_.empty() ? get_cost<direction::kForward>(meet_point_1_)
                        : pq1_.buckets_[pq1_.get_next_bucket()].back().cost();
       auto const top_r =
-          pq2_.empty() ? get_cost_from_end(meet_point_2_)
+          pq2_.empty() ? get_cost<direction::kBackward>(meet_point_2_)
                        : pq2_.buckets_[pq2_.get_next_bucket()].back().cost();
       if (top_f + top_r >= best_cost_ + radius_) {
         if (kDebug) {

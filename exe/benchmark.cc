@@ -117,8 +117,10 @@ template <>
 void set_start<car>(bidirectional<car>& d,
                     ways const& w,
                     node_idx_t const start) {
-  d.add_start(w, car::label{car::node{start, 0, direction::kForward}, 0U}, nullptr);
-  d.add_start(w, car::label{car::node{start, 0, direction::kBackward}, 0U}, nullptr);
+  d.add_start(w, car::label{car::node{start, 0, direction::kForward}, 0U},
+              nullptr);
+  d.add_start(w, car::label{car::node{start, 0, direction::kBackward}, 0U},
+              nullptr);
 };
 
 template <typename T>

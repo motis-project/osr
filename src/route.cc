@@ -201,8 +201,8 @@ path reconstruct_bi(ways const& w,
     auto const& e = b.cost1_.at(forward_n.get_key());
     auto const pred = e.pred(forward_n);
     if (pred.has_value()) {
-      auto const expected_cost =
-          static_cast<cost_t>(e.cost(forward_n) - b.get_cost_from_start(*pred));
+      auto const expected_cost = static_cast<cost_t>(
+          e.cost(forward_n) - b.template get_cost<direction::kForward>(*pred));
       forward_dist +=
           add_path<Profile>(w, *w.r_, blocked, sharing, elevations, *pred,
                             forward_n, expected_cost, forward_segments, dir);
@@ -239,8 +239,9 @@ path reconstruct_bi(ways const& w,
     if (pred.has_value()) {
 
       auto const expected_cost =
-          static_cast<cost_t>(e.cost(backward_n) - b.get_cost_from_end(*pred));
-      backward_dist += add_path<Profile>(w, *w.r_, blocked, nullptr, elevations,
+          static_cast<cost_t>(e.cost(backward_n) -
+                              b.template get_cost<direction::kBackward>(*pred));
+      backward_dist += add_path<Profile>(w, *w.r_, blocked, sharing, elevations,
                                          *pred, backward_n, expected_cost,
                                          backward_segments, opposite(dir));
     } else {
@@ -497,11 +498,9 @@ std::optional<path> route_bidirectional(ways const& w,
       return reconstruct_bi(w, blocked, sharing, elevations, b, start, end,
                             cost, dir);
     }
-    b.reset(max, from, to); // TODO
+    b.pq1_.clear();
     b.pq2_.clear();
-    b.pq2_.n_buckets(max + 1U);
     b.cost2_.clear();
-    b.max_reached_2_ = false;
   }
   return std::nullopt;
 }
@@ -600,10 +599,11 @@ std::vector<std::optional<path>> route(
     }
     for (auto const* nc : {&start.left_, &start.right_}) {
       if (nc->valid() && nc->cost_ < max) {
+        auto const start_way = start.way_;
         Profile::resolve_start_node(
             *w.r_, start.way_, nc->node_, from.lvl_, dir, [&](auto const node) {
               auto label = typename Profile::label{node, nc->cost_};
-              label.track(label, *w.r_, start.way_, node.get_node(), false);
+              label.track(label, *w.r_, start_way, node.get_node(), false);
               d.add_start(w, label);
             });
       }
