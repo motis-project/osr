@@ -323,9 +323,9 @@ struct foot {
          (!e.is_sidewalk_separate() && e.is_bike_accessible())) &&
         (!IsWheelchair || !e.is_steps())) {
       return (!e.is_foot_accessible() || e.is_sidewalk_separate() ? 90 : 0) +
-             static_cast<cost_t>(
-                 std::round(dist / (kSpeedMetersPerSecond +
-                                    (e.motor_vehicle_no_ ? 0.1 : 0.0))));
+             static_cast<cost_t>(std::round(
+                 dist / (kSpeedMetersPerSecond + (e.is_big_street_ ? -0.2 : 0) +
+                         (e.motor_vehicle_no_ ? 0.1 : 0.0))));
     } else {
       return kInfeasible;
     }

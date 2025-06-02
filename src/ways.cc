@@ -1,5 +1,7 @@
 #include "osr/ways.h"
 
+#include "utl/parallel_for.h"
+
 #include "cista/io.h"
 
 namespace osr {
@@ -86,6 +88,49 @@ void ways::add_restriction(std::vector<resolved_restriction>& rs) {
         }
       });
   r_->node_restrictions_.resize(node_to_osm_.size());
+}
+
+void ways::compute_big_street_neighbors() {
+  struct state {
+    hash_set<way_idx_t> done_;
+  };
+
+  auto pt = utl::get_active_progress_tracker();
+
+  utl::parallel_for_run_threadlocal<state>(
+      n_ways(), [&](state& s, std::size_t const i) {
+        auto const way = way_idx_t{i};
+
+        if (r_->way_properties_[way].is_big_street_) {
+          pt->update_monotonic(i);
+          return;
+        }
+
+        s.done_.clear();
+
+        auto const expand = [&](way_idx_t const x, bool const go_further,
+                                auto&& recurse) {
+          for (auto const& n : r_->way_nodes_[x]) {
+            for (auto const& w : r_->node_ways_[n]) {
+              if (r_->way_properties_[w].is_big_street_) {
+                r_->way_properties_[way].is_big_street_ = true;
+                return true;
+              }
+
+              if (s.done_.emplace(w).second && go_further) {
+                if (recurse(x, false, recurse)) {
+                  return true;
+                }
+              }
+            }
+          }
+          return false;
+        };
+
+        s.done_.emplace(way);
+        expand(way, true, expand);
+        pt->update_monotonic(i);
+      });
 }
 
 void ways::connect_ways() {
