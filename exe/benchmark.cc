@@ -221,18 +221,18 @@ int main(int argc, char const* argv[]) {
                       routing_algorithm::kAStarBi);
             auto const end_time = std::chrono::steady_clock::now();
 
-            std::cout << "took "
+            /*std::cout << "took "
                       << std::chrono::duration_cast<std::chrono::milliseconds>(
                              middle_time - start_time)
                       << " vs "
                       << std::chrono::duration_cast<std::chrono::milliseconds>(
                              end_time - middle_time)
-                      << std::endl;
+                      << std::endl;*/
 
             utl::verify(!d_res.has_value() && !b_res.has_value() ||
                             d_res.has_value() && b_res.has_value() &&
                                 d_res->cost_ == b_res->cost_,
-                        "not equal");
+                        "not equal {} {}", d_res->cost_, b_res->cost_);
             {
               auto const guard = std::lock_guard{m};
               results.emplace_back(benchmark_result{std::chrono::duration_cast<
@@ -258,13 +258,13 @@ int main(int argc, char const* argv[]) {
             b.template run<direction::kForward, false>(
                 w, *w.r_, opt.max_dist_, nullptr, nullptr, elevations.get());
             auto const end_time = std::chrono::steady_clock::now();
-            std::cout << "took "
+            /*std::cout << "took "
                       << std::chrono::duration_cast<std::chrono::milliseconds>(
                              middle_time - start_time)
                       << " vs "
                       << std::chrono::duration_cast<std::chrono::milliseconds>(
                              end_time - middle_time)
-                      << std::endl;
+                      << std::endl;*/
             auto const b_res =
                 b.get_cost_to_mp(b.meet_point_1_, b.meet_point_2_);
             if (!utl::any_of(ends, [&](auto&& e) {
