@@ -459,12 +459,13 @@ std::optional<path> route_bidirectional(ways const& w,
     if (b.max_reached_1_ && component_seen(w, from_match, i)) {
       continue;
     }
+    auto const start_way = start.way_;
     for (auto const* nc : {&start.left_, &start.right_}) {
       if (nc->valid() && nc->cost_ < max) {
         Profile::resolve_start_node(
             *w.r_, start.way_, nc->node_, from.lvl_, dir, [&](auto const node) {
               auto label = typename Profile::label{node, nc->cost_};
-              label.track(label, *w.r_, start.way_, node.get_node(), false);
+              label.track(label, *w.r_, start_way, node.get_node(), false);
               b.add_start(w, label, sharing);
             });
       }
@@ -479,13 +480,14 @@ std::optional<path> route_bidirectional(ways const& w,
       if (b.max_reached_2_ && component_seen(w, to_match, j)) {
         continue;
       }
+      auto const end_way = end.way_;
       for (auto const* nc : {&end.left_, &end.right_}) {
         if (nc->valid() && nc->cost_ < max) {
           Profile::resolve_start_node(
               *w.r_, end.way_, nc->node_, to.lvl_, opposite(dir),
               [&](auto const node) {
                 auto label = typename Profile::label{node, nc->cost_};
-                label.track(label, *w.r_, end.way_, node.get_node(), false);
+                label.track(label, *w.r_, end_way, node.get_node(), false);
                 b.add_end(w, label, sharing);
               });
         }
@@ -598,9 +600,9 @@ std::vector<std::optional<path>> route(
     if (!should_continue && component_seen(w, from_match, i)) {
       continue;
     }
+    auto const start_way = start.way_;
     for (auto const* nc : {&start.left_, &start.right_}) {
       if (nc->valid() && nc->cost_ < max) {
-        auto const start_way = start.way_;
         Profile::resolve_start_node(
             *w.r_, start.way_, nc->node_, from.lvl_, dir, [&](auto const node) {
               auto label = typename Profile::label{node, nc->cost_};
