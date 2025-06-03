@@ -447,7 +447,6 @@ std::optional<path> route_bidirectional(ways const& w,
                                         bitvec<node_idx_t> const* blocked,
                                         sharing_data const* sharing,
                                         elevation_storage const* elevations) {
-  std::cout << "using bidir" << std::endl;
   if (auto const direct = try_direct(from, to); direct.has_value()) {
     return *direct;
   }
@@ -456,7 +455,10 @@ std::optional<path> route_bidirectional(ways const& w,
   if (b.radius_ == max) {
     return std::nullopt;
   }
-  for (auto const& start : from_match) {
+  for (auto const [i, start] : utl::enumerate(from_match)) {
+    if (b.max_reached_1_ && component_seen(w, from_match, i)) {
+      continue;
+    }
     for (auto const* nc : {&start.left_, &start.right_}) {
       if (nc->valid() && nc->cost_ < max) {
         Profile::resolve_start_node(
@@ -470,8 +472,11 @@ std::optional<path> route_bidirectional(ways const& w,
     if (b.pq1_.empty()) {
       continue;
     }
-    for (auto const& end : to_match) {
+    for (auto const [j, end] : utl::enumerate(to_match)) {
       if (w.r_->way_component_[start.way_] != w.r_->way_component_[end.way_]) {
+        continue;
+      }
+      if (b.max_reached_2_ && component_seen(w, to_match, j)) {
         continue;
       }
       for (auto const* nc : {&end.left_, &end.right_}) {
@@ -490,8 +495,7 @@ std::optional<path> route_bidirectional(ways const& w,
       }
       auto const should_continue =
           b.run(w, *w.r_, max, blocked, sharing, elevations, dir);
-      std::cout << "weird" << should_continue << b.max_reached_1_
-                << b.max_reached_2_ << std::endl;
+
       if (b.meet_point_1_.get_node() == node_idx_t::invalid()) {
         if (should_continue) {
           continue;
@@ -507,6 +511,7 @@ std::optional<path> route_bidirectional(ways const& w,
     b.pq1_.clear();
     b.pq2_.clear();
     b.cost2_.clear();
+    b.max_reached_2_ = false;
   }
   return std::nullopt;
 }
