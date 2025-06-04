@@ -7,6 +7,8 @@
 #include "boost/thread/tss.hpp"
 
 #include "utl/concat.h"
+#include "utl/enumerate.h"
+#include "utl/helpers/algorithm.h"
 #include "utl/to_vec.h"
 #include "utl/verify.h"
 
@@ -199,8 +201,8 @@ path reconstruct_bi(ways const& w,
     auto const& e = b.cost1_.at(forward_n.get_key());
     auto const pred = e.pred(forward_n);
     if (pred.has_value()) {
-      auto const expected_cost =
-          static_cast<cost_t>(e.cost(forward_n) - b.get_cost_from_start(*pred));
+      auto const expected_cost = static_cast<cost_t>(
+          e.cost(forward_n) - b.template get_cost<direction::kForward>(*pred));
       forward_dist +=
           add_path<Profile>(w, *w.r_, blocked, sharing, elevations, *pred,
                             forward_n, expected_cost, forward_segments, dir);
@@ -237,8 +239,9 @@ path reconstruct_bi(ways const& w,
     if (pred.has_value()) {
 
       auto const expected_cost =
-          static_cast<cost_t>(e.cost(backward_n) - b.get_cost_from_end(*pred));
-      backward_dist += add_path<Profile>(w, *w.r_, blocked, nullptr, elevations,
+          static_cast<cost_t>(e.cost(backward_n) -
+                              b.template get_cost<direction::kBackward>(*pred));
+      backward_dist += add_path<Profile>(w, *w.r_, blocked, sharing, elevations,
                                          *pred, backward_n, expected_cost,
                                          backward_segments, opposite(dir));
     } else {
@@ -376,7 +379,6 @@ best_candidate(ways const& w,
     return std::pair{best_node, best_cost};
   };
 
-  auto checked = 0U;
   for (auto const& dest : m) {
     auto best_node = Profile::node::invalid();
     auto best_cost = path{.cost_ = std::numeric_limits<cost_t>::max()};
@@ -393,13 +395,10 @@ best_candidate(ways const& w,
       }
     }
 
-    ++checked;
     if (best != nullptr) {
       return best_cost.cost_ < max
                  ? std::optional{std::tuple{best, &dest, best_node, best_cost}}
                  : std::nullopt;
-    } else if (checked == 10U) {
-      break;
     }
   }
   return std::nullopt;
@@ -426,6 +425,16 @@ std::optional<path> try_direct(osr::location const& from,
   }
 }
 
+bool component_seen(ways const& w, match_view_t matches, size_t match_idx) {
+  auto this_component = w.r_->way_component_[matches[match_idx].way_];
+  for (auto j = 0U; j < match_idx; ++j) {
+    if (w.r_->way_component_[matches[j].way_] == this_component) {
+      return true;
+    }
+  }
+  return false;
+}
+
 template <typename Profile>
 std::optional<path> route_bidirectional(ways const& w,
                                         bidirectional<Profile>& b,
@@ -438,7 +447,6 @@ std::optional<path> route_bidirectional(ways const& w,
                                         bitvec<node_idx_t> const* blocked,
                                         sharing_data const* sharing,
                                         elevation_storage const* elevations) {
-  std::cout << "using bidir" << std::endl;
   if (auto const direct = try_direct(from, to); direct.has_value()) {
     return *direct;
   }
@@ -447,34 +455,54 @@ std::optional<path> route_bidirectional(ways const& w,
   if (b.radius_ == max) {
     return std::nullopt;
   }
-  auto init = true;
-  for (auto const& start : from_match) {
-    for (auto const& end : to_match) {
-      for (auto const* nc : {&start.left_, &start.right_}) {
-        if (nc->valid() && nc->cost_ < max) {
-          Profile::resolve_start_node(
-              *w.r_, start.way_, nc->node_, from.lvl_, dir,
-              [&](auto const node) { b.add_start(w, {node, nc->cost_}); });
-        }
+  for (auto const [i, start] : utl::enumerate(from_match)) {
+    if (b.max_reached_1_ && component_seen(w, from_match, i)) {
+      continue;
+    }
+    auto const start_way = start.way_;
+    for (auto const* nc : {&start.left_, &start.right_}) {
+      if (nc->valid() && nc->cost_ < max) {
+        Profile::resolve_start_node(
+            *w.r_, start.way_, nc->node_, from.lvl_, dir, [&](auto const node) {
+              auto label = typename Profile::label{node, nc->cost_};
+              label.track(label, *w.r_, start_way, node.get_node(), false);
+              b.add_start(w, label, sharing);
+            });
       }
+    }
+    if (b.pq1_.empty()) {
+      continue;
+    }
+    for (auto const [j, end] : utl::enumerate(to_match)) {
+      if (w.r_->way_component_[start.way_] != w.r_->way_component_[end.way_]) {
+        continue;
+      }
+      if (b.max_reached_2_ && component_seen(w, to_match, j)) {
+        continue;
+      }
+      auto const end_way = end.way_;
       for (auto const* nc : {&end.left_, &end.right_}) {
         if (nc->valid() && nc->cost_ < max) {
           Profile::resolve_start_node(
               *w.r_, end.way_, nc->node_, to.lvl_, opposite(dir),
-              [&](auto const node) { b.add_end(w, {node, nc->cost_}); });
+              [&](auto const node) {
+                auto label = typename Profile::label{node, nc->cost_};
+                label.track(label, *w.r_, end_way, node.get_node(), false);
+                b.add_end(w, label, sharing);
+              });
         }
       }
-      if ((b.pq1_.empty() && b.pq2_.empty()) ||
-          (init && (b.pq1_.empty() || b.pq2_.empty()))) {
+      if (b.pq2_.empty()) {
         continue;
       }
-      b.clear_mp();
-      init = false;
-
-      b.run(w, *w.r_, max, blocked, sharing, elevations, dir);
+      auto const should_continue =
+          b.run(w, *w.r_, max, blocked, sharing, elevations, dir);
 
       if (b.meet_point_1_.get_node() == node_idx_t::invalid()) {
-        continue;
+        if (should_continue) {
+          continue;
+        }
+        return std::nullopt;
       }
 
       auto const cost = b.get_cost_to_mp(b.meet_point_1_, b.meet_point_2_);
@@ -482,9 +510,10 @@ std::optional<path> route_bidirectional(ways const& w,
       return reconstruct_bi(w, blocked, sharing, elevations, b, start, end,
                             cost, dir);
     }
+    b.pq1_.clear();
     b.pq2_.clear();
-    b.pq2_.n_buckets(max + 1U);
     b.cost2_.clear();
+    b.max_reached_2_ = false;
   }
   return std::nullopt;
 }
@@ -506,8 +535,18 @@ std::optional<path> route_dijkstra(ways const& w,
   }
 
   d.reset(max);
+  auto should_continue = true;
+  for (auto const [i, start] : utl::enumerate(from_match)) {
+    if (!should_continue && component_seen(w, from_match, i)) {
+      continue;
+    }
+    if (utl::none_of(to_match, [&](way_candidate const& end) {
+          return w.r_->way_component_[start.way_] ==
+                 w.r_->way_component_[end.way_];
+        })) {
+      continue;
+    }
 
-  for (auto const& start : from_match) {
     for (auto const* nc : {&start.left_, &start.right_}) {
       if (nc->valid() && nc->cost_ < max) {
         Profile::resolve_start_node(
@@ -520,7 +559,8 @@ std::optional<path> route_dijkstra(ways const& w,
       continue;
     }
 
-    d.run(w, *w.r_, max, blocked, sharing, elevations, dir);
+    should_continue = d.run(w, *w.r_, max, blocked, sharing, elevations, dir) &&
+                      should_continue;
 
     auto const c = best_candidate(w, d, to.lvl_, to_match, max, dir);
     if (c.has_value()) {
@@ -555,19 +595,25 @@ std::vector<std::optional<path>> route(
   }
 
   d.reset(max);
-  for (auto const& start : from_match) {
+  auto should_continue = true;
+  for (auto const [i, start] : utl::enumerate(from_match)) {
+    if (!should_continue && component_seen(w, from_match, i)) {
+      continue;
+    }
+    auto const start_way = start.way_;
     for (auto const* nc : {&start.left_, &start.right_}) {
       if (nc->valid() && nc->cost_ < max) {
         Profile::resolve_start_node(
             *w.r_, start.way_, nc->node_, from.lvl_, dir, [&](auto const node) {
               auto label = typename Profile::label{node, nc->cost_};
-              label.track(label, *w.r_, start.way_, node.get_node(), false);
+              label.track(label, *w.r_, start_way, node.get_node(), false);
               d.add_start(w, label);
             });
       }
     }
 
-    d.run(w, *w.r_, max, blocked, sharing, elevations, dir);
+    should_continue = d.run(w, *w.r_, max, blocked, sharing, elevations, dir) &&
+                      should_continue;
 
     auto found = 0U;
     for (auto const [m, t, r] : utl::zip(to_match, to, result)) {

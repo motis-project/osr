@@ -25,6 +25,39 @@ ways::ways(std::filesystem::path p, cista::mmap::protection const mode)
           mm_vec<std::uint64_t>(mm("way_has_conditional_access_no"))},
       way_conditional_access_no_{mm("way_conditional_access_no")} {}
 
+void ways::build_components() {
+  auto q = hash_set<way_idx_t>{};
+  auto flood_fill = [&](way_idx_t const way_idx, component_idx_t const c) {
+    q.clear();
+    q.insert(way_idx);
+    while (!q.empty()) {
+      auto const next = *q.begin();
+      q.erase(q.begin());
+      for (auto const n : r_->way_nodes_[next]) {
+        for (auto const w : r_->node_ways_[n]) {
+          auto& wc = r_->way_component_[w];
+          if (wc == component_idx_t::invalid()) {
+            wc = c;
+            q.insert(w);
+          }
+        }
+      }
+    }
+  };
+
+  auto next_component_idx = component_idx_t{0U};
+  r_->way_component_.resize(n_ways(), component_idx_t::invalid());
+  for (auto i = 0U; i != n_ways(); ++i) {
+    auto const way_idx = way_idx_t{i};
+    auto& c = r_->way_component_[way_idx];
+    if (c != component_idx_t::invalid()) {
+      continue;
+    }
+    c = next_component_idx++;
+    flood_fill(way_idx, c);
+  }
+}
+
 void ways::add_restriction(std::vector<resolved_restriction>& rs) {
   using it_t = std::vector<resolved_restriction>::iterator;
   utl::sort(rs, [](auto&& a, auto&& b) { return a.via_ < b.via_; });

@@ -11,6 +11,7 @@
 #include "osr/location.h"
 #include "osr/routing/additional_edge.h"
 #include "osr/routing/dial.h"
+#include "osr/routing/sharing_data.h"
 #include "osr/types.h"
 #include "osr/ways.h"
 
@@ -54,26 +55,27 @@ struct bidirectional {
     clear_mp();
     start_loc_ = start_loc;
     end_loc_ = end_loc;
-    distance_lon_degrees_ =
-        std::clamp(1.0 - std::max(std::abs(start_loc_.pos_.lat()),
-                                  std::abs(end_loc_.pos_.lat())) /
-                             90.0,
-                   0.0, 1.0) *
-        kDistanceLatDegrees;
+    distance_lon_degrees_ = geo::approx_distance_lng_degrees(
+        std::abs(start_loc_.pos_.lat()) > std::abs(end_loc_.pos_.lat())
+            ? start_loc_.pos_
+            : end_loc_.pos_);
     auto const diameter =
         Profile::heuristic(distapprox(start_loc_.pos_, end_loc_.pos_));
     radius_ =
         diameter < max && max + diameter < std::numeric_limits<cost_t>::max()
             ? static_cast<cost_t>(diameter * 0.5)
             : max;
+    max_reached_1_ = false;
+    max_reached_2_ = false;
   }
 
   void add(ways const& w,
            label const l,
            direction const dir,
            cost_map& cost_map,
-           dial<label, get_bucket>& d) {
-    auto const heur = heuristic(w, l.n_, dir);
+           dial<label, get_bucket>& d,
+           sharing_data const* sharing) {
+    auto const heur = heuristic(w, l.n_, dir, sharing);
     if (l.cost() + heur < d.n_buckets() - 1 &&
         cost_map[l.get_node().get_key()].update(l, l.get_node(), l.cost(),
                                                 node::invalid())) {
@@ -82,57 +84,64 @@ struct bidirectional {
     }
   }
 
-  void add_start(ways const& w, label const l) {
+  void add_start(ways const& w, label const l, sharing_data const* sharing) {
     if (kDebug) {
+      l.get_node().print(std::cout, w);
       std::cout << "starting" << l.get_node().n_ << std::endl;
     }
-    add(w, l, direction::kForward, cost1_, pq1_);
+    add(w, l, direction::kForward, cost1_, pq1_, sharing);
   }
 
-  void add_end(ways const& w, label const l) {
+  void add_end(ways const& w, label const l, sharing_data const* sharing) {
     if (kDebug) {
+      l.get_node().print(std::cout, w);
       std::cout << "ending" << l.get_node().n_ << std::endl;
     }
-    add(w, l, direction::kBackward, cost2_, pq2_);
+    add(w, l, direction::kBackward, cost2_, pq2_, sharing);
   }
 
-  cost_t get_cost(node const n, direction const dir) const {
-    auto const cost = dir == direction::kForward ? &cost1_ : &cost2_;  // TODO
-    auto const it = cost->find(n.get_key());
-    return it != end(*cost) ? it->second.cost(n) : kInfeasible;
+  template <direction SearchDir>
+  cost_t get_cost(node const n) const {
+    if (SearchDir == direction::kForward) {
+      auto const it = cost1_.find(n.get_key());
+      return it != end(cost1_) ? it->second.cost(n) : kInfeasible;
+    } else {
+      auto const it = cost2_.find(n.get_key());
+      return it != end(cost2_) ? it->second.cost(n) : kInfeasible;
+    }
   }
 
   double distapprox(geo::latlng const& p1, geo::latlng const& p2) const {
-    auto const x = std::abs(p1.lat() - p2.lat()) * kDistanceLatDegrees;
-    auto const y = std::abs(p1.lng() - p2.lng()) * distance_lon_degrees_;
-
-    return std::max(std::max(x, y), (x + y) / 1.42);
+    auto const y = std::abs(p1.lat() - p2.lat()) * kDistanceLatDegrees;
+    auto const xdiff = std::abs(p1.lng() - p2.lng());
+    auto const x =
+        (xdiff > 180.0 ? (360 - xdiff) : xdiff) * distance_lon_degrees_;
+    return std::max(std::max(y, x), (y + x) / 1.42);
   }
 
-  double heuristic(ways const& w, node_idx_t idx, direction const dir) const {
-    auto const p = w.get_node_pos(idx).as_latlng();
+  double heuristic(ways const& w,
+                   node_idx_t idx,
+                   direction const dir,
+                   sharing_data const* sharing) const {
+    auto const get_node_pos = [&](node_idx_t const n) -> geo::latlng {
+      if (n == node_idx_t::invalid()) {
+        return {};
+      } else if (w.is_additional_node(n)) {
+        return sharing->get_additional_node_coordinates(n);
+      } else {
+        return w.get_node_pos(n).as_latlng();
+      }
+    };
+    auto const p = get_node_pos(idx);
     auto const dist = distapprox(p, end_loc_.pos_);
     auto const other_dist = distapprox(p, start_loc_.pos_);
     return 0.5 * (Profile::heuristic(dist) - Profile::heuristic(other_dist)) *
            (dir == direction::kForward ? 1 : -1);
   }
 
-  cost_t get_cost_from_x(node const n, cost_map const& cost) const {
-    auto const it = cost.find(n.get_key());
-    return it == cost.end() ? kInfeasible : it->second.cost(n);
-  }
-
-  cost_t get_cost_from_start(node const n) const {
-    return get_cost_from_x(n, cost1_);
-  }
-
-  cost_t get_cost_from_end(node const n) const {
-    return get_cost_from_x(n, cost2_);
-  }
-
   cost_t get_cost_to_mp(node const n1, node const n2) const {
-    auto const f_cost = get_cost(n1, direction::kForward);
-    auto const b_cost = get_cost(n2, direction::kBackward);
+    auto const f_cost = get_cost<direction::kForward>(n1);
+    auto const b_cost = get_cost<direction::kBackward>(n2);
     if (f_cost == kInfeasible || b_cost == kInfeasible) {
       return kInfeasible;
     }
@@ -152,8 +161,8 @@ struct bidirectional {
 
     auto const l = pq.pop();
     auto const curr = l.get_node();
-    auto const curr_cost = get_cost(curr, SearchDir);
-    if (curr_cost < l.cost() - heuristic(w, l.n_, SearchDir)) {
+    auto const curr_cost = get_cost<SearchDir>(curr);
+    if (curr_cost < l.cost() - heuristic(w, l.n_, SearchDir, sharing)) {
       return true;
     }
     if constexpr (kDebug) {
@@ -172,11 +181,17 @@ struct bidirectional {
             neighbor.print(std::cout, w);
           }
           auto const total = curr_cost + cost;
-          if (neighbor.n_ >= w.node_to_osm_.size()) {
+          auto const heur =
+              total + heuristic(w, neighbor.n_, SearchDir, sharing);
+          if (total >= adjusted_max) {
+            if (SearchDir == direction::kForward) {
+              max_reached_1_ = true;
+            } else {
+              max_reached_2_ = true;
+            }
             return;
           }
-          auto const heur = total + heuristic(w, neighbor.n_, SearchDir);
-          if (total < adjusted_max && heur < max &&
+          if (heur < max &&
               costs[neighbor.get_key()].update(
                   l, neighbor, static_cast<cost_t>(total), curr)) {
 
@@ -205,7 +220,7 @@ struct bidirectional {
         meet_point_1_ = meetpoint1;
         meet_point_2_ = meetpoint2;
         assert(tentative == get_cost_to_mp(meet_point_1_, meet_point_2_));
-        best_cost_ = get_cost_to_mp(meet_point_1_, meet_point_2_);
+        best_cost_ = static_cast<cost_t>(tentative);
 
         if constexpr (kDebug) {
           std::cout << " with cost " << best_cost_ << " -> ACCEPTED\n";
@@ -270,10 +285,10 @@ struct bidirectional {
 
     if (best_cost_ != kInfeasible) {
       auto const top_f =
-          pq1_.empty() ? get_cost_from_start(meet_point_1_)
+          pq1_.empty() ? get_cost<direction::kForward>(meet_point_1_)
                        : pq1_.buckets_[pq1_.get_next_bucket()].back().cost();
       auto const top_r =
-          pq2_.empty() ? get_cost_from_end(meet_point_2_)
+          pq2_.empty() ? get_cost<direction::kBackward>(meet_point_2_)
                        : pq2_.buckets_[pq2_.get_next_bucket()].back().cost();
       if (top_f + top_r >= best_cost_ + radius_) {
         if (kDebug) {
@@ -287,37 +302,35 @@ struct bidirectional {
   }
 
   template <direction SearchDir, bool WithBlocked>
-  void run(ways const& w,
+  bool run(ways const& w,
            ways::routing const& r,
            cost_t const max,
            bitvec<node_idx_t> const* blocked,
            sharing_data const* sharing,
            elevation_storage const* elevations) {
     if (radius_ == max) {
-      return;
+      return false;
     }
-    auto pq = &pq1_;
-    auto dir = direction::kForward;
-
-    while (!pq->empty()) {
-      auto const cont =
-          dir == direction::kForward
-              ? run_single<SearchDir, WithBlocked>(w, r, max, blocked, sharing,
-                                                   elevations, *pq, cost1_)
-              : run_single<opposite(SearchDir), WithBlocked>(
-                    w, r, max, blocked, sharing, elevations, *pq, cost2_);
-      if (!cont) {
+    while (!pq1_.empty() || !pq2_.empty()) {
+      if (!pq1_.empty() &&
+          !run_single<SearchDir, WithBlocked>(w, r, max, blocked, sharing,
+                                              elevations, pq1_, cost1_)) {
         break;
       }
-      pq = dir == direction::kForward ? &pq2_ : &pq1_;
-      dir = opposite(dir);
+      if (!pq2_.empty() &&
+          !run_single<opposite(SearchDir), WithBlocked>(
+              w, r, max, blocked, sharing, elevations, pq2_, cost2_)) {
+        break;
+      }
     }
-    if (best_cost_ > max) {
+    if (best_cost_ != kInfeasible && best_cost_ > max) {
       clear_mp();
+      return false;
     }
+    return !max_reached_1_ || !max_reached_2_;
   }
 
-  void run(ways const& w,
+  bool run(ways const& w,
            ways::routing const& r,
            cost_t const max,
            bitvec<node_idx_t> const* blocked,
@@ -325,15 +338,17 @@ struct bidirectional {
            elevation_storage const* elevations,
            direction const dir) {
     if (blocked == nullptr) {
-      dir == direction::kForward ? run<direction::kForward, false>(
-                                       w, r, max, blocked, sharing, elevations)
-                                 : run<direction::kBackward, false>(
-                                       w, r, max, blocked, sharing, elevations);
+      return dir == direction::kForward
+                 ? run<direction::kForward, false>(w, r, max, blocked, sharing,
+                                                   elevations)
+                 : run<direction::kBackward, false>(w, r, max, blocked, sharing,
+                                                    elevations);
     } else {
-      dir == direction::kForward ? run<direction::kForward, true>(
-                                       w, r, max, blocked, sharing, elevations)
-                                 : run<direction::kBackward, true>(
-                                       w, r, max, blocked, sharing, elevations);
+      return dir == direction::kForward
+                 ? run<direction::kForward, true>(w, r, max, blocked, sharing,
+                                                  elevations)
+                 : run<direction::kBackward, true>(w, r, max, blocked, sharing,
+                                                   elevations);
     }
   }
 
@@ -348,6 +363,8 @@ struct bidirectional {
   ankerl::unordered_dense::map<key, entry, hash> cost2_;
   cost_t radius_;
   double distance_lon_degrees_;
+  bool max_reached_1_;
+  bool max_reached_2_;
 };
 
 }  // namespace osr

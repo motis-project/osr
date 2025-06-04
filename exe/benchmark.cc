@@ -15,6 +15,7 @@
 #include "conf/options_parser.h"
 
 #include "utl/timer.h"
+#include "utl/verify.h"
 
 #include "osr/elevation_storage.h"
 #include "osr/location.h"
@@ -38,11 +39,13 @@ public:
     param(threads_, "threads,t", "Number of routing threads");
     param(n_queries_, ",n", "Number of queries");
     param(max_dist_, "radius,r", "Radius");
+    param(from_coords_, "matching,m", "Include node matching to coords");
   }
 
   fs::path data_dir_{"osr"};
   unsigned n_queries_{50};
-  unsigned max_dist_{50000};
+  unsigned max_dist_{32768};
+  bool from_coords_{false};
   unsigned threads_{std::thread::hardware_concurrency()};
 };
 
@@ -107,15 +110,17 @@ void set_start<car>(dijkstra<car>& d, ways const& w, node_idx_t const start) {
 
 template <typename T>
 void set_start(bidirectional<T>& d, ways const& w, node_idx_t const start) {
-  d.add_start(w, typename T::label{typename T::node{start}, 0U});
+  d.add_start(w, typename T::label{typename T::node{start}, 0U}, nullptr);
 }
 
 template <>
 void set_start<car>(bidirectional<car>& d,
                     ways const& w,
                     node_idx_t const start) {
-  d.add_start(w, car::label{car::node{start, 0, direction::kForward}, 0U});
-  d.add_start(w, car::label{car::node{start, 0, direction::kBackward}, 0U});
+  d.add_start(w, car::label{car::node{start, 0, direction::kForward}, 0U},
+              nullptr);
+  d.add_start(w, car::label{car::node{start, 0, direction::kBackward}, 0U},
+              nullptr);
 };
 
 template <typename T>
@@ -123,7 +128,7 @@ std::vector<typename T::label> set_end(bidirectional<T>& d,
                                        ways const& w,
                                        node_idx_t const end) {
   auto const l = typename T::label{typename T::node{end}, 0U};
-  d.add_end(w, l);
+  d.add_end(w, l, nullptr);
   return {l};
 }
 
@@ -137,8 +142,8 @@ std::vector<typename car::label> set_end<car>(bidirectional<car>& d,
   for (auto i = way_pos_t{0U}; i != ways.size(); ++i) {
     auto const l1 = car::label{car::node{end, i, direction::kForward}, 0U};
     auto const l2 = car::label{car::node{end, i, direction::kBackward}, 0U};
-    d.add_end(w, l1);
-    d.add_end(w, l2);
+    d.add_end(w, l1, nullptr);
+    d.add_end(w, l2, nullptr);
     ends.push_back(l1);
     ends.push_back(l2);
   }
@@ -167,13 +172,15 @@ int main(int argc, char const* argv[]) {
   }
 
   auto const w = ways{opt.data_dir_, cista::mmap::protection::READ};
+  auto const l = osr::lookup{w, opt.data_dir_, cista::mmap::protection::READ};
   auto const elevations = elevation_storage::try_open(opt.data_dir_);
 
   auto threads = std::vector<std::thread>(std::max(1U, opt.threads_));
   auto results = std::vector<benchmark_result>{};
   results.reserve(opt.n_queries_);
 
-  auto const run_benchmark = [&]<typename T>(const char* profile) {
+  auto const run_benchmark = [&]<typename T>(search_profile const profile,
+                                             const char* profile_label) {
     results.clear();
     auto i = std::atomic_size_t{0U};
     auto m = std::mutex{};
@@ -193,33 +200,88 @@ int main(int argc, char const* argv[]) {
               w.r_->node_ways_[end].empty()) {
             continue;
           }
-          d.reset(opt.max_dist_);
-          b.reset(opt.max_dist_,
-                  location{w.get_node_pos(start).as_latlng(), level_t{0.F}},
-                  location{w.get_node_pos(end).as_latlng(), level_t{0.F}});
-          set_start<T>(d, w, start);
-          set_start<T>(b, w, start);
-          auto const ends = set_end<T>(b, w, end);
-          auto const start_time = std::chrono::steady_clock::now();
-          d.template run<direction::kForward, false>(
-              w, *w.r_, opt.max_dist_, nullptr, nullptr, elevations.get());
-          auto const end_time = std::chrono::steady_clock::now();
-          b.template run<direction::kForward, false>(
-              w, *w.r_, opt.max_dist_, nullptr, nullptr, elevations.get());
-          if (!utl::any_of(ends, [&](auto&& e) {
-                auto const b_res =
-                    b.get_cost_to_mp(b.meet_point_1_, b.meet_point_2_);
-                auto const it = d.cost_.find(e.get_node().get_key());
-                auto const d_res = d.get_cost(e.get_node());
-                std::cout << b_res << " vs " << d_res << std::endl;
-                return b_res == d_res;
-              })) {
-            std::cout << "not equal" << std::endl;
-          }
-          {
-            auto const guard = std::lock_guard{m};
-            results.emplace_back(benchmark_result{std::chrono::duration_cast<
-                decltype(benchmark_result::duration_)>(end_time - start_time)});
+          auto const start_loc =
+              location{w.get_node_pos(start).as_latlng(), level_t{0.F}};
+          auto const end_loc =
+              location{w.get_node_pos(end).as_latlng(), level_t{0.F}};
+          std::cout << location{w.get_node_pos(start).as_latlng(), level_t{0.F}}
+                    << " fromto "
+                    << location{w.get_node_pos(end).as_latlng(), level_t{0.F}}
+                    << std::endl;
+          if (opt.from_coords_) {
+            auto const start_time = std::chrono::steady_clock::now();
+            auto const d_res =
+                route(w, l, profile, start_loc, end_loc, opt.max_dist_,
+                      direction::kForward, 250, nullptr, nullptr, nullptr,
+                      routing_algorithm::kDijkstra);
+            auto const middle_time = std::chrono::steady_clock::now();
+            auto const b_res =
+                route(w, l, profile, start_loc, end_loc, opt.max_dist_,
+                      direction::kForward, 250, nullptr, nullptr, nullptr,
+                      routing_algorithm::kAStarBi);
+            auto const end_time = std::chrono::steady_clock::now();
+
+            /*std::cout << "took "
+                      << std::chrono::duration_cast<std::chrono::milliseconds>(
+                             middle_time - start_time)
+                      << " vs "
+                      << std::chrono::duration_cast<std::chrono::milliseconds>(
+                             end_time - middle_time)
+                      << std::endl;*/
+
+            utl::verify(!d_res.has_value() && !b_res.has_value() ||
+                            d_res.has_value() && b_res.has_value() &&
+                                d_res->cost_ == b_res->cost_,
+                        "not equal {} {}", d_res->cost_, b_res->cost_);
+            {
+              auto const guard = std::lock_guard{m};
+              results.emplace_back(benchmark_result{std::chrono::duration_cast<
+                  decltype(benchmark_result::duration_)>(end_time -
+                                                         middle_time)});
+            }
+          } else {
+            if (w.r_->way_component_[w.r_->node_ways_[start][0]] !=
+                w.r_->way_component_[w.r_->node_ways_[end][0]]) {
+              std::cout << "skipping" << std::endl;
+              continue;
+            }
+            d.reset(opt.max_dist_);
+            b.reset(opt.max_dist_, start_loc, end_loc);
+            set_start<T>(d, w, start);
+            set_start<T>(b, w, start);
+
+            auto const ends = set_end<T>(b, w, end);
+            auto const start_time = std::chrono::steady_clock::now();
+            d.template run<direction::kForward, false>(
+                w, *w.r_, opt.max_dist_, nullptr, nullptr, elevations.get());
+            auto const middle_time = std::chrono::steady_clock::now();
+            b.template run<direction::kForward, false>(
+                w, *w.r_, opt.max_dist_, nullptr, nullptr, elevations.get());
+            auto const end_time = std::chrono::steady_clock::now();
+            /*std::cout << "took "
+                      << std::chrono::duration_cast<std::chrono::milliseconds>(
+                             middle_time - start_time)
+                      << " vs "
+                      << std::chrono::duration_cast<std::chrono::milliseconds>(
+                             end_time - middle_time)
+                      << std::endl;*/
+            auto const b_res =
+                b.get_cost_to_mp(b.meet_point_1_, b.meet_point_2_);
+            if (!utl::any_of(ends, [&](auto&& e) {
+                  auto const it = d.cost_.find(e.get_node().get_key());
+                  auto const d_res = d.get_cost(e.get_node());
+                  std::cout << " " << d_res << " vs " << b_res << std::endl;
+                  return b_res == d_res;
+                })) {
+
+              std::cout << "not equal" << std::endl;
+            }
+            {
+              auto const guard = std::lock_guard{m};
+              results.emplace_back(benchmark_result{std::chrono::duration_cast<
+                  decltype(benchmark_result::duration_)>(end_time -
+                                                         start_time)});
+            }
           }
         }
       });
@@ -233,14 +295,14 @@ int main(int argc, char const* argv[]) {
       return res.duration_;
     });
 
-    print_result(results, profile);
+    print_result(results, profile_label);
   };
 
-  run_benchmark.template operator()<car>("car");
+  run_benchmark.template operator()<car>(search_profile::kCar, "car");
   run_benchmark.template operator()<bike<kElevationNoCost>>(
-      "bike (no elevation costs)");
+      search_profile::kBike, "bike (no elevation costs)");
   run_benchmark.template operator()<bike<kElevationLowCost>>(
-      "bike (low elevation costs)");
+      search_profile::kBikeElevationLow, "bike (low elevation costs)");
   run_benchmark.template operator()<bike<kElevationHighCost>>(
-      "bike (high elevation costs)");
+      search_profile::kBikeElevationHigh, "bike (high elevation costs)");
 }
