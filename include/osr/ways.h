@@ -50,12 +50,16 @@ struct way_properties {
   constexpr bool is_car_accessible() const { return is_car_accessible_; }
   constexpr bool is_bike_accessible() const { return is_bike_accessible_; }
   constexpr bool is_foot_accessible() const { return is_foot_accessible_; }
+  constexpr bool is_big_street() const { return is_big_street_; }
   constexpr bool is_destination() const { return is_destination_; }
   constexpr bool is_oneway_car() const { return is_oneway_car_; }
   constexpr bool is_oneway_bike() const { return is_oneway_bike_; }
   constexpr bool is_elevator() const { return is_elevator_; }
   constexpr bool is_steps() const { return is_steps_; }
+  constexpr bool is_ramp() const { return is_ramp_; }
   constexpr bool is_parking() const { return is_parking_; }
+  constexpr bool has_toll() const { return has_toll_; }
+  constexpr bool is_sidewalk_separate() const { return is_sidewalk_separate_; }
   constexpr std::uint16_t max_speed_m_per_s() const {
     return to_meters_per_second(static_cast<speed_limit>(speed_limit_));
   }
@@ -93,9 +97,15 @@ struct way_properties {
 
   std::uint8_t is_platform_ : 1;  // only used during extract
   bool is_parking_ : 1;
+
+  bool is_ramp_ : 1;
+  bool is_sidewalk_separate_ : 1;
+  bool motor_vehicle_no_ : 1;
+  bool has_toll_ : 1;
+  bool is_big_street_ : 1;
 };
 
-static_assert(sizeof(way_properties) == 3);
+static_assert(sizeof(way_properties) == 4);
 
 struct node_properties {
   constexpr bool is_car_accessible() const { return is_car_accessible_; }
@@ -140,7 +150,9 @@ struct ways {
   ways(std::filesystem::path, cista::mmap::protection);
 
   void add_restriction(std::vector<resolved_restriction>&);
+  void compute_big_street_neighbors();
   void connect_ways();
+  void build_components();
 
   std::optional<way_idx_t> find_way(osm_way_idx_t const i) {
     auto const it = std::lower_bound(begin(way_osm_idx_), end(way_osm_idx_), i);
@@ -148,6 +160,10 @@ struct ways {
                ? std::optional{way_idx_t{
                      std::distance(begin(way_osm_idx_), it)}}
                : std::nullopt;
+  }
+
+  bool is_additional_node(osr::node_idx_t const n) const {
+    return n != node_idx_t::invalid() && n >= n_nodes();
   }
 
   std::optional<node_idx_t> find_node_idx(osm_node_idx_t const i) const {
@@ -167,16 +183,7 @@ struct ways {
   }
 
   point get_node_pos(node_idx_t const i) const {
-    auto const osm_idx = node_to_osm_[i];
-    auto const way = r_->node_ways_[i][0];
-    for (auto const [o, p] :
-         utl::zip(way_osm_nodes_[way], way_polylines_[way])) {
-      if (o == osm_idx) {
-        return p;
-      }
-    }
-    throw utl::fail("unable to find node {} [osm={}] in way {} [osm={}]", i,
-                    osm_idx, way, way_osm_idx_[way]);
+    return r_->node_positions_.at(i);
   }
 
   cista::mmap mm(char const* file) {
@@ -187,6 +194,8 @@ struct ways {
 
   way_idx_t::value_t n_ways() const { return way_osm_idx_.size(); }
   node_idx_t::value_t n_nodes() const { return node_to_osm_.size(); }
+
+  std::optional<std::string_view> get_access_restriction(way_idx_t) const;
 
   std::filesystem::path p_;
   cista::mmap::protection mode_;
@@ -247,7 +256,11 @@ struct ways {
     bitvec<node_idx_t> node_is_restricted_;
     vecvec<node_idx_t, restriction> node_restrictions_;
 
+    vec_map<node_idx_t, point> node_positions_;
+
     vec<pair<node_idx_t, level_bits_t>> multi_level_elevators_;
+
+    vec_map<way_idx_t, component_idx_t> way_component_;
   };
 
   cista::wrapped<routing> r_;
@@ -258,6 +271,9 @@ struct ways {
   mm_vecvec<way_idx_t, osm_node_idx_t, std::uint64_t> way_osm_nodes_;
   mm_vecvec<string_idx_t, char, std::uint64_t> strings_;
   mm_vec_map<way_idx_t, string_idx_t> way_names_;
+
+  mm_bitvec<way_idx_t> way_has_conditional_access_no_;
+  mm_vec<pair<way_idx_t, string_idx_t>> way_conditional_access_no_;
 
   multi_counter node_way_counter_;
 };

@@ -81,7 +81,7 @@
             background: #bdffb1;
         }
 
-        #profile, #direction {
+        #profile, #direction, #routing-algorithm {
             position: absolute;
             top: 5px;
             right: 5px;
@@ -93,6 +93,10 @@
 
         #direction {
             top: 48px;
+        }
+
+        #routing-algorithm {
+            top: 91px;
         }
 
         #journey-info {
@@ -118,14 +122,20 @@
 <a id="graph-toggle" href="#" onclick="toggleGraph()">G</a>
 <div id="levels"></div>
 <select id="profile" onchange="selectProfile(event)">
-    <option value="foot" selected>foot</option>
+    <option value="foot">foot</option>
     <option value="wheelchair">wheelchair</option>
     <option value="bike">bike</option>
-    <option value="car">car</option>
+    <option value="bike_elevation_low">bike (low elevation)</option>
+    <option value="bike_elevation_high">bike (high elevation)</option>
+    <option value="car" selected>car</option>
 </select>
 <select id="direction" onchange="selectDirection(event)">
     <option value="forward" selected>forward</option>
     <option value="backward">backward</option>
+</select>
+<select id="routing-algorithm" onchange="selectRoutingAlgorithm(event)">
+    <option value="dijkstra" selected>dijkstra</option>
+    <option value="bidirectional">bidirectional A*</option>
 </select>
 <div id="journey-info">
     Test
@@ -134,14 +144,14 @@
 <script type="module">
     import {style} from "./style.js";
 
-    const start = [9.182124, 48.782888]
-    const destination = [9.183369, 48.784705];
+    const start = [8.65749737, 50.10416625]
+    const destination = [8.65750757, 50.10417645];
     const query = {
         start, destination,
-        start_level: 0.0,
-        destination_level: 1.0,
+        max: 14400,
         profile: document.getElementById('profile').value,
-        direction: document.getElementById('direction').value
+        direction: document.getElementById('direction').value,
+        routing: document.getElementById('routing-algorithm').value
     };
 
     const meta = document.getElementById('journey-info');
@@ -167,7 +177,7 @@
         zoom: 18,
         transformRequest: (url, resourceType) => {
             if (url.startsWith('/')) {
-                return {url: `https://europe.motis-project.de/tiles${url}`}
+                return {url: ` https://europe.motis-project.de/tiles${url}`}
             }
         }
     });
@@ -224,16 +234,16 @@
             body: JSON.stringify({
                 start: {
                     lat: query.start[1],
-                    lng: query.start[0],
-                    level: query.start_level
+                    lng: query.start[0]
                 },
                 destination: {
                     lat: query.destination[1],
-                    lng: query.destination[0],
-                    level: query.destination_level
+                    lng: query.destination[0]
                 },
                 profile: query.profile,
-                direction: query.direction
+                direction: query.direction,
+                max: 14400,
+                routing: query.routing
             })
         });
         const r = await response.json();
@@ -462,6 +472,11 @@
 
     window.selectDirection = async (e) => {
         query.direction = e.target.value;
+        map.getSource('path').setData(await getRoute());
+    }
+
+    window.selectRoutingAlgorithm = async (e) => {
+        query.routing = e.target.value;
         map.getSource('path').setData(await getRoute());
     }
 

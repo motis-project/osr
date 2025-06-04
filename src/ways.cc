@@ -1,5 +1,7 @@
 #include "osr/ways.h"
 
+#include "utl/parallel_for.h"
+
 #include "cista/io.h"
 
 namespace osr {
@@ -18,7 +20,43 @@ ways::ways(std::filesystem::path p, cista::mmap::protection const mode)
                      mm_vec<std::uint64_t>{mm("way_osm_nodes_index.bin")}},
       strings_{mm_vec<char>(mm("strings_data.bin")),
                mm_vec<std::uint64_t>(mm("strings_idx.bin"))},
-      way_names_{mm("way_names.bin")} {}
+      way_names_{mm("way_names.bin")},
+      way_has_conditional_access_no_{
+          mm_vec<std::uint64_t>(mm("way_has_conditional_access_no"))},
+      way_conditional_access_no_{mm("way_conditional_access_no")} {}
+
+void ways::build_components() {
+  auto q = hash_set<way_idx_t>{};
+  auto flood_fill = [&](way_idx_t const way_idx, component_idx_t const c) {
+    q.clear();
+    q.insert(way_idx);
+    while (!q.empty()) {
+      auto const next = *q.begin();
+      q.erase(q.begin());
+      for (auto const n : r_->way_nodes_[next]) {
+        for (auto const w : r_->node_ways_[n]) {
+          auto& wc = r_->way_component_[w];
+          if (wc == component_idx_t::invalid()) {
+            wc = c;
+            q.insert(w);
+          }
+        }
+      }
+    }
+  };
+
+  auto next_component_idx = component_idx_t{0U};
+  r_->way_component_.resize(n_ways(), component_idx_t::invalid());
+  for (auto i = 0U; i != n_ways(); ++i) {
+    auto const way_idx = way_idx_t{i};
+    auto& c = r_->way_component_[way_idx];
+    if (c != component_idx_t::invalid()) {
+      continue;
+    }
+    c = next_component_idx++;
+    flood_fill(way_idx, c);
+  }
+}
 
 void ways::add_restriction(std::vector<resolved_restriction>& rs) {
   using it_t = std::vector<resolved_restriction>::iterator;
@@ -52,13 +90,56 @@ void ways::add_restriction(std::vector<resolved_restriction>& rs) {
   r_->node_restrictions_.resize(node_to_osm_.size());
 }
 
+void ways::compute_big_street_neighbors() {
+  struct state {
+    hash_set<way_idx_t> done_;
+  };
+
+  auto pt = utl::get_active_progress_tracker();
+
+  utl::parallel_for_run_threadlocal<state>(
+      n_ways(), [&](state& s, std::size_t const i) {
+        auto const way = way_idx_t{i};
+
+        if (r_->way_properties_[way].is_big_street_) {
+          pt->update_monotonic(i);
+          return;
+        }
+
+        s.done_.clear();
+
+        auto const expand = [&](way_idx_t const x, bool const go_further,
+                                auto&& recurse) {
+          for (auto const& n : r_->way_nodes_[x]) {
+            for (auto const& w : r_->node_ways_[n]) {
+              if (r_->way_properties_[w].is_big_street_) {
+                r_->way_properties_[way].is_big_street_ = true;
+                return true;
+              }
+
+              if (s.done_.emplace(w).second && go_further) {
+                if (recurse(x, false, recurse)) {
+                  return true;
+                }
+              }
+            }
+          }
+          return false;
+        };
+
+        s.done_.emplace(way);
+        expand(way, true, expand);
+        pt->update_monotonic(i);
+      });
+}
+
 void ways::connect_ways() {
   auto pt = utl::get_active_progress_tracker_or_activate("osr");
 
   {  // Assign graph node ids to every node with >1 way.
     pt->status("Create graph nodes")
         .in_high(node_way_counter_.size())
-        .out_bounds(50, 60);
+        .out_bounds(40, 50);
 
     auto node_idx = node_idx_t{0U};
     node_way_counter_.multi_.for_each_set_bit([&](std::uint64_t const b_idx) {
@@ -74,7 +155,7 @@ void ways::connect_ways() {
   {
     pt->status("Connect ways")
         .in_high(way_osm_nodes_.size())
-        .out_bounds(60, 90);
+        .out_bounds(50, 75);
     auto node_ways = mm_paged_vecvec<node_idx_t, way_idx_t>{
         cista::paged<mm_vec32<way_idx_t>>{
             mm_vec32<way_idx_t>{mm("tmp_node_ways_data.bin")}},
@@ -151,6 +232,21 @@ void ways::sync() {
   strings_.data_.mmap_.sync();
   strings_.bucket_starts_.mmap_.sync();
   way_names_.mmap_.sync();
+}
+
+std::optional<std::string_view> ways::get_access_restriction(
+    way_idx_t const way) const {
+  if (!way_has_conditional_access_no_.test(way)) {
+    return std::nullopt;
+  }
+  auto const it = std::lower_bound(
+      begin(way_conditional_access_no_), end(way_conditional_access_no_), way,
+      [](auto&& a, auto&& b) { return a.first < b; });
+  utl::verify(
+      it != end(way_conditional_access_no_) && it->first == way,
+      "access restriction for way with access restriction not found way={}",
+      way_osm_idx_[way]);
+  return strings_[it->second].view();
 }
 
 cista::wrapped<ways::routing> ways::routing::read(

@@ -6,6 +6,7 @@
 
 #include "utl/helpers/algorithm.h"
 
+#include "osr/elevation_storage.h"
 #include "osr/routing/mode.h"
 #include "osr/routing/profiles/car.h"
 #include "osr/routing/profiles/foot.h"
@@ -85,7 +86,7 @@ struct car_parking {
     }
 
     node_idx_t n_{node_idx_t::invalid()};
-    node_type type_;
+    node_type type_{node_type::kInvalid};
     level_t lvl_;
     direction dir_;
     way_pos_t way_;
@@ -107,7 +108,8 @@ struct car_parking {
 
     constexpr cost_t cost() const noexcept { return cost_; }
 
-    void track(label const&, ways::routing const&, way_idx_t, node_idx_t) {}
+    void track(
+        label const&, ways::routing const&, way_idx_t, node_idx_t, bool) {}
 
     node_idx_t n_;
     cost_t cost_;
@@ -240,34 +242,41 @@ struct car_parking {
                        node const n,
                        bitvec<node_idx_t> const* blocked,
                        sharing_data const*,
+                       elevation_storage const* elevations,
                        Fn&& fn) {
     static constexpr auto const kFwd = SearchDir == direction::kForward;
     static constexpr auto const kBwd = SearchDir == direction::kBackward;
 
-    auto const is_parking = w.node_properties_[n.n_].is_parking();
+    auto const is_parking =
+        w.node_properties_[n.n_].is_parking() ||
+        utl::any_of(w.node_ways_[n.n_], [&](way_idx_t const way) {
+          return w.way_properties_[way].is_parking();
+        });
 
     if (n.is_foot_node() || (kFwd && n.is_car_node() && is_parking)) {
       footp::template adjacent<SearchDir, WithBlocked>(
-          w, to_foot(n), blocked, nullptr,
+          w, to_foot(n), blocked, nullptr, elevations,
           [&](footp::node const neighbor, std::uint32_t const cost,
               distance_t const dist, way_idx_t const way,
-              std::uint16_t const from, std::uint16_t const to) {
+              std::uint16_t const from, std::uint16_t const to,
+              elevation_storage::elevation const elevation, bool) {
             fn(to_node(neighbor),
                cost + (n.is_foot_node() ? 0 : kSwitchPenalty), dist, way, from,
-               to);
+               to, elevation, false);
           });
     }
 
     if (n.is_car_node() || (kBwd && n.is_foot_node() && is_parking)) {
       car::template adjacent<SearchDir, WithBlocked>(
-          w, to_car(n), blocked, nullptr,
+          w, to_car(n), blocked, nullptr, elevations,
           [&](car::node const neighbor, std::uint32_t const cost,
               distance_t const dist, way_idx_t const way,
-              std::uint16_t const from, std::uint16_t const to) {
+              std::uint16_t const from, std::uint16_t const to,
+              elevation_storage::elevation const elevation, bool) {
             auto const way_prop = w.way_properties_[way];
             fn(to_node(neighbor, way_prop.from_level()),
                cost + (n.is_car_node() ? 0 : kSwitchPenalty), dist, way, from,
-               to);
+               to, elevation, false);
           });
     }
   }
@@ -312,6 +321,14 @@ struct car_parking {
                                    direction const dir,
                                    std::uint16_t const dist) {
     return footp::way_cost(e, dir, dist);
+  }
+
+  static constexpr double heuristic(double dist) {
+    return car::heuristic(dist);
+  }
+
+  static constexpr node get_reverse(node n) {
+    return {n.n_, n.type_, n.lvl_, opposite(n.dir_), n.way_};
   }
 };
 

@@ -14,9 +14,7 @@
 
 namespace osr {
 
-inline boost::json::array to_array(point const& p) {
-  return {p.lng(), p.lat()};
-}
+inline boost::json::array to_array(point const p) { return {p.lng(), p.lat()}; }
 
 inline boost::json::array to_array(geo::latlng const& p) {
   return {p.lng(), p.lat()};
@@ -36,7 +34,7 @@ boost::json::value to_line_string(std::initializer_list<T>&& line) {
   return to_line_string(line);
 }
 
-inline boost::json::value to_point(point const& p) {
+inline boost::json::value to_point(point const p) {
   return {{"type", "Point"}, {"coordinates", to_array(p)}};
 }
 
@@ -90,6 +88,7 @@ struct geojson_writer {
             {"car", p.is_car_accessible()},
             {"bike", p.is_bike_accessible()},
             {"foot", p.is_foot_accessible()},
+            {"is_big_street", p.is_big_street()},
             {"is_destination", p.is_destination()},
             {"oneway_car", p.is_oneway_car()},
             {"oneway_bike", p.is_oneway_bike()},
@@ -97,8 +96,10 @@ struct geojson_writer {
             {"from_level", p.from_level().to_float()},
             {"to_level", p.to_level().to_float()},
             {"is_elevator", p.is_elevator()},
+            {"sidewalk_separate", p.is_sidewalk_separate()},
             {"is_steps", p.is_steps()},
-            {"is_parking", p.is_parking_}}},
+            {"is_parking", p.is_parking()},
+            {"is_ramp", p.is_ramp()}}},
           {"geometry", to_line_string(std::initializer_list<geo::latlng>{
                            w_.get_node_pos(from), w_.get_node_pos(to)})}});
     }
@@ -113,13 +114,17 @@ struct geojson_writer {
                              {"bike", p.is_bike_accessible()},
                              {"foot", p.is_foot_accessible()},
                              {"is_destination", p.is_destination()},
+                             {"is_big_street", p.is_big_street()},
                              {"oneway_car", p.is_oneway_car()},
                              {"oneway_bike", p.is_oneway_bike()},
                              {"max_speed", p.max_speed_km_per_h()},
                              {"from_level", p.from_level().to_float()},
                              {"to_level", p.to_level().to_float()},
                              {"is_elevator", p.is_elevator()},
-                             {"is_steps", p.is_steps()}}},
+                             {"sidewalk_separate", p.is_sidewalk_separate()},
+                             {"is_steps", p.is_steps()},
+                             {"is_parking", p.is_parking()},
+                             {"is_ramp", p.is_ramp()}}},
                            {"geometry", to_line_string(w_.way_polylines_[i])}});
 
     nodes_.insert(begin(nodes), end(nodes));

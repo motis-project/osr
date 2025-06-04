@@ -9,7 +9,7 @@
 namespace osr {
 
 struct point {
-  friend std::ostream& operator<<(std::ostream& out, point const& c) {
+  friend std::ostream& operator<<(std::ostream& out, point const c) {
     auto const l = c.as_location();
     return out << '(' << l.lat() << ", " << l.lon() << ')';
   }

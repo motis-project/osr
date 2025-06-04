@@ -28,9 +28,11 @@
 #include "tiles/osm/hybrid_node_idx.h"
 #include "tiles/osm/tmp_file.h"
 
+#include "osr/elevation_storage.h"
 #include "osr/extract/tags.h"
 #include "osr/lookup.h"
 #include "osr/platforms.h"
+#include "osr/preprocessing/elevation/provider.h"
 #include "osr/ways.h"
 
 namespace osm = osmium;
@@ -58,9 +60,27 @@ bool is_number(std::string_view s) {
          utl::all_of(s, [](char const c) { return std::isdigit(c); });
 }
 
+bool is_big_street(tags const& t) {
+  switch (cista::hash(t.highway_)) {
+    case cista::hash("motorway"):
+    case cista::hash("motorway_link"):
+    case cista::hash("trunk"):
+    case cista::hash("trunk_link"):
+    case cista::hash("primary"):
+    case cista::hash("primary_link"):
+    case cista::hash("secondary"):
+    case cista::hash("secondary_link"):
+    case cista::hash("tertiary"):
+    case cista::hash("tertiary_link"):
+    case cista::hash("unclassified"): return true;
+    default: return false;
+  }
+}
+
 speed_limit get_speed_limit(tags const& t) {
   if (is_number(t.max_speed_) /* TODO: support units (kmh/mph) */) {
-    return get_speed_limit(utl::parse<unsigned>(t.max_speed_));
+    return get_speed_limit(
+        static_cast<unsigned>(utl::parse<unsigned>(t.max_speed_) * 0.9));
   } else {
     switch (cista::hash(t.highway_)) {
       case cista::hash("motorway"): return get_speed_limit(90);
@@ -71,13 +91,13 @@ speed_limit get_speed_limit(tags const& t) {
         return t.name_.empty() ? get_speed_limit(80) : get_speed_limit(40);
       case cista::hash("primary_link"): return get_speed_limit(30);
       case cista::hash("secondary"):
-        return t.name_.empty() ? get_speed_limit(75) : get_speed_limit(55);
+        return t.name_.empty() ? get_speed_limit(80) : get_speed_limit(60);
       case cista::hash("secondary_link"): return get_speed_limit(25);
       case cista::hash("tertiary"):
         return t.name_.empty() ? get_speed_limit(70) : get_speed_limit(40);
       case cista::hash("tertiary_link"): return get_speed_limit(20);
-      case cista::hash("unclassified"): [[fallthrough]];
-      case cista::hash("residential"): return get_speed_limit(25);
+      case cista::hash("unclassified"): return get_speed_limit(40);
+      case cista::hash("residential"): return get_speed_limit(30);
       case cista::hash("living_street"): return get_speed_limit(10);
       case cista::hash("service"): return get_speed_limit(15);
       case cista::hash("track"): return get_speed_limit(12);
@@ -95,8 +115,7 @@ struct rel_way {
 using rel_ways_t = hash_map<osm_way_idx_t, rel_way>;
 
 std::tuple<level_t, level_t, bool> get_levels(tags const& t) {
-  return t.has_level_ ? get_levels(t.has_level_, t.level_bits_)
-                      : get_levels(t.has_layer_, t.layer_bits_);
+  return get_levels(t.has_level_, t.level_bits_);
 }
 
 way_properties get_way_properties(tags const& t) {
@@ -116,6 +135,12 @@ way_properties get_way_properties(tags const& t) {
   p.from_level_ = to_idx(from);
   p.to_level_ = to_idx(to);
   p.is_platform_ = t.is_platform_;
+  p.is_ramp_ = t.is_ramp_;
+  p.is_sidewalk_separate_ = t.sidewalk_separate_;
+  p.motor_vehicle_no_ =
+      (t.motor_vehicle_ == "no"sv) || (t.vehicle_ == override::kBlacklist);
+  p.has_toll_ = t.toll_;
+  p.is_big_street_ = is_big_street(t);
   return p;
 }
 
@@ -221,6 +246,18 @@ struct way_handler : public osm::handler::Handler {
       return osm_node_idx_t{n.positive_ref()};
     };
 
+    auto const register_string = [&](std::string_view s) {
+      auto str_idx = string_idx_t::invalid();
+      if (auto const string_it = strings_set_.find(s);
+          string_it != end(strings_set_)) {
+        str_idx = *string_it;
+      } else {
+        str_idx = string_idx_t{w_.strings_.size()};
+        w_.strings_.emplace_back(s);
+      }
+      return str_idx;
+    };
+
     auto l = std::scoped_lock{mutex_};
     auto const way_idx = way_idx_t{w_.way_osm_idx_.size()};
 
@@ -243,17 +280,16 @@ struct way_handler : public osm::handler::Handler {
 
     auto const name = t.name_.empty() ? t.ref_ : t.name_;
     if (!name.empty()) {
-      auto str_idx = string_idx_t::invalid();
-      if (auto const string_it = strings_set_.find(name);
-          string_it != end(strings_set_)) {
-        str_idx = *string_it;
-      } else {
-        str_idx = string_idx_t{w_.strings_.size()};
-        w_.strings_.emplace_back(name);
-      }
-      w_.way_names_.emplace_back(str_idx);
+      w_.way_names_.emplace_back(register_string(name));
     } else {
       w_.way_names_.emplace_back(string_idx_t::invalid());
+    }
+
+    w_.way_has_conditional_access_no_.resize(to_idx(way_idx) + 1U);
+    if (!t.access_conditional_no_.empty()) {
+      w_.way_has_conditional_access_no_.set(way_idx, true);
+      w_.way_conditional_access_no_.emplace_back(
+          way_idx, register_string(t.access_conditional_no_));
     }
   }
 
@@ -284,6 +320,7 @@ struct node_handler : public osm::handler::Handler {
                hash_map<osm_node_idx_t, level_bits_t> const& elevator_nodes)
       : platforms_{platforms}, r_{r}, w_{w}, elevator_nodes_{elevator_nodes} {
     w_.r_->node_properties_.resize(w_.n_nodes());
+    w_.r_->node_positions_.resize(w_.n_nodes());
   }
 
   void node(osm::Node const& n) {
@@ -293,6 +330,7 @@ struct node_handler : public osm::handler::Handler {
       auto const t = tags{n};
       auto const [p, level_bits] = get_node_properties(t);
       w_.r_->node_properties_[*node_idx] = p;
+      w_.r_->node_positions_[*node_idx] = point::from_location(n.location());
 
       if (platforms_ != nullptr && t.is_platform_) {
         auto const l = std::lock_guard{platforms_mutex_};
@@ -452,7 +490,8 @@ struct rel_ways_handler : public osm::handler::Handler {
 
 void extract(bool const with_platforms,
              fs::path const& in,
-             fs::path const& out) {
+             fs::path const& out,
+             fs::path const& elevation_dir) {
   auto ec = std::error_code{};
   fs::remove_all(out, ec);
   if (!fs::is_directory(out)) {
@@ -488,7 +527,7 @@ void extract(bool const with_platforms,
 
   w.node_way_counter_.reserve(12000000000);
   {  // Collect node coordinates.
-    pt->status("Load OSM / Coordinates").in_high(file_size).out_bounds(0, 20);
+    pt->status("Load OSM / Coordinates").in_high(file_size).out_bounds(0, 15);
 
     auto node_idx_builder = tiles::hybrid_node_idx_builder{node_idx};
 
@@ -506,11 +545,12 @@ void extract(bool const with_platforms,
 
   auto elevator_nodes = hash_map<osm_node_idx_t, level_bits_t>{};
   {  // Extract streets, places, and areas.
-    pt->status("Load OSM / Ways").in_high(file_size).out_bounds(20, 50);
+    pt->status("Load OSM / Ways").in_high(file_size).out_bounds(15, 40);
 
     auto h = way_handler{w, pl.get(), rel_ways, elevator_nodes};
     auto reader =
         osm_io::Reader{input_file, osm_eb::way, osmium::io::read_meta::no};
+
     oneapi::tbb::parallel_pipeline(
         std::thread::hardware_concurrency() * 4U,
         oneapi::tbb::make_filter<void, osm_mem::Buffer>(
@@ -523,11 +563,15 @@ void extract(bool const with_platforms,
               }
               return buf;
             }) &
-            oneapi::tbb::make_filter<osm_mem::Buffer, void>(
-                oneapi::tbb::filter_mode::parallel, [&](osm_mem::Buffer&& buf) {
+            oneapi::tbb::make_filter<osm_mem::Buffer, osm_mem::Buffer>(
+                oneapi::tbb::filter_mode::parallel,
+                [&](osm_mem::Buffer&& buf) {
                   update_locations(node_idx, buf);
-                  osm::apply(buf, h);
-                }));
+                  return std::move(buf);
+                }) &
+            oneapi::tbb::make_filter<osm_mem::Buffer, void>(
+                oneapi::tbb::filter_mode::serial_in_order,
+                [&](osm_mem::Buffer&& buf) { osm::apply(buf, h); }));
 
     pt->update(pt->in_high_);
     reader.close();
@@ -537,30 +581,20 @@ void extract(bool const with_platforms,
   w.sync();
 
   w.connect_ways();
+  w.build_components();
 
   auto r = std::vector<resolved_restriction>{};
   {
     pt->status("Load OSM / Node Properties")
         .in_high(file_size)
-        .out_bounds(90, 100);
+        .out_bounds(90, 95);
     auto reader = osm_io::Reader{input_file, osm_eb::node | osm_eb::relation,
                                  osmium::io::read_meta::no};
     auto h = node_handler{w, pl.get(), r, elevator_nodes};
-    oneapi::tbb::parallel_pipeline(
-        std::thread::hardware_concurrency() * 4U,
-        oneapi::tbb::make_filter<void, osm_mem::Buffer>(
-            oneapi::tbb::filter_mode::serial_in_order,
-            [&](oneapi::tbb::flow_control& fc) {
-              auto buf = reader.read();
-              pt->update(reader.offset());
-              if (!buf) {
-                fc.stop();
-              }
-              return buf;
-            }) &
-            oneapi::tbb::make_filter<osm_mem::Buffer, void>(
-                oneapi::tbb::filter_mode::parallel,
-                [&](osm_mem::Buffer&& buf) { osm::apply(buf, h); }));
+    while (auto b = reader.read()) {
+      pt->update(reader.offset());
+      osm::apply(b, h);
+    }
 
     reader.close();
     pt->update(pt->in_high_);
@@ -575,6 +609,19 @@ void extract(bool const with_platforms,
               [](auto&& a, auto&& b) { return a.first < b.first; });
   }
 
+  if (!elevation_dir.empty()) {
+    auto const provider =
+        osr::preprocessing::elevation::provider{elevation_dir};
+    if (provider.driver_count() > 0) {
+      auto elevations = elevation_storage{out, cista::mmap::protection::WRITE};
+      elevations.set_elevations(w, provider);
+    }
+  }
+
+  pt->status("Load OSM / Big Street Neighbors")
+      .in_high(w.n_ways())
+      .out_bounds(95, 100);
+  w.compute_big_street_neighbors();
   w.r_->write(out);
 
   lookup{w, out, cista::mmap::protection::WRITE}.build_rtree();

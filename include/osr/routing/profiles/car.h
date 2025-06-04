@@ -6,6 +6,7 @@
 
 #include "utl/helpers/algorithm.h"
 
+#include "osr/elevation_storage.h"
 #include "osr/routing/mode.h"
 #include "osr/routing/route.h"
 #include "osr/ways.h"
@@ -28,12 +29,11 @@ struct car {
           .n_ = node_idx_t::invalid(), .way_ = 0U, .dir_ = direction::kForward};
     }
 
-    constexpr node_idx_t get_node() const noexcept { return n_; }
-
     boost::json::object geojson_properties(ways const&) const {
       return boost::json::object{{"node_id", n_.v_}, {"type", "car"}};
     }
 
+    constexpr node_idx_t get_node() const noexcept { return n_; }
     constexpr node_idx_t get_key() const noexcept { return n_; }
 
     static constexpr mode get_mode() noexcept { return mode::kCar; }
@@ -56,7 +56,8 @@ struct car {
     constexpr node get_node() const noexcept { return {n_, way_, dir_}; }
     constexpr cost_t cost() const noexcept { return cost_; }
 
-    void track(label const&, ways::routing const&, way_idx_t, node_idx_t) {}
+    void track(
+        label const&, ways::routing const&, way_idx_t, node_idx_t, bool) {}
 
     node_idx_t n_;
     way_pos_t way_;
@@ -106,7 +107,7 @@ struct car {
     }
 
     static constexpr std::size_t get_index(node const n) {
-      return (n.dir_ == direction::kForward ? 0 : 1) * kMaxWays + n.way_;
+      return (n.dir_ == direction::kForward ? 0U : 1U) * kMaxWays + n.way_;
     }
 
     static constexpr direction to_dir(bool const b) {
@@ -164,6 +165,7 @@ struct car {
                        node const n,
                        bitvec<node_idx_t> const* blocked,
                        sharing_data const*,
+                       elevation_storage const*,
                        Fn&& fn) {
     auto way_pos = way_pos_t{0U};
     for (auto const [way, i] :
@@ -199,7 +201,8 @@ struct car {
         auto const cost = way_cost(target_way_prop, way_dir, dist) +
                           node_cost(target_node_prop) +
                           (is_u_turn ? kUturnPenalty : 0U);
-        fn(target, cost, dist, way, from, to);
+        fn(target, cost, dist, way, from, to, elevation_storage::elevation{},
+           false);
       };
 
       if (i != 0U) {
@@ -244,6 +247,13 @@ struct car {
 
   static constexpr cost_t node_cost(node_properties const& n) {
     return n.is_car_accessible() ? 0U : kInfeasible;
+  }
+
+  static constexpr double heuristic(double const dist) {
+    return dist / (130U / 3.6);
+  }
+  static constexpr node get_reverse(node const n) {
+    return {n.n_, n.way_, opposite(n.dir_)};
   }
 };
 

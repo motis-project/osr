@@ -19,10 +19,12 @@
 
 #include "osr/geojson.h"
 #include "osr/lookup.h"
+#include "osr/routing/algorithms.h"
 #include "osr/routing/profiles/bike.h"
 #include "osr/routing/profiles/bike_sharing.h"
 #include "osr/routing/profiles/car.h"
 #include "osr/routing/profiles/car_parking.h"
+#include "osr/routing/profiles/car_sharing.h"
 #include "osr/routing/profiles/foot.h"
 #include "osr/routing/route.h"
 
@@ -76,12 +78,14 @@ struct http_server::impl {
        ways const& g,
        lookup const& l,
        platforms const* pl,
+       elevation_storage const* elevations,
        std::string const& static_file_path)
       : ioc_{ios},
         thread_pool_{thread_pool},
         w_{g},
         l_{l},
         pl_{pl},
+        elevations_{elevations},
         server_{ioc_} {
     try {
       if (!static_file_path.empty() && fs::is_directory(static_file_path)) {
@@ -101,11 +105,20 @@ struct http_server::impl {
                : to_profile(profile_it->value().as_string());
   }
 
+  static routing_algorithm get_routing_algorithm_from_request(
+      boost::json::object const& q) {
+    auto const routing_it = q.find("routing");
+    return routing_it == q.end() || !routing_it->value().is_string()
+               ? routing_algorithm::kDijkstra
+               : to_algorithm(routing_it->value().as_string());
+  }
+
   void handle_route(web_server::http_req_t const& req,
                     web_server::http_res_cb_t const& cb) {
     auto const q = boost::json::parse(req.body()).as_object();
     auto const profile = get_search_profile_from_request(q);
     auto const direction_it = q.find("direction");
+    auto const routing_algo = get_routing_algorithm_from_request(q);
     auto const dir = to_direction(direction_it == q.end() ||
                                           !direction_it->value().is_string()
                                       ? to_str(direction::kForward)
@@ -115,7 +128,23 @@ struct http_server::impl {
     auto const max_it = q.find("max");
     auto const max = static_cast<cost_t>(
         max_it == q.end() ? 3600 : max_it->value().as_int64());
-    auto const p = route(w_, l_, profile, from, to, max, dir, 100);
+
+    auto const p = route(w_, l_, profile, from, to, max, dir, 100, nullptr,
+                         nullptr, elevations_, routing_algo);
+
+    auto const p1 = route(w_, l_, profile, from, std::vector{to}, max, dir, 100,
+                          nullptr, nullptr, elevations_);
+
+    auto const print = [](char const* name, std::optional<path> const& p) {
+      if (p.has_value()) {
+        std::cout << name << " cost: " << p->cost_ << "\n";
+      } else {
+        std::cout << name << ": not found\n";
+      }
+    };
+    print("p", p);
+    print("p1", p1.at(0));
+
     if (!p.has_value()) {
       cb(json_response(req, "could not find a valid path",
                        http::status::not_found));
@@ -189,7 +218,15 @@ struct http_server::impl {
       case search_profile::kWheelchair:
         send_graph_response<foot<true, elevator_tracking>>(req, cb, gj);
         break;
-      case search_profile::kBike: send_graph_response<bike>(req, cb, gj); break;
+      case search_profile::kBike:
+        send_graph_response<bike<kElevationNoCost>>(req, cb, gj);
+        break;
+      case search_profile::kBikeElevationLow:
+        send_graph_response<bike<kElevationLowCost>>(req, cb, gj);
+        break;
+      case search_profile::kBikeElevationHigh:
+        send_graph_response<bike<kElevationHighCost>>(req, cb, gj);
+        break;
       case search_profile::kCar: send_graph_response<car>(req, cb, gj); break;
       case search_profile::kCarParking:
         send_graph_response<car_parking<false>>(req, cb, gj);
@@ -199,6 +236,9 @@ struct http_server::impl {
         break;
       case search_profile::kBikeSharing:
         send_graph_response<bike_sharing>(req, cb, gj);
+        break;
+      case search_profile::kCarSharing:
+        send_graph_response<car_sharing<track_node_tracking>>(req, cb, gj);
         break;
       default: throw utl::fail("not implemented");
     }
@@ -352,6 +392,7 @@ private:
   ways const& w_;
   lookup const& l_;
   platforms const* pl_;
+  elevation_storage const* elevations_;
   web_server server_;
   bool serve_static_files_{false};
   std::string static_file_path_;
@@ -362,8 +403,10 @@ http_server::http_server(boost::asio::io_context& ioc,
                          ways const& w,
                          lookup const& l,
                          platforms const* pl,
+                         elevation_storage const* elevation,
                          std::string const& static_file_path)
-    : impl_(new impl(ioc, thread_pool, w, l, pl, static_file_path)) {}
+    : impl_{new impl(ioc, thread_pool, w, l, pl, elevation, static_file_path)} {
+}
 
 http_server::~http_server() = default;
 

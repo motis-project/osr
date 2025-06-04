@@ -2,6 +2,7 @@
 
 #include "utl/for_each_bit_set.h"
 
+#include "osr/elevation_storage.h"
 #include "osr/routing/mode.h"
 #include "osr/routing/tracking.h"
 #include "osr/ways.h"
@@ -13,7 +14,8 @@ struct sharing_data;
 template <bool IsWheelchair, typename Tracking = noop_tracking>
 struct foot {
   static constexpr auto const kMaxMatchDistance = 100U;
-  static constexpr auto const kOffroadPenalty = 3U;
+  static constexpr auto const kSpeedMetersPerSecond =
+      (IsWheelchair ? 0.8 : 1.2F);
 
   struct node {
     friend bool operator==(node const a, node const b) {
@@ -31,7 +33,9 @@ struct foot {
 
     constexpr node get_key() const noexcept { return *this; }
 
-    static constexpr mode get_mode() noexcept { return mode::kFoot; }
+    static constexpr mode get_mode() noexcept {
+      return IsWheelchair ? mode::kWheelchair : mode::kFoot;
+    }
 
     std::ostream& print(std::ostream& out, ways const& w) const {
       return out << "(node=" << w.node_to_osm_[n_] << ", level=" << lvl_ << ")";
@@ -52,8 +56,9 @@ struct foot {
     void track(label const& l,
                ways::routing const& r,
                way_idx_t const w,
-               node_idx_t const n) {
-      tracking_.track(l.tracking_, r, w, n);
+               node_idx_t const n,
+               bool) {
+      tracking_.track(l.tracking_, r, w, n, false);
     }
 
     node_idx_t n_;
@@ -149,6 +154,7 @@ struct foot {
                        node const n,
                        bitvec<node_idx_t> const* blocked,
                        sharing_data const*,
+                       elevation_storage const*,
                        Fn&& fn) {
     for (auto const [way, i] :
          utl::zip_unchecked(w.node_ways_[n.n_], w.node_in_way_idx_[n.n_])) {
@@ -179,7 +185,8 @@ struct foot {
                 auto const cost = way_cost(target_way_prop, way_dir, dist) +
                                   node_cost(target_node_prop);
                 fn(node{target_node, target_lvl},
-                   static_cast<std::uint32_t>(cost), dist, way, from, to);
+                   static_cast<std::uint32_t>(cost), dist, way, from, to,
+                   elevation_storage::elevation{}, false);
               });
         } else {
           auto const target_lvl = get_target_level(w, n.n_, n.lvl_, way);
@@ -191,7 +198,7 @@ struct foot {
           auto const cost = way_cost(target_way_prop, way_dir, dist) +
                             node_cost(target_node_prop);
           fn(node{target_node, *target_lvl}, static_cast<std::uint32_t>(cost),
-             dist, way, from, to);
+             dist, way, from, to, elevation_storage::elevation{}, false);
         }
       };
 
@@ -234,7 +241,7 @@ struct foot {
       return std::nullopt;
     }
 
-    if (way_prop.is_steps()) {
+    if (way_prop.is_steps() || way_prop.is_ramp()) {
       if (from_level == kNoLevel) {
         return way_prop.from_level() == level_t{0.F} ? way_prop.to_level()
                                                      : way_prop.from_level();
@@ -312,11 +319,13 @@ struct foot {
   static constexpr cost_t way_cost(way_properties const e,
                                    direction,
                                    std::uint16_t const dist) {
-    if ((e.is_foot_accessible() || e.is_bike_accessible()) &&
+    if ((e.is_foot_accessible() ||
+         (!e.is_sidewalk_separate() && e.is_bike_accessible())) &&
         (!IsWheelchair || !e.is_steps())) {
-      return (!e.is_foot_accessible() ? 90 : 0) +
-             static_cast<cost_t>(
-                 std::round(dist / (IsWheelchair ? 0.8 : 1.1F)));
+      return (!e.is_foot_accessible() || e.is_sidewalk_separate() ? 90 : 0) +
+             static_cast<cost_t>(std::round(
+                 dist / (kSpeedMetersPerSecond + (e.is_big_street_ ? -0.2 : 0) +
+                         (e.motor_vehicle_no_ ? 0.1 : 0.0))));
     } else {
       return kInfeasible;
     }
@@ -325,6 +334,12 @@ struct foot {
   static constexpr cost_t node_cost(node_properties const n) {
     return n.is_walk_accessible() ? (n.is_elevator() ? 90U : 0U) : kInfeasible;
   }
+
+  static constexpr double heuristic(double const dist) {
+    return dist / (kSpeedMetersPerSecond + 0.1);
+  }
+
+  static constexpr node get_reverse(node const n) { return n; }
 };
 
 }  // namespace osr

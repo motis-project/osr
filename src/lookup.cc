@@ -4,6 +4,7 @@
 #include "osr/routing/profiles/bike_sharing.h"
 #include "osr/routing/profiles/car.h"
 #include "osr/routing/profiles/car_parking.h"
+#include "osr/routing/profiles/car_sharing.h"
 #include "osr/routing/profiles/foot.h"
 
 namespace osr {
@@ -48,8 +49,14 @@ match_t lookup::match(location const& query,
       return match<car>(query, reverse, search_dir, max_match_distance,
                         blocked);
     case search_profile::kBike:
-      return match<bike>(query, reverse, search_dir, max_match_distance,
-                         blocked);
+      return match<bike<kElevationNoCost>>(query, reverse, search_dir,
+                                           max_match_distance, blocked);
+    case search_profile::kBikeElevationLow:
+      return match<bike<kElevationLowCost>>(query, reverse, search_dir,
+                                            max_match_distance, blocked);
+    case search_profile::kBikeElevationHigh:
+      return match<bike<kElevationHighCost>>(query, reverse, search_dir,
+                                             max_match_distance, blocked);
     case search_profile::kCarParking:
       return match<car_parking<false>>(query, reverse, search_dir,
                                        max_match_distance, blocked);
@@ -59,6 +66,9 @@ match_t lookup::match(location const& query,
     case search_profile::kBikeSharing:
       return match<bike_sharing>(query, reverse, search_dir, max_match_distance,
                                  blocked);
+    case search_profile::kCarSharing:
+      return match<car_sharing<noop_tracking>>(query, reverse, search_dir,
+                                               max_match_distance, blocked);
   }
   throw utl::fail("{} is not a valid profile", static_cast<std::uint8_t>(p));
 }
