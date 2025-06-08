@@ -8,6 +8,7 @@
 #include "geo/box.h"
 #include "geo/polyline.h"
 
+#include "osr/types.h"
 #include "osr/ways.h"
 
 #include "utl/cflow.h"
@@ -52,6 +53,13 @@ struct node_candidate {
   std::vector<geo::latlng> path_{};
 };
 
+struct raw_node_candidate {
+  bool valid() const { return node_ != node_idx_t::invalid(); }
+
+  node_idx_t node_{node_idx_t::invalid()};
+  double dist_to_node_{0.0};
+};
+
 struct way_candidate {
   friend bool operator<(way_candidate const& a, way_candidate const& b) {
     return a.dist_to_way_ < b.dist_to_way_;
@@ -63,6 +71,19 @@ struct way_candidate {
   location query_{};
   way_idx_t way_{way_idx_t::invalid()};
   node_candidate left_{}, right_{};
+};
+
+struct raw_way_candidate {
+  friend bool operator<(raw_way_candidate const& a,
+                        raw_way_candidate const& b) {
+    return a.dist_to_way_ < b.dist_to_way_;
+  }
+
+  double dist_to_way_;
+  geo::latlng best_;
+  std::size_t segment_idx_;
+  way_idx_t way_{way_idx_t::invalid()};
+  raw_node_candidate left_{}, right_{};
 };
 
 using match_t = std::vector<way_candidate>;
@@ -77,35 +98,93 @@ struct lookup {
     return cista::mmap{(p_ / file).generic_string().c_str(), mode_};
   }
 
-  match_t get_raw_match(location const& query,
-                        double const max_match_distance) {
-    auto way_candidates = std::vector<way_candidate>{};
+  std::vector<raw_way_candidate> get_raw_match(
+      location const& query, double const max_match_distance) const {
+    auto way_candidates = std::vector<raw_way_candidate>{};
+    auto const approx_distance_lng_degrees =
+        geo::approx_distance_lng_degrees(query.pos_);
+    auto const squared_max_dist = std::pow(max_match_distance, 2);
     find(geo::box{query.pos_, max_match_distance}, [&](way_idx_t const way) {
-      auto d = geo::distance_to_polyline<way_candidate>(
-          query.pos_, ways_.way_polylines_[way]);
-      if (d.dist_to_way_ < max_match_distance) {
-        d.way_ = way;
-        way_candidates.emplace_back(d);
+      auto wc = geo::approx_squared_distance_to_polyline<raw_way_candidate>(
+          query.pos_, ways_.way_polylines_[way], approx_distance_lng_degrees);
+      if (wc.dist_to_way_ < squared_max_dist) {
+        wc.dist_to_way_ = std::sqrt(wc.dist_to_way_);
+        wc.way_ = way;
+        wc.left_ = find_raw_next_node(wc, query, direction::kBackward,
+                                      approx_distance_lng_degrees);
+        wc.right_ = find_raw_next_node(wc, query, direction::kForward,
+                                       approx_distance_lng_degrees);
+        if (wc.left_.valid() || wc.right_.valid()) {
+          way_candidates.emplace_back(std::move(wc));
+        }
       }
     });
     utl::sort(way_candidates);
     return way_candidates;
   }
 
+  way_candidate inflate_raw_way_candidate(raw_way_candidate const& wc,
+                                          location const& query) const {
+    return {wc.dist_to_way_,
+            wc.best_,
+            wc.segment_idx_,
+            query,
+            wc.way_,
+            {query.lvl_, direction::kForward, wc.left_.node_,
+             wc.left_.dist_to_node_},
+            {query.lvl_, direction::kBackward, wc.right_.node_,
+             wc.right_.dist_to_node_}};
+  }
+
   template <typename Profile>
-  match_t complete_match(match_t match,
-                         bool reverse,
-                         direction const search_dir,
-                         bitvec<node_idx_t>& blocked) {
-    for (auto& wc : match) {
-      wc.left_ =
-          find_next_node<Profile>(wc, wc.query_, direction::kBackward,
-                                  wc.query_.lvl_, reverse, search_dir, blocked);
-      wc.right_ =
-          find_next_node<Profile>(wc, wc.query_, direction::kForward,
-                                  wc.query_.lvl_, reverse, search_dir, blocked);
+  cost_t get_next_node_cost(way_candidate const& wc,
+                            node_candidate const& nc,
+                            bool const reverse,
+                            direction const search_dir,
+                            bitvec<node_idx_t> const* blocked) const {
+    if (!nc.valid()) {
+      return kInfeasible;
     }
-    return match;
+    if (nc.cost_ != 0) {
+      return nc.cost_;
+    }
+    auto const way_prop = ways_.r_->way_properties_[wc.way_];
+
+    auto const edge_dir = reverse ? opposite(nc.way_dir_) : nc.way_dir_;
+    auto const cost =
+        Profile::way_cost(way_prop, flip(search_dir, edge_dir),
+                          static_cast<distance_t>(nc.dist_to_node_));
+    if (blocked == nullptr || !blocked->test(nc.node_)) {
+      return cost;
+    }
+    return kInfeasible;
+  }
+
+  template <typename Profile>
+  std::vector<geo::latlng> get_next_node_path(way_candidate const& wc,
+                                              node_candidate const& nc,
+                                              bool const reverse) const {
+    if (!nc.path_.empty() || !nc.valid()) {
+      return nc.path_;
+    }
+    auto const polyline = ways_.way_polylines_[wc.way_];
+    auto const osm_nodes = ways_.way_osm_nodes_[wc.way_];
+    auto path = std::vector<geo::latlng>{wc.best_};
+    till_the_end(
+        wc.segment_idx_ + (nc.way_dir_ == direction::kForward ? 1U : 0U),
+        utl::zip(polyline, osm_nodes), nc.way_dir_, [&](auto&& x) {
+          auto const& [pos, osm_node_idx] = x;
+          path.push_back(pos);
+          if (ways_.node_to_osm_[nc.node_] == osm_node_idx) {
+            return utl::cflow::kBreak;
+          }
+          return utl::cflow::kContinue;
+        });
+
+    if (reverse) {
+      std::reverse(begin(path), end(path));
+    }
+    return path;
   }
 
   match_t match(location const& query,
@@ -232,6 +311,36 @@ private:
       std::reverse(begin(c.path_), end(c.path_));
     }
 
+    return c;
+  }
+
+  raw_node_candidate find_raw_next_node(
+      raw_way_candidate const& wc,
+      location const&,
+      direction const dir,
+      double approx_distance_lng_degrees) const {
+    auto c = raw_node_candidate{.dist_to_node_ = wc.dist_to_way_};
+    auto const polyline = ways_.way_polylines_[wc.way_];
+    auto const osm_nodes = ways_.way_osm_nodes_[wc.way_];
+
+    auto last_path_pos = wc.best_;
+    till_the_end(wc.segment_idx_ + (dir == direction::kForward ? 1U : 0U),
+                 utl::zip(polyline, osm_nodes), dir, [&](auto&& x) {
+                   auto const& [pos, osm_node_idx] = x;
+
+                   auto const segment_dist =
+                       std::sqrt(geo::approx_squared_distance(
+                           last_path_pos, pos, approx_distance_lng_degrees));
+                   c.dist_to_node_ += segment_dist;
+                   last_path_pos = pos;
+
+                   auto const way_node = ways_.find_node_idx(osm_node_idx);
+                   if (way_node.has_value()) {
+                     c.node_ = *way_node;
+                     return utl::cflow::kBreak;
+                   }
+                   return utl::cflow::kContinue;
+                 });
     return c;
   }
 
