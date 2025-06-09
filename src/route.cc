@@ -13,6 +13,7 @@
 #include "utl/verify.h"
 
 #include "osr/elevation_storage.h"
+#include "osr/lookup.h"
 #include "osr/routing/bidirectional.h"
 #include "osr/routing/dijkstra.h"
 #include "osr/routing/profiles/bike.h"
@@ -376,9 +377,7 @@ best_candidate(ways const& w,
         return;
       }
 
-      auto const x_cost =
-          l.get_next_node_cost<Profile>(dest, *x, true, dir, blocked);
-      auto const total_cost = target_cost + x_cost;
+      auto const total_cost = target_cost + x->cost_;
       if (total_cost < best_cost.cost_) {
         best_node = node;
         best_cost.cost_ = static_cast<cost_t>(total_cost);
@@ -571,8 +570,7 @@ std::optional<path> route_dijkstra(ways const& w,
     should_continue = d.run(w, *w.r_, max, blocked, sharing, elevations, dir) &&
                       should_continue;
 
-    auto const c =
-        best_candidate(w, l, d, to.lvl_, to_match, max, dir, blocked);
+    auto const c = best_candidate(w, d, to.lvl_, to_match, max, dir);
     if (c.has_value()) {
       auto const [nc, wc, node, p] = *c;
       return reconstruct<Profile>(w, l, blocked, sharing, elevations, d, start,
@@ -633,7 +631,7 @@ std::vector<std::optional<path>> route(
       } else if (auto const direct = try_direct(from, t); direct.has_value()) {
         r = direct;
       } else {
-        auto const c = best_candidate(w, l, d, t.lvl_, m, max, dir, blocked);
+        auto const c = best_candidate(w, d, t.lvl_, m, max, dir);
         if (c.has_value()) {
           auto [nc, wc, n, p] = *c;
           d.cost_.at(n.get_key()).write(n, p);

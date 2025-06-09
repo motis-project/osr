@@ -123,41 +123,42 @@ struct lookup {
     return way_candidates;
   }
 
-  way_candidate inflate_raw_way_candidate(raw_way_candidate const& wc,
-                                          location const& query) const {
-    return {wc.dist_to_way_,
-            wc.best_,
-            wc.segment_idx_,
-            query,
-            wc.way_,
-            {query.lvl_, direction::kForward, wc.left_.node_,
-             wc.left_.dist_to_node_},
-            {query.lvl_, direction::kBackward, wc.right_.node_,
-             wc.right_.dist_to_node_}};
-  }
-
   template <typename Profile>
-  cost_t get_next_node_cost(way_candidate const& wc,
-                            node_candidate const& nc,
-                            bool const reverse,
-                            direction const search_dir,
-                            bitvec<node_idx_t> const* blocked) const {
-    if (!nc.valid()) {
-      return kInfeasible;
+  match_t complete_match(
+      location const& query,
+      bool const reverse,
+      direction const search_dir,
+      double max_match_distance,
+      bitvec<node_idx_t> const* blocked,
+      std::span<raw_way_candidate const> raw_way_candidates) const {
+    auto matches = std::vector<way_candidate>{};
+    auto i = 0U;
+    for (auto raw_wc : raw_way_candidates) {
+      while (raw_wc.dist_to_way_ >= max_match_distance && matches.empty() &&
+             i++ < 4U) {
+        max_match_distance *= 2U;
+      }
+      if (raw_wc.dist_to_way_ >= max_match_distance) {
+        break;
+      }
+      auto wc =
+          way_candidate{raw_wc.dist_to_way_,
+                        raw_wc.best_,
+                        raw_wc.segment_idx_,
+                        query,
+                        raw_wc.way_,
+                        {query.lvl_, direction::kForward, raw_wc.left_.node_,
+                         raw_wc.left_.dist_to_node_},
+                        {query.lvl_, direction::kBackward, raw_wc.right_.node_,
+                         raw_wc.right_.dist_to_node_}};
+      apply_next_node_cost<Profile>(wc, wc.left_, reverse, search_dir, blocked);
+      apply_next_node_cost<Profile>(wc, wc.right_, reverse, search_dir,
+                                    blocked);
+      if (wc.left_.valid() || wc.right_.valid()) {
+        matches.emplace_back(std::move(wc));
+      }
     }
-    if (nc.cost_ != 0) {
-      return nc.cost_;
-    }
-    auto const way_prop = ways_.r_->way_properties_[wc.way_];
-
-    auto const edge_dir = reverse ? opposite(nc.way_dir_) : nc.way_dir_;
-    auto const cost =
-        Profile::way_cost(way_prop, flip(search_dir, edge_dir),
-                          static_cast<distance_t>(nc.dist_to_node_));
-    if (blocked == nullptr || !blocked->test(nc.node_)) {
-      return cost;
-    }
-    return kInfeasible;
+    return matches;
   }
 
   template <typename Profile>
@@ -187,19 +188,28 @@ struct lookup {
     return path;
   }
 
-  match_t match(location const& query,
-                bool const reverse,
-                direction const search_dir,
-                double const max_match_distance,
-                bitvec<node_idx_t> const* blocked,
-                search_profile) const;
+  match_t match(
+      location const& query,
+      bool const reverse,
+      direction const search_dir,
+      double const max_match_distance,
+      bitvec<node_idx_t> const* blocked,
+      search_profile,
+      std::span<raw_way_candidate const> raw_way_candidates = {}) const;
 
   template <typename Profile>
-  match_t match(location const& query,
-                bool const reverse,
-                direction const search_dir,
-                double max_match_distance,
-                bitvec<node_idx_t> const* blocked) const {
+  match_t match(
+      location const& query,
+      bool const reverse,
+      direction const search_dir,
+      double max_match_distance,
+      bitvec<node_idx_t> const* blocked,
+      std::span<raw_way_candidate const> raw_way_candidates = {}) const {
+    if (!raw_way_candidates.empty()) {
+      return complete_match<Profile>(query, reverse, search_dir,
+                                     max_match_distance, blocked,
+                                     raw_way_candidates);
+    }
     auto way_candidates = get_way_candidates<Profile>(
         query, reverse, search_dir, max_match_distance, blocked);
     auto i = 0U;
@@ -342,6 +352,30 @@ private:
                    return utl::cflow::kContinue;
                  });
     return c;
+  }
+
+  template <typename Profile>
+  void apply_next_node_cost(way_candidate const& wc,
+                            node_candidate& nc,
+                            bool const reverse,
+                            direction const search_dir,
+                            bitvec<node_idx_t> const* blocked) const {
+    if (!nc.valid()) {
+      return;
+    }
+    auto const way_prop = ways_.r_->way_properties_[wc.way_];
+
+    auto const edge_dir = reverse ? opposite(nc.way_dir_) : nc.way_dir_;
+    auto const cost =
+        Profile::way_cost(way_prop, flip(search_dir, edge_dir),
+                          static_cast<distance_t>(nc.dist_to_node_));
+
+    if (cost != kInfeasible &&
+        (blocked == nullptr || !blocked->test(nc.node_))) {
+      nc.cost_ = cost;
+    } else {
+      nc.node_ = node_idx_t::invalid();
+    }
   }
 
   std::filesystem::path p_;
