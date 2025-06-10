@@ -355,6 +355,21 @@ path reconstruct(ways const& w,
   return p;
 }
 
+bool component_seen(ways const& w,
+                    match_view_t matches,
+                    size_t match_idx,
+                    unsigned times = 1) {
+  auto this_component = w.r_->way_component_[matches[match_idx].way_];
+  for (auto j = 0U; j < match_idx; ++j) {
+    if (w.r_->way_component_[matches[j].way_] == this_component) {
+      if (--times == 0) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
 template <typename Profile>
 std::optional<std::tuple<node_candidate const*,
                          way_candidate const*,
@@ -365,7 +380,9 @@ best_candidate(ways const& w,
                level_t const lvl,
                match_view_t m,
                cost_t const max,
-               direction const dir) {
+               direction const dir,
+               bool should_continue,
+               way_candidate const& start) {
   auto const get_best = [&](way_candidate const& dest,
                             node_candidate const* x) {
     auto best_node = Profile::node::invalid();
@@ -391,7 +408,13 @@ best_candidate(ways const& w,
     return std::pair{best_node, best_cost};
   };
 
-  for (auto const& dest : m) {
+  for (auto const [j, dest] : utl::enumerate(m)) {
+    if (w.r_->way_component_[start.way_] != w.r_->way_component_[dest.way_]) {
+      continue;
+    }
+    if (!should_continue && component_seen(w, m, j, 10)) {
+      continue;
+    }
     auto best_node = Profile::node::invalid();
     auto best_cost = path{.cost_ = std::numeric_limits<cost_t>::max()};
     auto best = static_cast<node_candidate const*>(nullptr);
@@ -435,16 +458,6 @@ std::optional<path> try_direct(osr::location const& from,
   } else {
     return std::nullopt;
   }
-}
-
-bool component_seen(ways const& w, match_view_t matches, size_t match_idx) {
-  auto this_component = w.r_->way_component_[matches[match_idx].way_];
-  for (auto j = 0U; j < match_idx; ++j) {
-    if (w.r_->way_component_[matches[j].way_] == this_component) {
-      return true;
-    }
-  }
-  return false;
 }
 
 template <typename Profile>
@@ -576,7 +589,8 @@ std::optional<path> route_dijkstra(ways const& w,
     should_continue = d.run(w, *w.r_, max, blocked, sharing, elevations, dir) &&
                       should_continue;
 
-    auto const c = best_candidate(w, d, to.lvl_, to_match, max, dir);
+    auto const c = best_candidate(w, d, to.lvl_, to_match, max, dir,
+                                  should_continue, start);
     if (c.has_value()) {
       auto const [nc, wc, node, p] = *c;
       return reconstruct<Profile>(w, l, blocked, sharing, elevations, d, from,
@@ -637,7 +651,8 @@ std::vector<std::optional<path>> route(
       } else if (auto const direct = try_direct(from, t); direct.has_value()) {
         r = direct;
       } else {
-        auto const c = best_candidate(w, d, t.lvl_, m, max, dir);
+        auto const c =
+            best_candidate(w, d, t.lvl_, m, max, dir, should_continue, start);
         if (c.has_value()) {
           auto [nc, wc, n, p] = *c;
           d.cost_.at(n.get_key()).write(n, p);
