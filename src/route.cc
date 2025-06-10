@@ -183,10 +183,13 @@ double add_path(ways const& w,
 
 template <typename Profile>
 path reconstruct_bi(ways const& w,
+                    lookup const& l,
                     bitvec<node_idx_t> const* blocked,
                     sharing_data const* sharing,
                     elevation_storage const* elevations,
                     bidirectional<Profile> const& b,
+                    location const& from,
+                    location const& to,
                     way_candidate const& start,
                     way_candidate const& dest,
                     cost_t const cost,
@@ -217,7 +220,8 @@ path reconstruct_bi(ways const& w,
       forward_n.get_node() == start.left_.node_ ? start.left_ : start.right_;
 
   forward_segments.push_back(
-      {.polyline_ = start_node_candidate.path_,
+      {.polyline_ = l.get_node_candidate_path<Profile>(
+           start, start_node_candidate, false, from),
        .from_level_ = start_node_candidate.lvl_,
        .to_level_ = start_node_candidate.lvl_,
        .from_ = dir == direction::kBackward ? forward_n.get_node()
@@ -255,7 +259,8 @@ path reconstruct_bi(ways const& w,
       backward_n.get_node() == dest.left_.node_ ? dest.left_ : dest.right_;
 
   backward_segments.push_back(
-      {.polyline_ = dest_node_candidate.path_,
+      {.polyline_ = l.get_node_candidate_path<Profile>(
+           dest, dest_node_candidate, true, to),
        .from_level_ = dest_node_candidate.lvl_,
        .to_level_ = dest_node_candidate.lvl_,
        .from_ = dir == direction::kForward ? backward_n.get_node()
@@ -288,16 +293,18 @@ path reconstruct(ways const& w,
                  sharing_data const* sharing,
                  elevation_storage const* elevations,
                  dijkstra<Profile> const& d,
+                 location const& from,
+                 location const& to,
                  way_candidate const& start,
                  way_candidate const& dest,
                  node_candidate const& dest_nc,
                  typename Profile::node const dest_node,
                  cost_t const cost,
                  direction const dir) {
-  auto const dest_path = l.get_next_node_path<Profile>(dest, dest_nc, true);
+
   auto n = dest_node;
   auto segments = std::vector<path::segment>{
-      {.polyline_ = dest_path,
+      {.polyline_ = l.get_node_candidate_path<Profile>(dest, dest_nc, true, to),
        .from_level_ = dest_nc.lvl_,
        .to_level_ = dest_nc.lvl_,
        .from_ = node_idx_t::invalid(),
@@ -323,9 +330,9 @@ path reconstruct(ways const& w,
 
   auto const& start_nc =
       n.get_node() == start.left_.node_ ? start.left_ : start.right_;
-  auto const start_path = l.get_next_node_path<Profile>(start, start_nc, false);
   segments.push_back(
-      {.polyline_ = start_path,
+      {.polyline_ =
+           l.get_node_candidate_path<Profile>(start, start_nc, false, from),
        .from_level_ = start_nc.lvl_,
        .to_level_ = start_nc.lvl_,
        .from_ =
@@ -354,13 +361,11 @@ std::optional<std::tuple<node_candidate const*,
                          typename Profile::node,
                          path>>
 best_candidate(ways const& w,
-               lookup const& l,
                dijkstra<Profile>& d,
                level_t const lvl,
                match_view_t m,
                cost_t const max,
-               direction const dir,
-               bitvec<node_idx_t> const* blocked) {
+               direction const dir) {
   auto const get_best = [&](way_candidate const& dest,
                             node_candidate const* x) {
     auto best_node = Profile::node::invalid();
@@ -444,6 +449,7 @@ bool component_seen(ways const& w, match_view_t matches, size_t match_idx) {
 
 template <typename Profile>
 std::optional<path> route_bidirectional(ways const& w,
+                                        lookup const& l,
                                         bidirectional<Profile>& b,
                                         location const& from,
                                         location const& to,
@@ -514,8 +520,8 @@ std::optional<path> route_bidirectional(ways const& w,
 
       auto const cost = b.get_cost_to_mp(b.meet_point_1_, b.meet_point_2_);
 
-      return reconstruct_bi(w, blocked, sharing, elevations, b, start, end,
-                            cost, dir);
+      return reconstruct_bi(w, l, blocked, sharing, elevations, b, from, to,
+                            start, end, cost, dir);
     }
     b.pq1_.clear();
     b.pq2_.clear();
@@ -573,8 +579,8 @@ std::optional<path> route_dijkstra(ways const& w,
     auto const c = best_candidate(w, d, to.lvl_, to_match, max, dir);
     if (c.has_value()) {
       auto const [nc, wc, node, p] = *c;
-      return reconstruct<Profile>(w, l, blocked, sharing, elevations, d, start,
-                                  *wc, *nc, node, p.cost_, dir);
+      return reconstruct<Profile>(w, l, blocked, sharing, elevations, d, from,
+                                  to, start, *wc, *nc, node, p.cost_, dir);
     }
   }
 
@@ -637,7 +643,7 @@ std::vector<std::optional<path>> route(
           d.cost_.at(n.get_key()).write(n, p);
           if (do_reconstruct(p)) {
             p = reconstruct<Profile>(w, l, blocked, sharing, elevations, d,
-                                     start, *wc, *nc, n, p.cost_, dir);
+                                     from, t, start, *wc, *nc, n, p.cost_, dir);
             p.uses_elevator_ = true;
           }
           r = std::make_optional(p);
@@ -676,8 +682,8 @@ std::optional<path> route_bidirectional(ways const& w,
       return std::nullopt;
     }
 
-    return route_bidirectional(w, b, from, to, from_match, to_match, max, dir,
-                               blocked, sharing, elevations);
+    return route_bidirectional(w, l, b, from, to, from_match, to_match, max,
+                               dir, blocked, sharing, elevations);
   };
 
   switch (profile) {

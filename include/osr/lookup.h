@@ -6,6 +6,7 @@
 #include "cista/reflection/printable.h"
 
 #include "geo/box.h"
+#include "geo/latlng.h"
 #include "geo/polyline.h"
 
 #include "osr/types.h"
@@ -80,8 +81,6 @@ struct raw_way_candidate {
   }
 
   double dist_to_way_;
-  geo::latlng best_;
-  std::size_t segment_idx_;
   way_idx_t way_{way_idx_t::invalid()};
   raw_node_candidate left_{}, right_{};
 };
@@ -105,17 +104,18 @@ struct lookup {
         geo::approx_distance_lng_degrees(query.pos_);
     auto const squared_max_dist = std::pow(max_match_distance, 2);
     find(geo::box{query.pos_, max_match_distance}, [&](way_idx_t const way) {
-      auto wc = geo::approx_squared_distance_to_polyline<raw_way_candidate>(
+      auto wc = geo::approx_squared_distance_to_polyline<way_candidate>(
           query.pos_, ways_.way_polylines_[way], approx_distance_lng_degrees);
       if (wc.dist_to_way_ < squared_max_dist) {
-        wc.dist_to_way_ = std::sqrt(wc.dist_to_way_);
-        wc.way_ = way;
-        wc.left_ = find_raw_next_node(wc, query, direction::kBackward,
-                                      approx_distance_lng_degrees);
-        wc.right_ = find_raw_next_node(wc, query, direction::kForward,
-                                       approx_distance_lng_degrees);
-        if (wc.left_.valid() || wc.right_.valid()) {
-          way_candidates.emplace_back(std::move(wc));
+        auto raw_wc = raw_way_candidate{std::sqrt(wc.dist_to_way_), way};
+        raw_wc.left_ = find_raw_next_node(raw_wc, query, direction::kBackward,
+                                          approx_distance_lng_degrees, wc.best_,
+                                          wc.segment_idx_);
+        raw_wc.right_ = find_raw_next_node(raw_wc, query, direction::kForward,
+                                           approx_distance_lng_degrees,
+                                           wc.best_, wc.segment_idx_);
+        if (raw_wc.left_.valid() || raw_wc.right_.valid()) {
+          way_candidates.emplace_back(std::move(raw_wc));
         }
       }
     });
@@ -143,8 +143,8 @@ struct lookup {
       }
       auto wc =
           way_candidate{raw_wc.dist_to_way_,
-                        raw_wc.best_,
-                        raw_wc.segment_idx_,
+                        {},
+                        {},
                         query,
                         raw_wc.way_,
                         {query.lvl_, direction::kForward, raw_wc.left_.node_,
@@ -162,25 +162,33 @@ struct lookup {
   }
 
   template <typename Profile>
-  std::vector<geo::latlng> get_next_node_path(way_candidate const& wc,
-                                              node_candidate const& nc,
-                                              bool const reverse) const {
+  std::vector<geo::latlng> get_node_candidate_path(
+      way_candidate const& wc,
+      node_candidate const& nc,
+      bool const reverse,
+      location const& query) const {
     if (!nc.path_.empty() || !nc.valid()) {
       return nc.path_;
     }
+    auto const approx_distance_lng_degrees =
+        geo::approx_distance_lng_degrees(query.pos_);
+    auto reconstruct_wc =
+        geo::approx_squared_distance_to_polyline<way_candidate>(
+            query.pos_, ways_.way_polylines_[wc.way_],
+            approx_distance_lng_degrees);
     auto const polyline = ways_.way_polylines_[wc.way_];
     auto const osm_nodes = ways_.way_osm_nodes_[wc.way_];
-    auto path = std::vector<geo::latlng>{wc.best_};
-    till_the_end(
-        wc.segment_idx_ + (nc.way_dir_ == direction::kForward ? 1U : 0U),
-        utl::zip(polyline, osm_nodes), nc.way_dir_, [&](auto&& x) {
-          auto const& [pos, osm_node_idx] = x;
-          path.push_back(pos);
-          if (ways_.node_to_osm_[nc.node_] == osm_node_idx) {
-            return utl::cflow::kBreak;
-          }
-          return utl::cflow::kContinue;
-        });
+    auto path = std::vector<geo::latlng>{reconstruct_wc.best_};
+    till_the_end(reconstruct_wc.segment_idx_ +
+                     (nc.way_dir_ == direction::kForward ? 1U : 0U),
+                 utl::zip(polyline, osm_nodes), nc.way_dir_, [&](auto&& x) {
+                   auto const& [pos, osm_node_idx] = x;
+                   path.push_back(pos);
+                   if (ways_.node_to_osm_[nc.node_] == osm_node_idx) {
+                     return utl::cflow::kBreak;
+                   }
+                   return utl::cflow::kContinue;
+                 });
 
     if (reverse) {
       std::reverse(begin(path), end(path));
@@ -324,17 +332,18 @@ private:
     return c;
   }
 
-  raw_node_candidate find_raw_next_node(
-      raw_way_candidate const& wc,
-      location const&,
-      direction const dir,
-      double approx_distance_lng_degrees) const {
+  raw_node_candidate find_raw_next_node(raw_way_candidate const& wc,
+                                        location const&,
+                                        direction const dir,
+                                        double approx_distance_lng_degrees,
+                                        geo::latlng const best,
+                                        size_t segment_idx) const {
     auto c = raw_node_candidate{.dist_to_node_ = wc.dist_to_way_};
     auto const polyline = ways_.way_polylines_[wc.way_];
     auto const osm_nodes = ways_.way_osm_nodes_[wc.way_];
 
-    auto last_path_pos = wc.best_;
-    till_the_end(wc.segment_idx_ + (dir == direction::kForward ? 1U : 0U),
+    auto last_path_pos = best;
+    till_the_end(segment_idx + (dir == direction::kForward ? 1U : 0U),
                  utl::zip(polyline, osm_nodes), dir, [&](auto&& x) {
                    auto const& [pos, osm_node_idx] = x;
 
