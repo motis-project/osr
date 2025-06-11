@@ -94,34 +94,8 @@ struct lookup {
     return cista::mmap{(p_ / file).generic_string().c_str(), mode_};
   }
 
-  std::vector<raw_way_candidate> get_raw_match(
-      location const& query, double const max_match_distance) const {
-    auto way_candidates = std::vector<raw_way_candidate>{};
-    auto const approx_distance_lng_degrees =
-        geo::approx_distance_lng_degrees(query.pos_);
-    auto const squared_max_dist = std::pow(max_match_distance, 2);
-    find(geo::box{query.pos_, max_match_distance}, [&](way_idx_t const way) {
-      auto const [squared_dist, best, segment_idx] =
-          geo::approx_squared_distance_to_polyline<
-              std::tuple<double, geo::latlng, size_t>>(
-              query.pos_, ways_.way_polylines_[way],
-              approx_distance_lng_degrees);
-      if (squared_dist < squared_max_dist) {
-        auto raw_wc = raw_way_candidate{std::sqrt(squared_dist), way};
-        raw_wc.left_ =
-            find_raw_next_node(raw_wc, query, direction::kBackward,
-                               approx_distance_lng_degrees, best, segment_idx);
-        raw_wc.right_ =
-            find_raw_next_node(raw_wc, query, direction::kForward,
-                               approx_distance_lng_degrees, best, segment_idx);
-        if (raw_wc.left_.valid() || raw_wc.right_.valid()) {
-          way_candidates.emplace_back(std::move(raw_wc));
-        }
-      }
-    });
-    utl::sort(way_candidates);
-    return way_candidates;
-  }
+  std::vector<raw_way_candidate> get_raw_match(location const&,
+                                               double max_match_distance) const;
 
   template <typename Profile>
   match_t complete_match(
@@ -133,12 +107,12 @@ struct lookup {
       std::span<raw_way_candidate const> raw_way_candidates) const {
     auto matches = std::vector<way_candidate>{};
     auto i = 0U;
+    auto dist = max_match_distance;
     for (auto const& raw_wc : raw_way_candidates) {
-      while (raw_wc.dist_to_way_ >= max_match_distance && matches.empty() &&
-             i++ < 4U) {
-        max_match_distance *= 2U;
+      while (raw_wc.dist_to_way_ >= dist && matches.empty() && i++ < 4U) {
+        dist *= 2U;
       }
-      if (raw_wc.dist_to_way_ >= max_match_distance) {
+      if (raw_wc.dist_to_way_ >= dist) {
         break;
       }
       auto wc =
@@ -154,6 +128,10 @@ struct lookup {
       if (wc.left_.valid() || wc.right_.valid()) {
         matches.emplace_back(std::move(wc));
       }
+    }
+    if (i < 4 && matches.empty()) {
+      return match<Profile>(query, reverse, search_dir, max_match_distance,
+                            blocked);
     }
     return matches;
   }
@@ -330,36 +308,14 @@ private:
     return c;
   }
 
-  raw_node_candidate find_raw_next_node(raw_way_candidate const& wc,
-                                        location const&,
-                                        direction const dir,
-                                        double approx_distance_lng_degrees,
-                                        geo::latlng const best,
-                                        size_t segment_idx) const {
-    auto c = raw_node_candidate{.dist_to_node_ = wc.dist_to_way_};
-    auto const polyline = ways_.way_polylines_[wc.way_];
-    auto const osm_nodes = ways_.way_osm_nodes_[wc.way_];
+  std::vector<raw_way_candidate> get_raw_way_candidates(
+      location const& query, double const max_match_distance) const;
 
-    auto last_path_pos = best;
-    till_the_end(segment_idx + (dir == direction::kForward ? 1U : 0U),
-                 utl::zip(polyline, osm_nodes), dir, [&](auto&& x) {
-                   auto const& [pos, osm_node_idx] = x;
-
-                   auto const segment_dist =
-                       std::sqrt(geo::approx_squared_distance(
-                           last_path_pos, pos, approx_distance_lng_degrees));
-                   c.dist_to_node_ += segment_dist;
-                   last_path_pos = pos;
-
-                   auto const way_node = ways_.find_node_idx(osm_node_idx);
-                   if (way_node.has_value()) {
-                     c.node_ = *way_node;
-                     return utl::cflow::kBreak;
-                   }
-                   return utl::cflow::kContinue;
-                 });
-    return c;
-  }
+  raw_node_candidate find_raw_next_node(raw_way_candidate const&,
+                                        direction const,
+                                        double,
+                                        geo::latlng const,
+                                        size_t) const;
 
   template <typename Profile>
   void apply_next_node_cost(way_candidate const& wc,
