@@ -13,6 +13,7 @@
 #include "utl/verify.h"
 
 #include "osr/elevation_storage.h"
+#include "osr/lookup.h"
 #include "osr/routing/bidirectional.h"
 #include "osr/routing/dijkstra.h"
 #include "osr/routing/profiles/bike.h"
@@ -182,10 +183,13 @@ double add_path(ways const& w,
 
 template <typename Profile>
 path reconstruct_bi(ways const& w,
+                    lookup const& l,
                     bitvec<node_idx_t> const* blocked,
                     sharing_data const* sharing,
                     elevation_storage const* elevations,
                     bidirectional<Profile> const& b,
+                    location const& from,
+                    location const& to,
                     way_candidate const& start,
                     way_candidate const& dest,
                     cost_t const cost,
@@ -216,7 +220,8 @@ path reconstruct_bi(ways const& w,
       forward_n.get_node() == start.left_.node_ ? start.left_ : start.right_;
 
   forward_segments.push_back(
-      {.polyline_ = start_node_candidate.path_,
+      {.polyline_ = l.get_node_candidate_path<Profile>(
+           start, start_node_candidate, false, from),
        .from_level_ = start_node_candidate.lvl_,
        .to_level_ = start_node_candidate.lvl_,
        .from_ = dir == direction::kBackward ? forward_n.get_node()
@@ -254,7 +259,8 @@ path reconstruct_bi(ways const& w,
       backward_n.get_node() == dest.left_.node_ ? dest.left_ : dest.right_;
 
   backward_segments.push_back(
-      {.polyline_ = dest_node_candidate.path_,
+      {.polyline_ = l.get_node_candidate_path<Profile>(
+           dest, dest_node_candidate, true, to),
        .from_level_ = dest_node_candidate.lvl_,
        .to_level_ = dest_node_candidate.lvl_,
        .from_ = dir == direction::kForward ? backward_n.get_node()
@@ -282,25 +288,30 @@ path reconstruct_bi(ways const& w,
 
 template <typename Profile>
 path reconstruct(ways const& w,
+                 lookup const& l,
                  bitvec<node_idx_t> const* blocked,
                  sharing_data const* sharing,
                  elevation_storage const* elevations,
                  dijkstra<Profile> const& d,
+                 location const& from,
+                 location const& to,
                  way_candidate const& start,
-                 node_candidate const& dest,
+                 way_candidate const& dest,
+                 node_candidate const& dest_nc,
                  typename Profile::node const dest_node,
                  cost_t const cost,
                  direction const dir) {
+
   auto n = dest_node;
   auto segments = std::vector<path::segment>{
-      {.polyline_ = dest.path_,
-       .from_level_ = dest.lvl_,
-       .to_level_ = dest.lvl_,
+      {.polyline_ = l.get_node_candidate_path<Profile>(dest, dest_nc, true, to),
+       .from_level_ = dest_nc.lvl_,
+       .to_level_ = dest_nc.lvl_,
        .from_ = node_idx_t::invalid(),
        .to_ = node_idx_t::invalid(),
        .way_ = way_idx_t::invalid(),
-       .cost_ = dest.cost_,
-       .dist_ = static_cast<distance_t>(dest.dist_to_node_),
+       .cost_ = dest_nc.cost_,
+       .dist_ = static_cast<distance_t>(dest_nc.dist_to_node_),
        .mode_ = dest_node.get_mode()}};
   auto dist = 0.0;
   while (true) {
@@ -317,18 +328,19 @@ path reconstruct(ways const& w,
     n = *pred;
   }
 
-  auto const& start_node =
+  auto const& start_nc =
       n.get_node() == start.left_.node_ ? start.left_ : start.right_;
   segments.push_back(
-      {.polyline_ = start_node.path_,
-       .from_level_ = start_node.lvl_,
-       .to_level_ = start_node.lvl_,
+      {.polyline_ =
+           l.get_node_candidate_path<Profile>(start, start_nc, false, from),
+       .from_level_ = start_nc.lvl_,
+       .to_level_ = start_nc.lvl_,
        .from_ =
            dir == direction::kBackward ? n.get_node() : node_idx_t::invalid(),
        .to_ = dir == direction::kForward ? n.get_node() : node_idx_t::invalid(),
        .way_ = way_idx_t::invalid(),
-       .cost_ = start_node.cost_,
-       .dist_ = static_cast<distance_t>(start_node.dist_to_node_),
+       .cost_ = start_nc.cost_,
+       .dist_ = static_cast<distance_t>(start_nc.dist_to_node_),
        .mode_ = n.get_mode()});
   std::reverse(begin(segments), end(segments));
   auto path_elevation = elevation_storage::elevation{};
@@ -336,11 +348,26 @@ path reconstruct(ways const& w,
     path_elevation += segment.elevation_;
   }
   auto p = path{.cost_ = cost,
-                .dist_ = start_node.dist_to_node_ + dist + dest.dist_to_node_,
+                .dist_ = start_nc.dist_to_node_ + dist + dest_nc.dist_to_node_,
                 .elevation_ = path_elevation,
                 .segments_ = segments};
   d.cost_.at(dest_node.get_key()).write(dest_node, p);
   return p;
+}
+
+bool component_seen(ways const& w,
+                    match_view_t matches,
+                    size_t match_idx,
+                    unsigned times = 1) {
+  auto this_component = w.r_->way_component_[matches[match_idx].way_];
+  for (auto j = 0U; j < match_idx; ++j) {
+    if (w.r_->way_component_[matches[j].way_] == this_component) {
+      if (--times == 0) {
+        return true;
+      }
+    }
+  }
+  return false;
 }
 
 template <typename Profile>
@@ -353,7 +380,9 @@ best_candidate(ways const& w,
                level_t const lvl,
                match_view_t m,
                cost_t const max,
-               direction const dir) {
+               direction const dir,
+               bool should_continue,
+               way_candidate const& start) {
   auto const get_best = [&](way_candidate const& dest,
                             node_candidate const* x) {
     auto best_node = Profile::node::invalid();
@@ -379,7 +408,13 @@ best_candidate(ways const& w,
     return std::pair{best_node, best_cost};
   };
 
-  for (auto const& dest : m) {
+  for (auto const [j, dest] : utl::enumerate(m)) {
+    if (w.r_->way_component_[start.way_] != w.r_->way_component_[dest.way_]) {
+      continue;
+    }
+    if (!should_continue && component_seen(w, m, j, 10)) {
+      continue;
+    }
     auto best_node = Profile::node::invalid();
     auto best_cost = path{.cost_ = std::numeric_limits<cost_t>::max()};
     auto best = static_cast<node_candidate const*>(nullptr);
@@ -425,18 +460,9 @@ std::optional<path> try_direct(osr::location const& from,
   }
 }
 
-bool component_seen(ways const& w, match_view_t matches, size_t match_idx) {
-  auto this_component = w.r_->way_component_[matches[match_idx].way_];
-  for (auto j = 0U; j < match_idx; ++j) {
-    if (w.r_->way_component_[matches[j].way_] == this_component) {
-      return true;
-    }
-  }
-  return false;
-}
-
 template <typename Profile>
 std::optional<path> route_bidirectional(ways const& w,
+                                        lookup const& l,
                                         bidirectional<Profile>& b,
                                         location const& from,
                                         location const& to,
@@ -507,8 +533,8 @@ std::optional<path> route_bidirectional(ways const& w,
 
       auto const cost = b.get_cost_to_mp(b.meet_point_1_, b.meet_point_2_);
 
-      return reconstruct_bi(w, blocked, sharing, elevations, b, start, end,
-                            cost, dir);
+      return reconstruct_bi(w, l, blocked, sharing, elevations, b, from, to,
+                            start, end, cost, dir);
     }
     b.pq1_.clear();
     b.pq2_.clear();
@@ -520,6 +546,7 @@ std::optional<path> route_bidirectional(ways const& w,
 
 template <typename Profile>
 std::optional<path> route_dijkstra(ways const& w,
+                                   lookup const& l,
                                    dijkstra<Profile>& d,
                                    location const& from,
                                    location const& to,
@@ -562,11 +589,12 @@ std::optional<path> route_dijkstra(ways const& w,
     should_continue = d.run(w, *w.r_, max, blocked, sharing, elevations, dir) &&
                       should_continue;
 
-    auto const c = best_candidate(w, d, to.lvl_, to_match, max, dir);
+    auto const c = best_candidate(w, d, to.lvl_, to_match, max, dir,
+                                  should_continue, start);
     if (c.has_value()) {
       auto const [nc, wc, node, p] = *c;
-      return reconstruct<Profile>(w, blocked, sharing, elevations, d, start,
-                                  *nc, node, p.cost_, dir);
+      return reconstruct<Profile>(w, l, blocked, sharing, elevations, d, from,
+                                  to, start, *wc, *nc, node, p.cost_, dir);
     }
   }
 
@@ -576,6 +604,7 @@ std::optional<path> route_dijkstra(ways const& w,
 template <typename Profile>
 std::vector<std::optional<path>> route(
     ways const& w,
+    lookup const& l,
     dijkstra<Profile>& d,
     location const& from,
     std::vector<location> const& to,
@@ -622,13 +651,14 @@ std::vector<std::optional<path>> route(
       } else if (auto const direct = try_direct(from, t); direct.has_value()) {
         r = direct;
       } else {
-        auto const c = best_candidate(w, d, t.lvl_, m, max, dir);
+        auto const c =
+            best_candidate(w, d, t.lvl_, m, max, dir, should_continue, start);
         if (c.has_value()) {
           auto [nc, wc, n, p] = *c;
           d.cost_.at(n.get_key()).write(n, p);
           if (do_reconstruct(p)) {
-            p = reconstruct<Profile>(w, blocked, sharing, elevations, d, start,
-                                     *nc, n, p.cost_, dir);
+            p = reconstruct<Profile>(w, l, blocked, sharing, elevations, d,
+                                     from, t, start, *wc, *nc, n, p.cost_, dir);
             p.uses_elevator_ = true;
           }
           r = std::make_optional(p);
@@ -667,8 +697,8 @@ std::optional<path> route_bidirectional(ways const& w,
       return std::nullopt;
     }
 
-    return route_bidirectional(w, b, from, to, from_match, to_match, max, dir,
-                               blocked, sharing, elevations);
+    return route_bidirectional(w, l, b, from, to, from_match, to_match, max,
+                               dir, blocked, sharing, elevations);
   };
 
   switch (profile) {
@@ -718,7 +748,7 @@ std::vector<std::optional<path>> route(
     auto const to_match = utl::to_vec(to, [&](auto&& x) {
       return l.match<Profile>(x, true, dir, max_match_distance, blocked);
     });
-    return route(w, d, from, to, from_match, to_match, max, dir, blocked,
+    return route(w, l, d, from, to, from_match, to_match, max, dir, blocked,
                  sharing, elevations, do_reconstruct);
   };
 
@@ -768,7 +798,7 @@ std::optional<path> route_dijkstra(ways const& w,
       return std::nullopt;
     }
 
-    return route_dijkstra(w, d, from, to, from_match, to_match, max, dir,
+    return route_dijkstra(w, l, d, from, to, from_match, to_match, max, dir,
                           blocked, sharing, elevations);
   };
 
@@ -798,6 +828,7 @@ std::optional<path> route_dijkstra(ways const& w,
 
 std::vector<std::optional<path>> route(
     ways const& w,
+    lookup const& l,
     search_profile const profile,
     location const& from,
     std::vector<location> const& to,
@@ -815,7 +846,7 @@ std::vector<std::optional<path>> route(
 
   auto const r = [&]<typename Profile>(
                      dijkstra<Profile>& d) -> std::vector<std::optional<path>> {
-    return route(w, d, from, to, from_match, to_match, max, dir, blocked,
+    return route(w, l, d, from, to, from_match, to_match, max, dir, blocked,
                  sharing, elevations, do_reconstruct);
   };
 
@@ -844,6 +875,7 @@ std::vector<std::optional<path>> route(
 }
 
 std::optional<path> route(ways const& w,
+                          lookup const& l,
                           search_profile const profile,
                           location const& from,
                           location const& to,
@@ -860,7 +892,7 @@ std::optional<path> route(ways const& w,
 
   auto const r =
       [&]<typename Profile>(dijkstra<Profile>& d) -> std::optional<path> {
-    return route_dijkstra(w, d, from, to, from_match, to_match, max, dir,
+    return route_dijkstra(w, l, d, from, to, from_match, to_match, max, dir,
                           blocked, sharing, elevations);
   };
 

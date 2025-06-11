@@ -96,6 +96,7 @@ std::optional<path> route(ways const&,
 
 std::vector<std::optional<path>> route(
     ways const&,
+    lookup const&,
     search_profile const,
     location const& from,
     std::vector<location> const& to,
