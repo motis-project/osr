@@ -32,14 +32,14 @@ void lookup::build_rtree() {
   rtree_.write_meta(p_ / "rtree_meta.bin");
 }
 
-match_t lookup::match(
-    location const& query,
-    bool const reverse,
-    direction const search_dir,
-    double const max_match_distance,
-    bitvec<node_idx_t> const* blocked,
-    search_profile const p,
-    std::span<raw_way_candidate const> raw_way_candidates) const {
+match_t lookup::match(location const& query,
+                      bool const reverse,
+                      direction const search_dir,
+                      double const max_match_distance,
+                      bitvec<node_idx_t> const* blocked,
+                      search_profile const p,
+                      std::optional<std::span<raw_way_candidate const>>
+                          raw_way_candidates) const {
   switch (p) {
     case search_profile::kFoot:
       return match<foot<false>>(query, reverse, search_dir, max_match_distance,

@@ -1,5 +1,6 @@
 #pragma once
 
+#include <optional>
 #include <ostream>
 
 #include "cista/containers/rtree.h"
@@ -192,27 +193,27 @@ struct lookup {
     return path;
   }
 
-  match_t match(
-      location const& query,
-      bool const reverse,
-      direction const search_dir,
-      double const max_match_distance,
-      bitvec<node_idx_t> const* blocked,
-      search_profile,
-      std::span<raw_way_candidate const> raw_way_candidates = {}) const;
+  match_t match(location const& query,
+                bool const reverse,
+                direction const search_dir,
+                double const max_match_distance,
+                bitvec<node_idx_t> const* blocked,
+                search_profile,
+                std::optional<std::span<raw_way_candidate const>>
+                    raw_way_candidates = std::nullopt) const;
 
   template <typename Profile>
-  match_t match(
-      location const& query,
-      bool const reverse,
-      direction const search_dir,
-      double max_match_distance,
-      bitvec<node_idx_t> const* blocked,
-      std::span<raw_way_candidate const> raw_way_candidates = {}) const {
-    if (!raw_way_candidates.empty()) {
+  match_t match(location const& query,
+                bool const reverse,
+                direction const search_dir,
+                double max_match_distance,
+                bitvec<node_idx_t> const* blocked,
+                std::optional<std::span<raw_way_candidate const>>
+                    raw_way_candidates = std::nullopt) const {
+    if (raw_way_candidates.has_value()) {
       return complete_match<Profile>(query, reverse, search_dir,
                                      max_match_distance, blocked,
-                                     raw_way_candidates);
+                                     *raw_way_candidates);
     }
     auto way_candidates = get_way_candidates<Profile>(
         query, reverse, search_dir, max_match_distance, blocked);
@@ -286,9 +287,8 @@ private:
                                 size_t segment_idx) const {
     auto const way_prop = ways_.r_->way_properties_[wc.way_];
     auto const edge_dir = reverse ? opposite(dir) : dir;
-    auto const offroad_cost =
-        Profile::way_cost(way_prop, flip(search_dir, edge_dir), 0U);
-    if (offroad_cost == kInfeasible) {
+    if (Profile::way_cost(way_prop, flip(search_dir, edge_dir), 0U) ==
+        kInfeasible) {
       return node_candidate{};
     }
 
