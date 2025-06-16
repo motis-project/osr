@@ -308,7 +308,7 @@ private:
 
                    auto const way_node = ways_.find_node_idx(osm_node_idx);
                    if (way_node.has_value()) {
-                     if (way_node_feasible<Profile>(wc, way_node, query,
+                     if (way_node_feasible<Profile>(wc, *way_node, query,
                                                     reverse, search_dir) &&
                          (blocked == nullptr || !blocked->test(*way_node))) {
                        c.node_ = *way_node;
