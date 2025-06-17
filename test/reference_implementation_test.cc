@@ -28,6 +28,20 @@ using namespace osr;
 
 constexpr auto const kMaxMatchDistance = 100;
 
+void load(std::string_view raw_data, std::string_view data_dir) {
+  if (!fs::exists(data_dir)) {
+    if (fs::exists(raw_data)) {
+      auto const p = fs::path{data_dir};
+      auto ec = std::error_code{};
+      fs::remove_all(p, ec);
+      fs::create_directories(p, ec);
+      osr::extract(false, raw_data, data_dir, fs::path{});
+    } else {
+      GTEST_SKIP() << raw_data << " not found";
+    }
+  }
+}
+
 void run(ways const& w,
          lookup const& l,
          unsigned const n_samples,
@@ -71,6 +85,7 @@ void run(ways const& w,
     if (from_matches.empty() || to_matches.empty()) {
       ++n_empty_matches;
     }
+
     auto const from_matches_span =
         std::span{begin(from_matches), end(from_matches)};
     auto const to_matches_span = std::span{begin(to_matches), end(to_matches)};
@@ -139,61 +154,53 @@ void run(ways const& w,
 }
 
 TEST(reference_implementation, monaco) {
-  constexpr auto const kDataDir = "test/osr_monaco";
-  if (!fs::exists(kDataDir)) {
-    GTEST_SKIP() << kDataDir << " does not exist";
-  }
+  auto const raw_data = "test/monaco.osm.pbf";
+  auto const data_dir = "test/monaco";
+  auto const num_samples = 10000U;
+  auto const max_cost = 3600U;
 
-  constexpr auto const kNumSamples = 10000U;
-  constexpr auto const kMaxCost = 3600U;
+  load(raw_data, data_dir);
+  auto const w = osr::ways{data_dir, cista::mmap::protection::READ};
+  auto const l = osr::lookup{w, data_dir, cista::mmap::protection::READ};
 
-  auto const w = osr::ways{kDataDir, cista::mmap::protection::READ};
-  auto const l = osr::lookup{w, kDataDir, cista::mmap::protection::READ};
-
-  run(w, l, kNumSamples, kMaxCost);
+  run(w, l, num_samples, max_cost);
 }
 
 TEST(reference_implementation, hamburg) {
-  constexpr auto const kDataDir = "test/osr_hamburg";
-  if (!fs::exists(kDataDir)) {
-    GTEST_SKIP() << kDataDir << " does not exist";
-  }
+  auto const raw_data = "test/hamburg.osm.pbf";
+  auto const data_dir = "test/hamburg";
+  auto const num_samples = 5000U;
+  auto const max_cost = 2 * 3600U;
 
-  constexpr auto const kNumSamples = 5000U;
-  constexpr auto const kMaxCost = 2 * 3600U;
+  load(raw_data, data_dir);
+  auto const w = osr::ways{data_dir, cista::mmap::protection::READ};
+  auto const l = osr::lookup{w, data_dir, cista::mmap::protection::READ};
 
-  auto const w = osr::ways{kDataDir, cista::mmap::protection::READ};
-  auto const l = osr::lookup{w, kDataDir, cista::mmap::protection::READ};
-
-  run(w, l, kNumSamples, kMaxCost);
+  run(w, l, num_samples, max_cost);
 }
 
 TEST(reference_implementation, switzerland) {
-  constexpr auto const kDataDir = "test/osr_switzerland";
-  if (!fs::exists(kDataDir)) {
-    GTEST_SKIP() << kDataDir << " does not exist";
-  }
+  auto const raw_data = "test/switzerland.osm.pbf";
+  auto const data_dir = "test/switzerland";
+  auto const num_samples = 1000U;
+  auto const max_cost = 5 * 3600U;
 
-  constexpr auto const kNumSamples = 1000U;
-  constexpr auto const kMaxCost = 5 * 3600U;
+  load(raw_data, data_dir);
+  auto const w = osr::ways{data_dir, cista::mmap::protection::READ};
+  auto const l = osr::lookup{w, data_dir, cista::mmap::protection::READ};
 
-  auto const w = osr::ways{kDataDir, cista::mmap::protection::READ};
-  auto const l = osr::lookup{w, kDataDir, cista::mmap::protection::READ};
-
-  run(w, l, kNumSamples, kMaxCost);
+  run(w, l, num_samples, max_cost);
 }
 
 TEST(reference_implementation, germany) {
-  constexpr auto const kDataDir = "test/osr_germany";
-  if (!fs::exists(kDataDir)) {
-    GTEST_SKIP() << kDataDir << " does not exist";
-  }
+  auto const raw_data = "test/germany.osm.pbf";
+  auto const data_dir = "test/germany";
+  constexpr auto const num_samples = 50U;
+  constexpr auto const max_cost = 12 * 3600U;
 
-  constexpr auto const kNumSamples = 50U;
-  constexpr auto const kMaxCost = 12 * 3600U;
+  load(raw_data, data_dir);
+  auto const w = osr::ways{data_dir, cista::mmap::protection::READ};
+  auto const l = osr::lookup{w, data_dir, cista::mmap::protection::READ};
 
-  auto const w = osr::ways{kDataDir, cista::mmap::protection::READ};
-  auto const l = osr::lookup{w, kDataDir, cista::mmap::protection::READ};
-
-  run(w, l, kNumSamples, kMaxCost);
+  run(w, l, num_samples, max_cost);
 }
