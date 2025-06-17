@@ -36,8 +36,6 @@ void load(std::string_view raw_data, std::string_view data_dir) {
       fs::remove_all(p, ec);
       fs::create_directories(p, ec);
       osr::extract(false, raw_data, data_dir, fs::path{});
-    } else {
-      GTEST_SKIP() << raw_data << " not found";
     }
   }
 }
@@ -159,6 +157,10 @@ TEST(reference_implementation, monaco) {
   auto const num_samples = 10000U;
   auto const max_cost = 3600U;
 
+  if (!fs::exists(raw_data) && !fs::exists(data_dir)) {
+    GTEST_SKIP() << raw_data << " not found";
+  }
+
   load(raw_data, data_dir);
   auto const w = osr::ways{data_dir, cista::mmap::protection::READ};
   auto const l = osr::lookup{w, data_dir, cista::mmap::protection::READ};
@@ -171,6 +173,10 @@ TEST(reference_implementation, hamburg) {
   auto const data_dir = "test/hamburg";
   auto const num_samples = 5000U;
   auto const max_cost = 2 * 3600U;
+
+  if (!fs::exists(raw_data) && !fs::exists(data_dir)) {
+    GTEST_SKIP() << raw_data << " not found";
+  }
 
   load(raw_data, data_dir);
   auto const w = osr::ways{data_dir, cista::mmap::protection::READ};
@@ -185,6 +191,10 @@ TEST(reference_implementation, switzerland) {
   auto const num_samples = 1000U;
   auto const max_cost = 5 * 3600U;
 
+  if (!fs::exists(raw_data) && !fs::exists(data_dir)) {
+    GTEST_SKIP() << raw_data << " not found";
+  }
+
   load(raw_data, data_dir);
   auto const w = osr::ways{data_dir, cista::mmap::protection::READ};
   auto const l = osr::lookup{w, data_dir, cista::mmap::protection::READ};
@@ -197,6 +207,10 @@ TEST(reference_implementation, germany) {
   auto const data_dir = "test/germany";
   constexpr auto const num_samples = 50U;
   constexpr auto const max_cost = 12 * 3600U;
+
+  if (!fs::exists(raw_data) && !fs::exists(data_dir)) {
+    GTEST_SKIP() << raw_data << " not found";
+  }
 
   load(raw_data, data_dir);
   auto const w = osr::ways{data_dir, cista::mmap::protection::READ};
