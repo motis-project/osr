@@ -28,14 +28,6 @@ using namespace osr;
 
 constexpr auto const kMaxMatchDistance = 100;
 
-void load(std::string_view tmp, std::string_view data) {
-  auto const p = fs::path{tmp};
-  auto ec = std::error_code{};
-  fs::remove_all(p, ec);
-  fs::create_directories(p, ec);
-  osr::extract(false, data, tmp, fs::path{});
-}
-
 void run(ways const& w,
          lookup const& l,
          unsigned const n_samples,
