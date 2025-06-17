@@ -82,17 +82,18 @@ std::optional<path> route(ways const&,
                           elevation_storage const* = nullptr,
                           routing_algorithm = routing_algorithm::kDijkstra);
 
-std::optional<path> route(ways const&,
-                          search_profile,
+std::optional<path> route(ways const& w,
+                          lookup const& l,
+                          search_profile const profile,
                           location const& from,
                           location const& to,
                           match_view_t from_match,
                           match_view_t to_match,
                           cost_t const max,
-                          direction,
-                          bitvec<node_idx_t> const* blocked = nullptr,
-                          sharing_data const* sharing = nullptr,
-                          elevation_storage const* = nullptr);
+                          direction const dir,
+                          bitvec<node_idx_t> const* blocked,
+                          sharing_data const* sharing,
+                          elevation_storage const* elevations);
 
 std::vector<std::optional<path>> route(
     ways const&,
