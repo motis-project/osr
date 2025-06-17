@@ -931,6 +931,7 @@ std::optional<path> route(ways const& w,
         case search_profile::kCarSharing:
           return run_dijkstra(get_dijkstra<car_sharing<track_node_tracking>>());
       }
+      break;
     case routing_algorithm::kAStarBi:
       switch (profile) {
         case search_profile::kFoot:
@@ -959,6 +960,7 @@ std::optional<path> route(ways const& w,
           return run_bidirectional(
               get_bidirectional<car_sharing<track_node_tracking>>());
       }
+      break;
     // placeholder for future AStar implementation
     case routing_algorithm::kAStar:
       switch (profile) {
@@ -988,6 +990,7 @@ std::optional<path> route(ways const& w,
           return run_bidirectional(
               get_bidirectional<car_sharing<track_node_tracking>>());
       }
+      break;
   }
   throw utl::fail("not implemented");
 }
