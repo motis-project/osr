@@ -254,11 +254,11 @@ private:
   }
 
   template <typename Profile>
-  bool way_node_feasible(way_candidate const& wc,
-                         node_idx_t const node_idx,
-                         location const& query,
-                         bool const reverse,
-                         direction const search_dir) const {
+  bool is_way_node_feasible(way_candidate const& wc,
+                            node_idx_t const node_idx,
+                            location const& query,
+                            bool const reverse,
+                            direction const search_dir) const {
     auto const node_prop = ways_.r_->node_properties_[node_idx];
     if (Profile::node_cost(node_prop) == kInfeasible) {
       return false;
@@ -308,8 +308,8 @@ private:
 
                    auto const way_node = ways_.find_node_idx(osm_node_idx);
                    if (way_node.has_value()) {
-                     if (way_node_feasible<Profile>(wc, *way_node, query,
-                                                    reverse, search_dir) &&
+                     if (is_way_node_feasible<Profile>(wc, *way_node, query,
+                                                       reverse, search_dir) &&
                          (blocked == nullptr || !blocked->test(*way_node))) {
                        c.node_ = *way_node;
                        c.cost_ = Profile::way_cost(
@@ -347,7 +347,8 @@ private:
     if (!nc.valid()) {
       return;
     }
-    if (!way_node_feasible<Profile>(wc, nc.node_, query, reverse, search_dir)) {
+    if (!is_way_node_feasible<Profile>(wc, nc.node_, query, reverse,
+                                       search_dir)) {
       nc.node_ = node_idx_t::invalid();
       return;
     }
