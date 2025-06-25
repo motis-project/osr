@@ -268,16 +268,26 @@ struct bidirectional {
                     opposite_curr->get_key() != curr.get_key()) {
                   return;
                 }
-                if (SearchDir == direction::kForward) {
-                  evaluate_meetpoint(
-                      curr_cost,
-                      opposite_candidate->second.cost(*opposite_curr), curr,
-                      *opposite_curr);
+                auto const opposite_curr_cost =
+                    opposite_candidate->second.cost(*opposite_curr);
+                auto const pred_cost = get_cost<SearchDir>(*pred);
+                auto const opposite_pred_cost =
+                    opposite_it->second.cost(neighbor);
+                auto const evaluate_meetpoint_with_potential_u_turn_cost =
+                    [&](cost_t const cost_1, cost_t const cost_2,
+                        node const meet_1, node const meet_2) {
+                      evaluate_meetpoint(
+                          cost_1, cost_2,
+                          SearchDir == direction::kForward ? meet_1 : meet_2,
+                          SearchDir == direction::kForward ? meet_2 : meet_1);
+                    };
+                if (pred_cost + opposite_pred_cost >
+                    curr_cost + opposite_curr_cost) {
+                  evaluate_meetpoint_with_potential_u_turn_cost(
+                      pred_cost, opposite_pred_cost, *pred, neighbor);
                 } else {
-                  evaluate_meetpoint(
-                      curr_cost,
-                      opposite_candidate->second.cost(*opposite_curr),
-                      *opposite_curr, curr);
+                  evaluate_meetpoint_with_potential_u_turn_cost(
+                      curr_cost, opposite_curr_cost, curr, *opposite_curr);
                 }
               });
         }
