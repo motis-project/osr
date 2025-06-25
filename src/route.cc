@@ -389,8 +389,7 @@ best_candidate(ways const& w,
     auto best_cost = path{.cost_ = std::numeric_limits<cost_t>::max()};
     Profile::resolve_all(*w.r_, x->node_, lvl, [&](auto&& node) {
       if (!Profile::is_dest_reachable(*w.r_, node, dest.way_,
-                                      flip(opposite(dir), x->way_dir_),
-                                      opposite(dir))) {
+                                      flip(opposite(dir), x->way_dir_), dir)) {
         return;
       }
 
@@ -510,7 +509,7 @@ std::optional<path> route_bidirectional(ways const& w,
       for (auto const* nc : {&end.left_, &end.right_}) {
         if (nc->valid() && nc->cost_ < max) {
           Profile::resolve_start_node(
-              *w.r_, end.way_, nc->node_, to.lvl_, opposite(dir),
+              *w.r_, end_way, nc->node_, to.lvl_, opposite(dir),
               [&](auto const node) {
                 auto label = typename Profile::label{node, nc->cost_};
                 label.track(label, *w.r_, end_way, node.get_node(), false);
