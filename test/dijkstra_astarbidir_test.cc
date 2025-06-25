@@ -9,9 +9,12 @@
 
 #include "cista/mmap.h"
 
+#include "utl/parallel_for.h"
+
 #include "fmt/core.h"
 
 #include "osr/extract/extract.h"
+#include "osr/geojson.h"
 #include "osr/location.h"
 #include "osr/lookup.h"
 #include "osr/routing/bidirectional.h"
@@ -21,11 +24,11 @@
 #include "osr/routing/route.h"
 #include "osr/types.h"
 #include "osr/ways.h"
-#include "utl/parallel_for.h"
 
 namespace fs = std::filesystem;
 using namespace osr;
 
+constexpr auto const kUseMultithreading = true;
 constexpr auto const kMaxMatchDistance = 100;
 
 void load(std::string_view raw_data, std::string_view data_dir) {
@@ -62,98 +65,95 @@ void run(ways const& w,
   auto experiment_times = std::vector<std::chrono::steady_clock::duration>{};
 
   auto m = std::mutex{};
-  utl::parallel_for(from_tos,
-                    [&](std::pair<node_idx_t, node_idx_t> const from_to) {
-                      auto const from_node = from_to.first;
-                      auto const from_loc = location{w.get_node_pos(from_node)};
-                      auto const to_node = from_to.second;
-                      auto const to_loc = location{w.get_node_pos(to_node)};
 
-                      auto const node_pinned_matches = [&](location const& loc,
-                                                           node_idx_t const n) {
-                        auto matches =
-                            l.match<car>(loc, false, direction::kForward,
-                                         kMaxMatchDistance, nullptr);
-                        std::erase_if(matches, [&](auto const& wc) {
-                          return wc.left_.node_ != n && wc.right_.node_ != n;
-                        });
-                        return matches;
-                      };
-                      auto const from_matches =
-                          node_pinned_matches(from_loc, from_node);
-                      auto const to_matches =
-                          node_pinned_matches(to_loc, to_node);
-                      if (from_matches.empty() || to_matches.empty()) {
-                        ++n_empty_matches;
-                      }
+  auto const single_run = [&](std::pair<node_idx_t, node_idx_t> const from_to) {
+    auto const from_node = from_to.first;
+    auto const from_loc = location{w.get_node_pos(from_node)};
+    auto const to_node = from_to.second;
+    auto const to_loc = location{w.get_node_pos(to_node)};
 
-                      auto const from_matches_span =
-                          std::span{begin(from_matches), end(from_matches)};
-                      auto const to_matches_span =
-                          std::span{begin(to_matches), end(to_matches)};
+    auto const node_pinned_matches = [&](location const& loc,
+                                         node_idx_t const n) {
+      auto matches = l.match<car>(loc, false, direction::kForward,
+                                  kMaxMatchDistance, nullptr);
+      std::erase_if(matches, [&](auto const& wc) {
+        return wc.left_.node_ != n && wc.right_.node_ != n;
+      });
+      if (matches.size() > 1) {
+        // matches.resize(1);
+      }
+      return matches;
+    };
+    auto const from_matches = node_pinned_matches(from_loc, from_node);
+    auto const to_matches = node_pinned_matches(to_loc, to_node);
+    if (from_matches.empty() || to_matches.empty()) {
+      ++n_empty_matches;
+    }
 
-                      auto const reference_start =
-                          std::chrono::steady_clock::now();
-                      auto const reference =
-                          route(w, l, search_profile::kCar, from_loc, to_loc,
-                                from_matches_span, to_matches_span, max_cost,
-                                direction::kForward, nullptr, nullptr, nullptr,
-                                routing_algorithm::kDijkstra);
-                      auto const reference_time =
-                          std::chrono::steady_clock::now() - reference_start;
+    auto const from_matches_span =
+        std::span{begin(from_matches), end(from_matches)};
+    auto const to_matches_span = std::span{begin(to_matches), end(to_matches)};
 
-                      auto const experiment_start =
-                          std::chrono::steady_clock::now();
-                      auto const experiment =
-                          route(w, l, search_profile::kCar, from_loc, to_loc,
-                                from_matches_span, to_matches_span, max_cost,
-                                direction::kForward, nullptr, nullptr, nullptr,
-                                routing_algorithm::kAStarBi);
-                      auto const experiment_time =
-                          std::chrono::steady_clock::now() - experiment_start;
+    auto const reference_start = std::chrono::steady_clock::now();
+    auto const reference =
+        route(w, l, search_profile::kCar, from_loc, to_loc, from_matches_span,
+              to_matches_span, max_cost, direction::kForward, nullptr, nullptr,
+              nullptr, routing_algorithm::kDijkstra);
+    auto const reference_time =
+        std::chrono::steady_clock::now() - reference_start;
 
-                      if (reference.has_value() != experiment.has_value() ||
-                          (reference && experiment &&
-                           (reference->cost_ !=
-                            experiment->cost_ /*||
-        reference->dist_ !=
-        experiment->dist_*/))) {
-                        auto const print_result = [&](std::string_view name,
-                                                      auto const& p,
-                                                      auto const& t) {
-                          fmt::println(
-                              "{:10}: {:11} --> {:11} | {} | time: "
-                              "{}:{:0>3}:{:0>3} s",
-                              name, w.node_to_osm_[from_node],
-                              w.node_to_osm_[to_node],
-                              p ? fmt::format("cost: {:5} | dist: {:>10.2f}",
-                                              p->cost_, p->dist_)
-                                : "no result",
-                              std::chrono::duration_cast<std::chrono::seconds>(
-                                  t)
-                                  .count(),
-                              std::chrono::duration_cast<
-                                  std::chrono::milliseconds>(t)
-                                      .count() %
-                                  1000,
-                              std::chrono::duration_cast<
-                                  std::chrono::microseconds>(t)
-                                      .count() %
-                                  1000);
-                        };
+    auto const experiment_start = std::chrono::steady_clock::now();
+    auto const experiment =
+        route(w, l, search_profile::kCar, from_loc, to_loc, from_matches_span,
+              to_matches_span, max_cost, direction::kForward, nullptr, nullptr,
+              nullptr, routing_algorithm::kAStarBi);
+    auto const experiment_time =
+        std::chrono::steady_clock::now() - experiment_start;
 
-                        print_result("dijkstra", reference, reference_time);
-                        print_result("a* bidir", experiment, experiment_time);
-                      } else {
-                        ++n_congruent;
-                      }
+    if (reference.has_value() != experiment.has_value() || (reference &&
+                                                            experiment &&
+                                                            (reference->cost_ !=
+                                                             experiment
+                                                                 ->cost_ /*||
+                                   reference->dist_ !=
+                                   experiment->dist_*/))) {
+      auto const print_result = [&](std::string_view name, auto const& p,
+                                    auto const& t) {
+        fmt::println(
+            "{:10}: {:11} --> {:11} | {} | time: "
+            "{}:{:0>3}:{:0>3} s",
+            name, w.node_to_osm_[from_node], w.node_to_osm_[to_node],
+            p ? fmt::format("cost: {:5} | dist: {:>10.2f}", p->cost_, p->dist_)
+              : "no result",
+            std::chrono::duration_cast<std::chrono::seconds>(t).count(),
+            std::chrono::duration_cast<std::chrono::milliseconds>(t).count() %
+                1000,
+            std::chrono::duration_cast<std::chrono::microseconds>(t).count() %
+                1000);
+        if (p.has_value()) {
+          fmt::println("{}\n", to_featurecollection(w, p));
+        }
+      };
 
-                      if (!from_matches.empty() && !to_matches.empty()) {
-                        auto const guard = std::lock_guard{m};
-                        reference_times.emplace_back(reference_time);
-                        experiment_times.emplace_back(experiment_time);
-                      }
-                    });
+      print_result("dijkstra", reference, reference_time);
+      print_result("a* bidir", experiment, experiment_time);
+
+    } else {
+      ++n_congruent;
+    }
+
+    if (!from_matches.empty() && !to_matches.empty()) {
+      auto const guard = std::lock_guard{m};
+      reference_times.emplace_back(reference_time);
+      experiment_times.emplace_back(experiment_time);
+    }
+  };
+
+  if (kUseMultithreading) {
+    utl::parallel_for(from_tos, single_run);
+  } else {
+    std::for_each(begin(from_tos), end(from_tos), single_run);
+  }
 
   auto const non_empty_congruent = n_congruent - n_empty_matches;
   auto const non_empty_samples = n_samples - n_empty_matches;
