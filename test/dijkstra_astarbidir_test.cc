@@ -72,20 +72,20 @@ void run(ways const& w,
     auto const to_node = from_to.second;
     auto const to_loc = location{w.get_node_pos(to_node)};
 
-    auto const node_pinned_matches = [&](location const& loc,
-                                         node_idx_t const n) {
-      auto matches = l.match<car>(loc, false, direction::kForward,
-                                  kMaxMatchDistance, nullptr);
-      std::erase_if(matches, [&](auto const& wc) {
-        return wc.left_.node_ != n && wc.right_.node_ != n;
-      });
-      if (matches.size() > 1) {
-        // matches.resize(1);
-      }
-      return matches;
-    };
-    auto const from_matches = node_pinned_matches(from_loc, from_node);
-    auto const to_matches = node_pinned_matches(to_loc, to_node);
+    auto const node_pinned_matches =
+        [&](location const& loc, node_idx_t const n, bool const reverse) {
+          auto matches = l.match<car>(loc, reverse, direction::kForward,
+                                      kMaxMatchDistance, nullptr);
+          std::erase_if(matches, [&](auto const& wc) {
+            return wc.left_.node_ != n && wc.right_.node_ != n;
+          });
+          if (matches.size() > 1) {
+            // matches.resize(1);
+          }
+          return matches;
+        };
+    auto const from_matches = node_pinned_matches(from_loc, from_node, false);
+    auto const to_matches = node_pinned_matches(to_loc, to_node, true);
     if (from_matches.empty() || to_matches.empty()) {
       ++n_empty_matches;
     }
