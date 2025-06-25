@@ -32,6 +32,7 @@ struct bidirectional {
   constexpr static auto const kDebug = false;
   constexpr static auto const kDistanceLatDegrees =
       geo::kEarthRadiusMeters * geo::kPI / 180;
+  constexpr static auto const kLongestNodeDistance = cost_t{300};
 
   struct get_bucket {
     cost_t operator()(label const& l) { return l.cost(); }
@@ -62,8 +63,10 @@ struct bidirectional {
     auto const diameter =
         Profile::heuristic(distapprox(start_loc_.pos_, end_loc_.pos_));
     radius_ =
-        diameter < max && max + diameter < std::numeric_limits<cost_t>::max()
-            ? static_cast<cost_t>(diameter * 0.5)
+        diameter < max && max + std::max(diameter, kLongestNodeDistance * 2.0) <
+                              std::numeric_limits<cost_t>::max()
+            ? std::max(static_cast<cost_t>(diameter * 0.5),
+                       kLongestNodeDistance)
             : max;
     max_reached_1_ = false;
     max_reached_2_ = false;
