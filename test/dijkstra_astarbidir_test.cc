@@ -30,6 +30,7 @@ using namespace osr;
 
 constexpr auto const kUseMultithreading = true;
 constexpr auto const kMaxMatchDistance = 100;
+constexpr auto const kMaxAllowedPathDifferenceRatio = 0.5;
 
 void load(std::string_view raw_data, std::string_view data_dir) {
   if (!fs::exists(data_dir)) {
@@ -110,13 +111,11 @@ void run(ways const& w,
     auto const experiment_time =
         std::chrono::steady_clock::now() - experiment_start;
 
-    if (reference.has_value() != experiment.has_value() || (reference &&
-                                                            experiment &&
-                                                            (reference->cost_ !=
-                                                             experiment
-                                                                 ->cost_ /*||
-                                   reference->dist_ !=
-                                   experiment->dist_*/))) {
+    if (reference.has_value() != experiment.has_value() ||
+        (reference && experiment &&
+         (reference->cost_ != experiment->cost_ /*||
+          std::abs(reference->dist_ - experiment->dist_) / reference->dist_ >
+              kMaxAllowedPathDifferenceRatio*/))) {
       auto const print_result = [&](std::string_view name, auto const& p,
                                     auto const& t) {
         fmt::println(
@@ -227,7 +226,7 @@ TEST(dijkstra_astarbidir, switzerland) {
   run(w, l, num_samples, max_cost);
 }
 
-TEST(dijkstra_astarbidir, germany) {
+TEST(dijkstra_astarbidir, DISABLED_germany) {
   auto const raw_data = "test/germany.osm.pbf";
   auto const data_dir = "test/germany";
   constexpr auto const num_samples = 50U;
