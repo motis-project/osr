@@ -4,8 +4,7 @@
 #include "fmt/std.h"
 
 #include "utl/pairwise.h"
-#include "utl/pipes/transform.h"
-#include "utl/pipes/vec.h"
+#include "utl/pipes.h"
 
 #include "osr/platforms.h"
 #include "osr/routing/dijkstra.h"
