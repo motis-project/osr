@@ -418,8 +418,7 @@ best_candidate(ways const& w,
     if (!should_continue && component_seen(w, m, j, 10)) {
       continue;
     }
-    if (dest.dist_to_way_ * dest.dist_to_way_ >
-        limit_squared_max_matching_distance) {
+    if (std::pow(dest.dist_to_way_, 2) > limit_squared_max_matching_distance) {
       break;
     }
     auto best_node = Profile::node::invalid();
