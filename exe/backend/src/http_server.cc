@@ -4,6 +4,7 @@
 
 #include "boost/algorithm/string.hpp"
 #include "boost/asio/post.hpp"
+#include "boost/beast/core/string.hpp"
 #include "boost/beast/version.hpp"
 #include "boost/json.hpp"
 
@@ -254,7 +255,8 @@ struct http_server::impl {
 
   void handle_static(web_server::http_req_t const& req,
                      web_server::http_res_cb_t const& cb) {
-    if (auto res = net::serve_static_file(static_file_path_, req);
+    if (auto res = net::serve_static_file(
+            boost::beast::string_view{static_file_path_}, req);
         res.has_value()) {
       cb(std::move(*res));
     } else {

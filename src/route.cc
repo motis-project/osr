@@ -28,6 +28,8 @@
 
 namespace osr {
 
+constexpr auto const kMaxMatchingDistanceSquaredRatio = 9.0;
+
 struct connecting_way {
   constexpr bool valid() const { return way_ != way_idx_t::invalid(); }
 
@@ -382,7 +384,8 @@ best_candidate(ways const& w,
                cost_t const max,
                direction const dir,
                bool should_continue,
-               way_candidate const& start) {
+               way_candidate const& start,
+               double const limit_squared_max_matching_distance) {
   auto const get_best = [&](way_candidate const& dest,
                             node_candidate const* x) {
     auto best_node = Profile::node::invalid();
@@ -414,6 +417,9 @@ best_candidate(ways const& w,
     }
     if (!should_continue && component_seen(w, m, j, 10)) {
       continue;
+    }
+    if (std::pow(dest.dist_to_way_, 2) > limit_squared_max_matching_distance) {
+      break;
     }
     auto best_node = Profile::node::invalid();
     auto best_cost = path{.cost_ = std::numeric_limits<cost_t>::max()};
@@ -481,6 +487,12 @@ std::optional<path> route_bidirectional(ways const& w,
   if (b.radius_ == max) {
     return std::nullopt;
   }
+
+  auto const limit_squared_max_matching_distance =
+      geo::approx_squared_distance(from.pos_, to.pos_,
+                                   b.distance_lon_degrees_) /
+      kMaxMatchingDistanceSquaredRatio;
+
   for (auto const [i, start] : utl::enumerate(from_match)) {
     if (b.max_reached_1_ && component_seen(w, from_match, i)) {
       continue;
@@ -505,6 +517,9 @@ std::optional<path> route_bidirectional(ways const& w,
       }
       if (b.max_reached_2_ && component_seen(w, to_match, j)) {
         continue;
+      }
+      if (std::pow(end.dist_to_way_, 2) > limit_squared_max_matching_distance) {
+        break;
       }
       auto const end_way = end.way_;
       for (auto const* nc : {&end.left_, &end.right_}) {
@@ -561,6 +576,10 @@ std::optional<path> route_dijkstra(ways const& w,
     return *direct;
   }
 
+  auto const limit_squared_max_matching_distance =
+      std::pow(geo::distance(from.pos_, to.pos_), 2) /
+      kMaxMatchingDistanceSquaredRatio;
+
   d.reset(max);
   auto should_continue = true;
   for (auto const [i, start] : utl::enumerate(from_match)) {
@@ -589,8 +608,9 @@ std::optional<path> route_dijkstra(ways const& w,
     should_continue = d.run(w, *w.r_, max, blocked, sharing, elevations, dir) &&
                       should_continue;
 
-    auto const c = best_candidate(w, d, to.lvl_, to_match, max, dir,
-                                  should_continue, start);
+    auto const c =
+        best_candidate(w, d, to.lvl_, to_match, max, dir, should_continue,
+                       start, limit_squared_max_matching_distance);
     if (c.has_value()) {
       auto const [nc, wc, node, p] = *c;
       return reconstruct<Profile>(w, l, blocked, sharing, elevations, d, from,
@@ -623,6 +643,8 @@ std::vector<std::optional<path>> route(
     return result;
   }
 
+  auto const distance_lng_degrees = geo::approx_distance_lng_degrees(from.pos_);
+
   d.reset(max);
   auto should_continue = true;
   for (auto const [i, start] : utl::enumerate(from_match)) {
@@ -651,8 +673,14 @@ std::vector<std::optional<path>> route(
       } else if (auto const direct = try_direct(from, t); direct.has_value()) {
         r = direct;
       } else {
+        auto const limit_squared_max_matching_distance =
+            geo::approx_squared_distance(from.pos_, t.pos_,
+                                         distance_lng_degrees) /
+            kMaxMatchingDistanceSquaredRatio;
+
         auto const c =
-            best_candidate(w, d, t.lvl_, m, max, dir, should_continue, start);
+            best_candidate(w, d, t.lvl_, m, max, dir, should_continue, start,
+                           limit_squared_max_matching_distance);
         if (c.has_value()) {
           auto [nc, wc, n, p] = *c;
           d.cost_.at(n.get_key()).write(n, p);
