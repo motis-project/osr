@@ -254,7 +254,7 @@ struct http_server::impl {
 
   void handle_static(web_server::http_req_t const& req,
                      web_server::http_res_cb_t const& cb) {
-    if (auto res = net::serve_static_file(static_file_path_, req);
+    if (auto res = net::serve_static_file(fs::path{static_file_path_}, req);
         res.has_value()) {
       cb(std::move(*res));
     } else {
