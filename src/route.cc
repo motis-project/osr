@@ -519,8 +519,7 @@ std::optional<path> route_bidirectional(ways const& w,
       if (b.max_reached_2_ && component_seen(w, to_match, j)) {
         continue;
       }
-      if (end.dist_to_way_ * end.dist_to_way_ >
-          limit_squared_max_matching_distance) {
+      if (std::pow(end.dist_to_way_, 2) > limit_squared_max_matching_distance) {
         break;
       }
       auto const end_way = end.way_;
