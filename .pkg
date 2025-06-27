@@ -1,6 +1,6 @@
 [boost]
   url=git@github.com:motis-project/boost.git
-  branch=master
+  branch=boost-1.86.0
   commit=4a9aca6cb8af75be6e58f28c09cc7e39f61e6173
 [osmium]
   url=git@github.com:motis-project/libosmium.git
@@ -17,15 +17,15 @@
 [cista]
   url=git@github.com:felixguendling/cista.git
   branch=master
-  commit=847b27100b7e730370b810ce62206a66b0bf2d79
+  commit=9e961e3e617058eb62a9faef0d9ff15339e67316
 [googletest]
   url=git@github.com:motis-project/googletest.git
   branch=master
-  commit=34a46558609e05865c197f0260ab36daa7cbbb6e
+  commit=7b64fca6ea0833628d6f86255a81424365f7cc0c
 [utl]
   url=git@github.com:motis-project/utl.git
   branch=master
-  commit=538a11dec577de7238c7640491b3d4e091a33e08
+  commit=4bc0963e0b3545a1568ca4c873d02e06e927a81c
 [protozero]
   url=git@github.com:motis-project/protozero.git
   branch=master
@@ -41,7 +41,7 @@
 [mimalloc]
   url=git@github.com:motis-project/mimalloc.git
   branch=master
-  commit=2a557cafb2e9e7c872358a83a63c62a7e14330b3
+  commit=e2f4fe647e8aff4603a7d5119b8639fd1a47c8a6
 [rapidjson]
   url=git@github.com:motis-project/rapidjson.git
   branch=master
@@ -57,7 +57,7 @@
 [unordered_dense]
   url=git@github.com:motis-project/unordered_dense.git
   branch=main
-  commit=b33b037377ca966bbdd9cccc3417e46e88f83bfb
+  commit=2c7230ae7f9c30849a5b089fb4a5d11896b45dcf
 [expat]
   url=git@github.com:motis-project/expat.git
   branch=master
