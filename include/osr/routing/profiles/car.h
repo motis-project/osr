@@ -197,7 +197,7 @@ struct car {
         auto const is_u_turn = way_pos == n.way_ && way_dir == opposite(n.dir_);
         auto const dist = w.way_node_dist_[way][std::min(from, to)];
         auto const target =
-            node{target_node, w.get_way_pos(target_node, way), way_dir};
+            node{target_node, w.get_way_pos(target_node, way, to), way_dir};
         auto const cost = way_cost(target_way_prop, way_dir, dist) +
                           node_cost(target_node_prop) +
                           (is_u_turn ? kUturnPenalty : 0U);

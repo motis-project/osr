@@ -214,6 +214,20 @@ struct ways {
       return 0U;
     }
 
+    way_pos_t get_way_pos(node_idx_t const node,
+                          way_idx_t const way,
+                          std::uint16_t const node_in_way_idx) const {
+      auto const ways = node_ways_[node];
+      for (auto i = way_pos_t{0U}; i != ways.size(); ++i) {
+        if (ways[i] == way &&
+            (i + 1U == ways.size() || ways[i] != ways[i + 1U] ||
+             node_in_way_idx_[node][i] == node_in_way_idx)) {
+          return i;
+        }
+      }
+      return 0U;
+    }
+
     template <direction SearchDir>
     bool is_restricted(node_idx_t const n,
                        std::uint8_t const from,

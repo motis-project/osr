@@ -32,6 +32,7 @@ struct bidirectional {
   constexpr static auto const kDebug = false;
   constexpr static auto const kDistanceLatDegrees =
       geo::kEarthRadiusMeters * geo::kPI / 180;
+  constexpr static auto const kLongestNodeDistance = cost_t{300};
 
   struct get_bucket {
     cost_t operator()(label const& l) { return l.cost(); }
@@ -62,8 +63,10 @@ struct bidirectional {
     auto const diameter =
         Profile::heuristic(distapprox(start_loc_.pos_, end_loc_.pos_));
     radius_ =
-        diameter < max && max + diameter < std::numeric_limits<cost_t>::max()
-            ? static_cast<cost_t>(diameter * 0.5)
+        diameter < max && max + std::max(diameter, kLongestNodeDistance * 2.0) <
+                              std::numeric_limits<cost_t>::max()
+            ? std::max(static_cast<cost_t>(diameter * 0.5),
+                       kLongestNodeDistance)
             : max;
     max_reached_1_ = false;
     max_reached_2_ = false;
@@ -265,16 +268,26 @@ struct bidirectional {
                     opposite_curr->get_key() != curr.get_key()) {
                   return;
                 }
-                if (SearchDir == direction::kForward) {
-                  evaluate_meetpoint(
-                      curr_cost,
-                      opposite_candidate->second.cost(*opposite_curr), curr,
-                      *opposite_curr);
+                auto const opposite_curr_cost =
+                    opposite_candidate->second.cost(*opposite_curr);
+                auto const pred_cost = get_cost<SearchDir>(*pred);
+                auto const opposite_pred_cost =
+                    opposite_it->second.cost(neighbor);
+                auto const evaluate_meetpoint_with_potential_u_turn_cost =
+                    [&](cost_t const cost_1, cost_t const cost_2,
+                        node const meet_1, node const meet_2) {
+                      evaluate_meetpoint(
+                          cost_1, cost_2,
+                          SearchDir == direction::kForward ? meet_1 : meet_2,
+                          SearchDir == direction::kForward ? meet_2 : meet_1);
+                    };
+                if (pred_cost + opposite_pred_cost >
+                    curr_cost + opposite_curr_cost) {
+                  evaluate_meetpoint_with_potential_u_turn_cost(
+                      pred_cost, opposite_pred_cost, *pred, neighbor);
                 } else {
-                  evaluate_meetpoint(
-                      curr_cost,
-                      opposite_candidate->second.cost(*opposite_curr),
-                      *opposite_curr, curr);
+                  evaluate_meetpoint_with_potential_u_turn_cost(
+                      curr_cost, opposite_curr_cost, curr, *opposite_curr);
                 }
               });
         }

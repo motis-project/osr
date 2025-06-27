@@ -177,7 +177,7 @@
         zoom: 18,
         transformRequest: (url, resourceType) => {
             if (url.startsWith('/')) {
-                return {url: ` https://europe.motis-project.de/tiles${url}`}
+                return {url: `https://europe.motis-project.de/tiles${url}`}
             }
         }
     });
@@ -246,13 +246,18 @@
                 routing: query.routing
             })
         });
-        const r = await response.json();
-        const min = Math.floor(r.metadata.duration / 60);
-        const sec = r.metadata.duration % 60;
-        const m = Math.round(r.metadata.distance);
+        try {
+            const r = await response.json();
+            const min = Math.floor(r.metadata.duration / 60);
+            const sec = r.metadata.duration % 60;
+            const m = Math.round(r.metadata.distance);
 
-        meta.innerHTML = `${min} min ${sec} s<br>${m} meter`;
-        return r;
+            meta.innerHTML = `${min} min ${sec} s<br>${m} meter`;
+            return r;
+        } catch (e) {
+            console.log(e);
+            return { "type": "FeatureCollection", "metadata": {}, "features": [] };
+        }
     };
 
     const getGraph = async (bounds) => {

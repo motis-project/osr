@@ -151,28 +151,7 @@ struct http_server::impl {
                        http::status::not_found));
       return;
     }
-    cb(json_response(
-        req,
-        json::serialize(json::object{
-            {"type", "FeatureCollection"},
-            {"metadata", {{"duration", p->cost_}, {"distance", p->dist_}}},
-            {"features", utl::all(p->segments_) |
-                             utl::transform([&](const path::segment& s) {
-                               return json::object{
-                                   {"type", "Feature"},
-                                   {
-                                       "properties",
-                                       {{"level", s.from_level_.to_float()},
-                                        {"osm_way_id",
-                                         s.way_ == way_idx_t::invalid()
-                                             ? 0U
-                                             : to_idx(w_.way_osm_idx_[s.way_])},
-                                        {"cost", s.cost_},
-                                        {"distance", s.dist_}},
-                                   },
-                                   {"geometry", to_line_string(s.polyline_)}};
-                             }) |
-                             utl::emplace_back_to<json::array>()}})));
+    cb(json_response(req, to_featurecollection(w_, p)));
   }
 
   void handle_levels(web_server::http_req_t const& req,
