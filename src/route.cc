@@ -43,7 +43,6 @@ struct connecting_way {
 routing_algorithm to_algorithm(std::string_view s) {
   switch (cista::hash(s)) {
     case cista::hash("dijkstra"): return routing_algorithm::kDijkstra;
-    case cista::hash("a_star"): return routing_algorithm::kAStar;
     case cista::hash("bidirectional"): return routing_algorithm::kAStarBi;
   }
   throw utl::fail("unknown routing algorithm: {}", s);
@@ -961,7 +960,9 @@ std::optional<path> route(ways const& w,
                           elevation_storage const* elevations,
                           routing_algorithm algo) {
   if (profile == search_profile::kBikeSharing ||
-      profile == search_profile::kCarSharing) {
+      profile == search_profile::kCarSharing ||
+      profile == search_profile::kCarParkingWheelchair ||
+      profile == search_profile::kCarParking) {
     algo = routing_algorithm::kDijkstra;  // TODO
   }
   switch (algo) {
@@ -969,11 +970,6 @@ std::optional<path> route(ways const& w,
       return route_dijkstra(w, l, profile, from, to, max, dir,
                             max_match_distance, blocked, sharing, elevations);
     case routing_algorithm::kAStarBi:
-      return route_bidirectional(w, l, profile, from, to, max, dir,
-                                 max_match_distance, blocked, sharing,
-                                 elevations);
-    // placeholder for future AStar implementation
-    case routing_algorithm::kAStar:
       return route_bidirectional(w, l, profile, from, to, max, dir,
                                  max_match_distance, blocked, sharing,
                                  elevations);
