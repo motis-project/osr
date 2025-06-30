@@ -103,7 +103,7 @@ struct car {
     static constexpr node get_node(node_idx_t const n,
                                    std::size_t const index) {
       return node{n, static_cast<way_pos_t>(index % kMaxWays),
-                  to_dir((index / kMaxWays) == 0U)};
+                  to_dir((index / kMaxWays) != 0U)};
     }
 
     static constexpr std::size_t get_index(node const n) {
@@ -197,7 +197,7 @@ struct car {
         auto const is_u_turn = way_pos == n.way_ && way_dir == opposite(n.dir_);
         auto const dist = w.way_node_dist_[way][std::min(from, to)];
         auto const target =
-            node{target_node, w.get_way_pos(target_node, way), way_dir};
+            node{target_node, w.get_way_pos(target_node, way, to), way_dir};
         auto const cost = way_cost(target_way_prop, way_dir, dist) +
                           node_cost(target_node_prop) +
                           (is_u_turn ? kUturnPenalty : 0U);

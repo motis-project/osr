@@ -215,12 +215,9 @@ struct foot {
                                 node const n,
                                 way_idx_t const way,
                                 direction const way_dir,
-                                direction const search_dir) {
+                                direction) {
     auto const target_way_prop = w.way_properties_[way];
-    if (way_cost(
-            target_way_prop,
-            search_dir == direction::kForward ? way_dir : opposite(way_dir),
-            0U) == kInfeasible) {
+    if (way_cost(target_way_prop, way_dir, 0U) == kInfeasible) {
       return false;
     }
 

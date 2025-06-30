@@ -391,8 +391,7 @@ best_candidate(ways const& w,
     auto best_cost = path{.cost_ = std::numeric_limits<cost_t>::max()};
     Profile::resolve_all(*w.r_, x->node_, lvl, [&](auto&& node) {
       if (!Profile::is_dest_reachable(*w.r_, node, dest.way_,
-                                      flip(opposite(dir), x->way_dir_),
-                                      opposite(dir))) {
+                                      flip(opposite(dir), x->way_dir_), dir)) {
         return;
       }
 
@@ -524,7 +523,7 @@ std::optional<path> route_bidirectional(ways const& w,
       for (auto const* nc : {&end.left_, &end.right_}) {
         if (nc->valid() && nc->cost_ < max) {
           Profile::resolve_start_node(
-              *w.r_, end.way_, nc->node_, to.lvl_, opposite(dir),
+              *w.r_, end_way, nc->node_, to.lvl_, opposite(dir),
               [&](auto const node) {
                 auto label = typename Profile::label{node, nc->cost_};
                 label.track(label, *w.r_, end_way, node.get_node(), false);
@@ -912,38 +911,83 @@ std::optional<path> route(ways const& w,
                           direction const dir,
                           bitvec<node_idx_t> const* blocked,
                           sharing_data const* sharing,
-                          elevation_storage const* elevations) {
+                          elevation_storage const* elevations,
+                          routing_algorithm algo) {
   if (from_match.empty() || to_match.empty()) {
     return std::nullopt;
   }
 
-  auto const r =
+  if (profile == search_profile::kBikeSharing ||
+      profile == search_profile::kCarSharing) {
+    algo = routing_algorithm::kDijkstra;  // TODO
+  }
+
+  auto const run_dijkstra =
       [&]<typename Profile>(dijkstra<Profile>& d) -> std::optional<path> {
     return route_dijkstra(w, l, d, from, to, from_match, to_match, max, dir,
                           blocked, sharing, elevations);
   };
 
-  switch (profile) {
-    case search_profile::kFoot:
-      return r(get_dijkstra<foot<false, elevator_tracking>>());
-    case search_profile::kWheelchair:
-      return r(get_dijkstra<foot<true, elevator_tracking>>());
-    case search_profile::kBike:
-      return r(get_dijkstra<bike<kElevationNoCost>>());
-    case search_profile::kBikeElevationLow:
-      return r(get_dijkstra<bike<kElevationLowCost>>());
-    case search_profile::kBikeElevationHigh:
-      return r(get_dijkstra<bike<kElevationHighCost>>());
-    case search_profile::kCar: return r(get_dijkstra<car>());
-    case search_profile::kCarParking:
-      return r(get_dijkstra<car_parking<false>>());
-    case search_profile::kCarParkingWheelchair:
-      return r(get_dijkstra<car_parking<true>>());
-    case search_profile::kBikeSharing: return r(get_dijkstra<bike_sharing>());
-    case search_profile::kCarSharing:
-      return r(get_dijkstra<car_sharing<track_node_tracking>>());
-  }
+  auto const run_bidirectional =
+      [&]<typename Profile>(bidirectional<Profile>& b) {
+        return route_bidirectional(w, l, b, from, to, from_match, to_match, max,
+                                   dir, blocked, sharing, elevations);
+      };
 
+  switch (algo) {
+    case routing_algorithm::kDijkstra:
+      switch (profile) {
+        case search_profile::kFoot:
+          return run_dijkstra(get_dijkstra<foot<false, elevator_tracking>>());
+        case search_profile::kWheelchair:
+          return run_dijkstra(get_dijkstra<foot<true, elevator_tracking>>());
+        case search_profile::kBike:
+          return run_dijkstra(get_dijkstra<bike<kElevationNoCost>>());
+        case search_profile::kBikeElevationLow:
+          return run_dijkstra(get_dijkstra<bike<kElevationLowCost>>());
+        case search_profile::kBikeElevationHigh:
+          return run_dijkstra(get_dijkstra<bike<kElevationHighCost>>());
+        case search_profile::kCar: return run_dijkstra(get_dijkstra<car>());
+        case search_profile::kCarParking:
+          return run_dijkstra(get_dijkstra<car_parking<false>>());
+        case search_profile::kCarParkingWheelchair:
+          return run_dijkstra(get_dijkstra<car_parking<true>>());
+        case search_profile::kBikeSharing:
+          return run_dijkstra(get_dijkstra<bike_sharing>());
+        case search_profile::kCarSharing:
+          return run_dijkstra(get_dijkstra<car_sharing<track_node_tracking>>());
+      }
+      break;
+    case routing_algorithm::kAStarBi:
+      switch (profile) {
+        case search_profile::kFoot:
+          return run_bidirectional(
+              get_bidirectional<foot<false, elevator_tracking>>());
+        case search_profile::kWheelchair:
+          return run_bidirectional(
+              get_bidirectional<foot<true, elevator_tracking>>());
+        case search_profile::kBike:
+          return run_bidirectional(get_bidirectional<bike<kElevationNoCost>>());
+        case search_profile::kBikeElevationLow:
+          return run_bidirectional(
+              get_bidirectional<bike<kElevationLowCost>>());
+        case search_profile::kBikeElevationHigh:
+          return run_bidirectional(
+              get_bidirectional<bike<kElevationHighCost>>());
+        case search_profile::kCar:
+          return run_bidirectional(get_bidirectional<car>());
+        case search_profile::kCarParking:
+          return run_bidirectional(get_bidirectional<car_parking<false>>());
+        case search_profile::kCarParkingWheelchair:
+          return run_bidirectional(get_bidirectional<car_parking<true>>());
+        case search_profile::kBikeSharing:
+          return run_bidirectional(get_bidirectional<bike_sharing>());
+        case search_profile::kCarSharing:
+          return run_bidirectional(
+              get_bidirectional<car_sharing<track_node_tracking>>());
+      }
+      break;
+  }
   throw utl::fail("not implemented");
 }
 

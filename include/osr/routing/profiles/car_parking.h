@@ -308,7 +308,7 @@ struct car_parking {
                                 direction const way_dir,
                                 direction const search_dir) {
     return w.way_properties_[way].is_parking() ||
-           (search_dir == direction::kBackward
+           (search_dir == direction::kForward
                 ? n.is_foot_node() &&
                       footp::is_dest_reachable(w, to_foot(n), way, way_dir,
                                                search_dir)
