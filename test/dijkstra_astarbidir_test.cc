@@ -29,6 +29,7 @@ namespace fs = std::filesystem;
 using namespace osr;
 
 constexpr auto const kUseMultithreading = true;
+constexpr auto const kPrintDebugGeojson = false;
 constexpr auto const kMaxMatchDistance = 100;
 constexpr auto const kMaxAllowedPathDifferenceRatio = 0.5;
 
@@ -129,7 +130,7 @@ void run(ways const& w,
                 1000,
             std::chrono::duration_cast<std::chrono::microseconds>(t).count() %
                 1000);
-        if (p.has_value()) {
+        if (p.has_value() && kPrintDebugGeojson) {
           fmt::println("{}\n", to_featurecollection(w, p));
         }
       };
