@@ -97,11 +97,16 @@ void ways::compute_big_street_neighbors() {
 
   auto pt = utl::get_active_progress_tracker();
 
+  auto is_orig_big_street = std::vector<bool>(n_ways());
+  for (auto const [i, p] : utl::enumerate(r_->way_properties_)) {
+    is_orig_big_street[i] = p.is_big_street();
+  }
+
   utl::parallel_for_run_threadlocal<state>(
       n_ways(), [&](state& s, std::size_t const i) {
         auto const way = way_idx_t{i};
 
-        if (r_->way_properties_[way].is_big_street_) {
+        if (is_orig_big_street[to_idx(way)]) {
           pt->update_monotonic(i);
           return;
         }
@@ -112,7 +117,7 @@ void ways::compute_big_street_neighbors() {
                                 auto&& recurse) {
           for (auto const& n : r_->way_nodes_[x]) {
             for (auto const& w : r_->node_ways_[n]) {
-              if (r_->way_properties_[w].is_big_street_) {
+              if (is_orig_big_street[to_idx(w)]) {
                 r_->way_properties_[way].is_big_street_ = true;
                 return true;
               }

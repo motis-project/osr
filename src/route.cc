@@ -43,7 +43,6 @@ struct connecting_way {
 routing_algorithm to_algorithm(std::string_view s) {
   switch (cista::hash(s)) {
     case cista::hash("dijkstra"): return routing_algorithm::kDijkstra;
-    case cista::hash("a_star"): return routing_algorithm::kAStar;
     case cista::hash("bidirectional"): return routing_algorithm::kAStarBi;
   }
   throw utl::fail("unknown routing algorithm: {}", s);
@@ -988,36 +987,6 @@ std::optional<path> route(ways const& w,
               get_bidirectional<car_sharing<track_node_tracking>>());
       }
       break;
-    // placeholder for future AStar implementation
-    case routing_algorithm::kAStar:
-      switch (profile) {
-        case search_profile::kFoot:
-          return run_bidirectional(
-              get_bidirectional<foot<false, elevator_tracking>>());
-        case search_profile::kWheelchair:
-          return run_bidirectional(
-              get_bidirectional<foot<true, elevator_tracking>>());
-        case search_profile::kBike:
-          return run_bidirectional(get_bidirectional<bike<kElevationNoCost>>());
-        case search_profile::kBikeElevationLow:
-          return run_bidirectional(
-              get_bidirectional<bike<kElevationLowCost>>());
-        case search_profile::kBikeElevationHigh:
-          return run_bidirectional(
-              get_bidirectional<bike<kElevationHighCost>>());
-        case search_profile::kCar:
-          return run_bidirectional(get_bidirectional<car>());
-        case search_profile::kCarParking:
-          return run_bidirectional(get_bidirectional<car_parking<false>>());
-        case search_profile::kCarParkingWheelchair:
-          return run_bidirectional(get_bidirectional<car_parking<true>>());
-        case search_profile::kBikeSharing:
-          return run_bidirectional(get_bidirectional<bike_sharing>());
-        case search_profile::kCarSharing:
-          return run_bidirectional(
-              get_bidirectional<car_sharing<track_node_tracking>>());
-      }
-      break;
   }
   throw utl::fail("not implemented");
 }
@@ -1035,7 +1004,9 @@ std::optional<path> route(ways const& w,
                           elevation_storage const* elevations,
                           routing_algorithm algo) {
   if (profile == search_profile::kBikeSharing ||
-      profile == search_profile::kCarSharing) {
+      profile == search_profile::kCarSharing ||
+      profile == search_profile::kCarParkingWheelchair ||
+      profile == search_profile::kCarParking) {
     algo = routing_algorithm::kDijkstra;  // TODO
   }
   switch (algo) {
@@ -1043,11 +1014,6 @@ std::optional<path> route(ways const& w,
       return route_dijkstra(w, l, profile, from, to, max, dir,
                             max_match_distance, blocked, sharing, elevations);
     case routing_algorithm::kAStarBi:
-      return route_bidirectional(w, l, profile, from, to, max, dir,
-                                 max_match_distance, blocked, sharing,
-                                 elevations);
-    // placeholder for future AStar implementation
-    case routing_algorithm::kAStar:
       return route_bidirectional(w, l, profile, from, to, max, dir,
                                  max_match_distance, blocked, sharing,
                                  elevations);
