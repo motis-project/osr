@@ -103,7 +103,7 @@ struct car {
     static constexpr node get_node(node_idx_t const n,
                                    std::size_t const index) {
       return node{n, static_cast<way_pos_t>(index % kMaxWays),
-                  to_dir((index / kMaxWays) == 0U)};
+                  to_dir((index / kMaxWays) != 0U)};
     }
 
     static constexpr std::size_t get_index(node const n) {
