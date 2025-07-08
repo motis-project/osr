@@ -12,6 +12,8 @@ enum class search_profile : std::uint8_t {
   kBikeElevationLow,
   kBikeElevationHigh,
   kCar,
+  kCarDropOff,
+  kCarDropOffWheelchair,
   kCarParking,
   kCarParkingWheelchair,
   kBikeSharing,

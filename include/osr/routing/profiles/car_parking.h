@@ -17,7 +17,7 @@ namespace osr {
 
 struct sharing_data;
 
-template <bool IsWheelchair>
+template <bool IsWheelchair, bool UseParking = true>
 struct car_parking {
   using footp = foot<IsWheelchair>;
 
@@ -248,7 +248,7 @@ struct car_parking {
     static constexpr auto const kBwd = SearchDir == direction::kBackward;
 
     auto const is_parking =
-        w.node_properties_[n.n_].is_parking() ||
+        !UseParking || w.node_properties_[n.n_].is_parking() ||
         utl::any_of(w.node_ways_[n.n_], [&](way_idx_t const way) {
           return w.way_properties_[way].is_parking();
         });
@@ -307,7 +307,7 @@ struct car_parking {
                                 way_idx_t const way,
                                 direction const way_dir,
                                 direction const search_dir) {
-    return w.way_properties_[way].is_parking() ||
+    return !UseParking || w.way_properties_[way].is_parking() ||
            (search_dir == direction::kForward
                 ? n.is_foot_node() &&
                       footp::is_dest_reachable(w, to_foot(n), way, way_dir,

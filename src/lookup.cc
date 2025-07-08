@@ -132,14 +132,22 @@ match_t lookup::match(location const& query,
       return match<bike<kElevationHighCost>>(query, reverse, search_dir,
                                              max_match_distance, blocked,
                                              raw_way_candidates);
+    case search_profile::kCarDropOff:
+      return match<car_parking<false, false>>(query, reverse, search_dir,
+                                              max_match_distance, blocked,
+                                              raw_way_candidates);
+    case search_profile::kCarDropOffWheelchair:
+      return match<car_parking<true, false>>(query, reverse, search_dir,
+                                             max_match_distance, blocked,
+                                             raw_way_candidates);
     case search_profile::kCarParking:
-      return match<car_parking<false>>(query, reverse, search_dir,
-                                       max_match_distance, blocked,
-                                       raw_way_candidates);
+      return match<car_parking<false, true>>(query, reverse, search_dir,
+                                             max_match_distance, blocked,
+                                             raw_way_candidates);
     case search_profile::kCarParkingWheelchair:
-      return match<car_parking<true>>(query, reverse, search_dir,
-                                      max_match_distance, blocked,
-                                      raw_way_candidates);
+      return match<car_parking<true, true>>(query, reverse, search_dir,
+                                            max_match_distance, blocked,
+                                            raw_way_candidates);
     case search_profile::kBikeSharing:
       return match<bike_sharing>(query, reverse, search_dir, max_match_distance,
                                  blocked, raw_way_candidates);

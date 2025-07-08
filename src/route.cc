@@ -740,9 +740,13 @@ std::optional<path> route_bidirectional(ways const& w,
       return r(get_bidirectional<bike<kElevationHighCost>>());
     case search_profile::kCar: return r(get_bidirectional<car>());
     case search_profile::kCarParking:
-      return r(get_bidirectional<car_parking<false>>());
+      return r(get_bidirectional<car_parking<false, true>>());
     case search_profile::kCarParkingWheelchair:
-      return r(get_bidirectional<car_parking<true>>());
+      return r(get_bidirectional<car_parking<true, true>>());
+    case search_profile::kCarDropOff:
+      return r(get_bidirectional<car_parking<false, false>>());
+    case search_profile::kCarDropOffWheelchair:
+      return r(get_bidirectional<car_parking<true, false>>());
     case search_profile::kBikeSharing:
       return r(get_bidirectional<bike_sharing>());
     case search_profile::kCarSharing:
@@ -790,10 +794,14 @@ std::vector<std::optional<path>> route(
     case search_profile::kBikeElevationHigh:
       return r(get_dijkstra<bike<kElevationHighCost>>());
     case search_profile::kCar: return r(get_dijkstra<car>());
+    case search_profile::kCarDropOff:
+      return r(get_dijkstra<car_parking<false, false>>());
+    case search_profile::kCarDropOffWheelchair:
+      return r(get_dijkstra<car_parking<true, false>>());
     case search_profile::kCarParking:
-      return r(get_dijkstra<car_parking<false>>());
+      return r(get_dijkstra<car_parking<false, true>>());
     case search_profile::kCarParkingWheelchair:
-      return r(get_dijkstra<car_parking<true>>());
+      return r(get_dijkstra<car_parking<true, true>>());
     case search_profile::kBikeSharing: return r(get_dijkstra<bike_sharing>());
     case search_profile::kCarSharing:
       return r(get_dijkstra<car_sharing<track_node_tracking>>());
@@ -840,10 +848,14 @@ std::optional<path> route_dijkstra(ways const& w,
     case search_profile::kBikeElevationHigh:
       return r(get_dijkstra<bike<kElevationHighCost>>());
     case search_profile::kCar: return r(get_dijkstra<car>());
+    case search_profile::kCarDropOff:
+      return r(get_dijkstra<car_parking<false, false>>());
+    case search_profile::kCarDropOffWheelchair:
+      return r(get_dijkstra<car_parking<true, false>>());
     case search_profile::kCarParking:
-      return r(get_dijkstra<car_parking<false>>());
+      return r(get_dijkstra<car_parking<false, true>>());
     case search_profile::kCarParkingWheelchair:
-      return r(get_dijkstra<car_parking<true>>());
+      return r(get_dijkstra<car_parking<true, true>>());
     case search_profile::kBikeSharing: return r(get_dijkstra<bike_sharing>());
     case search_profile::kCarSharing:
       return r(get_dijkstra<car_sharing<track_node_tracking>>());
@@ -888,10 +900,14 @@ std::vector<std::optional<path>> route(
     case search_profile::kBikeElevationHigh:
       return r(get_dijkstra<bike<kElevationHighCost>>());
     case search_profile::kCar: return r(get_dijkstra<car>());
+    case search_profile::kCarDropOff:
+      return r(get_dijkstra<car_parking<false, false>>());
+    case search_profile::kCarDropOffWheelchair:
+      return r(get_dijkstra<car_parking<true, false>>());
     case search_profile::kCarParking:
-      return r(get_dijkstra<car_parking<false>>());
+      return r(get_dijkstra<car_parking<false, true>>());
     case search_profile::kCarParkingWheelchair:
-      return r(get_dijkstra<car_parking<true>>());
+      return r(get_dijkstra<car_parking<true, true>>());
     case search_profile::kBikeSharing: return r(get_dijkstra<bike_sharing>());
     case search_profile::kCarSharing:
       return r(get_dijkstra<car_sharing<track_node_tracking>>());
@@ -948,10 +964,14 @@ std::optional<path> route(ways const& w,
         case search_profile::kBikeElevationHigh:
           return run_dijkstra(get_dijkstra<bike<kElevationHighCost>>());
         case search_profile::kCar: return run_dijkstra(get_dijkstra<car>());
+        case search_profile::kCarDropOff:
+          return run_dijkstra(get_dijkstra<car_parking<false, false>>());
+        case search_profile::kCarDropOffWheelchair:
+          return run_dijkstra(get_dijkstra<car_parking<true, false>>());
         case search_profile::kCarParking:
-          return run_dijkstra(get_dijkstra<car_parking<false>>());
+          return run_dijkstra(get_dijkstra<car_parking<false, true>>());
         case search_profile::kCarParkingWheelchair:
-          return run_dijkstra(get_dijkstra<car_parking<true>>());
+          return run_dijkstra(get_dijkstra<car_parking<true, true>>());
         case search_profile::kBikeSharing:
           return run_dijkstra(get_dijkstra<bike_sharing>());
         case search_profile::kCarSharing:
@@ -976,10 +996,18 @@ std::optional<path> route(ways const& w,
               get_bidirectional<bike<kElevationHighCost>>());
         case search_profile::kCar:
           return run_bidirectional(get_bidirectional<car>());
+        case search_profile::kCarDropOff:
+          return run_bidirectional(
+              get_bidirectional<car_parking<false, false>>());
+        case search_profile::kCarDropOffWheelchair:
+          return run_bidirectional(
+              get_bidirectional<car_parking<true, false>>());
         case search_profile::kCarParking:
-          return run_bidirectional(get_bidirectional<car_parking<false>>());
+          return run_bidirectional(
+              get_bidirectional<car_parking<false, true>>());
         case search_profile::kCarParkingWheelchair:
-          return run_bidirectional(get_bidirectional<car_parking<true>>());
+          return run_bidirectional(
+              get_bidirectional<car_parking<true, true>>());
         case search_profile::kBikeSharing:
           return run_bidirectional(get_bidirectional<bike_sharing>());
         case search_profile::kCarSharing:
