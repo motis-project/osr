@@ -322,7 +322,7 @@ private:
                    return utl::cflow::kContinue;
                  });
 
-    if (reverse) {
+    if (reverse ^ (search_dir == direction::kBackward)) {
       std::reverse(begin(c.path_), end(c.path_));
     }
     return c;

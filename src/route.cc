@@ -134,28 +134,37 @@ double add_path(ways const& w,
   segment.mode_ = to.get_mode();
 
   if (way != way_idx_t::invalid()) {
-    segment.from_level_ = r.way_properties_[way].from_level();
-    segment.to_level_ = r.way_properties_[way].to_level();
-    segment.from_ = r.way_nodes_[way][from_idx];
-    segment.to_ = r.way_nodes_[way][to_idx];
+    auto const start_idx = dir == direction::kBackward ? to_idx : from_idx;
+    auto const end_idx = dir == direction::kBackward ? from_idx : to_idx;
+    auto const is_reverse = (start_idx > end_idx) ^ is_loop;
+
+    if (is_reverse) {
+      segment.from_level_ = r.way_properties_[way].to_level();
+      segment.to_level_ = r.way_properties_[way].from_level();
+    } else {
+      segment.from_level_ = r.way_properties_[way].from_level();
+      segment.to_level_ = r.way_properties_[way].to_level();
+    }
+    segment.from_ = r.way_nodes_[way][start_idx];
+    segment.to_ = r.way_nodes_[way][end_idx];
 
     for (auto const [osm_idx, coord] : infinite(
              reverse(utl::zip(w.way_osm_nodes_[way], w.way_polylines_[way]),
-                     (from_idx > to_idx) ^ is_loop),
+                     is_reverse),
              is_loop)) {
       utl::verify(j++ != 2 * w.way_polylines_[way].size() + 1U,
                   "infinite loop");
-      if (!active && w.node_to_osm_[r.way_nodes_[way][from_idx]] == osm_idx) {
+      if (!active && w.node_to_osm_[r.way_nodes_[way][start_idx]] == osm_idx) {
         active = true;
       }
       if (active) {
-        if (w.node_to_osm_[r.way_nodes_[way][from_idx]] == osm_idx) {
+        if (w.node_to_osm_[r.way_nodes_[way][start_idx]] == osm_idx) {
           // Again "from" node, then it's shorter to start from here.
           segment.polyline_.clear();
         }
 
         segment.polyline_.emplace_back(coord);
-        if (w.node_to_osm_[r.way_nodes_[way][to_idx]] == osm_idx) {
+        if (w.node_to_osm_[r.way_nodes_[way][end_idx]] == osm_idx) {
           break;
         }
       }
@@ -173,8 +182,9 @@ double add_path(ways const& w,
 
     segment.from_level_ = level_t{0.0F};
     segment.to_level_ = level_t{0.0F};
-    segment.from_ = from.get_node();
-    segment.to_ = to.get_node();
+    segment.from_ =
+        dir == direction::kBackward ? to.get_node() : from.get_node();
+    segment.to_ = dir == direction::kBackward ? from.get_node() : to.get_node();
     segment.polyline_ = {get_node_pos(segment.from_),
                          get_node_pos(segment.to_)};
   }
@@ -273,15 +283,25 @@ path reconstruct_bi(ways const& w,
        .dist_ = static_cast<distance_t>(dest_node_candidate.dist_to_node_),
        .mode_ = backward_n.get_mode()});
 
-  std::reverse(forward_segments.begin(), forward_segments.end());
+  if (dir == direction::kForward) {
+    std::reverse(forward_segments.begin(), forward_segments.end());
+  } else {
+    std::reverse(backward_segments.begin(), backward_segments.end());
+  }
   forward_segments.insert(forward_segments.end(), backward_segments.begin(),
                           backward_segments.end());
 
   auto total_dist = start_node_candidate.dist_to_node_ + forward_dist +
                     backward_dist + dest_node_candidate.dist_to_node_;
 
-  auto p =
-      path{.cost_ = cost, .dist_ = total_dist, .segments_ = forward_segments};
+  auto path_elevation = elevation_storage::elevation{};
+  for (auto const& segment : forward_segments) {
+    path_elevation += segment.elevation_;
+  }
+  auto p = path{.cost_ = cost,
+                .dist_ = total_dist,
+                .elevation_ = path_elevation,
+                .segments_ = forward_segments};
 
   b.cost2_.at(backward_n.get_key()).write(backward_n, p);
   return p;
@@ -305,11 +325,14 @@ path reconstruct(ways const& w,
 
   auto n = dest_node;
   auto segments = std::vector<path::segment>{
-      {.polyline_ = l.get_node_candidate_path<Profile>(dest, dest_nc, true, to),
+      {.polyline_ = l.get_node_candidate_path<Profile>(
+           dest, dest_nc, dir == direction::kForward, to),
        .from_level_ = dest_nc.lvl_,
        .to_level_ = dest_nc.lvl_,
-       .from_ = node_idx_t::invalid(),
-       .to_ = node_idx_t::invalid(),
+       .from_ =
+           dir == direction::kForward ? n.get_node() : node_idx_t::invalid(),
+       .to_ =
+           dir == direction::kBackward ? n.get_node() : node_idx_t::invalid(),
        .way_ = way_idx_t::invalid(),
        .cost_ = dest_nc.cost_,
        .dist_ = static_cast<distance_t>(dest_nc.dist_to_node_),
@@ -332,8 +355,8 @@ path reconstruct(ways const& w,
   auto const& start_nc =
       n.get_node() == start.left_.node_ ? start.left_ : start.right_;
   segments.push_back(
-      {.polyline_ =
-           l.get_node_candidate_path<Profile>(start, start_nc, false, from),
+      {.polyline_ = l.get_node_candidate_path<Profile>(
+           start, start_nc, dir == direction::kBackward, from),
        .from_level_ = start_nc.lvl_,
        .to_level_ = start_nc.lvl_,
        .from_ =
@@ -343,7 +366,9 @@ path reconstruct(ways const& w,
        .cost_ = start_nc.cost_,
        .dist_ = static_cast<distance_t>(start_nc.dist_to_node_),
        .mode_ = n.get_mode()});
-  std::reverse(begin(segments), end(segments));
+  if (dir == direction::kForward) {
+    std::reverse(begin(segments), end(segments));
+  }
   auto path_elevation = elevation_storage::elevation{};
   for (auto const& segment : segments) {
     path_elevation += segment.elevation_;
