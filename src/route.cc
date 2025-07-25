@@ -436,8 +436,7 @@ best_candidate(ways const& w,
     return std::pair{best_node, best_cost};
   };
 
-  for (auto const accept_bad_max_matching_dist :
-       std::initializer_list<bool>{false, true}) {
+  for (auto const accept_bad_max_matching_dist : {false, true}) {
     for (auto const [j, dest] : utl::enumerate(m)) {
       if (w.r_->way_component_[start.way_] != w.r_->way_component_[dest.way_]) {
         trace("reject {}: component mismatch {} vs {}",
@@ -557,8 +556,7 @@ std::optional<path> route_bidirectional(ways const& w,
     if (b.pq1_.empty()) {
       continue;
     }
-    for (auto const accept_bad_max_matching_dist :
-         std::initializer_list<bool>{false, true}) {
+    for (auto const accept_bad_max_matching_dist : {false, true}) {
       for (auto const [j, end] : utl::enumerate(to_match)) {
         if (w.r_->way_component_[start.way_] !=
             w.r_->way_component_[end.way_]) {
