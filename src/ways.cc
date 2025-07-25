@@ -28,7 +28,7 @@ ways::ways(std::filesystem::path p, cista::mmap::protection const mode)
 void ways::build_components() {
   auto q = hash_set<way_idx_t>{};
   auto flood_fill = [&](way_idx_t const way_idx, component_idx_t const c) {
-    q.clear();
+    assert(q.empty());
     q.insert(way_idx);
     while (!q.empty()) {
       auto const next = *q.begin();
@@ -45,6 +45,9 @@ void ways::build_components() {
     }
   };
 
+  auto pt = utl::get_active_progress_tracker_or_activate("osr");
+  pt->status("Build components").in_high(n_ways()).out_bounds(75, 90);
+
   auto next_component_idx = component_idx_t{0U};
   r_->way_component_.resize(n_ways(), component_idx_t::invalid());
   for (auto i = 0U; i != n_ways(); ++i) {
@@ -55,6 +58,7 @@ void ways::build_components() {
     }
     c = next_component_idx++;
     flood_fill(way_idx, c);
+    pt->increment();
   }
 }
 
