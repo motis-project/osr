@@ -30,6 +30,8 @@ namespace osr {
 
 constexpr auto const kMaxMatchingDistanceSquaredRatio = 9.0;
 
+#define trace(...)
+
 struct connecting_way {
   constexpr bool valid() const { return way_ != way_idx_t::invalid(); }
 
@@ -410,14 +412,6 @@ best_candidate(ways const& w,
                bool should_continue,
                way_candidate const& start,
                double const limit_squared_max_matching_distance) {
-  constexpr auto const kTracing = true;
-  auto const trace = []<typename... Args>(fmt::format_string<Args...> str,
-                                          Args&&... args) {
-    if constexpr (kTracing) {
-      fmt::println(str, std::forward<Args>(args)...);
-    }
-  };
-
   auto const get_best = [&](way_candidate const& dest,
                             node_candidate const* x) {
     auto best_node = Profile::node::invalid();
@@ -563,45 +557,51 @@ std::optional<path> route_bidirectional(ways const& w,
     if (b.pq1_.empty()) {
       continue;
     }
-    for (auto const [j, end] : utl::enumerate(to_match)) {
-      if (w.r_->way_component_[start.way_] != w.r_->way_component_[end.way_]) {
-        continue;
-      }
-      if (b.max_reached_2_ && component_seen(w, to_match, j)) {
-        continue;
-      }
-      if (std::pow(end.dist_to_way_, 2) > limit_squared_max_matching_distance) {
-        break;
-      }
-      auto const end_way = end.way_;
-      for (auto const* nc : {&end.left_, &end.right_}) {
-        if (nc->valid() && nc->cost_ < max) {
-          Profile::resolve_start_node(
-              *w.r_, end_way, nc->node_, to.lvl_, opposite(dir),
-              [&](auto const node) {
-                auto label = typename Profile::label{node, nc->cost_};
-                label.track(label, *w.r_, end_way, node.get_node(), false);
-                b.add_end(w, label, sharing);
-              });
-        }
-      }
-      if (b.pq2_.empty()) {
-        continue;
-      }
-      auto const should_continue =
-          b.run(w, *w.r_, max, blocked, sharing, elevations, dir);
-
-      if (b.meet_point_1_.get_node() == node_idx_t::invalid()) {
-        if (should_continue) {
+    for (auto const accept_bad_max_matching_dist :
+         std::initializer_list<bool>{false, true}) {
+      for (auto const [j, end] : utl::enumerate(to_match)) {
+        if (w.r_->way_component_[start.way_] !=
+            w.r_->way_component_[end.way_]) {
           continue;
         }
-        return std::nullopt;
+        if (b.max_reached_2_ && component_seen(w, to_match, j)) {
+          continue;
+        }
+        if (accept_bad_max_matching_dist &&
+            std::pow(end.dist_to_way_, 2) >
+                limit_squared_max_matching_distance) {
+          break;
+        }
+        auto const end_way = end.way_;
+        for (auto const* nc : {&end.left_, &end.right_}) {
+          if (nc->valid() && nc->cost_ < max) {
+            Profile::resolve_start_node(
+                *w.r_, end_way, nc->node_, to.lvl_, opposite(dir),
+                [&](auto const node) {
+                  auto label = typename Profile::label{node, nc->cost_};
+                  label.track(label, *w.r_, end_way, node.get_node(), false);
+                  b.add_end(w, label, sharing);
+                });
+          }
+        }
+        if (b.pq2_.empty()) {
+          continue;
+        }
+        auto const should_continue =
+            b.run(w, *w.r_, max, blocked, sharing, elevations, dir);
+
+        if (b.meet_point_1_.get_node() == node_idx_t::invalid()) {
+          if (should_continue) {
+            continue;
+          }
+          return std::nullopt;
+        }
+
+        auto const cost = b.get_cost_to_mp(b.meet_point_1_, b.meet_point_2_);
+
+        return reconstruct_bi(w, l, blocked, sharing, elevations, b, from, to,
+                              start, end, cost, dir);
       }
-
-      auto const cost = b.get_cost_to_mp(b.meet_point_1_, b.meet_point_2_);
-
-      return reconstruct_bi(w, l, blocked, sharing, elevations, b, from, to,
-                            start, end, cost, dir);
     }
     b.pq1_.clear();
     b.pq2_.clear();
