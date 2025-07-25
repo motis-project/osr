@@ -410,6 +410,14 @@ best_candidate(ways const& w,
                bool should_continue,
                way_candidate const& start,
                double const limit_squared_max_matching_distance) {
+  constexpr auto const kTracing = true;
+  auto const trace = []<typename... Args>(fmt::format_string<Args...> str,
+                                          Args&&... args) {
+    if constexpr (kTracing) {
+      fmt::println(str, std::forward<Args>(args)...);
+    }
+  };
+
   auto const get_best = [&](way_candidate const& dest,
                             node_candidate const* x) {
     auto best_node = Profile::node::invalid();
@@ -434,37 +442,58 @@ best_candidate(ways const& w,
     return std::pair{best_node, best_cost};
   };
 
-  for (auto const [j, dest] : utl::enumerate(m)) {
-    if (w.r_->way_component_[start.way_] != w.r_->way_component_[dest.way_]) {
-      continue;
-    }
-    if (!should_continue && component_seen(w, m, j, 10)) {
-      continue;
-    }
-    if (std::pow(dest.dist_to_way_, 2) > limit_squared_max_matching_distance) {
-      break;
-    }
-    auto best_node = Profile::node::invalid();
-    auto best_cost = path{.cost_ = std::numeric_limits<cost_t>::max()};
-    auto best = static_cast<node_candidate const*>(nullptr);
+  for (auto const accept_bad_max_matching_dist :
+       std::initializer_list<bool>{false, true}) {
+    for (auto const [j, dest] : utl::enumerate(m)) {
+      if (w.r_->way_component_[start.way_] != w.r_->way_component_[dest.way_]) {
+        trace("reject {}: component mismatch {} vs {}",
+              w.way_osm_idx_[dest.way_], w.r_->way_component_[start.way_],
+              w.r_->way_component_[dest.way_]);
+        continue;
+      }
+      if (!should_continue && component_seen(w, m, j, 10)) {
+        trace("reject {}: should_continue={}, component_seen={}",
+              w.way_osm_idx_[dest.way_], should_continue,
+              component_seen(w, m, j, 10));
+        continue;
+      }
+      if (accept_bad_max_matching_dist &&
+          std::pow(dest.dist_to_way_, 2) >
+              limit_squared_max_matching_distance) {
+        trace("reject {}: limit squared matching distance: {} > {} ",
+              w.way_osm_idx_[dest.way_], dest.dist_to_way_,
+              std::sqrt(limit_squared_max_matching_distance));
+        break;
+      } else if (std::pow(dest.dist_to_way_, 2) >
+                 limit_squared_max_matching_distance) {
+        trace("WOULD reject {}: limit squared matching distance: {} > {} ",
+              w.way_osm_idx_[dest.way_], dest.dist_to_way_,
+              std::sqrt(limit_squared_max_matching_distance));
+      }
+      auto best_node = Profile::node::invalid();
+      auto best_cost = path{.cost_ = std::numeric_limits<cost_t>::max()};
+      auto best = static_cast<node_candidate const*>(nullptr);
 
-    for (auto const x : {&dest.left_, &dest.right_}) {
-      if (x->valid()) {
-        auto const [x_node, x_cost] = get_best(dest, x);
-        if (x_cost.cost_ < best_cost.cost_) {
-          best = x;
-          best_node = x_node;
-          best_cost = x_cost;
+      for (auto const x : {&dest.left_, &dest.right_}) {
+        if (x->valid()) {
+          auto const [x_node, x_cost] = get_best(dest, x);
+          if (x_cost.cost_ < best_cost.cost_) {
+            best = x;
+            best_node = x_node;
+            best_cost = x_cost;
+          }
         }
       }
-    }
 
-    if (best != nullptr) {
-      return best_cost.cost_ < max
-                 ? std::optional{std::tuple{best, &dest, best_node, best_cost}}
-                 : std::nullopt;
+      if (best != nullptr) {
+        trace("MATCHED cost={} (max={})", best_cost.cost_, max);
+        return best_cost.cost_ < max ? std::optional{std::tuple{
+                                           best, &dest, best_node, best_cost}}
+                                     : std::nullopt;
+      }
     }
   }
+  trace("NOTHING MATCHED");
   return std::nullopt;
 }
 
