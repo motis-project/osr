@@ -46,7 +46,6 @@ void ways::build_components() {
   };
 
   auto pt = utl::get_active_progress_tracker_or_activate("osr");
-
   pt->status("Build components").in_high(n_ways()).out_bounds(75, 90);
 
   auto next_component_idx = component_idx_t{0U};
