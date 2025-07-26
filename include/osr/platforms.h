@@ -182,6 +182,9 @@ struct platforms {
     rtree_ = rtree_new();
 
     auto i = platform_idx_t{0U};
+    if (platform_ref_.empty()) {
+      return;
+    }
     for (auto const refs : platform_ref_) {
       for (auto const ref : refs) {
         assert(ref != std::numeric_limits<decltype(ref)>::max());
