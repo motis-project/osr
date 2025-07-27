@@ -518,17 +518,19 @@ std::optional<path> route_bidirectional(ways const& w,
     return *direct;
   }
 
-  b.reset(max, from, to);
-  if (b.radius_ == max) {
-    return std::nullopt;
-  }
-
-  auto const limit_squared_max_matching_distance =
-      geo::approx_squared_distance(from.pos_, to.pos_,
-                                   b.distance_lon_degrees_) /
-      kMaxMatchingDistanceSquaredRatio;
-
   for (auto const accept_bad_max_matching_dist : {false, true}) {
+    auto const limit_squared_max_matching_distance =
+        accept_bad_max_matching_dist
+            ? std::numeric_limits<double>::max()
+            : geo::approx_squared_distance(from.pos_, to.pos_,
+                                           b.distance_lon_degrees_) /
+                  kMaxMatchingDistanceSquaredRatio;
+
+    b.reset(max, from, to);
+    if (b.radius_ == max) {
+      return std::nullopt;
+    }
+
     for (auto const [i, start] : utl::enumerate(from_match)) {
       if (b.max_reached_1_ && component_seen(w, from_match, i)) {
         continue;
@@ -617,10 +619,10 @@ std::optional<path> route_dijkstra(ways const& w,
   }
 
   auto const distance_lng_degrees = geo::approx_distance_lng_degrees(from.pos_);
-
-  d.reset(max);
-  auto should_continue = true;
   for (auto const accept_bad_max_matching_dist : {false, true}) {
+    d.reset(max);
+    auto should_continue = true;
+
     auto const limit_squared_max_matching_distance =
         accept_bad_max_matching_dist
             ? std::numeric_limits<double>::max()
@@ -694,9 +696,9 @@ std::vector<std::optional<path>> route(
   auto const distance_lng_degrees = geo::approx_distance_lng_degrees(from.pos_);
 
   d.reset(max);
-  auto should_continue = true;
 
   for (auto const accept_bad_max_matching_dist : {false, true}) {
+    auto should_continue = true;
     for (auto const [i, start] : utl::enumerate(from_match)) {
       if (!should_continue && component_seen(w, from_match, i)) {
         continue;
