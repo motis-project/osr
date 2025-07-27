@@ -29,6 +29,7 @@
 namespace osr {
 
 constexpr auto const kMaxMatchingDistanceSquaredRatio = 9.0;
+constexpr auto const kBottomKDefinitelyConsidered = 5;
 
 struct connecting_way {
   constexpr bool valid() const { return way_ != way_idx_t::invalid(); }
@@ -441,7 +442,8 @@ best_candidate(ways const& w,
     if (!should_continue && component_seen(w, m, j, 10)) {
       continue;
     }
-    if (std::pow(dest.dist_to_way_, 2) > limit_squared_max_matching_distance) {
+    if (std::pow(dest.dist_to_way_, 2) > limit_squared_max_matching_distance &&
+        j > kBottomKDefinitelyConsidered) {
       break;
     }
     auto best_node = Profile::node::invalid();
@@ -541,7 +543,8 @@ std::optional<path> route_bidirectional(ways const& w,
       if (b.max_reached_2_ && component_seen(w, to_match, j)) {
         continue;
       }
-      if (std::pow(end.dist_to_way_, 2) > limit_squared_max_matching_distance) {
+      if (std::pow(end.dist_to_way_, 2) > limit_squared_max_matching_distance &&
+          j > kBottomKDefinitelyConsidered) {
         break;
       }
       auto const end_way = end.way_;
