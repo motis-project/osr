@@ -246,6 +246,7 @@ jobs:
       volumes:
         - ${{ github.event.repository.name }}-${{ matrix.config.preset }}-deps:/deps
         - ${{ github.event.repository.name }}-${{ matrix.config.preset }}-buildcache:/buildcache
+        - ${{ github.event.repository.name }}-${{ matrix.config.preset }}-testdata:/testdata
     strategy:
       fail-fast: false
       matrix:
@@ -285,6 +286,15 @@ jobs:
           buildcache -z
           cmake --build build --target osr-extract osr-backend osr-benchmark osr-test
           buildcache -s
+
+      # === TEST DATA ===
+      - name: Test Data
+        if: ${{ matrix.config.preset == linux-amd64-release }}
+        run: |
+          wget --mirror https://github.com/motis-project/test-data/releases/download/osr-test-data-1/hamburg.osm.pbf -O /testdata/hamburg.osm.pbf
+          wget --mirror https://github.com/motis-project/test-data/releases/download/osr-test-data-1/monaco.osm.pbf -O /testdata/monaco.osm.pbf
+          wget --mirror https://github.com/motis-project/test-data/releases/download/osr-test-data-1/switzerland.osm.pbf -O /testdata/switzerland.osm.pbf
+          ln -s /testdata/* test/
 
       # ==== TESTS ====
       - name: Run Tests
