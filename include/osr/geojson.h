@@ -34,10 +34,13 @@ boost::json::value to_line_string(std::initializer_list<T>&& line) {
 }
 
 inline std::string to_featurecollection(ways const& w,
-                                        std::optional<osr::path> const& p) {
+                                        std::optional<osr::path> const& p,
+                                        bool const with_properties = true) {
   return boost::json::serialize(boost::json::object{
       {"type", "FeatureCollection"},
-      {"metadata", {{"duration", p->cost_}, {"distance", p->dist_}}},
+      {"metadata", with_properties ? boost::json::value{{"duration", p->cost_},
+                                                        {"distance", p->dist_}}
+                                   : boost::json::value{{}}},
       {"features",
        utl::all(p->segments_) | utl::transform([&](const path::segment& s) {
          return boost::json::object{
