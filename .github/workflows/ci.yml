@@ -291,9 +291,11 @@ jobs:
       - name: Test Data
         if: ${{ matrix.config.preset == 'linux-amd64-release' }}
         run: |
-          wget --mirror https://github.com/motis-project/test-data/releases/download/osr-test-data-1/hamburg.osm.pbf -O /testdata/hamburg.osm.pbf
-          wget --mirror https://github.com/motis-project/test-data/releases/download/osr-test-data-1/monaco.osm.pbf -O /testdata/monaco.osm.pbf
-          wget --mirror https://github.com/motis-project/test-data/releases/download/osr-test-data-1/switzerland.osm.pbf -O /testdata/switzerland.osm.pbf
+          cd /testdata
+          wget -N https://github.com/motis-project/test-data/releases/download/osr-test-data-1/hamburg.osm.pbf
+          wget -N https://github.com/motis-project/test-data/releases/download/osr-test-data-1/monaco.osm.pbf
+          wget -N https://github.com/motis-project/test-data/releases/download/osr-test-data-1/switzerland.osm.pbf
+          cd -
           ln -s /testdata/* test/
 
       # ==== TESTS ====
