@@ -285,6 +285,7 @@ struct foot_profile {
         case cista::hash("steps"):
         case cista::hash("pedestrian"):
         case cista::hash("platform"):
+        case cista::hash("corridor"):
         case cista::hash("footway"): [[fallthrough]];
         case cista::hash("pier"): return true;
         default: return false;
