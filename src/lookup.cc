@@ -7,7 +7,6 @@
 #include "osr/routing/profiles/car_sharing.h"
 #include "osr/routing/profiles/foot.h"
 #include "osr/routing/with_profile.h"
-#include "utl/overloaded.h"
 
 namespace osr {
 
