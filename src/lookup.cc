@@ -30,8 +30,6 @@ void lookup::build_rtree() {
     }
     rtree_.insert(b.min_.lnglat_float(), b.max_.lnglat_float(), way);
   }
-  std::cerr << "\n\n\nWRITING META\n" << sizeof(rtree_.m_) << "\n\n\n";
-
   rtree_.write_meta(p_ / "rtree_meta.bin");
 }
 
