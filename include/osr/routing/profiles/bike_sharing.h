@@ -22,6 +22,7 @@ namespace osr {
 
 struct bike_sharing {
   using footp = foot<false>;
+  using bikep = bike<bike_costing::kSafe, kElevationNoCost>;
 
   // initial foot -> bike
   static constexpr auto const kStartSwitchPenalty = cost_t{30U};
@@ -224,7 +225,7 @@ struct bike_sharing {
     return {.n_ = n.n_, .lvl_ = n.lvl_};
   }
 
-  static bike<kElevationNoCost>::node to_bike(node const n) {
+  static bikep::node to_bike(node const n) {
     return {.n_ = n.n_, .dir_ = direction::kForward /* TODO */};
   }
 
@@ -232,7 +233,7 @@ struct bike_sharing {
     return {.n_ = n.n_, .type_ = type, .lvl_ = n.lvl_};
   }
 
-  static node to_node(bike<kElevationNoCost>::node const n, level_t const lvl) {
+  static node to_node(bikep::node const n, level_t const lvl) {
     return {.n_ = n.n_, .type_ = node_type::kBike, .lvl_ = lvl};
   }
 
@@ -312,12 +313,11 @@ struct bike_sharing {
 
     auto const& continue_on_bike = [&](bool const include_additional_edges,
                                        cost_t const switch_penalty = 0) {
-      bike<kElevationNoCost>::adjacent<SearchDir, WithBlocked>(
+      bikep::adjacent<SearchDir, WithBlocked>(
           w, to_bike(n), blocked, nullptr, elevations,
-          [&](bike<kElevationNoCost>::node const neighbor,
-              std::uint32_t const cost, distance_t const dist,
-              way_idx_t const way, std::uint16_t const from,
-              std::uint16_t const to,
+          [&](bikep::node const neighbor, std::uint32_t const cost,
+              distance_t const dist, way_idx_t const way,
+              std::uint16_t const from, std::uint16_t const to,
               elevation_storage::elevation const elevation, bool) {
             if (is_allowed(sharing->through_allowed_, neighbor.n_)) {
               fn(to_node(neighbor, kNoLevel), cost + switch_penalty, dist, way,
@@ -329,11 +329,11 @@ struct bike_sharing {
         if (auto const it = sharing->additional_edges_.find(n.n_);
             it != end(sharing->additional_edges_)) {
           for (auto const& ae : it->second) {
-            handle_additional_edge(ae, node_type::kBike,
-                                   bike<kElevationNoCost>::way_cost(
-                                       kAdditionalWayProperties,
-                                       direction::kForward, ae.distance_) +
-                                       switch_penalty);
+            handle_additional_edge(
+                ae, node_type::kBike,
+                bikep::way_cost(kAdditionalWayProperties, direction::kForward,
+                                ae.distance_) +
+                    switch_penalty);
           }
         }
       }
@@ -349,11 +349,11 @@ struct bike_sharing {
           for (auto const& ae : it->second) {
             if (n.is_initial_foot_node() &&
                 is_allowed(sharing->start_allowed_, n.n_)) {
-              handle_additional_edge(ae, node_type::kBike,
-                                     bike<kElevationNoCost>::way_cost(
-                                         kAdditionalWayProperties,
-                                         direction::kForward, ae.distance_) +
-                                         kStartSwitchPenalty);
+              handle_additional_edge(
+                  ae, node_type::kBike,
+                  bikep::way_cost(kAdditionalWayProperties, direction::kForward,
+                                  ae.distance_) +
+                      kStartSwitchPenalty);
             } else if (n.is_bike_node() &&
                        is_allowed(sharing->end_allowed_, n.n_)) {
               handle_additional_edge(
@@ -387,11 +387,11 @@ struct bike_sharing {
           for (auto const& ae : it->second) {
             if (n.is_trailing_foot_node() &&
                 is_allowed(sharing->end_allowed_, n.n_)) {
-              handle_additional_edge(ae, node_type::kBike,
-                                     bike<kElevationNoCost>::way_cost(
-                                         kAdditionalWayProperties,
-                                         direction::kForward, ae.distance_) +
-                                         kEndSwitchPenalty);
+              handle_additional_edge(
+                  ae, node_type::kBike,
+                  bikep::way_cost(kAdditionalWayProperties, direction::kForward,
+                                  ae.distance_) +
+                      kEndSwitchPenalty);
             } else if (n.is_bike_node() &&
                        is_allowed(sharing->start_allowed_, n.n_)) {
               handle_additional_edge(

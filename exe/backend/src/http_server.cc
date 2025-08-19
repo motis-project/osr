@@ -28,6 +28,7 @@
 #include "osr/routing/profiles/car_sharing.h"
 #include "osr/routing/profiles/foot.h"
 #include "osr/routing/route.h"
+#include "osr/routing/with_profile.h"
 
 using namespace net;
 using net::web_server;
@@ -191,37 +192,9 @@ struct http_server::impl {
     auto gj = geojson_writer{.w_ = w_};
     l_.find({min, max}, [&](way_idx_t const w) { gj.write_way(w); });
 
-    switch (profile) {
-      case search_profile::kFoot:
-        send_graph_response<foot<false, elevator_tracking>>(req, cb, gj);
-        break;
-      case search_profile::kWheelchair:
-        send_graph_response<foot<true, elevator_tracking>>(req, cb, gj);
-        break;
-      case search_profile::kBike:
-        send_graph_response<bike<kElevationNoCost>>(req, cb, gj);
-        break;
-      case search_profile::kBikeElevationLow:
-        send_graph_response<bike<kElevationLowCost>>(req, cb, gj);
-        break;
-      case search_profile::kBikeElevationHigh:
-        send_graph_response<bike<kElevationHighCost>>(req, cb, gj);
-        break;
-      case search_profile::kCar: send_graph_response<car>(req, cb, gj); break;
-      case search_profile::kCarParking:
-        send_graph_response<car_parking<false>>(req, cb, gj);
-        break;
-      case search_profile::kCarParkingWheelchair:
-        send_graph_response<car_parking<true>>(req, cb, gj);
-        break;
-      case search_profile::kBikeSharing:
-        send_graph_response<bike_sharing>(req, cb, gj);
-        break;
-      case search_profile::kCarSharing:
-        send_graph_response<car_sharing<track_node_tracking>>(req, cb, gj);
-        break;
-      default: throw utl::fail("not implemented");
-    }
+    with_profile(profile, [&]<typename Profile>(Profile&&) {
+      send_graph_response<Profile>(req, cb, gj);
+    });
   }
 
   template <typename Profile>

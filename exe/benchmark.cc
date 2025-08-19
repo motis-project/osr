@@ -299,10 +299,13 @@ int main(int argc, char const* argv[]) {
   };
 
   run_benchmark.template operator()<car>(search_profile::kCar, "car");
-  run_benchmark.template operator()<bike<kElevationNoCost>>(
-      search_profile::kBike, "bike (no elevation costs)");
-  run_benchmark.template operator()<bike<kElevationLowCost>>(
-      search_profile::kBikeElevationLow, "bike (low elevation costs)");
-  run_benchmark.template operator()<bike<kElevationHighCost>>(
-      search_profile::kBikeElevationHigh, "bike (high elevation costs)");
+  run_benchmark
+      .template operator()<bike<bike_costing::kSafe, kElevationNoCost>>(
+          search_profile::kBike, "bike (no elevation costs)");
+  run_benchmark
+      .template operator()<bike<bike_costing::kSafe, kElevationLowCost>>(
+          search_profile::kBikeElevationLow, "bike (low elevation costs)");
+  run_benchmark
+      .template operator()<bike<bike_costing::kSafe, kElevationHighCost>>(
+          search_profile::kBikeElevationHigh, "bike (high elevation costs)");
 }
