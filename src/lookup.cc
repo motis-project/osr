@@ -16,27 +16,12 @@ lookup::lookup(ways const& ways,
                cista::mmap::protection mode)
     : p_{std::move(p)},
       mode_{mode},
-      rtree_{cista::mm_rtree<way_idx_t>::meta{},
+      rtree_{mode == cista::mmap::protection::READ
+                 ? *cista::read<cista::mm_rtree<way_idx_t>::meta>(
+                       p_ / "rtree_meta.bin")
+                 : cista::mm_rtree<way_idx_t>::meta{},
              cista::mm_rtree<way_idx_t>::vector_t{mm("rtree_data.bin")}},
-      ways_{ways} {
-  if (mode == cista::mmap::protection::READ) {
-    auto const r =
-        cista::read<cista::mm_rtree<way_idx_t>::meta>(p_ / "rtree_meta.bin");
-    std::visit(
-        utl::overloaded{[](cista::buf<cista::mmap> const& x) {
-                          std::cerr << "mmap: size=" << x.size() << "\n";
-                        },
-                        [](cista::buffer const& x) {
-                          std::cerr << "buffer: size=" << x.size() << "\n";
-                        },
-                        [](cista::byte_buf const& x) {
-                          std::cerr << "byte_buf: size=" << x.size() << "\n";
-                        }},
-        r.mem_);
-    std::cerr << sizeof(cista::mm_rtree<way_idx_t>::meta) << "\n";
-    rtree_.m_ = *r;
-  }
-}
+      ways_{ways} {}
 
 void lookup::build_rtree() {
   for (auto way = way_idx_t{0U}; way != ways_.n_ways(); ++way) {
