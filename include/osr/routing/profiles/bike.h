@@ -13,7 +13,7 @@ struct sharing_data;
 constexpr auto const kElevationNoCost = 0U;
 constexpr auto const kElevationLowCost = 570U;
 constexpr auto const kElevationHighCost = 3700U;
-constexpr auto const kBikeSpeedMetersPerSecond = 3.8F;
+constexpr auto const kBikeSpeedMetersPerSecond = 4.2F;
 
 // Routing const configuration (cost, exp)
 // cost:
@@ -26,7 +26,10 @@ constexpr auto const kBikeSpeedMetersPerSecond = 3.8F;
 // (570, 2100)  // Low costs, penalize ways with higher incline
 // (3700, 2100)  // Higher costs, penalize ways with higher incline
 
-template <unsigned int ElevationUpCost,
+enum class bike_costing { kSafe, kFast };
+
+template <bike_costing Costing,
+          unsigned int ElevationUpCost,
           unsigned int ElevationExponentThousandth = 2100U>
 struct bike {
   static constexpr auto const kMaxMatchDistance = 100U;
@@ -214,9 +217,12 @@ struct bike {
                                    std::uint16_t const dist) {
     if (e.is_bike_accessible() &&
         (dir == direction::kForward || !e.is_oneway_bike())) {
-      return static_cast<cost_t>(std::round(
-          dist / (kBikeSpeedMetersPerSecond + (e.is_big_street_ ? -0.7 : 0) +
-                  (e.motor_vehicle_no_ ? 0.5 : 0.0))));
+      return static_cast<cost_t>(
+          std::round(dist / (kBikeSpeedMetersPerSecond +
+                             (Costing == bike_costing::kFast
+                                  ? 0
+                                  : (e.is_big_street_ ? -0.7 : 0) +
+                                        (e.motor_vehicle_no_ ? 0.5 : 0.0)))));
     } else {
       return kInfeasible;
     }

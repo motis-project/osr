@@ -23,6 +23,7 @@
 #include "osr/routing/profiles/car_sharing.h"
 #include "osr/routing/profiles/foot.h"
 #include "osr/routing/sharing_data.h"
+#include "osr/routing/with_profile.h"
 #include "osr/util/infinite.h"
 #include "osr/util/reverse.h"
 
@@ -30,6 +31,24 @@ namespace osr {
 
 constexpr auto const kMaxMatchingDistanceSquaredRatio = 9.0;
 constexpr auto const kBottomKDefinitelyConsidered = 5;
+
+template <typename Profile>
+bidirectional<Profile>& get_bidirectional() {
+  static auto s = boost::thread_specific_ptr<bidirectional<Profile>>{};
+  if (s.get() == nullptr) {
+    s.reset(new bidirectional<Profile>{});
+  }
+  return *s.get();
+}
+
+template <typename Profile>
+dijkstra<Profile>& get_dijkstra() {
+  static auto s = boost::thread_specific_ptr<dijkstra<Profile>>{};
+  if (s.get() == nullptr) {
+    s.reset(new dijkstra<Profile>{});
+  }
+  return *s.get();
+}
 
 struct connecting_way {
   constexpr bool valid() const { return way_ != way_idx_t::invalid(); }
@@ -740,47 +759,21 @@ std::optional<path> route_bidirectional(ways const& w,
                                         bitvec<node_idx_t> const* blocked,
                                         sharing_data const* sharing,
                                         elevation_storage const* elevations) {
-  auto const r =
-      [&]<typename Profile>(bidirectional<Profile>& b) -> std::optional<path> {
-    auto const from_match =
-        l.match<Profile>(from, false, dir, max_match_distance, blocked);
-    auto const to_match =
-        l.match<Profile>(to, true, dir, max_match_distance, blocked);
+  return with_profile(
+      profile, [&]<typename Profile>(Profile&&) -> std::optional<path> {
+        auto const from_match =
+            l.match<Profile>(from, false, dir, max_match_distance, blocked);
+        auto const to_match =
+            l.match<Profile>(to, true, dir, max_match_distance, blocked);
 
-    if (from_match.empty() || to_match.empty()) {
-      return std::nullopt;
-    }
+        if (from_match.empty() || to_match.empty()) {
+          return std::nullopt;
+        }
 
-    return route_bidirectional(w, l, b, from, to, from_match, to_match, max,
-                               dir, blocked, sharing, elevations);
-  };
-
-  switch (profile) {
-    case search_profile::kFoot:
-      return r(get_bidirectional<foot<false, elevator_tracking>>());
-    case search_profile::kWheelchair:
-      return r(get_bidirectional<foot<true, elevator_tracking>>());
-    case search_profile::kBike:
-      return r(get_bidirectional<bike<kElevationNoCost>>());
-    case search_profile::kBikeElevationLow:
-      return r(get_bidirectional<bike<kElevationLowCost>>());
-    case search_profile::kBikeElevationHigh:
-      return r(get_bidirectional<bike<kElevationHighCost>>());
-    case search_profile::kCar: return r(get_bidirectional<car>());
-    case search_profile::kCarParking:
-      return r(get_bidirectional<car_parking<false, true>>());
-    case search_profile::kCarParkingWheelchair:
-      return r(get_bidirectional<car_parking<true, true>>());
-    case search_profile::kCarDropOff:
-      return r(get_bidirectional<car_parking<false, false>>());
-    case search_profile::kCarDropOffWheelchair:
-      return r(get_bidirectional<car_parking<true, false>>());
-    case search_profile::kBikeSharing:
-      return r(get_bidirectional<bike_sharing>());
-    case search_profile::kCarSharing:
-      return r(get_bidirectional<car_sharing<track_node_tracking>>());
-  }
-  throw utl::fail("not implemented");
+        return route_bidirectional(w, l, get_bidirectional<Profile>(), from, to,
+                                   from_match, to_match, max, dir, blocked,
+                                   sharing, elevations);
+      });
 }
 
 std::vector<std::optional<path>> route(
@@ -796,46 +789,21 @@ std::vector<std::optional<path>> route(
     sharing_data const* sharing,
     elevation_storage const* elevations,
     std::function<bool(path const&)> const& do_reconstruct) {
-  auto const r = [&]<typename Profile>(
-                     dijkstra<Profile>& d) -> std::vector<std::optional<path>> {
-    auto const from_match =
-        l.match<Profile>(from, false, dir, max_match_distance, blocked);
-    if (from_match.empty()) {
-      return std::vector<std::optional<path>>(to.size());
-    }
-    auto const to_match = utl::to_vec(to, [&](auto&& x) {
-      return l.match<Profile>(x, true, dir, max_match_distance, blocked);
-    });
-    return route(w, l, d, from, to, from_match, to_match, max, dir, blocked,
-                 sharing, elevations, do_reconstruct);
-  };
-
-  switch (profile) {
-    case search_profile::kFoot:
-      return r(get_dijkstra<foot<false, elevator_tracking>>());
-    case search_profile::kWheelchair:
-      return r(get_dijkstra<foot<true, elevator_tracking>>());
-    case search_profile::kBike:
-      return r(get_dijkstra<bike<kElevationNoCost>>());
-    case search_profile::kBikeElevationLow:
-      return r(get_dijkstra<bike<kElevationLowCost>>());
-    case search_profile::kBikeElevationHigh:
-      return r(get_dijkstra<bike<kElevationHighCost>>());
-    case search_profile::kCar: return r(get_dijkstra<car>());
-    case search_profile::kCarDropOff:
-      return r(get_dijkstra<car_parking<false, false>>());
-    case search_profile::kCarDropOffWheelchair:
-      return r(get_dijkstra<car_parking<true, false>>());
-    case search_profile::kCarParking:
-      return r(get_dijkstra<car_parking<false, true>>());
-    case search_profile::kCarParkingWheelchair:
-      return r(get_dijkstra<car_parking<true, true>>());
-    case search_profile::kBikeSharing: return r(get_dijkstra<bike_sharing>());
-    case search_profile::kCarSharing:
-      return r(get_dijkstra<car_sharing<track_node_tracking>>());
-  }
-
-  throw utl::fail("not implemented");
+  return with_profile(
+      profile,
+      [&]<typename Profile>(Profile&&) -> std::vector<std::optional<path>> {
+        auto const from_match =
+            l.match<Profile>(from, false, dir, max_match_distance, blocked);
+        if (from_match.empty()) {
+          return std::vector<std::optional<path>>(to.size());
+        }
+        auto const to_match = utl::to_vec(to, [&](auto&& x) {
+          return l.match<Profile>(x, true, dir, max_match_distance, blocked);
+        });
+        return route(w, l, get_dijkstra<Profile>(), from, to, from_match,
+                     to_match, max, dir, blocked, sharing, elevations,
+                     do_reconstruct);
+      });
 }
 
 std::optional<path> route_dijkstra(ways const& w,
@@ -849,47 +817,21 @@ std::optional<path> route_dijkstra(ways const& w,
                                    bitvec<node_idx_t> const* blocked,
                                    sharing_data const* sharing,
                                    elevation_storage const* elevations) {
-  auto const r =
-      [&]<typename Profile>(dijkstra<Profile>& d) -> std::optional<path> {
-    auto const from_match =
-        l.match<Profile>(from, false, dir, max_match_distance, blocked);
-    auto const to_match =
-        l.match<Profile>(to, true, dir, max_match_distance, blocked);
+  return with_profile(
+      profile, [&]<typename Profile>(Profile&&) -> std::optional<path> {
+        auto const from_match =
+            l.match<Profile>(from, false, dir, max_match_distance, blocked);
+        auto const to_match =
+            l.match<Profile>(to, true, dir, max_match_distance, blocked);
 
-    if (from_match.empty() || to_match.empty()) {
-      return std::nullopt;
-    }
+        if (from_match.empty() || to_match.empty()) {
+          return std::nullopt;
+        }
 
-    return route_dijkstra(w, l, d, from, to, from_match, to_match, max, dir,
-                          blocked, sharing, elevations);
-  };
-
-  switch (profile) {
-    case search_profile::kFoot:
-      return r(get_dijkstra<foot<false, elevator_tracking>>());
-    case search_profile::kWheelchair:
-      return r(get_dijkstra<foot<true, elevator_tracking>>());
-    case search_profile::kBike:
-      return r(get_dijkstra<bike<kElevationNoCost>>());
-    case search_profile::kBikeElevationLow:
-      return r(get_dijkstra<bike<kElevationLowCost>>());
-    case search_profile::kBikeElevationHigh:
-      return r(get_dijkstra<bike<kElevationHighCost>>());
-    case search_profile::kCar: return r(get_dijkstra<car>());
-    case search_profile::kCarDropOff:
-      return r(get_dijkstra<car_parking<false, false>>());
-    case search_profile::kCarDropOffWheelchair:
-      return r(get_dijkstra<car_parking<true, false>>());
-    case search_profile::kCarParking:
-      return r(get_dijkstra<car_parking<false, true>>());
-    case search_profile::kCarParkingWheelchair:
-      return r(get_dijkstra<car_parking<true, true>>());
-    case search_profile::kBikeSharing: return r(get_dijkstra<bike_sharing>());
-    case search_profile::kCarSharing:
-      return r(get_dijkstra<car_sharing<track_node_tracking>>());
-  }
-
-  throw utl::fail("not implemented");
+        return route_dijkstra(w, l, get_dijkstra<Profile>(), from, to,
+                              from_match, to_match, max, dir, blocked, sharing,
+                              elevations);
+      });
 }
 
 std::vector<std::optional<path>> route(
@@ -909,39 +851,10 @@ std::vector<std::optional<path>> route(
   if (from_match.empty()) {
     return std::vector<std::optional<path>>(to.size());
   }
-
-  auto const r = [&]<typename Profile>(
-                     dijkstra<Profile>& d) -> std::vector<std::optional<path>> {
-    return route(w, l, d, from, to, from_match, to_match, max, dir, blocked,
-                 sharing, elevations, do_reconstruct);
-  };
-
-  switch (profile) {
-    case search_profile::kFoot:
-      return r(get_dijkstra<foot<false, elevator_tracking>>());
-    case search_profile::kWheelchair:
-      return r(get_dijkstra<foot<true, elevator_tracking>>());
-    case search_profile::kBike:
-      return r(get_dijkstra<bike<kElevationNoCost>>());
-    case search_profile::kBikeElevationLow:
-      return r(get_dijkstra<bike<kElevationLowCost>>());
-    case search_profile::kBikeElevationHigh:
-      return r(get_dijkstra<bike<kElevationHighCost>>());
-    case search_profile::kCar: return r(get_dijkstra<car>());
-    case search_profile::kCarDropOff:
-      return r(get_dijkstra<car_parking<false, false>>());
-    case search_profile::kCarDropOffWheelchair:
-      return r(get_dijkstra<car_parking<true, false>>());
-    case search_profile::kCarParking:
-      return r(get_dijkstra<car_parking<false, true>>());
-    case search_profile::kCarParkingWheelchair:
-      return r(get_dijkstra<car_parking<true, true>>());
-    case search_profile::kBikeSharing: return r(get_dijkstra<bike_sharing>());
-    case search_profile::kCarSharing:
-      return r(get_dijkstra<car_sharing<track_node_tracking>>());
-  }
-
-  throw utl::fail("not implemented");
+  return with_profile(profile, [&]<typename Profile>(Profile&&) {
+    return route(w, l, get_dijkstra<Profile>(), from, to, from_match, to_match,
+                 max, dir, blocked, sharing, elevations, do_reconstruct);
+  });
 }
 
 std::optional<path> route(ways const& w,
@@ -966,83 +879,19 @@ std::optional<path> route(ways const& w,
     algo = routing_algorithm::kDijkstra;  // TODO
   }
 
-  auto const run_dijkstra =
-      [&]<typename Profile>(dijkstra<Profile>& d) -> std::optional<path> {
-    return route_dijkstra(w, l, d, from, to, from_match, to_match, max, dir,
-                          blocked, sharing, elevations);
-  };
-
-  auto const run_bidirectional =
-      [&]<typename Profile>(bidirectional<Profile>& b) {
-        return route_bidirectional(w, l, b, from, to, from_match, to_match, max,
-                                   dir, blocked, sharing, elevations);
-      };
-
   switch (algo) {
     case routing_algorithm::kDijkstra:
-      switch (profile) {
-        case search_profile::kFoot:
-          return run_dijkstra(get_dijkstra<foot<false, elevator_tracking>>());
-        case search_profile::kWheelchair:
-          return run_dijkstra(get_dijkstra<foot<true, elevator_tracking>>());
-        case search_profile::kBike:
-          return run_dijkstra(get_dijkstra<bike<kElevationNoCost>>());
-        case search_profile::kBikeElevationLow:
-          return run_dijkstra(get_dijkstra<bike<kElevationLowCost>>());
-        case search_profile::kBikeElevationHigh:
-          return run_dijkstra(get_dijkstra<bike<kElevationHighCost>>());
-        case search_profile::kCar: return run_dijkstra(get_dijkstra<car>());
-        case search_profile::kCarDropOff:
-          return run_dijkstra(get_dijkstra<car_parking<false, false>>());
-        case search_profile::kCarDropOffWheelchair:
-          return run_dijkstra(get_dijkstra<car_parking<true, false>>());
-        case search_profile::kCarParking:
-          return run_dijkstra(get_dijkstra<car_parking<false, true>>());
-        case search_profile::kCarParkingWheelchair:
-          return run_dijkstra(get_dijkstra<car_parking<true, true>>());
-        case search_profile::kBikeSharing:
-          return run_dijkstra(get_dijkstra<bike_sharing>());
-        case search_profile::kCarSharing:
-          return run_dijkstra(get_dijkstra<car_sharing<track_node_tracking>>());
-      }
-      break;
+      return with_profile(profile, [&]<typename Profile>(Profile&&) {
+        return route_dijkstra(w, l, get_dijkstra<Profile>(), from, to,
+                              from_match, to_match, max, dir, blocked, sharing,
+                              elevations);
+      });
     case routing_algorithm::kAStarBi:
-      switch (profile) {
-        case search_profile::kFoot:
-          return run_bidirectional(
-              get_bidirectional<foot<false, elevator_tracking>>());
-        case search_profile::kWheelchair:
-          return run_bidirectional(
-              get_bidirectional<foot<true, elevator_tracking>>());
-        case search_profile::kBike:
-          return run_bidirectional(get_bidirectional<bike<kElevationNoCost>>());
-        case search_profile::kBikeElevationLow:
-          return run_bidirectional(
-              get_bidirectional<bike<kElevationLowCost>>());
-        case search_profile::kBikeElevationHigh:
-          return run_bidirectional(
-              get_bidirectional<bike<kElevationHighCost>>());
-        case search_profile::kCar:
-          return run_bidirectional(get_bidirectional<car>());
-        case search_profile::kCarDropOff:
-          return run_bidirectional(
-              get_bidirectional<car_parking<false, false>>());
-        case search_profile::kCarDropOffWheelchair:
-          return run_bidirectional(
-              get_bidirectional<car_parking<true, false>>());
-        case search_profile::kCarParking:
-          return run_bidirectional(
-              get_bidirectional<car_parking<false, true>>());
-        case search_profile::kCarParkingWheelchair:
-          return run_bidirectional(
-              get_bidirectional<car_parking<true, true>>());
-        case search_profile::kBikeSharing:
-          return run_bidirectional(get_bidirectional<bike_sharing>());
-        case search_profile::kCarSharing:
-          return run_bidirectional(
-              get_bidirectional<car_sharing<track_node_tracking>>());
-      }
-      break;
+      return with_profile(profile, [&]<typename Profile>(Profile&&) {
+        return route_bidirectional(w, l, get_bidirectional<Profile>(), from, to,
+                                   from_match, to_match, max, dir, blocked,
+                                   sharing, elevations);
+      });
   }
   throw utl::fail("not implemented");
 }
@@ -1076,35 +925,5 @@ std::optional<path> route(ways const& w,
   }
   throw utl::fail("not implemented");
 }
-
-template <typename Profile>
-bidirectional<Profile>& get_bidirectional() {
-  static auto s = boost::thread_specific_ptr<bidirectional<Profile>>{};
-  if (s.get() == nullptr) {
-    s.reset(new bidirectional<Profile>{});
-  }
-  return *s.get();
-}
-
-template <typename Profile>
-dijkstra<Profile>& get_dijkstra() {
-  static auto s = boost::thread_specific_ptr<dijkstra<Profile>>{};
-  if (s.get() == nullptr) {
-    s.reset(new dijkstra<Profile>{});
-  }
-  return *s.get();
-}
-
-template bidirectional<foot<true, osr::noop_tracking>>&
-get_bidirectional<foot<true, osr::noop_tracking>>();
-
-template bidirectional<foot<false, osr::noop_tracking>>&
-get_bidirectional<foot<false, osr::noop_tracking>>();
-
-template dijkstra<foot<true, osr::noop_tracking>>&
-get_dijkstra<foot<true, osr::noop_tracking>>();
-
-template dijkstra<foot<false, osr::noop_tracking>>&
-get_dijkstra<foot<false, osr::noop_tracking>>();
 
 }  // namespace osr

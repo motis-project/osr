@@ -6,6 +6,7 @@
 #include "osr/routing/profiles/car_parking.h"
 #include "osr/routing/profiles/car_sharing.h"
 #include "osr/routing/profiles/foot.h"
+#include "osr/routing/with_profile.h"
 
 namespace osr {
 
@@ -110,53 +111,10 @@ match_t lookup::match(location const& query,
                       search_profile const p,
                       std::optional<std::span<raw_way_candidate const>>
                           raw_way_candidates) const {
-  switch (p) {
-    case search_profile::kFoot:
-      return match<foot<false>>(query, reverse, search_dir, max_match_distance,
-                                blocked, raw_way_candidates);
-    case search_profile::kWheelchair:
-      return match<foot<true>>(query, reverse, search_dir, max_match_distance,
-                               blocked, raw_way_candidates);
-    case search_profile::kCar:
-      return match<car>(query, reverse, search_dir, max_match_distance, blocked,
-                        raw_way_candidates);
-    case search_profile::kBike:
-      return match<bike<kElevationNoCost>>(query, reverse, search_dir,
-                                           max_match_distance, blocked,
-                                           raw_way_candidates);
-    case search_profile::kBikeElevationLow:
-      return match<bike<kElevationLowCost>>(query, reverse, search_dir,
-                                            max_match_distance, blocked,
-                                            raw_way_candidates);
-    case search_profile::kBikeElevationHigh:
-      return match<bike<kElevationHighCost>>(query, reverse, search_dir,
-                                             max_match_distance, blocked,
-                                             raw_way_candidates);
-    case search_profile::kCarDropOff:
-      return match<car_parking<false, false>>(query, reverse, search_dir,
-                                              max_match_distance, blocked,
-                                              raw_way_candidates);
-    case search_profile::kCarDropOffWheelchair:
-      return match<car_parking<true, false>>(query, reverse, search_dir,
-                                             max_match_distance, blocked,
-                                             raw_way_candidates);
-    case search_profile::kCarParking:
-      return match<car_parking<false, true>>(query, reverse, search_dir,
-                                             max_match_distance, blocked,
-                                             raw_way_candidates);
-    case search_profile::kCarParkingWheelchair:
-      return match<car_parking<true, true>>(query, reverse, search_dir,
-                                            max_match_distance, blocked,
-                                            raw_way_candidates);
-    case search_profile::kBikeSharing:
-      return match<bike_sharing>(query, reverse, search_dir, max_match_distance,
-                                 blocked, raw_way_candidates);
-    case search_profile::kCarSharing:
-      return match<car_sharing<noop_tracking>>(query, reverse, search_dir,
-                                               max_match_distance, blocked,
-                                               raw_way_candidates);
-  }
-  throw utl::fail("{} is not a valid profile", static_cast<std::uint8_t>(p));
+  return with_profile(p, [&]<typename Profile>(Profile&&) {
+    return match<Profile>(query, reverse, search_dir, max_match_distance,
+                          blocked, raw_way_candidates);
+  });
 }
 
 hash_set<node_idx_t> lookup::find_elevators(geo::box const& b) const {
