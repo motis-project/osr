@@ -25,6 +25,12 @@ struct bidirectional;
 
 struct sharing_data;
 
+struct routing_parameters {
+  float speed_{1.2F};
+};
+
+constexpr auto const kRoutingParameters = routing_parameters{};
+ 
 struct path {
   struct segment {
     geo::polyline polyline_;
@@ -80,7 +86,9 @@ std::optional<path> route(ways const&,
                           bitvec<node_idx_t> const* blocked = nullptr,
                           sharing_data const* sharing = nullptr,
                           elevation_storage const* = nullptr,
-                          routing_algorithm = routing_algorithm::kDijkstra);
+                          routing_algorithm = routing_algorithm::kDijkstra,
+                          routing_parameters = kRoutingParameters
+                          );
 
 std::vector<std::optional<path>> route(
     ways const&,

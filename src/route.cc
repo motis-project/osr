@@ -616,7 +616,8 @@ std::optional<path> route_dijkstra(ways const& w,
                                    direction const dir,
                                    bitvec<node_idx_t> const* blocked,
                                    sharing_data const* sharing,
-                                   elevation_storage const* elevations) {
+                                   elevation_storage const* elevations,
+                                   [[maybe_unused]] routing_parameters const rp=kRoutingParameters) {
   if (auto const direct = try_direct(from, to); direct.has_value()) {
     return *direct;
   }
@@ -650,7 +651,7 @@ std::optional<path> route_dijkstra(ways const& w,
       continue;
     }
 
-    should_continue = d.run(w, *w.r_, max, blocked, sharing, elevations, dir) &&
+    should_continue = d.run(w, *w.r_, max, blocked, sharing, elevations, dir, rp) &&
                       should_continue;
 
     auto const c =
@@ -816,7 +817,8 @@ std::optional<path> route_dijkstra(ways const& w,
                                    double const max_match_distance,
                                    bitvec<node_idx_t> const* blocked,
                                    sharing_data const* sharing,
-                                   elevation_storage const* elevations) {
+                                   elevation_storage const* elevations,
+                          [[maybe_unused]] routing_parameters const rp) {
   return with_profile(
       profile, [&]<typename Profile>(Profile&&) -> std::optional<path> {
         auto const from_match =
@@ -830,7 +832,7 @@ std::optional<path> route_dijkstra(ways const& w,
 
         return route_dijkstra(w, l, get_dijkstra<Profile>(), from, to,
                               from_match, to_match, max, dir, blocked, sharing,
-                              elevations);
+                              elevations, rp);
       });
 }
 
@@ -907,7 +909,8 @@ std::optional<path> route(ways const& w,
                           bitvec<node_idx_t> const* blocked,
                           sharing_data const* sharing,
                           elevation_storage const* elevations,
-                          routing_algorithm algo) {
+                          routing_algorithm algo,
+                          [[maybe_unused]] routing_parameters const rp) {
   if (profile == search_profile::kBikeSharing ||
       profile == search_profile::kCarSharing ||
       profile == search_profile::kCarParkingWheelchair ||
@@ -917,7 +920,7 @@ std::optional<path> route(ways const& w,
   switch (algo) {
     case routing_algorithm::kDijkstra:
       return route_dijkstra(w, l, profile, from, to, max, dir,
-                            max_match_distance, blocked, sharing, elevations);
+                            max_match_distance, blocked, sharing, elevations, rp);
     case routing_algorithm::kAStarBi:
       return route_bidirectional(w, l, profile, from, to, max, dir,
                                  max_match_distance, blocked, sharing,

@@ -183,10 +183,12 @@ int main(int argc, char const* argv[]) {
   results.reserve(opt.n_queries_);
 
   auto const run_benchmark = [&]<typename T>(search_profile const profile,
-                                             const char* profile_label) {
+                                             const char* profile_label,
+                                             [[maybe_unused]] float const speed) {
     results.clear();
     auto i = std::atomic_size_t{0U};
     auto m = std::mutex{};
+    auto const rp = routing_parameters{speed};
     for (auto& t : threads) {
       t = std::thread([&]() {
         auto d = dijkstra<T>{};
@@ -216,7 +218,7 @@ int main(int argc, char const* argv[]) {
             auto const d_res =
                 route(w, l, profile, start_loc, end_loc, opt.max_dist_,
                       direction::kForward, 250, nullptr, nullptr, nullptr,
-                      routing_algorithm::kDijkstra);
+                      routing_algorithm::kDijkstra, rp);
             auto const middle_time = std::chrono::steady_clock::now();
             auto const b_res =
                 route(w, l, profile, start_loc, end_loc, opt.max_dist_,
@@ -256,7 +258,7 @@ int main(int argc, char const* argv[]) {
             auto const ends = set_end<T>(b, w, end);
             auto const start_time = std::chrono::steady_clock::now();
             d.template run<direction::kForward, false>(
-                w, *w.r_, opt.max_dist_, nullptr, nullptr, elevations.get());
+                w, *w.r_, opt.max_dist_, nullptr, nullptr, elevations.get(), rp);
             auto const middle_time = std::chrono::steady_clock::now();
             b.template run<direction::kForward, false>(
                 w, *w.r_, opt.max_dist_, nullptr, nullptr, elevations.get());
@@ -302,7 +304,7 @@ int main(int argc, char const* argv[]) {
   };
 
   fmt::println("Measuring with speed {} starting ...", opt.speed_);
-  run_benchmark.template operator()<foot<false>>(search_profile::kFoot, "foot");
+  run_benchmark.template operator()<foot<false>>(search_profile::kFoot, "foot", opt.speed_);
   fmt::println("Measuring with speed {} ended", opt.speed_);
   // run_benchmark.template operator()<car>(search_profile::kCar, "car");
   // run_benchmark

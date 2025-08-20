@@ -243,7 +243,7 @@ struct car_parking {
                        bitvec<node_idx_t> const* blocked,
                        sharing_data const*,
                        elevation_storage const* elevations,
-                       Fn&& fn) {
+                       Fn&& fn, [[maybe_unused]] routing_parameters const rp=kRoutingParameters) {
     static constexpr auto const kFwd = SearchDir == direction::kForward;
     static constexpr auto const kBwd = SearchDir == direction::kBackward;
 
@@ -263,7 +263,7 @@ struct car_parking {
             fn(to_node(neighbor),
                cost + (n.is_foot_node() ? 0 : kSwitchPenalty), dist, way, from,
                to, elevation, false);
-          });
+          }, rp);
     }
 
     if (n.is_car_node() || (kBwd && n.is_foot_node() && is_parking)) {
@@ -277,7 +277,7 @@ struct car_parking {
             fn(to_node(neighbor, way_prop.from_level()),
                cost + (n.is_car_node() ? 0 : kSwitchPenalty), dist, way, from,
                to, elevation, false);
-          });
+          }, rp);
     }
   }
 

@@ -155,7 +155,7 @@ struct foot {
                        bitvec<node_idx_t> const* blocked,
                        sharing_data const*,
                        elevation_storage const*,
-                       Fn&& fn) {
+                       Fn&& fn, [[maybe_unused]] routing_parameters const rp=kRoutingParameters) {
     for (auto const [way, i] :
          utl::zip_unchecked(w.node_ways_[n.n_], w.node_in_way_idx_[n.n_])) {
       auto const expand = [&](direction const way_dir, std::uint16_t const from,

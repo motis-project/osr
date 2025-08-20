@@ -322,7 +322,7 @@ struct car_sharing {
                        bitvec<node_idx_t> const* blocked,
                        sharing_data const* sharing,
                        elevation_storage const* elevations,
-                       Fn&& fn) {
+                       Fn&& fn, [[maybe_unused]] routing_parameters const rp=kRoutingParameters) {
     assert(sharing != nullptr);
 
     auto const& handle_additional_edge =
@@ -347,7 +347,7 @@ struct car_sharing {
               fn(to_node(neighbor, nt), cost + switch_penalty, dist, way, from,
                  to, elevation, switch_penalty != 0);
             }
-          });
+          }, rp);
       if (include_additional_edges) {
         // walk to station or free-floating vehicle
         if (auto const it = sharing->additional_edges_.find(n.n_);
@@ -375,7 +375,7 @@ struct car_sharing {
               fn(to_node(neighbor, kNoLevel), cost + switch_penalty, dist, way,
                  from, to, elevation, false);
             }
-          });
+          }, rp);
       if (include_additional_edges) {
         // drive to station
         if (auto const it = sharing->additional_edges_.find(n.n_);

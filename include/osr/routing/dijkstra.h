@@ -6,6 +6,8 @@
 #include "osr/types.h"
 #include "osr/ways.h"
 
+#include "osr/routing/route.h"
+
 namespace osr {
 
 struct sharing_data;
@@ -55,7 +57,8 @@ struct dijkstra {
            cost_t const max,
            bitvec<node_idx_t> const* blocked,
            sharing_data const* sharing,
-           elevation_storage const* elevations) {
+           elevation_storage const* elevations,
+                                   [[maybe_unused]] routing_parameters const rp) {
     while (!pq_.empty()) {
       auto l = pq_.pop();
       if (get_cost(l.get_node()) < l.cost()) {
@@ -99,7 +102,7 @@ struct dijkstra {
                 std::cout << " -> DOMINATED\n";
               }
             }
-          });
+          }, rp);
     }
     return !max_reached_;
   }
@@ -110,19 +113,20 @@ struct dijkstra {
            bitvec<node_idx_t> const* blocked,
            sharing_data const* sharing,
            elevation_storage const* elevations,
-           direction const dir) {
+           direction const dir,
+                                   [[maybe_unused]] routing_parameters const rp=kRoutingParameters) {
     if (blocked == nullptr) {
       return dir == direction::kForward
                  ? run<direction::kForward, false>(w, r, max, blocked, sharing,
-                                                   elevations)
+                                                   elevations, rp)
                  : run<direction::kBackward, false>(w, r, max, blocked, sharing,
-                                                    elevations);
+                                                    elevations, rp);
     } else {
       return dir == direction::kForward
                  ? run<direction::kForward, true>(w, r, max, blocked, sharing,
-                                                  elevations)
+                                                  elevations, rp)
                  : run<direction::kBackward, true>(w, r, max, blocked, sharing,
-                                                   elevations);
+                                                   elevations, rp);
     }
   }
 
