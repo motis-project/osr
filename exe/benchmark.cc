@@ -25,6 +25,7 @@
 #include "osr/routing/profile.h"
 #include "osr/routing/profiles/bike.h"
 #include "osr/routing/profiles/car.h"
+#include "osr/routing/profiles/foot.h"
 #include "osr/routing/route.h"
 #include "osr/types.h"
 #include "osr/ways.h"
@@ -40,6 +41,7 @@ public:
     param(n_queries_, ",n", "Number of queries");
     param(max_dist_, "radius,r", "Radius");
     param(from_coords_, "matching,m", "Include node matching to coords");
+    param(speed_, "speed,s", "Walking speed");
   }
 
   fs::path data_dir_{"osr"};
@@ -47,6 +49,7 @@ public:
   unsigned max_dist_{32768};
   bool from_coords_{false};
   unsigned threads_{std::thread::hardware_concurrency()};
+  float speed_{1.2F};
 };
 
 struct benchmark_result {
@@ -298,14 +301,17 @@ int main(int argc, char const* argv[]) {
     print_result(results, profile_label);
   };
 
-  run_benchmark.template operator()<car>(search_profile::kCar, "car");
-  run_benchmark
-      .template operator()<bike<bike_costing::kSafe, kElevationNoCost>>(
-          search_profile::kBike, "bike (no elevation costs)");
-  run_benchmark
-      .template operator()<bike<bike_costing::kSafe, kElevationLowCost>>(
-          search_profile::kBikeElevationLow, "bike (low elevation costs)");
-  run_benchmark
-      .template operator()<bike<bike_costing::kSafe, kElevationHighCost>>(
-          search_profile::kBikeElevationHigh, "bike (high elevation costs)");
+  fmt::println("Measuring with speed {} starting ...", opt.speed_);
+  run_benchmark.template operator()<foot<false>>(search_profile::kFoot, "foot");
+  fmt::println("Measuring with speed {} ended", opt.speed_);
+  // run_benchmark.template operator()<car>(search_profile::kCar, "car");
+  // run_benchmark
+  //     .template operator()<bike<bike_costing::kSafe, kElevationNoCost>>(
+  //         search_profile::kBike, "bike (no elevation costs)");
+  // run_benchmark
+  //     .template operator()<bike<bike_costing::kSafe, kElevationLowCost>>(
+  //         search_profile::kBikeElevationLow, "bike (low elevation costs)");
+  // run_benchmark
+  //     .template operator()<bike<bike_costing::kSafe, kElevationHighCost>>(
+  //         search_profile::kBikeElevationHigh, "bike (high elevation costs)");
 }
