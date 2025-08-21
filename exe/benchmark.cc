@@ -101,52 +101,52 @@ void print_result(std::vector<benchmark_result> const& var,
 }
 
 template <typename T>
-void set_start(dijkstra<T>& d, ways const& w, node_idx_t const start) {
-  d.add_start(w, typename T::label{typename T::node{start}, 0U});
+void set_start(dijkstra<T>& d, ways const& w, node_idx_t const start, routing_parameters const rp) {
+  d.add_start(w, typename T::label{typename T::node{start}, 0U}, rp);
 }
 
 template <>
-void set_start<car>(dijkstra<car>& d, ways const& w, node_idx_t const start) {
-  d.add_start(w, car::label{car::node{start, 0, direction::kForward}, 0U});
-  d.add_start(w, car::label{car::node{start, 0, direction::kBackward}, 0U});
+void set_start<car>(dijkstra<car>& d, ways const& w, node_idx_t const start, routing_parameters const rp) {
+  d.add_start(w, car::label{car::node{start, 0, direction::kForward}, 0U}, rp);
+  d.add_start(w, car::label{car::node{start, 0, direction::kBackward}, 0U}, rp);
 };
 
 template <typename T>
-void set_start(bidirectional<T>& d, ways const& w, node_idx_t const start) {
-  d.add_start(w, typename T::label{typename T::node{start}, 0U}, nullptr);
+void set_start(bidirectional<T>& d, ways const& w, node_idx_t const start, routing_parameters const rp) {
+  d.add_start(w, typename T::label{typename T::node{start}, 0U}, nullptr, rp);
 }
 
 template <>
 void set_start<car>(bidirectional<car>& d,
                     ways const& w,
-                    node_idx_t const start) {
+                    node_idx_t const start, routing_parameters const rp) {
   d.add_start(w, car::label{car::node{start, 0, direction::kForward}, 0U},
-              nullptr);
+              nullptr, rp);
   d.add_start(w, car::label{car::node{start, 0, direction::kBackward}, 0U},
-              nullptr);
+              nullptr, rp);
 };
 
 template <typename T>
 std::vector<typename T::label> set_end(bidirectional<T>& d,
                                        ways const& w,
-                                       node_idx_t const end) {
+                                       node_idx_t const end, routing_parameters const rp) {
   auto const l = typename T::label{typename T::node{end}, 0U};
-  d.add_end(w, l, nullptr);
+  d.add_end(w, l, nullptr, rp);
   return {l};
 }
 
 template <>
 std::vector<typename car::label> set_end<car>(bidirectional<car>& d,
                                               ways const& w,
-                                              node_idx_t const end) {
+                                              node_idx_t const end, routing_parameters const rp) {
   std::vector<typename car::label> ends;
   auto const ways = w.r_->node_ways_[end];
 
   for (auto i = way_pos_t{0U}; i != ways.size(); ++i) {
     auto const l1 = car::label{car::node{end, i, direction::kForward}, 0U};
     auto const l2 = car::label{car::node{end, i, direction::kBackward}, 0U};
-    d.add_end(w, l1, nullptr);
-    d.add_end(w, l2, nullptr);
+    d.add_end(w, l1, nullptr, rp);
+    d.add_end(w, l2, nullptr, rp);
     ends.push_back(l1);
     ends.push_back(l2);
   }
@@ -251,17 +251,17 @@ int main(int argc, char const* argv[]) {
               continue;
             }
             d.reset(opt.max_dist_);
-            b.reset(opt.max_dist_, start_loc, end_loc);
-            set_start<T>(d, w, start);
-            set_start<T>(b, w, start);
+            b.reset(opt.max_dist_, start_loc, end_loc, rp);
+            set_start<T>(d, w, start, rp);
+            set_start<T>(b, w, start, rp);
 
-            auto const ends = set_end<T>(b, w, end);
+            auto const ends = set_end<T>(b, w, end, rp);
             auto const start_time = std::chrono::steady_clock::now();
             d.template run<direction::kForward, false>(
                 w, *w.r_, opt.max_dist_, nullptr, nullptr, elevations.get(), rp);
             auto const middle_time = std::chrono::steady_clock::now();
             b.template run<direction::kForward, false>(
-                w, *w.r_, opt.max_dist_, nullptr, nullptr, elevations.get());
+                w, *w.r_, opt.max_dist_, nullptr, nullptr, elevations.get(), rp);
             auto const end_time = std::chrono::steady_clock::now();
             /*std::cout << "took "
                       << std::chrono::duration_cast<std::chrono::milliseconds>(

@@ -220,7 +220,7 @@ struct car {
                                 node const n,
                                 way_idx_t const way,
                                 direction const way_dir,
-                                direction const search_dir) {
+                                direction const search_dir, [[maybe_unused]] routing_parameters const rp) {
     auto const target_way_prop = w.way_properties_[way];
     if (way_cost(target_way_prop, way_dir, 0U) == kInfeasible) {
       return false;
@@ -249,7 +249,7 @@ struct car {
     return n.is_car_accessible() ? 0U : kInfeasible;
   }
 
-  static constexpr double heuristic(double const dist) {
+  static constexpr double heuristic(double const dist, [[maybe_unused]] routing_parameters const rp) {
     return dist / (130U / 3.6);
   }
   static constexpr node get_reverse(node const n) {

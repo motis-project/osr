@@ -421,9 +421,9 @@ struct bike_sharing {
                                 node const n,
                                 way_idx_t const way,
                                 direction const way_dir,
-                                direction const search_dir) {
+                                direction const search_dir, routing_parameters const rp) {
     return !n.is_bike_node() &&
-           footp::is_dest_reachable(w, to_foot(n), way, way_dir, search_dir);
+           footp::is_dest_reachable(w, to_foot(n), way, way_dir, search_dir, rp);
   }
 
   static constexpr cost_t way_cost(way_properties const& e,
@@ -436,7 +436,7 @@ struct bike_sharing {
     return footp::node_cost(n);
   }
 
-  static constexpr double heuristic(double const dist) {
+  static constexpr double heuristic(double const dist, [[maybe_unused]] routing_parameters const rp) {
     return dist / kBikeSpeedMetersPerSecond;
   }
 

@@ -147,7 +147,7 @@ struct bike {
                                 node,
                                 way_idx_t const way,
                                 direction const way_dir,
-                                direction) {
+                                direction, [[maybe_unused]] routing_parameters const rp) {
     return way_cost(w.way_properties_[way], way_dir, 0U) != kInfeasible;
   }
 
@@ -232,7 +232,7 @@ struct bike {
     return n.is_bike_accessible() ? 0U : kInfeasible;
   }
 
-  static constexpr double heuristic(double const dist) {
+  static constexpr double heuristic(double const dist, [[maybe_unused]] routing_parameters const rp) {
     return dist / (kBikeSpeedMetersPerSecond + 0.5);
   }
 

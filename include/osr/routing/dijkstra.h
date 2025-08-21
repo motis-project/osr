@@ -34,7 +34,7 @@ struct dijkstra {
     max_reached_ = false;
   }
 
-  void add_start(ways const& w, label const l) {
+  void add_start(ways const& w, label const l, [[maybe_unused]] routing_parameters const rp) {
     if (cost_[l.get_node().get_key()].update(l, l.get_node(), l.cost(),
                                              node::invalid())) {
       if constexpr (kDebug) {

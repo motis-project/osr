@@ -73,7 +73,8 @@ std::vector<std::optional<path>> route(
     elevation_storage const* = nullptr,
     std::function<bool(path const&)> const& do_reconstruct = [](path const&) {
       return false;
-    });
+    },
+  routing_parameters = kRoutingParameters);
 
 std::optional<path> route(ways const&,
                           lookup const&,
@@ -105,7 +106,8 @@ std::vector<std::optional<path>> route(
     elevation_storage const* = nullptr,
     std::function<bool(path const&)> const& do_reconstruct = [](path const&) {
       return false;
-    });
+    },
+  routing_parameters = kRoutingParameters);
 
 std::optional<path> route(ways const& w,
                           lookup const& l,
@@ -119,6 +121,7 @@ std::optional<path> route(ways const& w,
                           bitvec<node_idx_t> const* blocked = nullptr,
                           sharing_data const* sharing = nullptr,
                           elevation_storage const* = nullptr,
-                          routing_algorithm = routing_algorithm::kDijkstra);
+                          routing_algorithm = routing_algorithm::kDijkstra,
+  routing_parameters = kRoutingParameters);
 
 }  // namespace osr

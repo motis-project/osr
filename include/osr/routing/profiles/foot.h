@@ -174,7 +174,7 @@ struct foot {
         }
 
         auto const target_way_prop = w.way_properties_[way];
-        if (way_cost(target_way_prop, way_dir, 0U) == kInfeasible) {
+        if (way_cost(target_way_prop, way_dir, 0U, rp) == kInfeasible) {
           return;
         }
 
@@ -182,7 +182,7 @@ struct foot {
           for_each_elevator_level(
               w, target_node, [&](level_t const target_lvl) {
                 auto const dist = w.way_node_dist_[way][std::min(from, to)];
-                auto const cost = way_cost(target_way_prop, way_dir, dist) +
+                auto const cost = way_cost(target_way_prop, way_dir, dist, rp) +
                                   node_cost(target_node_prop);
                 fn(node{target_node, target_lvl},
                    static_cast<std::uint32_t>(cost), dist, way, from, to,
@@ -195,7 +195,7 @@ struct foot {
           }
 
           auto const dist = w.way_node_dist_[way][std::min(from, to)];
-          auto const cost = way_cost(target_way_prop, way_dir, dist) +
+          auto const cost = way_cost(target_way_prop, way_dir, dist, rp) +
                             node_cost(target_node_prop);
           fn(node{target_node, *target_lvl}, static_cast<std::uint32_t>(cost),
              dist, way, from, to, elevation_storage::elevation{}, false);
@@ -215,9 +215,10 @@ struct foot {
                                 node const n,
                                 way_idx_t const way,
                                 direction const way_dir,
-                                direction) {
+                                direction,
+                                   routing_parameters const rp) {
     auto const target_way_prop = w.way_properties_[way];
-    if (way_cost(target_way_prop, way_dir, 0U) == kInfeasible) {
+    if (way_cost(target_way_prop, way_dir, 0U, rp) == kInfeasible) {
       return false;
     }
 
@@ -315,7 +316,9 @@ struct foot {
 
   static constexpr cost_t way_cost(way_properties const e,
                                    direction,
-                                   std::uint16_t const dist) {
+                                   std::uint16_t const dist,
+                                   routing_parameters const rp=kRoutingParameters) {
+    [[maybe_unused]] auto const speed = rp.speed_;
     if ((e.is_foot_accessible() ||
          (!e.is_sidewalk_separate() && e.is_bike_accessible())) &&
         (!IsWheelchair || !e.is_steps())) {
@@ -332,7 +335,8 @@ struct foot {
     return n.is_walk_accessible() ? (n.is_elevator() ? 90U : 0U) : kInfeasible;
   }
 
-  static constexpr double heuristic(double const dist) {
+  static constexpr double heuristic(double const dist, routing_parameters const rp) {
+    [[maybe_unused]] auto const speed = rp.speed_;
     return dist / (kSpeedMetersPerSecond + 0.1);
   }
 

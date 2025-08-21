@@ -306,15 +306,15 @@ struct car_parking {
                                 node const n,
                                 way_idx_t const way,
                                 direction const way_dir,
-                                direction const search_dir) {
+                                direction const search_dir, routing_parameters const rp) {
     return !UseParking || w.way_properties_[way].is_parking() ||
            (search_dir == direction::kForward
                 ? n.is_foot_node() &&
                       footp::is_dest_reachable(w, to_foot(n), way, way_dir,
-                                               search_dir)
+                                               search_dir, rp)
                 : n.is_car_node() &&
                       car::is_dest_reachable(w, to_car(n), way, way_dir,
-                                             search_dir));
+                                             search_dir, rp));
   }
 
   static constexpr cost_t way_cost(way_properties const& e,
@@ -327,8 +327,8 @@ struct car_parking {
     return footp::node_cost(n);
   }
 
-  static constexpr double heuristic(double dist) {
-    return car::heuristic(dist);
+  static constexpr double heuristic(double dist, routing_parameters const rp) {
+    return car::heuristic(dist, rp);
   }
 
   static constexpr node get_reverse(node n) {
