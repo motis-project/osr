@@ -213,7 +213,7 @@ struct bidirectional {
               std::cout << " -> DOMINATED\n";
             }
           }
-        });
+        }, rp);
 
     auto const evaluate_meetpoint = [&](cost_t cost, cost_t other_cost,
                                         node meetpoint1, node meetpoint2) {
@@ -292,7 +292,7 @@ struct bidirectional {
                   evaluate_meetpoint_with_potential_u_turn_cost(
                       curr_cost, opposite_curr_cost, curr, *opposite_curr);
                 }
-              });
+              }, rp);
         }
       }
     };

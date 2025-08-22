@@ -77,7 +77,7 @@ void run(ways const& w,
     auto const node_pinned_matches =
         [&](location const& loc, node_idx_t const n, bool const reverse) {
           auto matches = l.match<car>(loc, reverse, direction::kForward,
-                                      kMaxMatchDistance, nullptr);
+                                      kMaxMatchDistance, nullptr, kRoutingParameters);
           std::erase_if(matches, [&](auto const& wc) {
             return wc.left_.node_ != n && wc.right_.node_ != n;
           });

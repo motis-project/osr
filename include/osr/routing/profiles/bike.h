@@ -148,7 +148,7 @@ struct bike {
                                 way_idx_t const way,
                                 direction const way_dir,
                                 direction, [[maybe_unused]] routing_parameters const rp) {
-    return way_cost(w.way_properties_[way], way_dir, 0U) != kInfeasible;
+    return way_cost(w.way_properties_[way], way_dir, 0U, rp) != kInfeasible;
   }
 
   template <direction SearchDir, bool WithBlocked, typename Fn>
@@ -175,7 +175,7 @@ struct bike {
         }
 
         auto const target_way_prop = w.way_properties_[way];
-        if (way_cost(target_way_prop, way_dir, 0U) == kInfeasible) {
+        if (way_cost(target_way_prop, way_dir, 0U, rp) == kInfeasible) {
           return;
         }
 
@@ -197,7 +197,7 @@ struct bike {
                                  ElevationExponentThousandth / 1000.0)
                        : ElevationUpCost * to_idx(elevation.up_) / dist)
                 : 0);
-        auto const cost = way_cost(target_way_prop, way_dir, dist) +
+        auto const cost = way_cost(target_way_prop, way_dir, dist, rp) +
                           node_cost(target_node_prop) + elevation_cost;
         fn(node{target_node, way_dir}, static_cast<std::uint32_t>(cost), dist,
            way, from, to, elevation, false);
@@ -214,7 +214,7 @@ struct bike {
 
   static constexpr cost_t way_cost(way_properties const e,
                                    direction const dir,
-                                   std::uint16_t const dist) {
+                                   std::uint16_t const dist, [[maybe_unused]] routing_parameters const rp) {
     if (e.is_bike_accessible() &&
         (dir == direction::kForward || !e.is_oneway_bike())) {
       return static_cast<cost_t>(

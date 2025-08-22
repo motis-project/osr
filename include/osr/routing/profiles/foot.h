@@ -155,7 +155,7 @@ struct foot {
                        bitvec<node_idx_t> const* blocked,
                        sharing_data const*,
                        elevation_storage const*,
-                       Fn&& fn, routing_parameters const rp=kRoutingParameters) {
+                       Fn&& fn, routing_parameters const rp) {
     for (auto const [way, i] :
          utl::zip_unchecked(w.node_ways_[n.n_], w.node_in_way_idx_[n.n_])) {
       auto const expand = [&](direction const way_dir, std::uint16_t const from,
@@ -317,7 +317,7 @@ struct foot {
   static constexpr cost_t way_cost(way_properties const e,
                                    direction,
                                    std::uint16_t const dist,
-                                   routing_parameters const rp=kRoutingParameters) {
+                                   routing_parameters const rp) {
     [[maybe_unused]] auto const speed = rp.speed_;
     if ((e.is_foot_accessible() ||
          (!e.is_sidewalk_separate() && e.is_bike_accessible())) &&

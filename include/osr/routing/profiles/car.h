@@ -186,7 +186,7 @@ struct car {
         }
 
         auto const target_way_prop = w.way_properties_[way];
-        if (way_cost(target_way_prop, way_dir, 0U) == kInfeasible) {
+        if (way_cost(target_way_prop, way_dir, 0U, rp) == kInfeasible) {
           return;
         }
 
@@ -198,7 +198,7 @@ struct car {
         auto const dist = w.way_node_dist_[way][std::min(from, to)];
         auto const target =
             node{target_node, w.get_way_pos(target_node, way, to), way_dir};
-        auto const cost = way_cost(target_way_prop, way_dir, dist) +
+        auto const cost = way_cost(target_way_prop, way_dir, dist, rp) +
                           node_cost(target_node_prop) +
                           (is_u_turn ? kUturnPenalty : 0U);
         fn(target, cost, dist, way, from, to, elevation_storage::elevation{},
@@ -222,7 +222,7 @@ struct car {
                                 direction const way_dir,
                                 direction const search_dir, [[maybe_unused]] routing_parameters const rp) {
     auto const target_way_prop = w.way_properties_[way];
-    if (way_cost(target_way_prop, way_dir, 0U) == kInfeasible) {
+    if (way_cost(target_way_prop, way_dir, 0U, rp) == kInfeasible) {
       return false;
     }
 
@@ -235,7 +235,7 @@ struct car {
 
   static constexpr cost_t way_cost(way_properties const& e,
                                    direction const dir,
-                                   std::uint16_t const dist) {
+                                   std::uint16_t const dist, [[maybe_unused]] routing_parameters const rp) {
     if (e.is_car_accessible() &&
         (dir == direction::kForward || !e.is_oneway_car())) {
       return (dist / e.max_speed_m_per_s()) * (e.is_destination() ? 5U : 1U) +

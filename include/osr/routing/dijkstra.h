@@ -114,7 +114,7 @@ struct dijkstra {
            sharing_data const* sharing,
            elevation_storage const* elevations,
            direction const dir,
-                                   [[maybe_unused]] routing_parameters const rp=kRoutingParameters) {
+                                   routing_parameters const rp) {
     if (blocked == nullptr) {
       return dir == direction::kForward
                  ? run<direction::kForward, false>(w, r, max, blocked, sharing,

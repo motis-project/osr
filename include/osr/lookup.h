@@ -19,6 +19,7 @@
 
 #include "osr/location.h"
 #include "osr/routing/profile.h"
+#include "osr/types.h"
 
 namespace osr {
 
@@ -104,6 +105,7 @@ struct lookup {
       direction const search_dir,
       double max_match_distance,
       bitvec<node_idx_t> const* blocked,
+                routing_parameters const rp,
       std::span<raw_way_candidate const> raw_way_candidates) const {
     auto matches = std::vector<way_candidate>{};
     auto i = 0U;
@@ -123,16 +125,16 @@ struct lookup {
                         {query.lvl_, direction::kForward, raw_wc.right_.node_,
                          raw_wc.right_.dist_to_node_}};
       apply_next_node_cost<Profile>(wc, wc.left_, query, reverse, search_dir,
-                                    blocked);
+                                    blocked, rp);
       apply_next_node_cost<Profile>(wc, wc.right_, query, reverse, search_dir,
-                                    blocked);
+                                    blocked, rp);
       if (wc.left_.valid() || wc.right_.valid()) {
         matches.emplace_back(std::move(wc));
       }
     }
     if (i < 4 && matches.empty()) {
       return match<Profile>(query, reverse, search_dir, max_match_distance,
-                            blocked);
+                            blocked, rp);
     }
     return matches;
   }
@@ -178,6 +180,7 @@ struct lookup {
                 double const max_match_distance,
                 bitvec<node_idx_t> const* blocked,
                 search_profile,
+                routing_parameters const rp,
                 std::optional<std::span<raw_way_candidate const>>
                     raw_way_candidates = std::nullopt) const;
 
@@ -187,20 +190,21 @@ struct lookup {
                 direction const search_dir,
                 double max_match_distance,
                 bitvec<node_idx_t> const* blocked,
+                routing_parameters const rp,
                 std::optional<std::span<raw_way_candidate const>>
                     raw_way_candidates = std::nullopt) const {
     if (raw_way_candidates.has_value()) {
       return complete_match<Profile>(query, reverse, search_dir,
                                      max_match_distance, blocked,
-                                     *raw_way_candidates);
+                                     rp, *raw_way_candidates);
     }
     auto way_candidates = get_way_candidates<Profile>(
-        query, reverse, search_dir, max_match_distance, blocked);
+        query, reverse, search_dir, max_match_distance, blocked, rp);
     auto i = 0U;
     while (way_candidates.empty() && i++ < 4U) {
       max_match_distance *= 2U;
       way_candidates = get_way_candidates<Profile>(query, reverse, search_dir,
-                                                   max_match_distance, blocked);
+                                                   max_match_distance, blocked, rp);
     }
     return way_candidates;
   }
@@ -225,7 +229,7 @@ private:
                              bool const reverse,
                              direction const search_dir,
                              double const max_match_distance,
-                             bitvec<node_idx_t> const* blocked) const {
+                             bitvec<node_idx_t> const* blocked, routing_parameters const rp) const {
     auto way_candidates = std::vector<way_candidate>{};
     auto const approx_distance_lng_degrees =
         geo::approx_distance_lng_degrees(query.pos_);
@@ -240,10 +244,10 @@ private:
         auto wc = way_candidate{std::sqrt(squared_dist), way};
         wc.left_ = find_next_node<Profile>(
             wc, query, direction::kBackward, query.lvl_, reverse, search_dir,
-            blocked, approx_distance_lng_degrees, best, segment_idx);
+            blocked, approx_distance_lng_degrees, best, segment_idx, rp);
         wc.right_ = find_next_node<Profile>(
             wc, query, direction::kForward, query.lvl_, reverse, search_dir,
-            blocked, approx_distance_lng_degrees, best, segment_idx);
+            blocked, approx_distance_lng_degrees, best, segment_idx, rp);
         if (wc.left_.valid() || wc.right_.valid()) {
           way_candidates.emplace_back(std::move(wc));
         }
@@ -280,10 +284,10 @@ private:
                                 bitvec<node_idx_t> const* blocked,
                                 double approx_distance_lng_degrees,
                                 geo::latlng const best,
-                                size_t segment_idx) const {
+                                size_t segment_idx, routing_parameters const rp) const {
     auto const way_prop = ways_.r_->way_properties_[wc.way_];
     auto const edge_dir = reverse ? opposite(dir) : dir;
-    if (Profile::way_cost(way_prop, flip(search_dir, edge_dir), 0U) ==
+    if (Profile::way_cost(way_prop, flip(search_dir, edge_dir), 0U, rp) ==
         kInfeasible) {
       return node_candidate{};
     }
@@ -314,7 +318,7 @@ private:
                        c.node_ = *way_node;
                        c.cost_ = Profile::way_cost(
                            way_prop, flip(search_dir, edge_dir),
-                           static_cast<distance_t>(c.dist_to_node_));
+                           static_cast<distance_t>(c.dist_to_node_), rp);
                      }
                      return utl::cflow::kBreak;
                    }
@@ -343,7 +347,7 @@ private:
                             location const& query,
                             bool const reverse,
                             direction const search_dir,
-                            bitvec<node_idx_t> const* blocked) const {
+                            bitvec<node_idx_t> const* blocked, routing_parameters const rp) const {
     if (!nc.valid()) {
       return;
     }
@@ -357,7 +361,7 @@ private:
     auto const edge_dir = reverse ? opposite(nc.way_dir_) : nc.way_dir_;
     auto const cost =
         Profile::way_cost(way_prop, flip(search_dir, edge_dir),
-                          static_cast<distance_t>(nc.dist_to_node_));
+                          static_cast<distance_t>(nc.dist_to_node_), rp);
 
     if (cost != kInfeasible &&
         (blocked == nullptr || !blocked->test(nc.node_))) {

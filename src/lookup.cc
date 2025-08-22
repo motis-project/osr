@@ -109,11 +109,12 @@ match_t lookup::match(location const& query,
                       double const max_match_distance,
                       bitvec<node_idx_t> const* blocked,
                       search_profile const p,
+                routing_parameters const rp,
                       std::optional<std::span<raw_way_candidate const>>
                           raw_way_candidates) const {
   return with_profile(p, [&]<typename Profile>(Profile&&) {
     return match<Profile>(query, reverse, search_dir, max_match_distance,
-                          blocked, raw_way_candidates);
+                          blocked, rp, raw_way_candidates);
   });
 }
 

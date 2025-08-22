@@ -304,7 +304,7 @@ struct bike_sharing {
             handle_additional_edge(
                 ae, nt,
                 footp::way_cost(kAdditionalWayProperties, direction::kForward,
-                                ae.distance_) +
+                                ae.distance_, rp) +
                     switch_penalty);
           }
         }
@@ -332,7 +332,7 @@ struct bike_sharing {
             handle_additional_edge(
                 ae, node_type::kBike,
                 bikep::way_cost(kAdditionalWayProperties, direction::kForward,
-                                ae.distance_) +
+                                ae.distance_, rp) +
                     switch_penalty);
           }
         }
@@ -352,14 +352,14 @@ struct bike_sharing {
               handle_additional_edge(
                   ae, node_type::kBike,
                   bikep::way_cost(kAdditionalWayProperties, direction::kForward,
-                                  ae.distance_) +
+                                  ae.distance_, rp) +
                       kStartSwitchPenalty);
             } else if (n.is_bike_node() &&
                        is_allowed(sharing->end_allowed_, n.n_)) {
               handle_additional_edge(
                   ae, node_type::kTrailingFoot,
                   footp::way_cost(kAdditionalWayProperties, direction::kForward,
-                                  ae.distance_) +
+                                  ae.distance_, rp) +
                       kEndSwitchPenalty);
             }
           }
@@ -390,14 +390,14 @@ struct bike_sharing {
               handle_additional_edge(
                   ae, node_type::kBike,
                   bikep::way_cost(kAdditionalWayProperties, direction::kForward,
-                                  ae.distance_) +
+                                  ae.distance_, rp) +
                       kEndSwitchPenalty);
             } else if (n.is_bike_node() &&
                        is_allowed(sharing->start_allowed_, n.n_)) {
               handle_additional_edge(
                   ae, node_type::kInitialFoot,
                   footp::way_cost(kAdditionalWayProperties, direction::kForward,
-                                  ae.distance_) +
+                                  ae.distance_, rp) +
                       kStartSwitchPenalty);
             }
           }
@@ -428,8 +428,8 @@ struct bike_sharing {
 
   static constexpr cost_t way_cost(way_properties const& e,
                                    direction const dir,
-                                   std::uint16_t const dist) {
-    return footp::way_cost(e, dir, dist);
+                                   std::uint16_t const dist, routing_parameters const rp) {
+    return footp::way_cost(e, dir, dist, rp);
   }
 
   static constexpr cost_t node_cost(node_properties const n) {

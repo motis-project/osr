@@ -25,12 +25,6 @@ struct bidirectional;
 
 struct sharing_data;
 
-struct routing_parameters {
-  float speed_{1.7F};
-};
-
-constexpr auto const kRoutingParameters = routing_parameters{};
- 
 struct path {
   struct segment {
     geo::polyline polyline_;
