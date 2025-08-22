@@ -26,7 +26,7 @@ struct bidirectional;
 struct sharing_data;
 
 struct routing_parameters {
-  float speed_{1.2F};
+  float speed_{1.7F};
 };
 
 constexpr auto const kRoutingParameters = routing_parameters{};

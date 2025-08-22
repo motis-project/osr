@@ -184,7 +184,7 @@ int main(int argc, char const* argv[]) {
 
   auto const run_benchmark = [&]<typename T>(search_profile const profile,
                                              const char* profile_label,
-                                             [[maybe_unused]] float const speed) {
+                                             float const speed) {
     results.clear();
     auto i = std::atomic_size_t{0U};
     auto m = std::mutex{};
@@ -223,7 +223,7 @@ int main(int argc, char const* argv[]) {
             auto const b_res =
                 route(w, l, profile, start_loc, end_loc, opt.max_dist_,
                       direction::kForward, 250, nullptr, nullptr, nullptr,
-                      routing_algorithm::kAStarBi);
+                      routing_algorithm::kAStarBi, rp);
             auto const end_time = std::chrono::steady_clock::now();
 
             /*std::cout << "took "

@@ -14,8 +14,8 @@ struct sharing_data;
 template <bool IsWheelchair, typename Tracking = noop_tracking>
 struct foot {
   static constexpr auto const kMaxMatchDistance = 100U;
-  static constexpr auto const kSpeedMetersPerSecond =
-      (IsWheelchair ? 0.8 : 1.2F);
+  // static constexpr auto const kSpeedMetersPerSecond =
+  //     (IsWheelchair ? 0.8 : 1.2F);
 
   struct node {
     friend bool operator==(node const a, node const b) {
@@ -155,7 +155,7 @@ struct foot {
                        bitvec<node_idx_t> const* blocked,
                        sharing_data const*,
                        elevation_storage const*,
-                       Fn&& fn, [[maybe_unused]] routing_parameters const rp=kRoutingParameters) {
+                       Fn&& fn, routing_parameters const rp=kRoutingParameters) {
     for (auto const [way, i] :
          utl::zip_unchecked(w.node_ways_[n.n_], w.node_in_way_idx_[n.n_])) {
       auto const expand = [&](direction const way_dir, std::uint16_t const from,
@@ -324,7 +324,7 @@ struct foot {
         (!IsWheelchair || !e.is_steps())) {
       return (!e.is_foot_accessible() || e.is_sidewalk_separate() ? 90 : 0) +
              static_cast<cost_t>(std::round(
-                 dist / (kSpeedMetersPerSecond + (e.is_big_street_ ? -0.2 : 0) +
+                 dist / (speed + (e.is_big_street_ ? -0.2 : 0) +
                          (e.motor_vehicle_no_ ? 0.1 : 0.0))));
     } else {
       return kInfeasible;
@@ -337,7 +337,7 @@ struct foot {
 
   static constexpr double heuristic(double const dist, routing_parameters const rp) {
     [[maybe_unused]] auto const speed = rp.speed_;
-    return dist / (kSpeedMetersPerSecond + 0.1);
+    return dist / (speed + 0.1);
   }
 
   static constexpr node get_reverse(node const n) { return n; }

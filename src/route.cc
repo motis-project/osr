@@ -820,7 +820,7 @@ std::optional<path> route_dijkstra(ways const& w,
                                    bitvec<node_idx_t> const* blocked,
                                    sharing_data const* sharing,
                                    elevation_storage const* elevations,
-                          [[maybe_unused]] routing_parameters const rp) {
+                          routing_parameters const rp) {
   return with_profile(
       profile, [&]<typename Profile>(Profile&&) -> std::optional<path> {
         auto const from_match =
