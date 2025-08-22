@@ -322,7 +322,7 @@ struct car_sharing {
                        bitvec<node_idx_t> const* blocked,
                        sharing_data const* sharing,
                        elevation_storage const* elevations,
-                       Fn&& fn, [[maybe_unused]] routing_parameters const rp=kRoutingParameters) {
+                       Fn&& fn, routing_parameters const rp) {
     assert(sharing != nullptr);
 
     auto const& handle_additional_edge =

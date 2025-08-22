@@ -23,7 +23,7 @@ struct routing_parameters {
 };
 
 constexpr auto const kRoutingParameters = routing_parameters{};
- 
+
 template <typename K, typename V, typename SizeType = cista::base_t<K>>
 using vecvec = cista::raw::vecvec<K, V, SizeType>;
 

@@ -243,7 +243,7 @@ struct car_parking {
                        bitvec<node_idx_t> const* blocked,
                        sharing_data const*,
                        elevation_storage const* elevations,
-                       Fn&& fn, [[maybe_unused]] routing_parameters const rp=kRoutingParameters) {
+                       Fn&& fn, routing_parameters const rp) {
     static constexpr auto const kFwd = SearchDir == direction::kForward;
     static constexpr auto const kBwd = SearchDir == direction::kBackward;
 

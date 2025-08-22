@@ -166,7 +166,7 @@ struct car {
                        bitvec<node_idx_t> const* blocked,
                        sharing_data const*,
                        elevation_storage const*,
-                       Fn&& fn, [[maybe_unused]] routing_parameters const rp=kRoutingParameters) {
+                       Fn&& fn, routing_parameters const rp) {
     auto way_pos = way_pos_t{0U};
     for (auto const [way, i] :
          utl::zip_unchecked(w.node_ways_[n.n_], w.node_in_way_idx_[n.n_])) {
