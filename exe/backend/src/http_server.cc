@@ -131,11 +131,11 @@ struct http_server::impl {
     auto const max = static_cast<cost_t>(
         max_it == q.end() ? 3600 : max_it->value().as_int64());
 
-    auto const p = route(w_, l_, profile, from, to, max, dir, 100, nullptr,
+    auto const p = route(w_, l_, profile, from, to, max, dir, 100, kRoutingParameters, nullptr,
                          nullptr, elevations_, routing_algo);
 
     auto const p1 = route(w_, l_, profile, from, std::vector{to}, max, dir, 100,
-                          nullptr, nullptr, elevations_);
+                          kRoutingParameters, nullptr, nullptr, elevations_);
 
     auto const print = [](char const* name, std::optional<path> const& p) {
       if (p.has_value()) {

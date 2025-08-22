@@ -22,7 +22,7 @@ std::string extract_and_route(std::string_view path,
   auto l = osr::lookup{w, dir, cista::mmap::protection::READ};
 
   auto const p = osr::route(w, l, osr::search_profile::kFoot, from, {to}, 900,
-                            osr::direction::kForward, 250.0, nullptr, nullptr,
+                            osr::direction::kForward, 250.0, osr::kRoutingParameters, nullptr, nullptr,
                             nullptr, osr::routing_algorithm::kDijkstra);
   utl::verify(p.has_value(), "{}: from={} to={} -> no route", path,
               fmt::streamed(from), fmt::streamed(to));

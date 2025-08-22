@@ -678,12 +678,11 @@ std::vector<std::optional<path>> route(
     match_view_t from_match,
     std::vector<match_t> const& to_match,
     cost_t const max,
-    direction const dir,
+    direction const dir, routing_parameters const rp,
     bitvec<node_idx_t> const* blocked,
     sharing_data const* sharing,
     elevation_storage const* elevations,
-    std::function<bool(path const&)> const& do_reconstruct,
-  routing_parameters const rp) {
+    std::function<bool(path const&)> const& do_reconstruct) {
   auto result = std::vector<std::optional<path>>{};
   result.resize(to_match.size());
 
@@ -787,11 +786,11 @@ std::vector<std::optional<path>> route(
     std::vector<location> const& to,
     cost_t const max,
     direction const dir,
-    double const max_match_distance,
+    double const max_match_distance, routing_parameters const rp,
     bitvec<node_idx_t> const* blocked,
     sharing_data const* sharing,
     elevation_storage const* elevations,
-    std::function<bool(path const&)> const& do_reconstruct, routing_parameters const rp) {
+    std::function<bool(path const&)> const& do_reconstruct) {
   return with_profile(
       profile,
       [&]<typename Profile>(Profile&&) -> std::vector<std::optional<path>> {
@@ -804,8 +803,8 @@ std::vector<std::optional<path>> route(
           return l.match<Profile>(x, true, dir, max_match_distance, blocked, rp);
         });
         return route(w, l, get_dijkstra<Profile>(), from, to, from_match,
-                     to_match, max, dir, blocked, sharing, elevations,
-                     do_reconstruct, rp);
+                     to_match, max, dir, rp, blocked, sharing, elevations,
+                     do_reconstruct);
       });
 }
 
@@ -848,16 +847,16 @@ std::vector<std::optional<path>> route(
     std::vector<match_t> const& to_match,
     cost_t const max,
     direction const dir,
-    bitvec<node_idx_t> const* blocked,
+    bitvec<node_idx_t> const* blocked, routing_parameters const rp,
     sharing_data const* sharing,
     elevation_storage const* elevations,
-    std::function<bool(path const&)> const& do_reconstruct, routing_parameters const rp) {
+    std::function<bool(path const&)> const& do_reconstruct) {
   if (from_match.empty()) {
     return std::vector<std::optional<path>>(to.size());
   }
   return with_profile(profile, [&]<typename Profile>(Profile&&) {
     return route(w, l, get_dijkstra<Profile>(), from, to, from_match, to_match,
-                 max, dir, blocked, sharing, elevations, do_reconstruct, rp);
+                 max, dir, rp, blocked, sharing, elevations, do_reconstruct);
   });
 }
 
@@ -869,11 +868,11 @@ std::optional<path> route(ways const& w,
                           match_view_t from_match,
                           match_view_t to_match,
                           cost_t const max,
-                          direction const dir,
+                          direction const dir, routing_parameters const rp,
                           bitvec<node_idx_t> const* blocked,
                           sharing_data const* sharing,
                           elevation_storage const* elevations,
-                          routing_algorithm algo, routing_parameters const rp) {
+                          routing_algorithm algo) {
   if (from_match.empty() || to_match.empty()) {
     return std::nullopt;
   }
@@ -907,12 +906,11 @@ std::optional<path> route(ways const& w,
                           location const& to,
                           cost_t const max,
                           direction const dir,
-                          double const max_match_distance,
+                          double const max_match_distance, routing_parameters const rp,
                           bitvec<node_idx_t> const* blocked,
                           sharing_data const* sharing,
                           elevation_storage const* elevations,
-                          routing_algorithm algo,
-                          routing_parameters const rp) {
+                          routing_algorithm algo) {
   if (profile == search_profile::kBikeSharing ||
       profile == search_profile::kCarSharing ||
       profile == search_profile::kCarParkingWheelchair ||

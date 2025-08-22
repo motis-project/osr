@@ -62,13 +62,13 @@ std::vector<std::optional<path>> route(
     cost_t max,
     direction,
     double max_match_distance,
+  routing_parameters,
     bitvec<node_idx_t> const* blocked = nullptr,
     sharing_data const* sharing = nullptr,
     elevation_storage const* = nullptr,
     std::function<bool(path const&)> const& do_reconstruct = [](path const&) {
       return false;
-    },
-  routing_parameters = kRoutingParameters);
+    });
 
 std::optional<path> route(ways const&,
                           lookup const&,
@@ -78,11 +78,11 @@ std::optional<path> route(ways const&,
                           cost_t max,
                           direction,
                           double max_match_distance,
+  routing_parameters,
                           bitvec<node_idx_t> const* blocked = nullptr,
                           sharing_data const* sharing = nullptr,
                           elevation_storage const* = nullptr,
-                          routing_algorithm = routing_algorithm::kDijkstra,
-                          routing_parameters = kRoutingParameters
+                          routing_algorithm = routing_algorithm::kDijkstra
                           );
 
 std::vector<std::optional<path>> route(
@@ -95,13 +95,13 @@ std::vector<std::optional<path>> route(
     std::vector<match_t> const& to_match,
     cost_t const max,
     direction const,
+  routing_parameters,
     bitvec<node_idx_t> const* blocked = nullptr,
     sharing_data const* sharing = nullptr,
     elevation_storage const* = nullptr,
     std::function<bool(path const&)> const& do_reconstruct = [](path const&) {
       return false;
-    },
-  routing_parameters = kRoutingParameters);
+    });
 
 std::optional<path> route(ways const& w,
                           lookup const& l,
@@ -112,10 +112,10 @@ std::optional<path> route(ways const& w,
                           match_view_t to_match,
                           cost_t const max,
                           direction const dir,
+  routing_parameters,
                           bitvec<node_idx_t> const* blocked = nullptr,
                           sharing_data const* sharing = nullptr,
                           elevation_storage const* = nullptr,
-                          routing_algorithm = routing_algorithm::kDijkstra,
-  routing_parameters = kRoutingParameters);
+                          routing_algorithm = routing_algorithm::kDijkstra);
 
 }  // namespace osr

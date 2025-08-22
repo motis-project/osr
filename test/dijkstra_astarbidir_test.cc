@@ -99,7 +99,7 @@ void run(ways const& w,
     auto const reference_start = std::chrono::steady_clock::now();
     auto const reference =
         route(w, l, search_profile::kCar, from_loc, to_loc, from_matches_span,
-              to_matches_span, max_cost, direction::kForward, nullptr, nullptr,
+              to_matches_span, max_cost, direction::kForward, kRoutingParameters, nullptr, nullptr,
               nullptr, routing_algorithm::kDijkstra);
     auto const reference_time =
         std::chrono::steady_clock::now() - reference_start;
@@ -107,7 +107,7 @@ void run(ways const& w,
     auto const experiment_start = std::chrono::steady_clock::now();
     auto const experiment =
         route(w, l, search_profile::kCar, from_loc, to_loc, from_matches_span,
-              to_matches_span, max_cost, direction::kForward, nullptr, nullptr,
+              to_matches_span, max_cost, direction::kForward, kRoutingParameters, nullptr, nullptr,
               nullptr, routing_algorithm::kAStarBi);
     auto const experiment_time =
         std::chrono::steady_clock::now() - experiment_start;

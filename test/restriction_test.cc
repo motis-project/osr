@@ -51,10 +51,10 @@ TEST(extract, wa) {
   constexpr auto const kMaxMatchDistance = 100;
   auto const route_no_costs = route(
       w, l, search_profile::kBike, from, to, kMaxCost, direction::kForward,
-      kMaxMatchDistance, nullptr, nullptr, elevations.get());
+      kMaxMatchDistance, kRoutingParameters, nullptr, nullptr, elevations.get());
   auto const route_high_costs =
       route(w, l, search_profile::kBikeElevationHigh, from, to, kMaxCost,
-            direction::kForward, kMaxMatchDistance, nullptr, nullptr,
+            direction::kForward, kMaxMatchDistance, kRoutingParameters, nullptr, nullptr,
             elevations.get());
 
   auto const is_restricted = w.r_->is_restricted<osr::direction::kForward>(
