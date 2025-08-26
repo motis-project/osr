@@ -25,7 +25,7 @@ ways::ways(std::filesystem::path p, cista::mmap::protection const mode)
           mm_vec<std::uint64_t>(mm("way_has_conditional_access_no"))},
       way_conditional_access_no_{mm("way_conditional_access_no")} {}
 
-void ways::build_components() {
+void ways::build_components_and_importance() {
   auto q = hash_set<way_idx_t>{};
   auto flood_fill = [&](way_idx_t const way_idx, component_idx_t const c) {
     assert(q.empty());
@@ -34,6 +34,9 @@ void ways::build_components() {
       auto const next = *q.begin();
       q.erase(q.begin());
       for (auto const n : r_->way_nodes_[next]) {
+        r_->node_properties_[n].importance_ =
+            std::max(r_->node_properties_[n].importance_,
+                     r_->way_properties_[next].importance_);
         for (auto const w : r_->node_ways_[n]) {
           auto& wc = r_->way_component_[w];
           if (wc == component_idx_t::invalid()) {
@@ -46,7 +49,9 @@ void ways::build_components() {
   };
 
   auto pt = utl::get_active_progress_tracker_or_activate("osr");
-  pt->status("Build components").in_high(n_ways()).out_bounds(75, 90);
+  pt->status("Build components and importance")
+      .in_high(n_ways())
+      .out_bounds(75, 90);
 
   auto next_component_idx = component_idx_t{0U};
   r_->way_component_.resize(n_ways(), component_idx_t::invalid());
