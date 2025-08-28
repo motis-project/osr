@@ -21,7 +21,7 @@ namespace osr {
 
 struct sharing_data;
 
-template <typename Profile>
+template <IsProfile Profile>
 struct bidirectional {
   using profile_t = Profile;
   using key = typename Profile::key;

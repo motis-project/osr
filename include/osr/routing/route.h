@@ -17,10 +17,10 @@ namespace osr {
 
 struct ways;
 
-template <typename Profile>
+template <IsProfile Profile>
 struct dijkstra;
 
-template <typename Profile>
+template <IsProfile Profile>
 struct bidirectional;
 
 struct sharing_data;
@@ -47,10 +47,10 @@ struct path {
   node_idx_t track_node_{node_idx_t::invalid()};
 };
 
-template <typename Profile>
+template <IsProfile Profile>
 bidirectional<Profile>& get_bidirectional();
 
-template <typename Profile>
+template <IsProfile Profile>
 dijkstra<Profile>& get_dijkstra();
 
 std::vector<std::optional<path>> route(

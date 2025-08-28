@@ -98,7 +98,7 @@ struct lookup {
   std::vector<raw_way_candidate> get_raw_match(location const&,
                                                double max_match_distance) const;
 
-  template <typename Profile>
+  template <IsProfile Profile>
   match_t complete_match(
       location const& query,
       bool const reverse,
@@ -139,7 +139,7 @@ struct lookup {
     return matches;
   }
 
-  template <typename Profile>
+  template <IsProfile Profile>
   std::vector<geo::latlng> get_node_candidate_path(
       way_candidate const& wc,
       node_candidate const& nc,
@@ -184,7 +184,7 @@ struct lookup {
                 std::optional<std::span<raw_way_candidate const>>
                     raw_way_candidates = std::nullopt) const;
 
-  template <typename Profile>
+  template <IsProfile Profile>
   match_t match(location const& query,
                 bool const reverse,
                 direction const search_dir,
@@ -224,7 +224,7 @@ struct lookup {
   void insert(way_idx_t);
 
 private:
-  template <typename Profile>
+  template <IsProfile Profile>
   match_t get_way_candidates(location const& query,
                              bool const reverse,
                              direction const search_dir,
@@ -257,7 +257,7 @@ private:
     return way_candidates;
   }
 
-  template <typename Profile>
+  template <IsProfile Profile>
   bool is_way_node_feasible(way_candidate const& wc,
                             node_idx_t const node_idx,
                             location const& query,
@@ -274,7 +274,7 @@ private:
     return found;
   }
 
-  template <typename Profile>
+  template <IsProfile Profile>
   node_candidate find_next_node(way_candidate const& wc,
                                 location const& query,
                                 direction const dir,
@@ -341,7 +341,7 @@ private:
                                         geo::latlng const,
                                         size_t) const;
 
-  template <typename Profile>
+  template <IsProfile Profile>
   void apply_next_node_cost(way_candidate const& wc,
                             node_candidate& nc,
                             location const& query,

@@ -32,7 +32,7 @@ namespace osr {
 constexpr auto const kMaxMatchingDistanceSquaredRatio = 9.0;
 constexpr auto const kBottomKDefinitelyConsidered = 5;
 
-template <typename Profile>
+template <IsProfile Profile>
 bidirectional<Profile>& get_bidirectional() {
   static auto s = boost::thread_specific_ptr<bidirectional<Profile>>{};
   if (s.get() == nullptr) {
@@ -41,7 +41,7 @@ bidirectional<Profile>& get_bidirectional() {
   return *s.get();
 }
 
-template <typename Profile>
+template <IsProfile Profile>
 dijkstra<Profile>& get_dijkstra() {
   static auto s = boost::thread_specific_ptr<dijkstra<Profile>>{};
   if (s.get() == nullptr) {
@@ -103,7 +103,7 @@ connecting_way find_connecting_way(ways const& w,
   return *conn;
 }
 
-template <typename Profile>
+template <IsProfile Profile>
 connecting_way find_connecting_way(ways const& w,
                                    bitvec<node_idx_t> const* blocked,
                                    sharing_data const* sharing,
@@ -129,7 +129,7 @@ connecting_way find_connecting_way(ways const& w,
   }
 }
 
-template <typename Profile>
+template <IsProfile Profile>
 double add_path(ways const& w,
                 ways::routing const& r,
                 bitvec<node_idx_t> const* blocked,
@@ -212,7 +212,7 @@ double add_path(ways const& w,
   return distance;
 }
 
-template <typename Profile>
+template <IsProfile Profile>
 path reconstruct_bi(ways const& w,
                     lookup const& l,
                     bitvec<node_idx_t> const* blocked,
@@ -327,7 +327,7 @@ path reconstruct_bi(ways const& w,
   return p;
 }
 
-template <typename Profile>
+template <IsProfile Profile>
 path reconstruct(ways const& w,
                  lookup const& l,
                  bitvec<node_idx_t> const* blocked,
@@ -416,7 +416,7 @@ bool component_seen(ways const& w,
   return false;
 }
 
-template <typename Profile>
+template <IsProfile Profile>
 std::optional<std::tuple<node_candidate const*,
                          way_candidate const*,
                          typename Profile::node,
@@ -511,7 +511,7 @@ std::optional<path> try_direct(osr::location const& from,
   }
 }
 
-template <typename Profile>
+template <IsProfile Profile>
 std::optional<path> route_bidirectional(ways const& w,
                                         lookup const& l,
                                         bidirectional<Profile>& b,
@@ -605,7 +605,7 @@ std::optional<path> route_bidirectional(ways const& w,
   return std::nullopt;
 }
 
-template <typename Profile>
+template <IsProfile Profile>
 std::optional<path> route_dijkstra(ways const& w,
                                    lookup const& l,
                                    dijkstra<Profile>& d,
@@ -668,7 +668,7 @@ std::optional<path> route_dijkstra(ways const& w,
   return std::nullopt;
 }
 
-template <typename Profile>
+template <IsProfile Profile>
 std::vector<std::optional<path>> route(
     ways const& w,
     lookup const& l,
@@ -762,7 +762,7 @@ std::optional<path> route_bidirectional(ways const& w,
                                         sharing_data const* sharing,
                                         elevation_storage const* elevations, routing_parameters const rp) {
   return with_profile(
-      profile, [&]<typename Profile>(Profile&&) -> std::optional<path> {
+      profile, [&]<IsProfile Profile>(Profile&&) -> std::optional<path> {
         auto const from_match =
             l.match<Profile>(from, false, dir, max_match_distance, blocked, rp);
         auto const to_match =
@@ -793,7 +793,7 @@ std::vector<std::optional<path>> route(
     std::function<bool(path const&)> const& do_reconstruct) {
   return with_profile(
       profile,
-      [&]<typename Profile>(Profile&&) -> std::vector<std::optional<path>> {
+      [&]<IsProfile Profile>(Profile&&) -> std::vector<std::optional<path>> {
         auto const from_match =
             l.match<Profile>(from, false, dir, max_match_distance, blocked, rp);
         if (from_match.empty()) {
@@ -821,7 +821,7 @@ std::optional<path> route_dijkstra(ways const& w,
                                    elevation_storage const* elevations,
                           routing_parameters const rp) {
   return with_profile(
-      profile, [&]<typename Profile>(Profile&&) -> std::optional<path> {
+      profile, [&]<IsProfile Profile>(Profile&&) -> std::optional<path> {
         auto const from_match =
             l.match<Profile>(from, false, dir, max_match_distance, blocked, rp);
         auto const to_match =
@@ -854,7 +854,7 @@ std::vector<std::optional<path>> route(
   if (from_match.empty()) {
     return std::vector<std::optional<path>>(to.size());
   }
-  return with_profile(profile, [&]<typename Profile>(Profile&&) {
+  return with_profile(profile, [&]<IsProfile Profile>(Profile&&) {
     return route(w, l, get_dijkstra<Profile>(), from, to, from_match, to_match,
                  max, dir, rp, blocked, sharing, elevations, do_reconstruct);
   });
@@ -884,13 +884,13 @@ std::optional<path> route(ways const& w,
 
   switch (algo) {
     case routing_algorithm::kDijkstra:
-      return with_profile(profile, [&]<typename Profile>(Profile&&) {
+      return with_profile(profile, [&]<IsProfile Profile>(Profile&&) {
         return route_dijkstra(w, l, get_dijkstra<Profile>(), from, to,
                               from_match, to_match, max, dir, blocked, sharing,
                               elevations, rp);
       });
     case routing_algorithm::kAStarBi:
-      return with_profile(profile, [&]<typename Profile>(Profile&&) {
+      return with_profile(profile, [&]<IsProfile Profile>(Profile&&) {
         return route_bidirectional(w, l, get_bidirectional<Profile>(), from, to,
                                    from_match, to_match, max, dir, blocked,
                                    sharing, elevations, rp);

@@ -34,35 +34,37 @@ concept IsEntry =
       { entry.update(label, node, cost, node) } -> std::same_as<bool>;
     };
 
-template <typename Profile, typename F = decltype([] {})>
+template <typename Profile>
 concept IsProfile =
     IsNode<typename Profile::node, typename Profile::key> &&
     IsLabel<typename Profile::label, typename Profile::node> &&
     IsEntry<typename Profile::entry,
             typename Profile::node,
             typename Profile::label> &&
-    std::invocable<decltype(Profile::template resolve_start_node<F>),
+    std::invocable<decltype(Profile::template resolve_start_node<std::function<void(typename Profile::node)>>),
                    ways::routing,
                    way_idx_t,
                    node_idx_t,
                    level_t,
                    direction,
-                   F> &&
-    std::invocable<decltype(Profile::template resolve_all<F>),
+                   std::function<void(typename Profile::node)>> &&
+    // TODO Check signature
+    std::invocable<decltype(Profile::template resolve_all<std::function<void(typename Profile::node)>>),
                    ways::routing,
                    node_idx_t,
                    level_t,
-                   F> &&
+                   std::function<void(typename Profile::node)>> &&
     // std::invocable<decltype(T::way_cost)> &&
+    // TODO Check signature
     std::invocable<
         decltype(Profile::
-                     template adjacent<osr::direction::kBackward, true, F>),
+                     template adjacent<osr::direction::kBackward, true, std::function<void(typename Profile::node)>>),
         osr::ways::routing const,
         typename Profile::node const,
         bitvec<node_idx_t> const*,
         sharing_data const*,
         elevation_storage const*,
-        F,
+        std::function<void(typename Profile::node)>,
         routing_parameters> &&
     requires(Profile p) {
       {

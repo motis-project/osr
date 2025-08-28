@@ -14,7 +14,7 @@ struct sharing_data;
 
 constexpr auto const kDebug = false;
 
-template <typename Profile>
+template <IsProfile Profile>
 struct dijkstra {
   using profile_t = Profile;
   using key = typename Profile::key;
