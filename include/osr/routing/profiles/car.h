@@ -8,7 +8,8 @@
 
 #include "osr/elevation_storage.h"
 #include "osr/routing/mode.h"
-#include "osr/routing/route.h"
+// #include "osr/routing/route.h"
+#include "osr/routing/path.h"
 #include "osr/ways.h"
 
 namespace osr {
@@ -20,6 +21,8 @@ struct car {
   static constexpr auto const kUturnPenalty = cost_t{120U};
 
   using key = node_idx_t;
+
+  struct parameters {};
 
   struct node {
     friend bool operator==(node, node) = default;
@@ -161,12 +164,13 @@ struct car {
   }
 
   template <direction SearchDir, bool WithBlocked, typename Fn>
-  static void adjacent(ways::routing const& w,
+  static void adjacent(parameters const& params,
+                       ways::routing const& w,
                        node const n,
                        bitvec<node_idx_t> const* blocked,
                        sharing_data const*,
                        elevation_storage const*,
-                       Fn&& fn, routing_parameters const rp) {
+                       Fn&& fn) {
     auto way_pos = way_pos_t{0U};
     for (auto const [way, i] :
          utl::zip_unchecked(w.node_ways_[n.n_], w.node_in_way_idx_[n.n_])) {
@@ -186,7 +190,7 @@ struct car {
         }
 
         auto const target_way_prop = w.way_properties_[way];
-        if (way_cost(target_way_prop, way_dir, 0U, rp) == kInfeasible) {
+        if (way_cost(params, target_way_prop, way_dir, 0U) == kInfeasible) {
           return;
         }
 
@@ -198,7 +202,7 @@ struct car {
         auto const dist = w.way_node_dist_[way][std::min(from, to)];
         auto const target =
             node{target_node, w.get_way_pos(target_node, way, to), way_dir};
-        auto const cost = way_cost(target_way_prop, way_dir, dist, rp) +
+        auto const cost = way_cost(params, target_way_prop, way_dir, dist) +
                           node_cost(target_node_prop) +
                           (is_u_turn ? kUturnPenalty : 0U);
         fn(target, cost, dist, way, from, to, elevation_storage::elevation{},
@@ -216,13 +220,14 @@ struct car {
     }
   }
 
-  static bool is_dest_reachable(ways::routing const& w,
+  static bool is_dest_reachable(parameters const& params,
+                                ways::routing const& w,
                                 node const n,
                                 way_idx_t const way,
                                 direction const way_dir,
-                                direction const search_dir, [[maybe_unused]] routing_parameters const rp) {
+                                direction const search_dir) {
     auto const target_way_prop = w.way_properties_[way];
-    if (way_cost(target_way_prop, way_dir, 0U, rp) == kInfeasible) {
+    if (way_cost(params, target_way_prop, way_dir, 0U) == kInfeasible) {
       return false;
     }
 
@@ -233,9 +238,10 @@ struct car {
     return true;
   }
 
-  static constexpr cost_t way_cost(way_properties const& e,
+  static constexpr cost_t way_cost(parameters const&,
+                                   way_properties const& e,
                                    direction const dir,
-                                   std::uint16_t const dist, [[maybe_unused]] routing_parameters const rp) {
+                                   std::uint16_t const dist) {
     if (e.is_car_accessible() &&
         (dir == direction::kForward || !e.is_oneway_car())) {
       return (dist / e.max_speed_m_per_s()) * (e.is_destination() ? 5U : 1U) +
@@ -249,7 +255,7 @@ struct car {
     return n.is_car_accessible() ? 0U : kInfeasible;
   }
 
-  static constexpr double heuristic(double const dist, [[maybe_unused]] routing_parameters const rp) {
+  static constexpr double heuristic(parameters const&, double const dist) {
     return dist / (130U / 3.6);
   }
   static constexpr node get_reverse(node const n) {

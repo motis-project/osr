@@ -36,6 +36,7 @@ concept IsEntry =
 
 template <typename Profile>
 concept IsProfile =
+    std::is_default_constructible_v<typename Profile::parameters> &&
     IsNode<typename Profile::node, typename Profile::key> &&
     IsLabel<typename Profile::label, typename Profile::node> &&
     IsEntry<typename Profile::entry,
@@ -59,18 +60,18 @@ concept IsProfile =
     std::invocable<
         decltype(Profile::
                      template adjacent<osr::direction::kBackward, true, std::function<void(typename Profile::node)>>),
+        typename Profile::parameters const,
         osr::ways::routing const,
         typename Profile::node const,
         bitvec<node_idx_t> const*,
         sharing_data const*,
         elevation_storage const*,
-        std::function<void(typename Profile::node)>,
-        routing_parameters> &&
+        std::function<void(typename Profile::node)>> &&
     requires(Profile p) {
       {
-        Profile::way_cost(std::declval<way_properties>(),
-                          std::declval<direction>(), std::uint16_t(),
-                          std::declval<routing_parameters>())
+        Profile::way_cost(typename Profile::parameters{},
+                          std::declval<way_properties>(),
+                          std::declval<direction>(), std::uint16_t())
       } -> std::same_as<cost_t>;
     };
 // TODO: is_dest_reachable, heuristic

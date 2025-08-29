@@ -100,53 +100,56 @@ void print_result(std::vector<benchmark_result> const& var,
             << "\n-----------------------------\n";
 }
 
-template <typename T>
-void set_start(dijkstra<T>& d, ways const& w, node_idx_t const start, routing_parameters const rp) {
-  d.add_start(w, typename T::label{typename T::node{start}, 0U}, rp);
+template <IsProfile Profile>
+void set_start(dijkstra<Profile>& d, ways const& w, node_idx_t const start) {
+  d.add_start(w, typename Profile::label{typename Profile::node{start}, 0U});
 }
 
 template <>
-void set_start<car>(dijkstra<car>& d, ways const& w, node_idx_t const start, routing_parameters const rp) {
-  d.add_start(w, car::label{car::node{start, 0, direction::kForward}, 0U}, rp);
-  d.add_start(w, car::label{car::node{start, 0, direction::kBackward}, 0U}, rp);
+void set_start<car>(dijkstra<car>& d, ways const& w, node_idx_t const start) {
+  d.add_start(w, car::label{car::node{start, 0, direction::kForward}, 0U});
+  d.add_start(w, car::label{car::node{start, 0, direction::kBackward}, 0U});
 };
 
-template <typename T>
-void set_start(bidirectional<T>& d, ways const& w, node_idx_t const start, routing_parameters const rp) {
-  d.add_start(w, typename T::label{typename T::node{start}, 0U}, nullptr, rp);
+template <IsProfile Profile>
+void set_start(typename Profile::parameters const& params, bidirectional<Profile>& d, ways const& w, node_idx_t const start) {
+  d.add_start(params, w, typename Profile::label{typename Profile::node{start}, 0U}, nullptr);
 }
 
 template <>
-void set_start<car>(bidirectional<car>& d,
+void set_start<car>(car::parameters const& params,
+                    bidirectional<car>& d,
                     ways const& w,
-                    node_idx_t const start, routing_parameters const rp) {
-  d.add_start(w, car::label{car::node{start, 0, direction::kForward}, 0U},
-              nullptr, rp);
-  d.add_start(w, car::label{car::node{start, 0, direction::kBackward}, 0U},
-              nullptr, rp);
+                    node_idx_t const start) {
+  d.add_start(params, w, car::label{car::node{start, 0, direction::kForward}, 0U},
+              nullptr);
+  d.add_start(params, w, car::label{car::node{start, 0, direction::kBackward}, 0U},
+              nullptr);
 };
 
-template <typename T>
-std::vector<typename T::label> set_end(bidirectional<T>& d,
+template <IsProfile Profile>
+std::vector<typename Profile::label> set_end(typename Profile::parameters const& params,
+                                       bidirectional<Profile>& d,
                                        ways const& w,
-                                       node_idx_t const end, routing_parameters const rp) {
-  auto const l = typename T::label{typename T::node{end}, 0U};
-  d.add_end(w, l, nullptr, rp);
+                                       node_idx_t const end) {
+  auto const l = typename Profile::label{typename Profile::node{end}, 0U};
+  d.add_end(params, w, l, nullptr);
   return {l};
 }
 
 template <>
-std::vector<typename car::label> set_end<car>(bidirectional<car>& d,
+std::vector<typename car::label> set_end<car>(car::parameters const& params,
+                                              bidirectional<car>& d,
                                               ways const& w,
-                                              node_idx_t const end, routing_parameters const rp) {
+                                              node_idx_t const end) {
   std::vector<typename car::label> ends;
   auto const ways = w.r_->node_ways_[end];
 
   for (auto i = way_pos_t{0U}; i != ways.size(); ++i) {
     auto const l1 = car::label{car::node{end, i, direction::kForward}, 0U};
     auto const l2 = car::label{car::node{end, i, direction::kBackward}, 0U};
-    d.add_end(w, l1, nullptr, rp);
-    d.add_end(w, l2, nullptr, rp);
+    d.add_end(params, w, l1, nullptr);
+    d.add_end(params, w, l2, nullptr);
     ends.push_back(l1);
     ends.push_back(l2);
   }
@@ -182,17 +185,16 @@ int main(int argc, char const* argv[]) {
   auto results = std::vector<benchmark_result>{};
   results.reserve(opt.n_queries_);
 
-  auto const run_benchmark = [&]<typename T>(search_profile const profile,
-                                             const char* profile_label,
-                                             float const speed) {
+  auto const run_benchmark = [&]<IsProfile Profile>(typename Profile::parameters const& params,
+                                                    search_profile const profile,
+                                             const char* profile_label) {
     results.clear();
     auto i = std::atomic_size_t{0U};
     auto m = std::mutex{};
-    auto const rp = routing_parameters{speed};
     for (auto& t : threads) {
       t = std::thread([&]() {
-        auto d = dijkstra<T>{};
-        auto b = bidirectional<T>{};
+        auto d = dijkstra<Profile>{};
+        auto b = bidirectional<Profile>{};
         auto h = cista::BASE_HASH;
         auto n = 0U;
         while (i.fetch_add(1U) < opt.n_queries_ - 1) {
@@ -216,13 +218,13 @@ int main(int argc, char const* argv[]) {
           if (opt.from_coords_) {
             auto const start_time = std::chrono::steady_clock::now();
             auto const d_res =
-                route(w, l, profile, start_loc, end_loc, opt.max_dist_,
-                      direction::kForward, 250, rp, nullptr, nullptr, nullptr,
+                route(params, w, l, profile, start_loc, end_loc, opt.max_dist_,
+                      direction::kForward, 250, nullptr, nullptr, nullptr,
                       routing_algorithm::kDijkstra);
             auto const middle_time = std::chrono::steady_clock::now();
             auto const b_res =
-                route(w, l, profile, start_loc, end_loc, opt.max_dist_,
-                      direction::kForward, 250, rp, nullptr, nullptr, nullptr,
+                route(params, w, l, profile, start_loc, end_loc, opt.max_dist_,
+                      direction::kForward, 250, nullptr, nullptr, nullptr,
                       routing_algorithm::kAStarBi);
             auto const end_time = std::chrono::steady_clock::now();
 
@@ -251,17 +253,17 @@ int main(int argc, char const* argv[]) {
               continue;
             }
             d.reset(opt.max_dist_);
-            b.reset(opt.max_dist_, start_loc, end_loc, rp);
-            set_start<T>(d, w, start, rp);
-            set_start<T>(b, w, start, rp);
+            b.reset(params, opt.max_dist_, start_loc, end_loc);
+            set_start<Profile>(d, w, start);
+            set_start<Profile>(params, b, w, start);
 
-            auto const ends = set_end<T>(b, w, end, rp);
+            auto const ends = set_end<Profile>(params, b, w, end);
             auto const start_time = std::chrono::steady_clock::now();
             d.template run<direction::kForward, false>(
-                w, *w.r_, opt.max_dist_, nullptr, nullptr, elevations.get(), rp);
+                params, w, *w.r_, opt.max_dist_, nullptr, nullptr, elevations.get());
             auto const middle_time = std::chrono::steady_clock::now();
             b.template run<direction::kForward, false>(
-                w, *w.r_, opt.max_dist_, nullptr, nullptr, elevations.get(), rp);
+                params, w, *w.r_, opt.max_dist_, nullptr, nullptr, elevations.get());
             auto const end_time = std::chrono::steady_clock::now();
             /*std::cout << "took "
                       << std::chrono::duration_cast<std::chrono::milliseconds>(
@@ -304,7 +306,8 @@ int main(int argc, char const* argv[]) {
   };
 
   fmt::println("Measuring with speed {} starting ...", opt.speed_);
-  run_benchmark.template operator()<foot<false>>(search_profile::kFoot, "foot", opt.speed_);
+  auto const foot_params = foot<false>::parameters{.speed_=opt.speed_};
+  run_benchmark.template operator()<foot<false>>(foot_params, search_profile::kFoot, "foot");
   fmt::println("Measuring with speed {} ended", opt.speed_);
   // run_benchmark.template operator()<car>(search_profile::kCar, "car");
   // run_benchmark

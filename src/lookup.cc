@@ -6,6 +6,7 @@
 #include "osr/routing/profiles/car_parking.h"
 #include "osr/routing/profiles/car_sharing.h"
 #include "osr/routing/profiles/foot.h"
+#include "osr/routing/parameters.h"
 #include "osr/routing/with_profile.h"
 
 namespace osr {
@@ -103,18 +104,18 @@ raw_node_candidate lookup::find_raw_next_node(
   return c;
 }
 
-match_t lookup::match(location const& query,
+match_t lookup::match(profile_parameters const& params,
+                      location const& query,
                       bool const reverse,
                       direction const search_dir,
                       double const max_match_distance,
                       bitvec<node_idx_t> const* blocked,
                       search_profile const p,
-                routing_parameters const rp,
                       std::optional<std::span<raw_way_candidate const>>
                           raw_way_candidates) const {
   return with_profile(p, [&]<IsProfile Profile>(Profile&&) {
-    return match<Profile>(query, reverse, search_dir, max_match_distance,
-                          blocked, rp, raw_way_candidates);
+    return match<Profile>(std::get<typename Profile::parameters>(params), query, reverse, search_dir, max_match_distance,
+                          blocked, raw_way_candidates);
   });
 }
 

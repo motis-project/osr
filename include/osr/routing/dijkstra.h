@@ -34,7 +34,7 @@ struct dijkstra {
     max_reached_ = false;
   }
 
-  void add_start(ways const& w, label const l, [[maybe_unused]] routing_parameters const rp) {
+  void add_start(ways const& w, label const l) {
     if (cost_[l.get_node().get_key()].update(l, l.get_node(), l.cost(),
                                              node::invalid())) {
       if constexpr (kDebug) {
@@ -52,13 +52,13 @@ struct dijkstra {
   }
 
   template <direction SearchDir, bool WithBlocked>
-  bool run(ways const& w,
+  bool run(Profile::parameters const& params,
+           ways const& w,
            ways::routing const& r,
            cost_t const max,
            bitvec<node_idx_t> const* blocked,
            sharing_data const* sharing,
-           elevation_storage const* elevations,
-                                   [[maybe_unused]] routing_parameters const rp) {
+           elevation_storage const* elevations) {
     while (!pq_.empty()) {
       auto l = pq_.pop();
       if (get_cost(l.get_node()) < l.cost()) {
@@ -73,7 +73,7 @@ struct dijkstra {
 
       auto const curr = l.get_node();
       Profile::template adjacent<SearchDir, WithBlocked>(
-          r, curr, blocked, sharing, elevations,
+          params, r, curr, blocked, sharing, elevations,
           [&](node const neighbor, std::uint32_t const cost, distance_t,
               way_idx_t const way, std::uint16_t, std::uint16_t,
               elevation_storage::elevation, bool const track) {
@@ -102,31 +102,31 @@ struct dijkstra {
                 std::cout << " -> DOMINATED\n";
               }
             }
-          }, rp);
+          });
     }
     return !max_reached_;
   }
 
-  bool run(ways const& w,
+  bool run(Profile::parameters const& params,
+           ways const& w,
            ways::routing const& r,
            cost_t const max,
            bitvec<node_idx_t> const* blocked,
            sharing_data const* sharing,
            elevation_storage const* elevations,
-           direction const dir,
-                                   routing_parameters const rp) {
+           direction const dir) {
     if (blocked == nullptr) {
       return dir == direction::kForward
-                 ? run<direction::kForward, false>(w, r, max, blocked, sharing,
-                                                   elevations, rp)
-                 : run<direction::kBackward, false>(w, r, max, blocked, sharing,
-                                                    elevations, rp);
+                 ? run<direction::kForward, false>(params, w, r, max, blocked, sharing,
+                                                   elevations)
+                 : run<direction::kBackward, false>(params, w, r, max, blocked, sharing,
+                                                    elevations);
     } else {
       return dir == direction::kForward
-                 ? run<direction::kForward, true>(w, r, max, blocked, sharing,
-                                                  elevations, rp)
-                 : run<direction::kBackward, true>(w, r, max, blocked, sharing,
-                                                   elevations, rp);
+                 ? run<direction::kForward, true>(params, w, r, max, blocked, sharing,
+                                                  elevations)
+                 : run<direction::kBackward, true>(params, w, r, max, blocked, sharing,
+                                                   elevations);
     }
   }
 
