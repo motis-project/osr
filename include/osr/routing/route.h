@@ -7,8 +7,7 @@
 
 #include "osr/elevation_storage.h"
 #include "osr/location.h"
-// #include "osr/lookup.h"
-#include "osr/match_view.h"
+#include "osr/lookup.h"
 #include "osr/routing/algorithms.h"
 #include "osr/routing/mode.h"
 #include "osr/routing/path.h"
@@ -27,10 +26,6 @@ template <IsProfile Profile>
 struct bidirectional;
 
 struct sharing_data;
-
-struct lookup;
-
-using match_view_t = std::span<way_candidate const>;
 
 template <IsProfile Profile>
 bidirectional<Profile>& get_bidirectional();

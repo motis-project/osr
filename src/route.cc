@@ -771,7 +771,7 @@ std::optional<path> route_bidirectional(profile_parameters const& params,
                                         elevation_storage const* elevations) {
   return with_profile(
       profile, [&]<IsProfile Profile>(Profile&&) -> std::optional<path> {
-        auto const pp = std::get<typename Profile::parameters>(params);
+        auto const& pp = std::get<typename Profile::parameters>(params);
         auto const from_match =
             l.match<Profile>(pp, from, false, dir, max_match_distance, blocked);
         auto const to_match =
@@ -804,7 +804,7 @@ std::vector<std::optional<path>> route(
   return with_profile(
       profile,
       [&]<IsProfile Profile>(Profile&&) -> std::vector<std::optional<path>> {
-        auto const pp = std::get<typename Profile::parameters>(params);
+        auto const& pp = std::get<typename Profile::parameters>(params);
         auto const from_match =
             l.match<Profile>(pp, from, false, dir, max_match_distance, blocked);
         if (from_match.empty()) {
@@ -833,7 +833,7 @@ std::optional<path> route_dijkstra(profile_parameters const& params,
                                    elevation_storage const* elevations) {
   return with_profile(
       profile, [&]<IsProfile Profile>(Profile&&) -> std::optional<path> {
-        auto const pp = std::get<typename Profile::parameters>(params);
+        auto const& pp = std::get<typename Profile::parameters>(params);
         auto const from_match =
             l.match<Profile>(pp, from, false, dir, max_match_distance, blocked);
         auto const to_match =
