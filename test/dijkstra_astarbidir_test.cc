@@ -198,7 +198,7 @@ TEST(dijkstra_astarbidir, hamburg) {
   auto const raw_data = "test/hamburg.osm.pbf";
   auto const data_dir = "test/hamburg";
   auto const num_samples = 5000U;
-  auto const max_cost = 2 * 3600U;
+  auto const max_cost = 3 * 3600U;
 
   if (!fs::exists(raw_data) && !fs::exists(data_dir)) {
     GTEST_SKIP() << raw_data << " not found";
