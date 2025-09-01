@@ -23,9 +23,8 @@ template <typename Node, typename NodeKey>
 concept IsNode =
     IsNodeBase<Node, osr::node_idx_t> && requires(Node const& node) {
       { node.get_key() } -> std::same_as<NodeKey>;
-    } && requires(Node const& a, Node const& b) {
-      { a == b } -> std::same_as<bool>;
     } && requires(Node const& node, std::ostream& out, ways const& w) {
+      { node == node } -> std::same_as<bool>;
       { node.get_mode() } -> std::same_as<mode>;
       { node.print(out, w) } -> std::same_as<decltype(out)>;
     };
@@ -67,66 +66,50 @@ concept IsProfile =
     IsEntry<typename Profile::entry,
             typename Profile::node,
             typename Profile::label> &&
-    std::invocable<decltype(Profile::template resolve_start_node<
-                            std::function<void(typename Profile::node const)>>),
-                   ways::routing const&,
-                   way_idx_t const,
-                   node_idx_t const,
-                   level_t const,
-                   direction const,
-                   std::function<void(typename Profile::node const)>&&> &&
-    std::invocable<decltype(Profile::template resolve_all<
-                            std::function<void(typename Profile::node const)>>),
-                   ways::routing const&,
-                   node_idx_t const,
-                   level_t const,
-                   std::function<void(typename Profile::node const)>&&> &&
-    std::invocable<decltype(Profile::template adjacent<
-                            osr::direction::kBackward,
-                            true,
-                            std::function<void(typename Profile::node const,
-                                               std::uint32_t const,
-                                               distance_t,
-                                               way_idx_t const,
-                                               std::uint16_t,
-                                               std::uint16_t,
-                                               elevation_storage::elevation,
-                                               bool const)>>),
-                   typename Profile::parameters const,
-                   osr::ways::routing const,
-                   typename Profile::node const,
-                   bitvec<node_idx_t> const*,
-                   sharing_data const*,
-                   elevation_storage const*,
-                   std::function<void(typename Profile::node const,
-                                      std::uint32_t const,
-                                      distance_t,
-                                      way_idx_t const,
-                                      std::uint16_t,
-                                      std::uint16_t,
-                                      elevation_storage::elevation,
-                                      bool const)>> &&
     requires(typename Profile::parameters const& params,
+             typename Profile::node const node,
              ways::routing const& r,
-             typename Profile::node const n,
              way_idx_t const w,
-             direction const dir) {
+             node_idx_t const node_idx,
+             level_t const lvl,
+             direction const dir,
+             double const dist,
+             std::function<void(typename Profile::node const)>&& f) {
       {
-        Profile::is_dest_reachable(params, r, n, w, dir, dir)
+        Profile::resolve_start_node(r, w, node_idx, lvl, dir, f)
+      } -> std::same_as<void>;
+      { Profile::resolve_all(r, node_idx, lvl, f) } -> std::same_as<void>;
+      {
+        Profile::is_dest_reachable(params, r, node, w, dir, dir)
       } -> std::same_as<bool>;
-    } &&
-    requires(Profile p) {
       {
         Profile::way_cost(typename Profile::parameters{},
                           std::declval<way_properties>(),
                           std::declval<direction>(), std::uint16_t())
       } -> std::same_as<cost_t>;
-    } &&
-    requires(node_properties const n) {
-      { Profile::node_cost(n) } -> std::same_as<cost_t>;
-    } &&
-    requires(typename Profile::parameters const& params, double const dist) {
+      {
+        Profile::node_cost(std::declval<node_properties>())
+      } -> std::same_as<cost_t>;
       { Profile::heuristic(params, dist) } -> std::same_as<double>;
+    } &&
+    requires(typename Profile::parameters const& params,
+             typename Profile::node const n,
+             osr::ways::routing const& r,
+             bitvec<node_idx_t> const* blocked,
+             sharing_data const* sharing,
+             elevation_storage const* elevation,
+             std::function<void(typename Profile::node const,
+                                std::uint32_t const,
+                                distance_t,
+                                way_idx_t const,
+                                std::uint16_t,
+                                std::uint16_t,
+                                elevation_storage::elevation,
+                                bool const)> f) {
+      {
+        Profile::template adjacent<direction::kBackward, false>(
+            params, r, n, blocked, sharing, elevation, f)
+      } -> std::same_as<void>;
     };
 
 enum class search_profile : std::uint8_t {
