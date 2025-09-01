@@ -14,7 +14,6 @@ struct sharing_data;
 constexpr auto const kElevationNoCost = 0U;
 constexpr auto const kElevationLowCost = 570U;
 constexpr auto const kElevationHighCost = 3700U;
-constexpr auto const kBikeSpeedMetersPerSecond = 4.2F;
 
 // Routing const configuration (cost, exp)
 // cost:
@@ -35,7 +34,9 @@ template <bike_costing Costing,
 struct bike {
   static constexpr auto const kMaxMatchDistance = 100U;
 
-  struct parameters {};
+  struct parameters {
+    float const speed_{4.2F};
+  };
 
   struct node {
     friend bool operator==(node, node) = default;
@@ -217,14 +218,14 @@ struct bike {
     }
   }
 
-  static constexpr cost_t way_cost(parameters const&,
+  static constexpr cost_t way_cost(parameters const& params,
                                    way_properties const e,
                                    direction const dir,
                                    std::uint16_t const dist) {
     if (e.is_bike_accessible() &&
         (dir == direction::kForward || !e.is_oneway_bike())) {
       return static_cast<cost_t>(
-          std::round(dist / (kBikeSpeedMetersPerSecond +
+          std::round(dist / (params.speed_ +
                              (Costing == bike_costing::kFast
                                   ? 0
                                   : (e.is_big_street_ ? -0.7 : 0) +
@@ -238,8 +239,8 @@ struct bike {
     return n.is_bike_accessible() ? 0U : kInfeasible;
   }
 
-  static constexpr double heuristic(parameters const&, double const dist) {
-    return dist / (kBikeSpeedMetersPerSecond + 0.5);
+  static constexpr double heuristic(parameters const& params, double const dist) {
+    return dist / (params.speed_ + 0.5);
   }
 
   static constexpr node get_reverse(node const n) {

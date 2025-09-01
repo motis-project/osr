@@ -506,7 +506,7 @@ struct car_sharing {
     return footp::node_cost(n);
   }
 
-  static constexpr double heuristic(parameters const& params,double const dist) {
+  static constexpr double heuristic(parameters const& params, double const dist) {
     return car::heuristic(params.car_, dist);
   }
 

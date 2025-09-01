@@ -445,8 +445,8 @@ struct bike_sharing {
     return footp::node_cost(n);
   }
 
-  static constexpr double heuristic(parameters const&, double const dist) {
-    return dist / kBikeSpeedMetersPerSecond;
+  static constexpr double heuristic(parameters const& params, double const dist) {
+    return dist / params.bike_.speed_;
   }
 
   static constexpr node get_reverse(node const n) { return n; }
