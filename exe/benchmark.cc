@@ -23,10 +23,9 @@
 #include "osr/routing/bidirectional.h"
 #include "osr/routing/dijkstra.h"
 #include "osr/routing/profile.h"
-#include "osr/routing/profiles/bike.h"
 #include "osr/routing/profiles/car.h"
-#include "osr/routing/profiles/foot.h"
 #include "osr/routing/route.h"
+#include "osr/routing/with_profile.h"
 #include "osr/types.h"
 #include "osr/ways.h"
 
@@ -316,19 +315,30 @@ int main(int argc, char const* argv[]) {
     print_result(results, profile_label);
   };
 
-  fmt::println("Measuring with speed {} starting ...", opt.speed_);
-  auto const foot_params = foot<false>::parameters{.speed_ = opt.speed_};
-  run_benchmark.template operator()<foot<false>>(foot_params,
-                                                 search_profile::kFoot, "foot");
-  fmt::println("Measuring with speed {} ended", opt.speed_);
-  // run_benchmark.template operator()<car>(search_profile::kCar, "car");
-  // run_benchmark
-  //     .template operator()<bike<bike_costing::kSafe, kElevationNoCost>>(
-  //         search_profile::kBike, "bike (no elevation costs)");
-  // run_benchmark
-  //     .template operator()<bike<bike_costing::kSafe, kElevationLowCost>>(
-  //         search_profile::kBikeElevationLow, "bike (low elevation costs)");
-  // run_benchmark
-  //     .template operator()<bike<bike_costing::kSafe, kElevationHighCost>>(
-  //         search_profile::kBikeElevationHigh, "bike (high elevation costs)");
+  auto const run_speed_benchmark = [&](search_profile const profile,
+                                       std::string_view label,
+                                       float const speed = 0.0F) {
+    with_profile(profile, [&](IsProfile auto&& p) {
+      using Profile = std::remove_cvref_t<decltype(p)>;
+      constexpr auto const params = [&]() {
+        if constexpr (requires { typename Profile::parameters::speed_; }) {
+          return speed > 0.0F
+                     ? typename Profile::parameters{.speed_ = opt.speed_}
+                     : typename Profile::parameters{};
+        } else {
+          return typename Profile::parameters{};
+        }
+      }();
+      run_benchmark.template operator()<Profile>(params, profile, label.data());
+    });
+  };
+  auto const walk_speed = opt.speed_;
+  auto const bike_speed = 3.5F * walk_speed;
+  run_speed_benchmark(search_profile::kFoot, "foot", walk_speed);
+  run_speed_benchmark(search_profile::kCar, "car");
+  run_speed_benchmark(search_profile::kBike, "bike", bike_speed);
+  run_speed_benchmark(search_profile::kBikeElevationLow,
+                      "bike (low elevation costs)", bike_speed);
+  run_speed_benchmark(search_profile::kBikeElevationHigh,
+                      "bike (high elevation costs)", bike_speed);
 }
