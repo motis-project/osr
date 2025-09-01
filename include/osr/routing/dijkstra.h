@@ -117,16 +117,16 @@ struct dijkstra {
            direction const dir) {
     if (blocked == nullptr) {
       return dir == direction::kForward
-                 ? run<direction::kForward, false>(params, w, r, max, blocked, sharing,
-                                                   elevations)
-                 : run<direction::kBackward, false>(params, w, r, max, blocked, sharing,
-                                                    elevations);
+                 ? run<direction::kForward, false>(params, w, r, max, blocked,
+                                                   sharing, elevations)
+                 : run<direction::kBackward, false>(params, w, r, max, blocked,
+                                                    sharing, elevations);
     } else {
       return dir == direction::kForward
-                 ? run<direction::kForward, true>(params, w, r, max, blocked, sharing,
-                                                  elevations)
-                 : run<direction::kBackward, true>(params, w, r, max, blocked, sharing,
-                                                   elevations);
+                 ? run<direction::kForward, true>(params, w, r, max, blocked,
+                                                  sharing, elevations)
+                 : run<direction::kBackward, true>(params, w, r, max, blocked,
+                                                   sharing, elevations);
     }
   }
 

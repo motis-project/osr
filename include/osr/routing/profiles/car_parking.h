@@ -318,11 +318,11 @@ struct car_parking {
     return !UseParking || w.way_properties_[way].is_parking() ||
            (search_dir == direction::kForward
                 ? n.is_foot_node() &&
-                      footp::is_dest_reachable(params.foot_, w, to_foot(n), way, way_dir,
-                                               search_dir)
+                      footp::is_dest_reachable(params.foot_, w, to_foot(n), way,
+                                               way_dir, search_dir)
                 : n.is_car_node() &&
-                      car::is_dest_reachable(params.car_, w, to_car(n), way, way_dir,
-                                             search_dir));
+                      car::is_dest_reachable(params.car_, w, to_car(n), way,
+                                             way_dir, search_dir));
   }
 
   static constexpr cost_t way_cost(parameters const& params,

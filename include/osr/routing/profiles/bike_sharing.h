@@ -310,8 +310,8 @@ struct bike_sharing {
           for (auto const& ae : it->second) {
             handle_additional_edge(
                 ae, nt,
-                footp::way_cost(params.foot_, kAdditionalWayProperties, direction::kForward,
-                                ae.distance_) +
+                footp::way_cost(params.foot_, kAdditionalWayProperties,
+                                direction::kForward, ae.distance_) +
                     switch_penalty);
           }
         }
@@ -338,8 +338,8 @@ struct bike_sharing {
           for (auto const& ae : it->second) {
             handle_additional_edge(
                 ae, node_type::kBike,
-                bikep::way_cost(params.bike_, kAdditionalWayProperties, direction::kForward,
-                                ae.distance_) +
+                bikep::way_cost(params.bike_, kAdditionalWayProperties,
+                                direction::kForward, ae.distance_) +
                     switch_penalty);
           }
         }
@@ -358,15 +358,15 @@ struct bike_sharing {
                 is_allowed(sharing->start_allowed_, n.n_)) {
               handle_additional_edge(
                   ae, node_type::kBike,
-                  bikep::way_cost(params.bike_, kAdditionalWayProperties, direction::kForward,
-                                  ae.distance_) +
+                  bikep::way_cost(params.bike_, kAdditionalWayProperties,
+                                  direction::kForward, ae.distance_) +
                       kStartSwitchPenalty);
             } else if (n.is_bike_node() &&
                        is_allowed(sharing->end_allowed_, n.n_)) {
               handle_additional_edge(
                   ae, node_type::kTrailingFoot,
-                  footp::way_cost(params.foot_, kAdditionalWayProperties, direction::kForward,
-                                  ae.distance_) +
+                  footp::way_cost(params.foot_, kAdditionalWayProperties,
+                                  direction::kForward, ae.distance_) +
                       kEndSwitchPenalty);
             }
           }
@@ -396,15 +396,15 @@ struct bike_sharing {
                 is_allowed(sharing->end_allowed_, n.n_)) {
               handle_additional_edge(
                   ae, node_type::kBike,
-                  bikep::way_cost(params.bike_, kAdditionalWayProperties, direction::kForward,
-                                  ae.distance_) +
+                  bikep::way_cost(params.bike_, kAdditionalWayProperties,
+                                  direction::kForward, ae.distance_) +
                       kEndSwitchPenalty);
             } else if (n.is_bike_node() &&
                        is_allowed(sharing->start_allowed_, n.n_)) {
               handle_additional_edge(
                   ae, node_type::kInitialFoot,
-                  footp::way_cost(params.foot_, kAdditionalWayProperties, direction::kForward,
-                                  ae.distance_) +
+                  footp::way_cost(params.foot_, kAdditionalWayProperties,
+                                  direction::kForward, ae.distance_) +
                       kStartSwitchPenalty);
             }
           }
@@ -431,7 +431,8 @@ struct bike_sharing {
                                 direction const way_dir,
                                 direction const search_dir) {
     return !n.is_bike_node() &&
-           footp::is_dest_reachable(params.foot_, w, to_foot(n), way, way_dir, search_dir);
+           footp::is_dest_reachable(params.foot_, w, to_foot(n), way, way_dir,
+                                    search_dir);
   }
 
   static constexpr cost_t way_cost(parameters const& params,
@@ -445,7 +446,8 @@ struct bike_sharing {
     return footp::node_cost(n);
   }
 
-  static constexpr double heuristic(parameters const& params, double const dist) {
+  static constexpr double heuristic(parameters const& params,
+                                    double const dist) {
     return dist / params.bike_.speed_;
   }
 

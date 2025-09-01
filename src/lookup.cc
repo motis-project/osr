@@ -1,12 +1,12 @@
 #include "osr/lookup.h"
 
+#include "osr/routing/parameters.h"
 #include "osr/routing/profiles/bike.h"
 #include "osr/routing/profiles/bike_sharing.h"
 #include "osr/routing/profiles/car.h"
 #include "osr/routing/profiles/car_parking.h"
 #include "osr/routing/profiles/car_sharing.h"
 #include "osr/routing/profiles/foot.h"
-#include "osr/routing/parameters.h"
 #include "osr/routing/with_profile.h"
 
 namespace osr {
@@ -114,8 +114,9 @@ match_t lookup::match(profile_parameters const& params,
                       std::optional<std::span<raw_way_candidate const>>
                           raw_way_candidates) const {
   return with_profile(p, [&]<IsProfile Profile>(Profile&&) {
-    return match<Profile>(std::get<typename Profile::parameters>(params), query, reverse, search_dir, max_match_distance,
-                          blocked, raw_way_candidates);
+    return match<Profile>(std::get<typename Profile::parameters>(params), query,
+                          reverse, search_dir, max_match_distance, blocked,
+                          raw_way_candidates);
   });
 }
 

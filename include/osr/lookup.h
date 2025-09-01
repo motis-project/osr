@@ -18,8 +18,8 @@
 #include "utl/pairwise.h"
 
 #include "osr/location.h"
-#include "osr/routing/profile.h"
 #include "osr/routing/parameters.h"
+#include "osr/routing/profile.h"
 #include "osr/types.h"
 
 namespace osr {
@@ -125,17 +125,17 @@ struct lookup {
                          raw_wc.left_.dist_to_node_},
                         {query.lvl_, direction::kForward, raw_wc.right_.node_,
                          raw_wc.right_.dist_to_node_}};
-      apply_next_node_cost<Profile>(params, wc, wc.left_, query, reverse, search_dir,
-                                    blocked);
-      apply_next_node_cost<Profile>(params, wc, wc.right_, query, reverse, search_dir,
-                                    blocked);
+      apply_next_node_cost<Profile>(params, wc, wc.left_, query, reverse,
+                                    search_dir, blocked);
+      apply_next_node_cost<Profile>(params, wc, wc.right_, query, reverse,
+                                    search_dir, blocked);
       if (wc.left_.valid() || wc.right_.valid()) {
         matches.emplace_back(std::move(wc));
       }
     }
     if (i < 4 && matches.empty()) {
-      return match<Profile>(params, query, reverse, search_dir, max_match_distance,
-                            blocked);
+      return match<Profile>(params, query, reverse, search_dir,
+                            max_match_distance, blocked);
     }
     return matches;
   }
@@ -205,8 +205,8 @@ struct lookup {
     auto i = 0U;
     while (way_candidates.empty() && i++ < 4U) {
       max_match_distance *= 2U;
-      way_candidates = get_way_candidates<Profile>(params, query, reverse, search_dir,
-                                                   max_match_distance, blocked);
+      way_candidates = get_way_candidates<Profile>(
+          params, query, reverse, search_dir, max_match_distance, blocked);
     }
     return way_candidates;
   }
@@ -246,11 +246,13 @@ private:
       if (squared_dist < squared_max_dist) {
         auto wc = way_candidate{std::sqrt(squared_dist), way};
         wc.left_ = find_next_node<Profile>(
-            params, wc, query, direction::kBackward, query.lvl_, reverse, search_dir,
-            blocked, approx_distance_lng_degrees, best, segment_idx);
+            params, wc, query, direction::kBackward, query.lvl_, reverse,
+            search_dir, blocked, approx_distance_lng_degrees, best,
+            segment_idx);
         wc.right_ = find_next_node<Profile>(
-            params, wc, query, direction::kForward, query.lvl_, reverse, search_dir,
-            blocked, approx_distance_lng_degrees, best, segment_idx);
+            params, wc, query, direction::kForward, query.lvl_, reverse,
+            search_dir, blocked, approx_distance_lng_degrees, best,
+            segment_idx);
         if (wc.left_.valid() || wc.right_.valid()) {
           way_candidates.emplace_back(std::move(wc));
         }

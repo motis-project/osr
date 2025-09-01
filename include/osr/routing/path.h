@@ -2,8 +2,8 @@
 
 #include "geo/polyline.h"
 
-#include "osr/routing/mode.h"
 #include "osr/elevation_storage.h"
+#include "osr/routing/mode.h"
 
 namespace osr {
 
@@ -29,4 +29,4 @@ struct path {
   node_idx_t track_node_{node_idx_t::invalid()};
 };
 
-}
+}  // namespace osr

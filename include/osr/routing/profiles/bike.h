@@ -239,7 +239,8 @@ struct bike {
     return n.is_bike_accessible() ? 0U : kInfeasible;
   }
 
-  static constexpr double heuristic(parameters const& params, double const dist) {
+  static constexpr double heuristic(parameters const& params,
+                                    double const dist) {
     return dist / (params.speed_ + 0.5);
   }
 

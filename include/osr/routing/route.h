@@ -10,9 +10,9 @@
 #include "osr/lookup.h"
 #include "osr/routing/algorithms.h"
 #include "osr/routing/mode.h"
+#include "osr/routing/parameters.h"
 #include "osr/routing/path.h"
 #include "osr/routing/profile.h"
-#include "osr/routing/parameters.h"
 #include "osr/types.h"
 
 namespace osr {
@@ -51,7 +51,7 @@ std::vector<std::optional<path>> route(
     });
 
 std::optional<path> route(profile_parameters const&,
-  ways const&,
+                          ways const&,
                           lookup const&,
                           search_profile,
                           location const& from,
@@ -62,12 +62,11 @@ std::optional<path> route(profile_parameters const&,
                           bitvec<node_idx_t> const* blocked = nullptr,
                           sharing_data const* sharing = nullptr,
                           elevation_storage const* = nullptr,
-                          routing_algorithm = routing_algorithm::kDijkstra
-                          );
+                          routing_algorithm = routing_algorithm::kDijkstra);
 
 std::vector<std::optional<path>> route(
     profile_parameters const&,
-  ways const&,
+    ways const&,
     lookup const&,
     search_profile const,
     location const& from,

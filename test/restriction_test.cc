@@ -49,15 +49,18 @@ TEST(extract, wa) {
   auto const to = location{w.get_node_pos(*n_dst), kNoLevel};
   constexpr auto const kMaxCost = cost_t{3600};
   constexpr auto const kMaxMatchDistance = 100;
-  constexpr auto const kParamsNoCosts = bike<bike_costing::kSafe, kElevationNoCost>::parameters{};
-  constexpr auto const kParamsHighCosts = bike<bike_costing::kSafe, kElevationHighCost>::parameters{};
-  auto const route_no_costs = route(
-      kParamsNoCosts, w, l, search_profile::kBike, from, to, kMaxCost, direction::kForward,
-      kMaxMatchDistance, nullptr, nullptr, elevations.get());
-  auto const route_high_costs =
-      route(kParamsHighCosts, w, l, search_profile::kBikeElevationHigh, from, to, kMaxCost,
+  constexpr auto const kParamsNoCosts =
+      bike<bike_costing::kSafe, kElevationNoCost>::parameters{};
+  constexpr auto const kParamsHighCosts =
+      bike<bike_costing::kSafe, kElevationHighCost>::parameters{};
+  auto const route_no_costs =
+      route(kParamsNoCosts, w, l, search_profile::kBike, from, to, kMaxCost,
             direction::kForward, kMaxMatchDistance, nullptr, nullptr,
             elevations.get());
+  auto const route_high_costs =
+      route(kParamsHighCosts, w, l, search_profile::kBikeElevationHigh, from,
+            to, kMaxCost, direction::kForward, kMaxMatchDistance, nullptr,
+            nullptr, elevations.get());
 
   auto const is_restricted = w.r_->is_restricted<osr::direction::kForward>(
       n.value(), w.r_->get_way_pos(n.value(), rhoenring.value()),

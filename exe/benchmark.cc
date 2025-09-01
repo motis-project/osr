@@ -112,8 +112,13 @@ void set_start<car>(dijkstra<car>& d, ways const& w, node_idx_t const start) {
 };
 
 template <IsProfile Profile>
-void set_start(typename Profile::parameters const& params, bidirectional<Profile>& d, ways const& w, node_idx_t const start) {
-  d.add_start(params, w, typename Profile::label{typename Profile::node{start}, 0U}, nullptr);
+void set_start(typename Profile::parameters const& params,
+               bidirectional<Profile>& d,
+               ways const& w,
+               node_idx_t const start) {
+  d.add_start(params, w,
+              typename Profile::label{typename Profile::node{start}, 0U},
+              nullptr);
 }
 
 template <>
@@ -121,17 +126,20 @@ void set_start<car>(car::parameters const& params,
                     bidirectional<car>& d,
                     ways const& w,
                     node_idx_t const start) {
-  d.add_start(params, w, car::label{car::node{start, 0, direction::kForward}, 0U},
+  d.add_start(params, w,
+              car::label{car::node{start, 0, direction::kForward}, 0U},
               nullptr);
-  d.add_start(params, w, car::label{car::node{start, 0, direction::kBackward}, 0U},
+  d.add_start(params, w,
+              car::label{car::node{start, 0, direction::kBackward}, 0U},
               nullptr);
 };
 
 template <IsProfile Profile>
-std::vector<typename Profile::label> set_end(typename Profile::parameters const& params,
-                                       bidirectional<Profile>& d,
-                                       ways const& w,
-                                       node_idx_t const end) {
+std::vector<typename Profile::label> set_end(
+    typename Profile::parameters const& params,
+    bidirectional<Profile>& d,
+    ways const& w,
+    node_idx_t const end) {
   auto const l = typename Profile::label{typename Profile::node{end}, 0U};
   d.add_end(params, w, l, nullptr);
   return {l};
@@ -185,9 +193,10 @@ int main(int argc, char const* argv[]) {
   auto results = std::vector<benchmark_result>{};
   results.reserve(opt.n_queries_);
 
-  auto const run_benchmark = [&]<IsProfile Profile>(typename Profile::parameters const& params,
-                                                    search_profile const profile,
-                                             const char* profile_label) {
+  auto const run_benchmark = [&]<IsProfile Profile>(
+                                 typename Profile::parameters const& params,
+                                 search_profile const profile,
+                                 const char* profile_label) {
     results.clear();
     auto i = std::atomic_size_t{0U};
     auto m = std::mutex{};
@@ -260,10 +269,12 @@ int main(int argc, char const* argv[]) {
             auto const ends = set_end<Profile>(params, b, w, end);
             auto const start_time = std::chrono::steady_clock::now();
             d.template run<direction::kForward, false>(
-                params, w, *w.r_, opt.max_dist_, nullptr, nullptr, elevations.get());
+                params, w, *w.r_, opt.max_dist_, nullptr, nullptr,
+                elevations.get());
             auto const middle_time = std::chrono::steady_clock::now();
             b.template run<direction::kForward, false>(
-                params, w, *w.r_, opt.max_dist_, nullptr, nullptr, elevations.get());
+                params, w, *w.r_, opt.max_dist_, nullptr, nullptr,
+                elevations.get());
             auto const end_time = std::chrono::steady_clock::now();
             /*std::cout << "took "
                       << std::chrono::duration_cast<std::chrono::milliseconds>(
@@ -306,8 +317,9 @@ int main(int argc, char const* argv[]) {
   };
 
   fmt::println("Measuring with speed {} starting ...", opt.speed_);
-  auto const foot_params = foot<false>::parameters{.speed_=opt.speed_};
-  run_benchmark.template operator()<foot<false>>(foot_params, search_profile::kFoot, "foot");
+  auto const foot_params = foot<false>::parameters{.speed_ = opt.speed_};
+  run_benchmark.template operator()<foot<false>>(foot_params,
+                                                 search_profile::kFoot, "foot");
   fmt::println("Measuring with speed {} ended", opt.speed_);
   // run_benchmark.template operator()<car>(search_profile::kCar, "car");
   // run_benchmark

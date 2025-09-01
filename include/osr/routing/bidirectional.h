@@ -91,7 +91,10 @@ struct bidirectional {
     }
   }
 
-  void add_start(Profile::parameters const& params, ways const& w, label const l, sharing_data const* sharing) {
+  void add_start(Profile::parameters const& params,
+                 ways const& w,
+                 label const l,
+                 sharing_data const* sharing) {
     if (kDebug) {
       l.get_node().print(std::cout, w);
       std::cout << "starting" << l.get_node().n_ << std::endl;
@@ -99,7 +102,10 @@ struct bidirectional {
     add(params, w, l, direction::kForward, cost1_, pq1_, sharing);
   }
 
-  void add_end(Profile::parameters const& params, ways const& w, label const l, sharing_data const* sharing) {
+  void add_end(Profile::parameters const& params,
+               ways const& w,
+               label const l,
+               sharing_data const* sharing) {
     if (kDebug) {
       l.get_node().print(std::cout, w);
       std::cout << "ending" << l.get_node().n_ << std::endl;
@@ -143,7 +149,9 @@ struct bidirectional {
     auto const p = get_node_pos(idx);
     auto const dist = distapprox(p, end_loc_.pos_);
     auto const other_dist = distapprox(p, start_loc_.pos_);
-    return 0.5 * (Profile::heuristic(params, dist) - Profile::heuristic(params, other_dist)) *
+    return 0.5 *
+           (Profile::heuristic(params, dist) -
+            Profile::heuristic(params, other_dist)) *
            (dir == direction::kForward ? 1 : -1);
   }
 
@@ -333,8 +341,8 @@ struct bidirectional {
     }
     while (!pq1_.empty() || !pq2_.empty()) {
       if (!pq1_.empty() &&
-          !run_single<SearchDir, WithBlocked>(params, w, r, max, blocked, sharing,
-                                              elevations, pq1_, cost1_)) {
+          !run_single<SearchDir, WithBlocked>(
+              params, w, r, max, blocked, sharing, elevations, pq1_, cost1_)) {
         break;
       }
       if (!pq2_.empty() &&
@@ -360,16 +368,16 @@ struct bidirectional {
            direction const dir) {
     if (blocked == nullptr) {
       return dir == direction::kForward
-                 ? run<direction::kForward, false>(params, w, r, max, blocked, sharing,
-                                                   elevations)
-                 : run<direction::kBackward, false>(params, w, r, max, blocked, sharing,
-                                                    elevations);
+                 ? run<direction::kForward, false>(params, w, r, max, blocked,
+                                                   sharing, elevations)
+                 : run<direction::kBackward, false>(params, w, r, max, blocked,
+                                                    sharing, elevations);
     } else {
       return dir == direction::kForward
-                 ? run<direction::kForward, true>(params, w, r, max, blocked, sharing,
-                                                  elevations)
-                 : run<direction::kBackward, true>(params, w, r, max, blocked, sharing,
-                                                   elevations);
+                 ? run<direction::kForward, true>(params, w, r, max, blocked,
+                                                  sharing, elevations)
+                 : run<direction::kBackward, true>(params, w, r, max, blocked,
+                                                   sharing, elevations);
     }
   }
 

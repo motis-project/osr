@@ -3,8 +3,8 @@
 
 #include "osr/extract/extract.h"
 #include "osr/lookup.h"
-#include "osr/routing/route.h"
 #include "osr/routing/profiles/foot.h"
+#include "osr/routing/route.h"
 #include "osr/ways.h"
 
 namespace fs = std::filesystem;
@@ -22,9 +22,10 @@ std::string extract_and_route(std::string_view path,
   auto w = osr::ways{dir, cista::mmap::protection::READ};
   auto l = osr::lookup{w, dir, cista::mmap::protection::READ};
 
-  auto const p = osr::route(osr::foot<false, osr::elevator_tracking>::parameters{}, w, l, osr::search_profile::kFoot, from, {to}, 900,
-                            osr::direction::kForward, 250.0, nullptr, nullptr,
-                            nullptr, osr::routing_algorithm::kDijkstra);
+  auto const p = osr::route(
+      osr::foot<false, osr::elevator_tracking>::parameters{}, w, l,
+      osr::search_profile::kFoot, from, {to}, 900, osr::direction::kForward,
+      250.0, nullptr, nullptr, nullptr, osr::routing_algorithm::kDijkstra);
   utl::verify(p.has_value(), "{}: from={} to={} -> no route", path,
               fmt::streamed(from), fmt::streamed(to));
   return osr::to_featurecollection(w, *p, false);

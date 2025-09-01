@@ -186,8 +186,9 @@ struct foot {
           for_each_elevator_level(
               w, target_node, [&](level_t const target_lvl) {
                 auto const dist = w.way_node_dist_[way][std::min(from, to)];
-                auto const cost = way_cost(params, target_way_prop, way_dir, dist) +
-                                  node_cost(target_node_prop);
+                auto const cost =
+                    way_cost(params, target_way_prop, way_dir, dist) +
+                    node_cost(target_node_prop);
                 fn(node{target_node, target_lvl},
                    static_cast<std::uint32_t>(cost), dist, way, from, to,
                    elevation_storage::elevation{}, false);
@@ -338,7 +339,8 @@ struct foot {
     return n.is_walk_accessible() ? (n.is_elevator() ? 90U : 0U) : kInfeasible;
   }
 
-  static constexpr double heuristic(parameters const& params,double const dist) {
+  static constexpr double heuristic(parameters const& params,
+                                    double const dist) {
     return dist / (params.speed_ + 0.1);
   }
 

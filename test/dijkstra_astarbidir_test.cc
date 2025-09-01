@@ -76,8 +76,9 @@ void run(ways const& w,
 
     auto const node_pinned_matches =
         [&](location const& loc, node_idx_t const n, bool const reverse) {
-          auto matches = l.match<car>(car::parameters{}, loc, reverse, direction::kForward,
-                                      kMaxMatchDistance, nullptr);
+          auto matches =
+              l.match<car>(car::parameters{}, loc, reverse, direction::kForward,
+                           kMaxMatchDistance, nullptr);
           std::erase_if(matches, [&](auto const& wc) {
             return wc.left_.node_ != n && wc.right_.node_ != n;
           });
@@ -98,17 +99,17 @@ void run(ways const& w,
 
     auto const reference_start = std::chrono::steady_clock::now();
     auto const reference =
-        route(car::parameters{}, w, l, search_profile::kCar, from_loc, to_loc, from_matches_span,
-              to_matches_span, max_cost, direction::kForward, nullptr, nullptr,
-              nullptr, routing_algorithm::kDijkstra);
+        route(car::parameters{}, w, l, search_profile::kCar, from_loc, to_loc,
+              from_matches_span, to_matches_span, max_cost, direction::kForward,
+              nullptr, nullptr, nullptr, routing_algorithm::kDijkstra);
     auto const reference_time =
         std::chrono::steady_clock::now() - reference_start;
 
     auto const experiment_start = std::chrono::steady_clock::now();
     auto const experiment =
-        route(car::parameters{}, w, l, search_profile::kCar, from_loc, to_loc, from_matches_span,
-              to_matches_span, max_cost, direction::kForward, nullptr, nullptr,
-              nullptr, routing_algorithm::kAStarBi);
+        route(car::parameters{}, w, l, search_profile::kCar, from_loc, to_loc,
+              from_matches_span, to_matches_span, max_cost, direction::kForward,
+              nullptr, nullptr, nullptr, routing_algorithm::kAStarBi);
     auto const experiment_time =
         std::chrono::steady_clock::now() - experiment_start;
 
