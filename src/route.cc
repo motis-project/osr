@@ -257,8 +257,8 @@ path reconstruct_bi(typename Profile::parameters const& params,
       forward_n.get_node() == start.left_.node_ ? start.left_ : start.right_;
 
   forward_segments.push_back(
-      {.polyline_ = l.get_node_candidate_path<Profile>(
-           start, start_node_candidate, false, from),
+      {.polyline_ =
+           l.get_node_candidate_path(start, start_node_candidate, false, from),
        .from_level_ = start_node_candidate.lvl_,
        .to_level_ = start_node_candidate.lvl_,
        .from_ = dir == direction::kBackward ? forward_n.get_node()
@@ -296,8 +296,8 @@ path reconstruct_bi(typename Profile::parameters const& params,
       backward_n.get_node() == dest.left_.node_ ? dest.left_ : dest.right_;
 
   backward_segments.push_back(
-      {.polyline_ = l.get_node_candidate_path<Profile>(
-           dest, dest_node_candidate, true, to),
+      {.polyline_ =
+           l.get_node_candidate_path(dest, dest_node_candidate, true, to),
        .from_level_ = dest_node_candidate.lvl_,
        .to_level_ = dest_node_candidate.lvl_,
        .from_ = dir == direction::kForward ? backward_n.get_node()
@@ -352,8 +352,8 @@ path reconstruct(typename Profile::parameters const& params,
 
   auto n = dest_node;
   auto segments = std::vector<path::segment>{
-      {.polyline_ = l.get_node_candidate_path<Profile>(
-           dest, dest_nc, dir == direction::kForward, to),
+      {.polyline_ = l.get_node_candidate_path(dest, dest_nc,
+                                              dir == direction::kForward, to),
        .from_level_ = dest_nc.lvl_,
        .to_level_ = dest_nc.lvl_,
        .from_ =
@@ -382,7 +382,7 @@ path reconstruct(typename Profile::parameters const& params,
   auto const& start_nc =
       n.get_node() == start.left_.node_ ? start.left_ : start.right_;
   segments.push_back(
-      {.polyline_ = l.get_node_candidate_path<Profile>(
+      {.polyline_ = l.get_node_candidate_path(
            start, start_nc, dir == direction::kBackward, from),
        .from_level_ = start_nc.lvl_,
        .to_level_ = start_nc.lvl_,
