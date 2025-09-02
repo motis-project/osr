@@ -8,9 +8,9 @@
 
 #include "osr/elevation_storage.h"
 #include "osr/routing/mode.h"
+#include "osr/routing/path.h"
 #include "osr/routing/profiles/car.h"
 #include "osr/routing/profiles/foot.h"
-#include "osr/routing/path.h"
 #include "osr/ways.h"
 
 namespace osr {
@@ -38,6 +38,7 @@ struct car_parking {
   }
 
   struct parameters {
+    using profile_t = car_parking<IsWheelchair, UseParking>;
     car::parameters const car_{};
     footp::parameters const foot_{};
   };

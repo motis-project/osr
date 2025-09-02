@@ -17,6 +17,7 @@ struct foot {
   static constexpr auto const kMaxMatchDistance = 100U;
 
   struct parameters {
+    using profile_t = foot<IsWheelchair, Tracking>;
     float const speed_{IsWheelchair ? 0.8F : 1.2F};
   };
 

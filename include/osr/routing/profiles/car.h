@@ -21,7 +21,9 @@ struct car {
 
   using key = node_idx_t;
 
-  struct parameters {};
+  struct parameters {
+    using profile_t = car;
+  };
 
   struct node {
     friend bool operator==(node, node) = default;

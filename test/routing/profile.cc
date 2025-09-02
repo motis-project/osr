@@ -1,24 +1,19 @@
 #include "osr/routing/profile.h"
 
-#include "osr/routing/profiles/bike.h"
-#include "osr/routing/profiles/bike_sharing.h"
-#include "osr/routing/profiles/car.h"
-#include "osr/routing/profiles/car_parking.h"
-#include "osr/routing/profiles/car_sharing.h"
-#include "osr/routing/profiles/foot.h"
+#include "osr/routing/parameters.h"
 
-static_assert(osr::IsProfile<osr::foot<false>>);  // Foot
-static_assert(osr::IsProfile<osr::foot<true>>);  // Wheelchair
-static_assert(
-    osr::IsProfile<osr::bike<osr::bike_costing::kSafe, osr::kElevationNoCost>>);
-static_assert(
-    osr::IsProfile<osr::bike<osr::bike_costing::kFast, osr::kElevationNoCost>>);
-static_assert(osr::IsProfile<
-              osr::bike<osr::bike_costing::kSafe, osr::kElevationLowCost>>);
-static_assert(osr::IsProfile<
-              osr::bike<osr::bike_costing::kFast, osr::kElevationHighCost>>);
-static_assert(osr::IsProfile<osr::car>);
-static_assert(osr::IsProfile<osr::car_parking<false>>);  // No wheelchair
-static_assert(osr::IsProfile<osr::car_parking<true>>);  // Wheelchair
-static_assert(osr::IsProfile<osr::car_sharing<>>);  // Wheelchair
-static_assert(osr::IsProfile<osr::bike_sharing>);
+template <std::size_t N>
+constexpr bool is_profile_rec() {
+  using profile_t =
+      std::variant_alternative_t<N, osr::profile_parameters>::profile_t;
+  if constexpr (N > 0U) {
+    return osr::IsProfile<profile_t> && is_profile_rec<N - 1>();
+  } else {
+    return osr::IsProfile<profile_t>;
+  }
+}
+
+constexpr auto const contains_only_profiles =
+    is_profile_rec<std::variant_size_v<osr::profile_parameters> - 1U>();
+
+static_assert(contains_only_profiles);

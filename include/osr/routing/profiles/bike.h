@@ -34,6 +34,8 @@ struct bike {
   static constexpr auto const kMaxMatchDistance = 100U;
 
   struct parameters {
+    using profile_t =
+        bike<Costing, ElevationUpCost, ElevationExponentThousandth>;
     float const speed_{4.2F};
   };
 

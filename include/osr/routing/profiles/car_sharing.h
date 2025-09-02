@@ -78,6 +78,7 @@ struct car_sharing {
   }
 
   struct parameters {
+    using profile_t = car_sharing<Tracking>;
     car::parameters const car_{};
     footp::parameters const footp_{};
   };

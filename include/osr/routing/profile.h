@@ -14,6 +14,12 @@
 
 namespace osr {
 
+template <typename Parameters, typename Profile>
+concept IsParameters =
+    std::is_default_constructible_v<Parameters> &&
+    std::is_same_v<typename Parameters::profile_t, Profile> &&
+    std::is_same_v<Parameters, typename Profile::parameters>;
+
 template <typename Node, typename NodeValue>
 concept IsNodeBase = requires(Node node, NodeValue value) {
   { node.get_node() } -> std::same_as<NodeValue>;
@@ -60,7 +66,7 @@ concept IsEntry =
 
 template <typename Profile>
 concept IsProfile =
-    std::is_default_constructible_v<typename Profile::parameters> &&
+    IsParameters<typename Profile::parameters, Profile> &&
     IsNode<typename Profile::node, typename Profile::key> &&
     IsLabel<typename Profile::label, typename Profile::node> &&
     IsEntry<typename Profile::entry,
