@@ -2,7 +2,6 @@
 
 #include "osr/elevation_storage.h"
 #include "osr/routing/mode.h"
-// #include "osr/routing/route.h"
 #include "osr/routing/path.h"
 #include "osr/types.h"
 #include "osr/ways.h"

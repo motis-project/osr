@@ -260,7 +260,6 @@ private:
     return way_candidates;
   }
 
-  // TODO Template not required?
   template <IsProfile Profile>
   bool is_way_node_feasible(way_candidate const& wc,
                             node_idx_t const node_idx,

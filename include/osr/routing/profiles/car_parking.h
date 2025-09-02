@@ -10,7 +10,6 @@
 #include "osr/routing/mode.h"
 #include "osr/routing/profiles/car.h"
 #include "osr/routing/profiles/foot.h"
-// #include "osr/routing/route.h"
 #include "osr/routing/path.h"
 #include "osr/ways.h"
 

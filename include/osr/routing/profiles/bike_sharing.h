@@ -14,7 +14,6 @@
 #include "osr/routing/mode.h"
 #include "osr/routing/profiles/bike.h"
 #include "osr/routing/profiles/foot.h"
-// #include "osr/routing/route.h"
 #include "osr/routing/path.h"
 #include "osr/routing/sharing_data.h"
 #include "osr/ways.h"
