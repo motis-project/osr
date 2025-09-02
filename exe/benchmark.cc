@@ -320,7 +320,7 @@ int main(int argc, char const* argv[]) {
                                        float const speed = 0.0F) {
     with_profile(profile, [&](IsProfile auto&& p) {
       using Profile = std::remove_cvref_t<decltype(p)>;
-      constexpr auto const params = [&]() {
+      auto const params = [&]() {
         if constexpr (requires { typename Profile::parameters::speed_; }) {
           return speed > 0.0F
                      ? typename Profile::parameters{.speed_ = opt.speed_}
