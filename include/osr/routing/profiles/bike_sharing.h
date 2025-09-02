@@ -12,9 +12,9 @@
 #include "osr/elevation_storage.h"
 #include "osr/routing/additional_edge.h"
 #include "osr/routing/mode.h"
+#include "osr/routing/path.h"
 #include "osr/routing/profiles/bike.h"
 #include "osr/routing/profiles/foot.h"
-#include "osr/routing/path.h"
 #include "osr/routing/sharing_data.h"
 #include "osr/ways.h"
 
