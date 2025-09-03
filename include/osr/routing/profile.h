@@ -1,7 +1,9 @@
 #pragma once
 
-#include <cinttypes>
+#include <cstdint>
+
 #include <concepts>
+#include <functional>
 #include <ostream>
 #include <string_view>
 
@@ -20,49 +22,52 @@ concept IsParameters =
     std::is_same_v<typename Parameters::profile_t, Profile> &&
     std::is_same_v<Parameters, typename Profile::parameters>;
 
-template <typename Node, typename NodeValue>
-concept IsNodeBase = requires(Node node, NodeValue value) {
-  { node.get_node() } -> std::same_as<NodeValue>;
+template <typename Node, typename NodeKey>
+concept IsNode = requires {
+  { Node::invalid() } -> std::same_as<Node>;
+} && requires(Node const& node, std::ostream& out, ways const& w) {
+  { node.get_key() } -> std::same_as<NodeKey>;
+  { node.get_node() } -> std::same_as<node_idx_t>;
+  { node.get_mode() } -> std::same_as<mode>;
+  { node == node } -> std::same_as<bool>;
+  { node.print(out, w) } -> std::same_as<decltype(out)>;
 };
 
-template <typename Node, typename NodeKey>
-concept IsNode =
-    IsNodeBase<Node, osr::node_idx_t> && requires(Node const& node) {
-      { node.get_key() } -> std::same_as<NodeKey>;
-    } && requires(Node const& node, std::ostream& out, ways const& w) {
-      { node == node } -> std::same_as<bool>;
-      { node.get_mode() } -> std::same_as<mode>;
-      { node.print(out, w) } -> std::same_as<decltype(out)>;
-    };
-
 template <typename Label, typename Node>
-concept IsLabel = IsNodeBase<Label, Node> &&
-                  requires(Label label) {
-                    { label.cost() } -> std::same_as<osr::cost_t>;
-                  } &&
-                  requires(Label label,
-                           Label const& l,
-                           ways::routing const r,
-                           way_idx_t const w,
-                           node_idx_t const n) {
-                    {
-                      label.track(l, r, w, n, std::declval<bool>())
-                    } -> std::same_as<void>;
-                  };
+concept IsLabel =
+    requires {
+      { Label(std::declval<Node>(), std::declval<cost_t>()) };
+    } &&
+    requires(Label const& label) {
+      { label.get_node() } -> std::same_as<Node>;
+      { label.cost() } -> std::same_as<cost_t>;
+    } &&
+    requires(Label label,
+             Label const& l,
+             ways::routing const r,
+             way_idx_t const w,
+             node_idx_t const n) {
+      { label.track(l, r, w, n, std::declval<bool>()) } -> std::same_as<void>;
+    };
 
 template <typename Entry, typename Node, typename Label>
 concept IsEntry =
-    requires(Entry const& entry, Node node, path& p) {
+    requires(Entry const& entry, Node const node, path& p) {
       { entry.pred(node) } -> std::same_as<std::optional<Node>>;
-      { entry.cost(node) } -> std::same_as<osr::cost_t>;
+      { entry.cost(node) } -> std::same_as<cost_t>;
       { entry.write(node, p) } -> std::same_as<void>;
     } && requires(Entry entry,
-                  Node node,
+                  Node const node,
                   Label const& label,
-                  osr::cost_t const& cost,
+                  cost_t const cost,
                   path& p) {
       { entry.update(label, node, cost, node) } -> std::same_as<bool>;
     };
+
+template <typename Hash, typename NodeKey>
+concept IsHash = requires(Hash const& h, NodeKey key) {
+  { h(key) };
+};
 
 template <typename Profile>
 concept IsProfile =
@@ -72,35 +77,40 @@ concept IsProfile =
     IsEntry<typename Profile::entry,
             typename Profile::node,
             typename Profile::label> &&
-    requires(typename Profile::parameters const& params,
-             typename Profile::node const node,
+    IsHash<typename Profile::hash, typename Profile::key> &&
+    requires(typename Profile::node const node,
              ways::routing const& r,
              way_idx_t const w,
              node_idx_t const node_idx,
              level_t const lvl,
              direction const dir,
-             double const dist,
              std::function<void(typename Profile::node const)>&& f) {
       {
         Profile::resolve_start_node(r, w, node_idx, lvl, dir, f)
       } -> std::same_as<void>;
       { Profile::resolve_all(r, node_idx, lvl, f) } -> std::same_as<void>;
+    } &&
+    requires(typename Profile::parameters const& params,
+             typename Profile::node const node,
+             ways::routing const& r,
+             way_idx_t const w,
+             direction const dir,
+             node_properties const n_props,
+             way_properties const w_props,
+             double const dist) {
       {
         Profile::is_dest_reachable(params, r, node, w, dir, dir)
       } -> std::same_as<bool>;
       {
-        Profile::way_cost(typename Profile::parameters{},
-                          std::declval<way_properties>(),
-                          std::declval<direction>(), std::uint16_t())
+        Profile::way_cost(params, w_props, dir, std::declval<std::uint16_t>())
       } -> std::same_as<cost_t>;
-      {
-        Profile::node_cost(std::declval<node_properties>())
-      } -> std::same_as<cost_t>;
+      { Profile::node_cost(n_props) } -> std::same_as<cost_t>;
       { Profile::heuristic(params, dist) } -> std::same_as<double>;
+      { Profile::get_reverse(node) } -> std::same_as<typename Profile::node>;
     } &&
     requires(typename Profile::parameters const& params,
              typename Profile::node const n,
-             osr::ways::routing const& r,
+             ways::routing const& r,
              bitvec<node_idx_t> const* blocked,
              sharing_data const* sharing,
              elevation_storage const* elevation,
