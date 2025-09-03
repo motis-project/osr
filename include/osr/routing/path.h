@@ -1,9 +1,12 @@
 #pragma once
 
+#include <vector>
+
 #include "geo/polyline.h"
 
 #include "osr/elevation_storage.h"
 #include "osr/routing/mode.h"
+#include "osr/types.h"
 
 namespace osr {
 
