@@ -112,23 +112,23 @@ void set_start<car>(dijkstra<car>& d, ways const& w, node_idx_t const start) {
 
 template <IsProfile Profile>
 void set_start(typename Profile::parameters const& params,
-               bidirectional<Profile>& d,
+               bidirectional<Profile>& b,
                ways const& w,
                node_idx_t const start) {
-  d.add_start(params, w,
+  b.add_start(params, w,
               typename Profile::label{typename Profile::node{start}, 0U},
               nullptr);
 }
 
 template <>
 void set_start<car>(car::parameters const& params,
-                    bidirectional<car>& d,
+                    bidirectional<car>& b,
                     ways const& w,
                     node_idx_t const start) {
-  d.add_start(params, w,
+  b.add_start(params, w,
               car::label{car::node{start, 0, direction::kForward}, 0U},
               nullptr);
-  d.add_start(params, w,
+  b.add_start(params, w,
               car::label{car::node{start, 0, direction::kBackward}, 0U},
               nullptr);
 };
@@ -136,17 +136,17 @@ void set_start<car>(car::parameters const& params,
 template <IsProfile Profile>
 std::vector<typename Profile::label> set_end(
     typename Profile::parameters const& params,
-    bidirectional<Profile>& d,
+    bidirectional<Profile>& b,
     ways const& w,
     node_idx_t const end) {
   auto const l = typename Profile::label{typename Profile::node{end}, 0U};
-  d.add_end(params, w, l, nullptr);
+  b.add_end(params, w, l, nullptr);
   return {l};
 }
 
 template <>
 std::vector<typename car::label> set_end<car>(car::parameters const& params,
-                                              bidirectional<car>& d,
+                                              bidirectional<car>& b,
                                               ways const& w,
                                               node_idx_t const end) {
   std::vector<typename car::label> ends;
@@ -155,8 +155,8 @@ std::vector<typename car::label> set_end<car>(car::parameters const& params,
   for (auto i = way_pos_t{0U}; i != ways.size(); ++i) {
     auto const l1 = car::label{car::node{end, i, direction::kForward}, 0U};
     auto const l2 = car::label{car::node{end, i, direction::kBackward}, 0U};
-    d.add_end(params, w, l1, nullptr);
-    d.add_end(params, w, l2, nullptr);
+    b.add_end(params, w, l1, nullptr);
+    b.add_end(params, w, l2, nullptr);
     ends.push_back(l1);
     ends.push_back(l2);
   }
