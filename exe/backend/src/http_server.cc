@@ -135,9 +135,9 @@ struct http_server::impl {
         q.try_at("footSpeed")->try_to_number<float>();
     auto const params =
         profile == search_profile::kFoot && foot_speed_result.has_value()
-            ? foot<false, elevator_tracking>::parameters{.speed_ =
-                                                             foot_speed_result
-                                                                 .value()}
+            ? foot<false,
+                   elevator_tracking>::parameters{.speed_meters_per_second_ =
+                                                      foot_speed_result.value()}
             : get_parameters(profile);
 
     auto const p = route(params, w_, l_, profile, from, to, max, dir, 100,

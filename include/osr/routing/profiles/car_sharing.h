@@ -80,7 +80,7 @@ struct car_sharing {
   struct parameters {
     using profile_t = car_sharing<Tracking>;
     car::parameters const car_{};
-    footp::parameters const footp_{};
+    footp::parameters const foot_{};
   };
 
   struct key {
@@ -345,7 +345,7 @@ struct car_sharing {
                                        bool const include_additional_edges,
                                        cost_t const switch_penalty = 0) {
       footp::template adjacent<SearchDir, WithBlocked>(
-          params.footp_, w, to_foot(n), blocked, nullptr, elevations,
+          params.foot_, w, to_foot(n), blocked, nullptr, elevations,
           [&](footp::node const neighbor, std::uint32_t const cost,
               distance_t const dist, way_idx_t const way,
               std::uint16_t const from, std::uint16_t const to,
@@ -362,7 +362,7 @@ struct car_sharing {
           for (auto const& ae : it->second) {
             handle_additional_edge(
                 ae, nt,
-                footp::way_cost(params.footp_, kAdditionalWayProperties,
+                footp::way_cost(params.foot_, kAdditionalWayProperties,
                                 direction::kForward, ae.distance_) +
                     switch_penalty);
           }
@@ -417,7 +417,7 @@ struct car_sharing {
                        is_allowed(sharing->end_allowed_, n.n_)) {
               handle_additional_edge(
                   ae, node_type::kTrailingFoot,
-                  footp::way_cost(params.footp_, kAdditionalWayProperties,
+                  footp::way_cost(params.foot_, kAdditionalWayProperties,
                                   direction::kForward, ae.distance_) +
                       kEndSwitchPenalty);
             }
@@ -460,7 +460,7 @@ struct car_sharing {
                        is_allowed(sharing->start_allowed_, n.n_)) {
               handle_additional_edge(
                   ae, node_type::kInitialFoot,
-                  footp::way_cost(params.footp_, kAdditionalWayProperties,
+                  footp::way_cost(params.foot_, kAdditionalWayProperties,
                                   direction::kForward, ae.distance_) +
                       kStartSwitchPenalty);
             }
@@ -492,7 +492,7 @@ struct car_sharing {
                                 direction const way_dir,
                                 direction const search_dir) {
     return !n.is_rental_node() &&
-           footp::is_dest_reachable(params.footp_, w, to_foot(n), way, way_dir,
+           footp::is_dest_reachable(params.foot_, w, to_foot(n), way, way_dir,
                                     search_dir);
   }
 
@@ -500,7 +500,7 @@ struct car_sharing {
                                    way_properties const& e,
                                    direction const dir,
                                    std::uint16_t const dist) {
-    return footp::way_cost(params.footp_, e, dir, dist);
+    return footp::way_cost(params.foot_, e, dir, dist);
   }
 
   static constexpr cost_t node_cost(node_properties const n) {

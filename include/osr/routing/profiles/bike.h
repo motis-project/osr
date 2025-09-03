@@ -36,7 +36,7 @@ struct bike {
   struct parameters {
     using profile_t =
         bike<Costing, ElevationUpCost, ElevationExponentThousandth>;
-    float const speed_{4.2F};
+    float const speed_meters_per_second_{4.2F};
   };
 
   struct node {
@@ -226,7 +226,7 @@ struct bike {
     if (e.is_bike_accessible() &&
         (dir == direction::kForward || !e.is_oneway_bike())) {
       return static_cast<cost_t>(
-          std::round(dist / (params.speed_ +
+          std::round(dist / (params.speed_meters_per_second_ +
                              (Costing == bike_costing::kFast
                                   ? 0
                                   : (e.is_big_street_ ? -0.7 : 0) +
@@ -242,7 +242,7 @@ struct bike {
 
   static constexpr double heuristic(parameters const& params,
                                     double const dist) {
-    return dist / (params.speed_ + 0.5);
+    return dist / (params.speed_meters_per_second_ + 0.5);
   }
 
   static constexpr node get_reverse(node const n) {

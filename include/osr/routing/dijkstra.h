@@ -3,10 +3,9 @@
 #include "osr/elevation_storage.h"
 #include "osr/routing/additional_edge.h"
 #include "osr/routing/dial.h"
+#include "osr/routing/profile.h"
 #include "osr/types.h"
 #include "osr/ways.h"
-
-#include "osr/routing/route.h"
 
 namespace osr {
 

@@ -448,7 +448,7 @@ struct bike_sharing {
 
   static constexpr double heuristic(parameters const& params,
                                     double const dist) {
-    return dist / params.bike_.speed_;
+    return dist / params.bike_.speed_meters_per_second_;
   }
 
   static constexpr node get_reverse(node const n) { return n; }

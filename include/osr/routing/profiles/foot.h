@@ -18,7 +18,7 @@ struct foot {
 
   struct parameters {
     using profile_t = foot<IsWheelchair, Tracking>;
-    float const speed_{IsWheelchair ? 0.8F : 1.2F};
+    float const speed_meters_per_second_{IsWheelchair ? 0.8F : 1.2F};
   };
 
   struct node {
@@ -328,9 +328,10 @@ struct foot {
          (!e.is_sidewalk_separate() && e.is_bike_accessible())) &&
         (!IsWheelchair || !e.is_steps())) {
       return (!e.is_foot_accessible() || e.is_sidewalk_separate() ? 90 : 0) +
-             static_cast<cost_t>(std::round(
-                 dist / (params.speed_ + (e.is_big_street_ ? -0.2 : 0) +
-                         (e.motor_vehicle_no_ ? 0.1 : 0.0))));
+             static_cast<cost_t>(
+                 std::round(dist / (params.speed_meters_per_second_ +
+                                    (e.is_big_street_ ? -0.2 : 0) +
+                                    (e.motor_vehicle_no_ ? 0.1 : 0.0))));
     } else {
       return kInfeasible;
     }
@@ -342,7 +343,7 @@ struct foot {
 
   static constexpr double heuristic(parameters const& params,
                                     double const dist) {
-    return dist / (params.speed_ + 0.1);
+    return dist / (params.speed_meters_per_second_ + 0.1);
   }
 
   static constexpr node get_reverse(node const n) { return n; }
