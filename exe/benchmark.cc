@@ -318,8 +318,7 @@ int main(int argc, char const* argv[]) {
   auto const run_speed_benchmark = [&](search_profile const profile,
                                        std::string_view label,
                                        float const speed = 0.0F) {
-    with_profile(profile, [&](IsProfile auto&& p) {
-      using Profile = std::remove_cvref_t<decltype(p)>;
+    with_profile(profile, [&]<IsProfile Profile>(Profile&&) {
       auto const params = [&]() {
         if constexpr (requires { typename Profile::parameters::speed_; }) {
           return speed > 0.0F
