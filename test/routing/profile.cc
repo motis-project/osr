@@ -6,8 +6,8 @@ constexpr auto const kProfileCount =
 
 template <std::size_t N>
 constexpr bool is_profile() {
-  return osr::IsProfile<typename std::variant_alternative_t<
-      N, osr::profile_parameters>::profile_t>;
+  return osr::IsProfileParameters<
+      std::variant_alternative_t<N, osr::profile_parameters>>;
 }
 
 template <std::size_t N>

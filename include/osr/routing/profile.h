@@ -128,6 +128,9 @@ concept IsProfile =
       } -> std::same_as<void>;
     };
 
+template <typename Parameters>
+concept IsProfileParameters = IsProfile<typename Parameters::profile_t>;
+
 enum class search_profile : std::uint8_t {
   kFoot,
   kWheelchair,
