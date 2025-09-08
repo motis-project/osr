@@ -62,7 +62,7 @@ int main(int argc, const char** argv) {
   utl::activate_progress_tracker("contraction-hierarchy");
   auto const silencer = utl::global_progress_bars{false};
 
-  auto const order = get_order_strategy(c);
+  auto order = get_order_strategy(c);
 
   process_ch(c.in_,c.out_, order);
 

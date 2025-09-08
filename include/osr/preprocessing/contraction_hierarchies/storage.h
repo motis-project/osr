@@ -67,7 +67,7 @@ struct shortcut_storage {
 
   cista::raw::ankerl_map<way_idx_t, way_and_dir> first_way_on_shortcut;
   cista::raw::ankerl_map<way_idx_t, way_and_dir> last_way_on_shortcut;
-
+  void set_max_way_idx(way_idx_t const max_way_idx) { max_way_idx_ = max_way_idx; }
   uint64_t get_node_order(node_idx_t const n) const {
     return node_order_->get_order(n);
   }

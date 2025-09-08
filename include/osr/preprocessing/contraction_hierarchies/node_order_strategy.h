@@ -46,7 +46,9 @@ struct RandomOrderStrategy : public OrderStrategy {
     node_idx_t const node = rnd_vec_elem(order_);
     return node;
   }
-
+  std::vector<node_idx_t> get_node_order() override {
+    return order_;
+  }
   node_idx_t rnd_vec_elem(std::vector<node_idx_t>& v) {
     int n = v.size();
     srand(seed_);
