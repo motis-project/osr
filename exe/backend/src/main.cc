@@ -31,6 +31,7 @@ public:
     param(static_file_path_, "static,s", "Path to static files (ui/web)");
     param(threads_, "threads,t", "Number of routing threads");
     param(lock_, "lock,l", "Lock to memory");
+    param(ch_dir_, "ch-dir,ch", "directory of contraction hierarchy");
   }
 
   fs::path data_dir_{"osr"};
@@ -38,6 +39,7 @@ public:
   std::string http_port_{"8000"};
   std::string static_file_path_;
   bool lock_{true};
+  fs::path ch_dir_{""};
   unsigned threads_{std::thread::hardware_concurrency()};
 };
 
@@ -94,10 +96,45 @@ int main(int argc, char const* argv[]) {
 
   auto const l = lookup{w, opt.data_dir_, cista::mmap::protection::READ};
 
+  bool use_ch = false;
+  if (!opt.ch_dir_.empty()) {
+    use_ch = true;
+  }
+
+  std::unique_ptr<ways> w_shortcuts = use_ch ? std::make_unique<ways>(opt.ch_dir_, cista::mmap::protection::READ) : nullptr;
+  auto const ch_check_path = opt.ch_dir_ / "shortcuts.bin";
+  bool const should_load = fs::exists(ch_check_path) && use_ch;
+  if (!fs::exists(ch_check_path) && use_ch) {
+    std::cout << ch_check_path << " does not exist\n";
+  }
+  auto shortcuts = should_load ? std::make_unique<ch::shortcut_storage>() : nullptr;
+  if (shortcuts != nullptr) {
+    shortcuts->load(opt.ch_dir_);
+    shortcuts->load_all_shortcuts_in_graph(std::ref(*w_shortcuts));
+    fmt::print("loaded {} shortcuts\n", shortcuts->shortcuts_.size());
+  }
+  auto const ch_node_order_path = opt.ch_dir_ / "node_order.bin";
+  bool const should_load_node_order = fs::exists(ch_node_order_path) && use_ch;
+  if (!fs::exists(ch_node_order_path) && use_ch) {
+    std::cout << ch_node_order_path << " does not exist\n";
+  }
+  auto node_order = should_load_node_order ? std::make_unique<ch::node_order>(opt.ch_dir_, cista::mmap::protection::READ) : nullptr;
+  if (node_order != nullptr) {
+    fmt::print("loaded node order\n");
+  }
+  if ((shortcuts == nullptr || node_order == nullptr) && use_ch) {
+    fmt::print("no shortcuts or node order found, skipping contraction hierarchy\n");
+    shortcuts = nullptr;
+    node_order = nullptr;
+  } else if (use_ch) {
+    fmt::print("using contraction hierarchy\n");
+    shortcuts->node_order_ = std::move(node_order);
+  }
+
   auto ioc = boost::asio::io_context{};
   auto pool = boost::asio::io_context{};
   auto server = http_server{
-      ioc, pool, w, l, pl.get(), elevations.get(), opt.static_file_path_};
+      ioc, pool, w, l, pl.get(), elevations.get(), opt.static_file_path_, shortcuts.get(), w_shortcuts.get()};
 
   auto work_guard = boost::asio::make_work_guard(pool);
   auto threads = std::vector<std::thread>(std::max(1U, opt.threads_));

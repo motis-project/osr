@@ -81,14 +81,18 @@ struct http_server::impl {
        lookup const& l,
        platforms const* pl,
        elevation_storage const* elevations,
-       std::string const& static_file_path)
+       std::string const& static_file_path,
+       ch::shortcut_storage const* shortcuts,
+       ways const* shortcut_ways)
       : ioc_{ios},
         thread_pool_{thread_pool},
         w_{g},
         l_{l},
         pl_{pl},
         elevations_{elevations},
-        server_{ioc_} {
+        server_{ioc_},
+        shortcuts_{shortcuts},
+        shortcut_ways_{shortcut_ways} {
     try {
       if (!static_file_path.empty() && fs::is_directory(static_file_path)) {
         static_file_path_ = fs::canonical(static_file_path).string();
@@ -132,7 +136,7 @@ struct http_server::impl {
         max_it == q.end() ? 3600 : max_it->value().as_int64());
 
     auto const p = route(w_, l_, profile, from, to, max, dir, 100, nullptr,
-                         nullptr, elevations_, routing_algo);
+                         nullptr, elevations_, routing_algo, shortcuts_, shortcut_ways_);
 
     auto const p1 = route(w_, l_, profile, from, std::vector{to}, max, dir, 100,
                           nullptr, nullptr, elevations_);
@@ -350,6 +354,8 @@ private:
   web_server server_;
   bool serve_static_files_{false};
   std::string static_file_path_;
+  ch::shortcut_storage const* shortcuts_;
+  ways const* shortcut_ways_;
 };
 
 http_server::http_server(boost::asio::io_context& ioc,
@@ -358,8 +364,10 @@ http_server::http_server(boost::asio::io_context& ioc,
                          lookup const& l,
                          platforms const* pl,
                          elevation_storage const* elevation,
-                         std::string const& static_file_path)
-    : impl_{new impl(ioc, thread_pool, w, l, pl, elevation, static_file_path)} {
+                         std::string const& static_file_path,
+                         ch::shortcut_storage const* shortcuts,
+                         ways const* shortcut_ways)
+    : impl_{new impl(ioc, thread_pool, w, l, pl, elevation, static_file_path, shortcuts, shortcut_ways)} {
 }
 
 http_server::~http_server() = default;

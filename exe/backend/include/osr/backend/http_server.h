@@ -9,6 +9,7 @@
 #include "osr/lookup.h"
 #include "osr/platforms.h"
 #include "osr/ways.h"
+#include "osr/preprocessing/contraction_hierarchies/storage.h"
 
 namespace osr::backend {
 
@@ -19,7 +20,9 @@ struct http_server {
               lookup const&,
               platforms const*,
               elevation_storage const*,
-              std::string const& static_file_path);
+              std::string const& static_file_path,
+              ch::shortcut_storage const*,
+              ways const*); // ch ways when shortcuts are on
   ~http_server();
   http_server(http_server const&) = delete;
   http_server& operator=(http_server const&) = delete;

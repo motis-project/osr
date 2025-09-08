@@ -253,7 +253,8 @@ int main(int argc, char const* argv[]) {
             auto const ends = set_end<T>(b, w, end);
             auto const start_time = std::chrono::steady_clock::now();
             d.template run<direction::kForward, false>(
-                w, *w.r_, opt.max_dist_, nullptr, nullptr, elevations.get());
+                w, *w.r_, opt.max_dist_, nullptr, nullptr, elevations.get(),
+                nullptr);
             auto const middle_time = std::chrono::steady_clock::now();
             b.template run<direction::kForward, false>(
                 w, *w.r_, opt.max_dist_, nullptr, nullptr, elevations.get());
