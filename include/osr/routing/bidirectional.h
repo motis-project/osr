@@ -20,14 +20,14 @@ namespace osr {
 
 struct sharing_data;
 
-template <IsProfile Profile>
+template <Profile P>
 struct bidirectional {
-  using profile_t = Profile;
-  using key = typename Profile::key;
-  using label = typename Profile::label;
-  using node = typename Profile::node;
-  using entry = typename Profile::entry;
-  using hash = typename Profile::hash;
+  using profile_t = P;
+  using key = typename P::key;
+  using label = typename P::label;
+  using node = typename P::node;
+  using entry = typename P::entry;
+  using hash = typename P::hash;
   using cost_map = typename ankerl::unordered_dense::map<key, entry, hash>;
 
   constexpr static auto const kDebug = false;
@@ -45,7 +45,7 @@ struct bidirectional {
     best_cost_ = kInfeasible;
   }
 
-  void reset(Profile::parameters const& params,
+  void reset(P::parameters const& params,
              cost_t const max,
              location const& start_loc,
              location const& end_loc) {
@@ -63,7 +63,7 @@ struct bidirectional {
             ? start_loc_.pos_
             : end_loc_.pos_);
     auto const diameter =
-        Profile::heuristic(params, distapprox(start_loc_.pos_, end_loc_.pos_));
+        P::heuristic(params, distapprox(start_loc_.pos_, end_loc_.pos_));
     radius_ =
         diameter < max && max + std::max(diameter, kLongestNodeDistance * 2.0) <
                               std::numeric_limits<cost_t>::max()
@@ -74,7 +74,7 @@ struct bidirectional {
     max_reached_2_ = false;
   }
 
-  void add(Profile::parameters const& params,
+  void add(P::parameters const& params,
            ways const& w,
            label const l,
            direction const dir,
@@ -90,7 +90,7 @@ struct bidirectional {
     }
   }
 
-  void add_start(Profile::parameters const& params,
+  void add_start(P::parameters const& params,
                  ways const& w,
                  label const l,
                  sharing_data const* sharing) {
@@ -101,7 +101,7 @@ struct bidirectional {
     add(params, w, l, direction::kForward, cost1_, pq1_, sharing);
   }
 
-  void add_end(Profile::parameters const& params,
+  void add_end(P::parameters const& params,
                ways const& w,
                label const l,
                sharing_data const* sharing) {
@@ -131,7 +131,7 @@ struct bidirectional {
     return std::max(std::max(y, x), (y + x) / 1.42);
   }
 
-  double heuristic(Profile::parameters const& params,
+  double heuristic(P::parameters const& params,
                    ways const& w,
                    node_idx_t idx,
                    direction const dir,
@@ -149,8 +149,7 @@ struct bidirectional {
     auto const dist = distapprox(p, end_loc_.pos_);
     auto const other_dist = distapprox(p, start_loc_.pos_);
     return 0.5 *
-           (Profile::heuristic(params, dist) -
-            Profile::heuristic(params, other_dist)) *
+           (P::heuristic(params, dist) - P::heuristic(params, other_dist)) *
            (dir == direction::kForward ? 1 : -1);
   }
 
@@ -164,7 +163,7 @@ struct bidirectional {
   }
 
   template <direction SearchDir, bool WithBlocked>
-  bool run_single(Profile::parameters const& params,
+  bool run_single(P::parameters const& params,
                   ways const& w,
                   ways::routing const& r,
                   cost_t const max,
@@ -187,7 +186,7 @@ struct bidirectional {
       std::cout << "\n";
     }
 
-    Profile::template adjacent<SearchDir, WithBlocked>(
+    P::template adjacent<SearchDir, WithBlocked>(
         params, r, curr, blocked, sharing, elevations,
         [&](node const neighbor, std::uint32_t const cost, distance_t,
             way_idx_t const way, std::uint16_t, std::uint16_t,
@@ -263,7 +262,7 @@ struct bidirectional {
           if (!pred.has_value()) {
             return;
           }
-          Profile::template adjacent<opposite(SearchDir), WithBlocked>(
+          P::template adjacent<opposite(SearchDir), WithBlocked>(
               params, r, curr, blocked, sharing, elevations,
               [&](node const neighbor, std::uint32_t const, distance_t,
                   way_idx_t const, std::uint16_t, std::uint16_t,
@@ -328,7 +327,7 @@ struct bidirectional {
   }
 
   template <direction SearchDir, bool WithBlocked>
-  bool run(Profile::parameters const& params,
+  bool run(P::parameters const& params,
            ways const& w,
            ways::routing const& r,
            cost_t const max,
@@ -357,7 +356,7 @@ struct bidirectional {
     return !max_reached_1_ || !max_reached_2_;
   }
 
-  bool run(Profile::parameters const& params,
+  bool run(P::parameters const& params,
            ways const& w,
            ways::routing const& r,
            cost_t const max,

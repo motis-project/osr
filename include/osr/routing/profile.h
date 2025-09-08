@@ -69,29 +69,27 @@ concept IsHash = requires(Hash const& h, NodeKey key) {
   { h(key) };
 };
 
-template <typename Profile>
-concept IsProfile =
-    IsParameters<typename Profile::parameters, Profile> &&
-    IsNode<typename Profile::node, typename Profile::key> &&
-    IsLabel<typename Profile::label, typename Profile::node> &&
-    IsEntry<typename Profile::entry,
-            typename Profile::node,
-            typename Profile::label> &&
-    IsHash<typename Profile::hash, typename Profile::key> &&
-    requires(typename Profile::node const node,
+template <typename P>
+concept Profile =
+    IsParameters<typename P::parameters, P> &&
+    IsNode<typename P::node, typename P::key> &&
+    IsLabel<typename P::label, typename P::node> &&
+    IsEntry<typename P::entry, typename P::node, typename P::label> &&
+    IsHash<typename P::hash, typename P::key> &&
+    requires(typename P::node const node,
              ways::routing const& r,
              way_idx_t const w,
              node_idx_t const node_idx,
              level_t const lvl,
              direction const dir,
-             std::function<void(typename Profile::node const)>&& f) {
+             std::function<void(typename P::node const)>&& f) {
       {
-        Profile::resolve_start_node(r, w, node_idx, lvl, dir, f)
+        P::resolve_start_node(r, w, node_idx, lvl, dir, f)
       } -> std::same_as<void>;
-      { Profile::resolve_all(r, node_idx, lvl, f) } -> std::same_as<void>;
+      { P::resolve_all(r, node_idx, lvl, f) } -> std::same_as<void>;
     } &&
-    requires(typename Profile::parameters const& params,
-             typename Profile::node const node,
+    requires(typename P::parameters const& params,
+             typename P::node const node,
              ways::routing const& r,
              way_idx_t const w,
              direction const dir,
@@ -99,22 +97,22 @@ concept IsProfile =
              way_properties const w_props,
              double const dist) {
       {
-        Profile::is_dest_reachable(params, r, node, w, dir, dir)
+        P::is_dest_reachable(params, r, node, w, dir, dir)
       } -> std::same_as<bool>;
       {
-        Profile::way_cost(params, w_props, dir, std::declval<std::uint16_t>())
+        P::way_cost(params, w_props, dir, std::declval<std::uint16_t>())
       } -> std::same_as<cost_t>;
-      { Profile::node_cost(n_props) } -> std::same_as<cost_t>;
-      { Profile::heuristic(params, dist) } -> std::same_as<double>;
-      { Profile::get_reverse(node) } -> std::same_as<typename Profile::node>;
+      { P::node_cost(n_props) } -> std::same_as<cost_t>;
+      { P::heuristic(params, dist) } -> std::same_as<double>;
+      { P::get_reverse(node) } -> std::same_as<typename P::node>;
     } &&
-    requires(typename Profile::parameters const& params,
-             typename Profile::node const n,
+    requires(typename P::parameters const& params,
+             typename P::node const n,
              ways::routing const& r,
              bitvec<node_idx_t> const* blocked,
              sharing_data const* sharing,
              elevation_storage const* elevation,
-             std::function<void(typename Profile::node const,
+             std::function<void(typename P::node const,
                                 std::uint32_t const,
                                 distance_t,
                                 way_idx_t const,
@@ -123,13 +121,13 @@ concept IsProfile =
                                 elevation_storage::elevation,
                                 bool const)> f) {
       {
-        Profile::template adjacent<direction::kBackward, false>(
-            params, r, n, blocked, sharing, elevation, f)
+        P::template adjacent<direction::kBackward, false>(params, r, n, blocked,
+                                                          sharing, elevation, f)
       } -> std::same_as<void>;
     };
 
 template <typename Parameters>
-concept IsProfileParameters = IsProfile<typename Parameters::profile_t>;
+concept ProfileParameters = Profile<typename Parameters::profile_t>;
 
 enum class search_profile : std::uint8_t {
   kFoot,

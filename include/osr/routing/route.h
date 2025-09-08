@@ -19,19 +19,19 @@ namespace osr {
 
 struct ways;
 
-template <IsProfile Profile>
+template <Profile>
 struct dijkstra;
 
-template <IsProfile Profile>
+template <Profile>
 struct bidirectional;
 
 struct sharing_data;
 
-template <IsProfile Profile>
-bidirectional<Profile>& get_bidirectional();
+template <Profile P>
+bidirectional<P>& get_bidirectional();
 
-template <IsProfile Profile>
-dijkstra<Profile>& get_dijkstra();
+template <Profile P>
+dijkstra<P>& get_dijkstra();
 
 std::vector<std::optional<path>> route(
     profile_parameters const&,

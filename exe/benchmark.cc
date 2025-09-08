@@ -99,9 +99,9 @@ void print_result(std::vector<benchmark_result> const& var,
             << "\n-----------------------------\n";
 }
 
-template <IsProfile Profile>
-void set_start(dijkstra<Profile>& d, ways const& w, node_idx_t const start) {
-  d.add_start(w, typename Profile::label{typename Profile::node{start}, 0U});
+template <Profile P>
+void set_start(dijkstra<P>& d, ways const& w, node_idx_t const start) {
+  d.add_start(w, typename P::label{typename P::node{start}, 0U});
 }
 
 template <>
@@ -110,13 +110,12 @@ void set_start<car>(dijkstra<car>& d, ways const& w, node_idx_t const start) {
   d.add_start(w, car::label{car::node{start, 0, direction::kBackward}, 0U});
 };
 
-template <IsProfile Profile>
-void set_start(typename Profile::parameters const& params,
-               bidirectional<Profile>& b,
+template <Profile P>
+void set_start(typename P::parameters const& params,
+               bidirectional<P>& b,
                ways const& w,
                node_idx_t const start) {
-  b.add_start(params, w,
-              typename Profile::label{typename Profile::node{start}, 0U},
+  b.add_start(params, w, typename P::label{typename P::node{start}, 0U},
               nullptr);
 }
 
@@ -133,13 +132,12 @@ void set_start<car>(car::parameters const& params,
               nullptr);
 };
 
-template <IsProfile Profile>
-std::vector<typename Profile::label> set_end(
-    typename Profile::parameters const& params,
-    bidirectional<Profile>& b,
-    ways const& w,
-    node_idx_t const end) {
-  auto const l = typename Profile::label{typename Profile::node{end}, 0U};
+template <Profile P>
+std::vector<typename P::label> set_end(typename P::parameters const& params,
+                                       bidirectional<P>& b,
+                                       ways const& w,
+                                       node_idx_t const end) {
+  auto const l = typename P::label{typename P::node{end}, 0U};
   b.add_end(params, w, l, nullptr);
   return {l};
 }
@@ -192,8 +190,8 @@ int main(int argc, char const* argv[]) {
   auto results = std::vector<benchmark_result>{};
   results.reserve(opt.n_queries_);
 
-  auto const run_benchmark = [&]<IsProfile Profile>(
-                                 typename Profile::parameters const& params,
+  auto const run_benchmark = [&]<Profile P>(
+                                 typename P::parameters const& params,
                                  search_profile const profile,
                                  const char* profile_label) {
     results.clear();
@@ -201,8 +199,8 @@ int main(int argc, char const* argv[]) {
     auto m = std::mutex{};
     for (auto& t : threads) {
       t = std::thread([&]() {
-        auto d = dijkstra<Profile>{};
-        auto b = bidirectional<Profile>{};
+        auto d = dijkstra<P>{};
+        auto b = bidirectional<P>{};
         auto h = cista::BASE_HASH;
         auto n = 0U;
         while (i.fetch_add(1U) < opt.n_queries_ - 1) {
@@ -262,10 +260,10 @@ int main(int argc, char const* argv[]) {
             }
             d.reset(opt.max_dist_);
             b.reset(params, opt.max_dist_, start_loc, end_loc);
-            set_start<Profile>(d, w, start);
-            set_start<Profile>(params, b, w, start);
+            set_start<P>(d, w, start);
+            set_start<P>(params, b, w, start);
 
-            auto const ends = set_end<Profile>(params, b, w, end);
+            auto const ends = set_end<P>(params, b, w, end);
             auto const start_time = std::chrono::steady_clock::now();
             d.template run<direction::kForward, false>(
                 params, w, *w.r_, opt.max_dist_, nullptr, nullptr,
@@ -318,17 +316,16 @@ int main(int argc, char const* argv[]) {
   auto const run_speed_benchmark = [&](search_profile const profile,
                                        std::string_view label,
                                        float const speed = 0.0F) {
-    with_profile(profile, [&]<IsProfile Profile>(Profile&&) {
+    with_profile(profile, [&]<Profile P>(P&&) {
       auto const params = [&]() {
-        if constexpr (requires { typename Profile::parameters::speed_; }) {
-          return speed > 0.0F
-                     ? typename Profile::parameters{.speed_ = opt.speed_}
-                     : typename Profile::parameters{};
+        if constexpr (requires { typename P::parameters::speed_; }) {
+          return speed > 0.0F ? typename P::parameters{.speed_ = opt.speed_}
+                              : typename P::parameters{};
         } else {
-          return typename Profile::parameters{};
+          return typename P::parameters{};
         }
       }();
-      run_benchmark.template operator()<Profile>(params, profile, label.data());
+      run_benchmark.template operator()<P>(params, profile, label.data());
     });
   };
   auto const walk_speed = opt.speed_;

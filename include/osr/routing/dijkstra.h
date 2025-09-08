@@ -13,14 +13,14 @@ struct sharing_data;
 
 constexpr auto const kDebug = false;
 
-template <IsProfile Profile>
+template <Profile P>
 struct dijkstra {
-  using profile_t = Profile;
-  using key = typename Profile::key;
-  using label = typename Profile::label;
-  using node = typename Profile::node;
-  using entry = typename Profile::entry;
-  using hash = typename Profile::hash;
+  using profile_t = P;
+  using key = typename P::key;
+  using label = typename P::label;
+  using node = typename P::node;
+  using entry = typename P::entry;
+  using hash = typename P::hash;
 
   struct get_bucket {
     cost_t operator()(label const& l) { return l.cost(); }
@@ -51,7 +51,7 @@ struct dijkstra {
   }
 
   template <direction SearchDir, bool WithBlocked>
-  bool run(Profile::parameters const& params,
+  bool run(P::parameters const& params,
            ways const& w,
            ways::routing const& r,
            cost_t const max,
@@ -71,7 +71,7 @@ struct dijkstra {
       }
 
       auto const curr = l.get_node();
-      Profile::template adjacent<SearchDir, WithBlocked>(
+      P::template adjacent<SearchDir, WithBlocked>(
           params, r, curr, blocked, sharing, elevations,
           [&](node const neighbor, std::uint32_t const cost, distance_t,
               way_idx_t const way, std::uint16_t, std::uint16_t,
@@ -106,7 +106,7 @@ struct dijkstra {
     return !max_reached_;
   }
 
-  bool run(Profile::parameters const& params,
+  bool run(P::parameters const& params,
            ways const& w,
            ways::routing const& r,
            cost_t const max,

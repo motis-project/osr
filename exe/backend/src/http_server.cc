@@ -201,16 +201,15 @@ struct http_server::impl {
     auto gj = geojson_writer{.w_ = w_};
     l_.find({min, max}, [&](way_idx_t const w) { gj.write_way(w); });
 
-    with_profile(profile, [&]<IsProfile Profile>(Profile&&) {
-      send_graph_response<Profile>(req, cb, gj);
-    });
+    with_profile(profile,
+                 [&]<Profile P>(P&&) { send_graph_response<P>(req, cb, gj); });
   }
 
-  template <IsProfile Profile>
+  template <Profile P>
   void send_graph_response(web_server::http_req_t const& req,
                            web_server::http_res_cb_t const& cb,
                            geojson_writer& gj) {
-    gj.finish(&get_dijkstra<Profile>());
+    gj.finish(&get_dijkstra<P>());
     cb(json_response(req, gj.string()));
   }
 
