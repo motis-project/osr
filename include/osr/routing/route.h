@@ -10,6 +10,8 @@
 #include "osr/lookup.h"
 #include "osr/routing/algorithms.h"
 #include "osr/routing/mode.h"
+#include "osr/routing/parameters.h"
+#include "osr/routing/path.h"
 #include "osr/routing/profile.h"
 #include "osr/types.h"
 
@@ -17,43 +19,22 @@ namespace osr {
 
 struct ways;
 
-template <typename Profile>
+template <Profile>
 struct dijkstra;
 
-template <typename Profile>
+template <Profile>
 struct bidirectional;
 
 struct sharing_data;
 
-struct path {
-  struct segment {
-    geo::polyline polyline_;
-    level_t from_level_{kNoLevel};
-    level_t to_level_{kNoLevel};
-    node_idx_t from_{node_idx_t::invalid()};
-    node_idx_t to_{node_idx_t::invalid()};
-    way_idx_t way_{way_idx_t::invalid()};
-    cost_t cost_{kInfeasible};
-    distance_t dist_{0};
-    elevation_storage::elevation elevation_{};
-    mode mode_{mode::kFoot};
-  };
+template <Profile P>
+bidirectional<P>& get_bidirectional();
 
-  cost_t cost_{kInfeasible};
-  double dist_{0.0};
-  elevation_storage::elevation elevation_{};
-  std::vector<segment> segments_{};
-  bool uses_elevator_{false};
-  node_idx_t track_node_{node_idx_t::invalid()};
-};
-
-template <typename Profile>
-bidirectional<Profile>& get_bidirectional();
-
-template <typename Profile>
-dijkstra<Profile>& get_dijkstra();
+template <Profile P>
+dijkstra<P>& get_dijkstra();
 
 std::vector<std::optional<path>> route(
+    profile_parameters const&,
     ways const&,
     lookup const&,
     search_profile,
@@ -69,7 +50,8 @@ std::vector<std::optional<path>> route(
       return false;
     });
 
-std::optional<path> route(ways const&,
+std::optional<path> route(profile_parameters const&,
+                          ways const&,
                           lookup const&,
                           search_profile,
                           location const& from,
@@ -83,6 +65,7 @@ std::optional<path> route(ways const&,
                           routing_algorithm = routing_algorithm::kDijkstra);
 
 std::vector<std::optional<path>> route(
+    profile_parameters const&,
     ways const&,
     lookup const&,
     search_profile const,
@@ -99,7 +82,8 @@ std::vector<std::optional<path>> route(
       return false;
     });
 
-std::optional<path> route(ways const& w,
+std::optional<path> route(profile_parameters const&,
+                          ways const& w,
                           lookup const& l,
                           search_profile const profile,
                           location const& from,
