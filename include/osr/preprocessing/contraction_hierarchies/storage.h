@@ -1,0 +1,189 @@
+#pragma once
+#include <stack>
+#include "node_order_strategy.h"
+#include "osr/types.h"
+#include "osr/ways.h"
+
+namespace osr::ch {
+
+struct node_order {
+  mm_vec_map<node_idx_t, uint64_t> order_to_store_;
+  uint64_t order_count_{0U};
+  node_order(std::filesystem::path p, cista::mmap::protection mode) : order_to_store_(cista::mmap{(p / "node_order.bin").generic_string().c_str(), mode}), order_count_(0U) { }
+
+  void init(size_t const& n) {
+    order_count_ = 0U;
+    for (node_idx_t idx{0U}; idx < n; ++idx) {
+      order_to_store_.push_back(0U);
+    }
+  }
+
+  void add_node(node_idx_t const n) {
+    order_to_store_[n] = order_count_++; // store the current count and increment it afterwards
+  }
+
+  uint64_t get_order(node_idx_t const n) {
+    return order_to_store_[n];
+  }
+};
+
+struct ShortcutSegment {
+  way_idx_t w;
+  node_idx_t from;
+  node_idx_t to;
+  distance_t distance;
+  std::uint32_t cost;
+};
+
+struct shortcut_data {
+  const node_idx_t from;
+  const node_idx_t to;
+  const uint32_t cost;
+  const distance_t distance;
+  const node_idx_t via_node;  // node that was contracted
+  const way_idx_t upward_way;  // from -> via
+  const direction upward_dir;  // direction of upward_way
+  const distance_t upward_distance;  // distance of upward_way
+  const uint32_t upward_cost;  // cost of upward_way
+  const direction downward_dir;  // direction of downward_way
+  const way_idx_t downward_way;  // via -> to
+  const distance_t downward_distance;  // distance of downward_way
+  const uint32_t downward_cost;  // cost of downward_way
+  const way_idx_t selfloop_way_idx;  // special shortcut for selfloop (used to contract a 3 way pair where one is a self loop)
+  vec<ShortcutSegment> loop_segments{};
+};
+struct way_and_dir {
+  way_idx_t way;
+  direction dir;
+  way_pos_t pos;
+};
+struct shortcut_storage {
+
+  vec<shortcut_data> shortcuts_;
+
+  std::unique_ptr<node_order> node_order_;
+
+  way_idx_t max_way_idx_; // This will contain the last non shortcut way_idx_t so if there are 10 ways it will be 9
+
+  cista::raw::ankerl_map<way_idx_t, way_and_dir> first_way_on_shortcut;
+  cista::raw::ankerl_map<way_idx_t, way_and_dir> last_way_on_shortcut;
+
+  uint64_t get_node_order(node_idx_t const n) const {
+    return node_order_->get_order(n);
+  }
+
+  bool is_shortcut(way_idx_t const idx) const {
+    return idx > max_way_idx_;
+  }
+
+  shortcut_data const* get_shortcut(way_idx_t idx) const {
+    if (!is_shortcut(idx)) { return nullptr;}
+    return &shortcuts_.at(cista::to_idx(idx) - cista::to_idx(max_way_idx_) - 1);
+  }
+
+  bool shortcut_is_selfloop(way_idx_t const idx) const {
+    if (!is_shortcut(idx)) {
+      return false;
+    }
+    auto const& s = get_shortcut(idx);
+    return s->from == s->to;
+  }
+
+  void save(std::filesystem::path const& p) const;
+
+  void load(std::filesystem::path const& p);
+
+  way_idx_t resolve_first_way(way_idx_t const way) {
+    if (!is_shortcut(way)) return way;
+    return first_way_on_shortcut[way].way;
+  }
+
+  way_and_dir resolve_first_way_and_dir(way_idx_t const way, direction dir, way_pos_t way_pos = way_pos_t{0U}) const {
+    if (!is_shortcut(way)) return way_and_dir{way, dir, way_pos};
+    return first_way_on_shortcut.at(way);
+  }
+
+  way_and_dir resolve_last_way_and_dir(way_idx_t const way, direction dir, way_pos_t way_pos = way_pos_t{0U}) const {
+    if (!is_shortcut(way)) return way_and_dir{way, dir, way_pos};
+    return last_way_on_shortcut.at(way);
+  }
+  struct SegmentFrame {
+    way_idx_t w;
+    shortcut_data const* s;
+    bool is_left_child;
+  };
+  std::vector<ShortcutSegment> get_shortcut_segments(way_idx_t const way) const {
+    if (way == way_idx_t::invalid() || !is_shortcut(way)) {
+      return {};
+    }
+    std::vector<ShortcutSegment> out = {};
+    std::stack<SegmentFrame> st;
+    auto const sh = get_shortcut(way);
+    if (!sh->loop_segments.empty()) {
+      for (auto const& s : sh->loop_segments) {
+        out.push_back(s);
+      }
+      return out;
+    }
+    st.push({sh->downward_way, sh, false});
+    if (cista::to_idx(sh->selfloop_way_idx) != std::numeric_limits<std::uint32_t>::max()) {
+      auto const sh_selfloop = get_shortcut(sh->selfloop_way_idx);
+      st.push({sh->selfloop_way_idx, sh_selfloop, false}); // is_left_child is not important here
+    }
+    st.push({sh->upward_way, sh, true});
+
+    while (!st.empty()) {
+      SegmentFrame const& frame = st.top();
+      st.pop();
+
+      if (!is_shortcut(frame.w)) {
+        if (frame.is_left_child) {
+          out.push_back(ShortcutSegment{frame.w, frame.s->from, frame.s->via_node, frame.s->upward_distance, frame.s->upward_cost});
+        } else {
+          out.push_back(ShortcutSegment{frame.w,frame.s->via_node, frame.s->to, frame.s->downward_distance, frame.s->downward_cost});
+        }
+        continue;
+      }
+      auto const& sh = get_shortcut(frame.w);
+      if (!sh->loop_segments.empty()) {
+        for (auto const& s : sh->loop_segments) {
+          out.push_back(s);
+        }
+      } else {
+        st.push({sh->downward_way, sh, false});
+        if (cista::to_idx(sh->selfloop_way_idx) != std::numeric_limits<std::uint32_t>::max()) {
+          auto const sh_selfloop = get_shortcut(sh->selfloop_way_idx);
+          st.push({sh->selfloop_way_idx, sh_selfloop, false}); // is_left_child is not important here
+        }
+        st.push({sh->upward_way, sh, true});
+      }
+    }
+    return out;
+  }
+
+  way_idx_t add_shortcut(ways& w, shortcut_data const& shortcut);
+
+  void construct_way_on_shortcut_arrays(ways const& ways, way_idx_t const shortcut_way, shortcut_data const& shortcut) {
+    if (is_shortcut(shortcut.upward_way)) {
+      first_way_on_shortcut.insert_or_assign(
+          shortcut_way, first_way_on_shortcut[shortcut.upward_way]);
+    } else {
+      first_way_on_shortcut.insert_or_assign(
+          shortcut_way, way_and_dir{shortcut.upward_way, shortcut.upward_dir, ways.r_->get_way_pos(shortcut.from, shortcut.upward_way)});
+    }
+    if (is_shortcut(shortcut.downward_way)) {
+      last_way_on_shortcut.insert_or_assign(
+          shortcut_way, last_way_on_shortcut[shortcut.downward_way]);
+    } else {
+      last_way_on_shortcut.insert_or_assign(
+          shortcut_way,
+          way_and_dir{shortcut.downward_way, shortcut.downward_dir, ways.r_->get_way_pos(shortcut.to, shortcut.downward_way)});
+    }
+  }
+
+  static void add_shortcut_to_graph(osr::ways& w, shortcut_data const& shortcut, way_idx_t way_idx, bool add_to_nodes);
+
+  void load_all_shortcuts_in_graph(osr::ways& w);
+};
+
+} // namespace osr::ch
