@@ -31,6 +31,46 @@ struct contractor {
         from_way_and_dir.dir == opposite(to_way_and_dir.dir));
   }
 
+  struct bypass_path {
+    std::vector<car::node> nodes;
+    vec<ShortcutSegment> segments;
+    cost_t total_cost{0};
+    distance_t total_distance{0};
+
+    bool is_distinct_from(const bypass_path& other) const {
+      if (nodes.empty() || other.nodes.empty()) {
+        return false;
+      }
+      return !(nodes.front() == other.nodes.front() &&
+        nodes.back() == other.nodes.back());
+    }
+  };
+  std::vector<bypass_path> find_restriction_bypasses(ways const& w,
+                                                  bitvec<node_idx_t>* blocked,
+                                                  node_idx_t node,
+                                                  node_idx_t from_node,
+                                                  way_idx_t from_way,
+                                                  direction from_dir,
+                                                  shortcut_storage const* shortcut_storage);
+  std::vector<way_pos_t> get_restriction_to_ways(ways const& w,
+                                           node_idx_t node,
+                                           way_idx_t from_way,
+                                           shortcut_storage const* shortcut_storage) {
+    std::vector<way_pos_t> to_ways;
+
+    if (!w.r_->node_is_restricted_[node]) {
+      return to_ways;
+    }
+    auto const from_way_pos = w.r_->get_way_pos(node, from_way);
+    auto const& node_restrictions = w.r_->node_restrictions_[node];
+
+    for (auto const& restriction : node_restrictions) {
+      if (restriction.from_ == from_way_pos && !shortcut_storage->is_shortcut(w.r_->node_ways_[node][restriction.to_])) {
+        to_ways.push_back(restriction.to_);
+      }
+    }
+    return to_ways;
+  }
   bool is_restriction_subset_at_node(ways const& w, node_idx_t node, way_pos_t way1_pos, way_pos_t way2_pos) {
     if (!w.r_->node_is_restricted_[node]) {
       return true;
