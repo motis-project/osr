@@ -175,7 +175,7 @@ struct bidirectional {
     }
 
     Profile::template adjacent<SearchDir, WithBlocked>(
-        r, curr, blocked, sharing, elevations,
+        r, curr, blocked, sharing, elevations, nullptr,
         [&](node const neighbor, std::uint32_t const cost, distance_t,
             way_idx_t const way, std::uint16_t, std::uint16_t,
             elevation_storage::elevation const, bool const track) {
@@ -251,7 +251,7 @@ struct bidirectional {
             return;
           }
           Profile::template adjacent<opposite(SearchDir), WithBlocked>(
-              r, curr, blocked, sharing, elevations,
+              r, curr, blocked, sharing, elevations, nullptr,
               [&](node const neighbor, std::uint32_t const, distance_t,
                   way_idx_t const, std::uint16_t, std::uint16_t,
                   elevation_storage::elevation const, bool const) {
