@@ -34,13 +34,13 @@ void process_all_nodes(
 }
 
 void process_ch(std::filesystem::path const& in,
-                std::filesystem::path const& original_in,
+                std::filesystem::path const& out,
                 std::unique_ptr<OrderStrategy>& order_strategy) {
   fmt::println("Begin Setup for Contraction Hirachies");
 
-  auto w = ways{in, cista::mmap::protection::READ};
-  auto const w_without = ways{original_in, cista::mmap::protection::READ};
-  auto node_order = osr::ch::node_order{in, cista::mmap::protection::WRITE};
+  auto w = ways{out, cista::mmap::protection::READ};
+  auto const w_without = ways{in, cista::mmap::protection::READ};
+  auto node_order = osr::ch::node_order{out, cista::mmap::protection::WRITE};
 
   node_order.init(w.n_nodes());
 
@@ -60,6 +60,7 @@ void process_ch(std::filesystem::path const& in,
   shortcuts.set_max_way_idx(way_idx_t{w.n_ways() - 1});
 
   c.calculate_neighbors(w);
+
   bitvec<node_idx_t> blocked(w.n_nodes());
   process_all_nodes(w, w_without, &blocked, shortcuts, c, order_strategy, &node_order);
 
@@ -69,9 +70,8 @@ void process_ch(std::filesystem::path const& in,
   auto duration = duration_cast<seconds>(stop - start);
   fmt::println("Computation Time: {} s", duration.count());
 
-  shortcuts.save(in);
-  shortcuts.save(in);
-  w.r_->write(in);
+  shortcuts.save(out);
+  w.r_->write(out);
 
   fmt::println("Shortcuts saved to [file={}]", in);
 }

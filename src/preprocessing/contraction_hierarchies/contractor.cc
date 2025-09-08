@@ -10,41 +10,44 @@ void contractor::calculate_neighbors(ways const& w) {
   pt->status("calculate neighbours").in_high(w.n_nodes()).out_bounds(0,100);
   for (node_idx_t node{0U}; node < w.n_nodes(); ++node) {
     pt->update(node.v_);
+
     for (auto const [way, i] : utl::zip_unchecked(w.r_->node_ways_[node], w.r_->node_in_way_idx_[node])) {
       const auto way_pos = w.r_->get_way_pos(node, way);
+
       for (const auto dir : {direction::kForward, direction::kBackward}) {
+
         const car::node n{.n_ = node, .way_ = way_pos, .dir_ = dir};
+
         car::adjacent<direction::kForward, false>(
-              *w.r_, n, nullptr, nullptr, nullptr,
-              [&](car::node const neighbor, std::uint32_t const cost,
-                  distance_t distance, way_idx_t const n_way, std::uint16_t,
-                  std::uint16_t, elevation_storage::elevation const, bool) {
-                if (neighbor.get_node() == node) {
-                  return;
-                }
-                auto& existing_neighbors = outgoing_neighbors_[node];
-                auto const it = std::ranges::find_if(existing_neighbors, [&](auto const& e) {
-                  return e.node_idx == neighbor.get_node();
-                });
-                if (it == existing_neighbors.end() || cost < it->cost) {
-                  if (it != existing_neighbors.end()) {
-                    *it = neighbor_data{
-                        .node_idx = neighbor.get_node(),
-                        .cost = cost,
-                        .way = n_way,
-                        .distance = distance,
-                        .node = neighbor};
-                  } else {
-                    existing_neighbors.push_back(
-                        neighbor_data{.node_idx = neighbor.get_node(),
+            *w.r_, n, nullptr, nullptr, nullptr, nullptr,
+            [&](car::node const neighbor, std::uint32_t const cost,
+                distance_t distance, way_idx_t const n_way, std::uint16_t,
+                std::uint16_t, elevation_storage::elevation const, bool) {
+              if (neighbor.get_node() == node) {
+                return;
+              }
+              auto& existing_neighbors = outgoing_neighbors_[node];
+              auto const it =
+                  std::ranges::find_if(existing_neighbors, [&](auto const& e) {
+                    return e.node_idx == neighbor.get_node();
+                  });
+              if (it == existing_neighbors.end() || cost < it->cost) {
+                if (it != existing_neighbors.end()) {
+                  *it = neighbor_data{.node_idx = neighbor.get_node(),
                                       .cost = cost,
                                       .way = n_way,
                                       .distance = distance,
-                                      .node = neighbor}
-                    );
-                  }
+                                      .node = neighbor};
+                } else {
+                  existing_neighbors.push_back(
+                      neighbor_data{.node_idx = neighbor.get_node(),
+                                    .cost = cost,
+                                    .way = n_way,
+                                    .distance = distance,
+                                    .node = neighbor});
                 }
-              });
+              }
+            });
       }
     }
   }
@@ -130,7 +133,7 @@ std::vector<contractor::bypass_path> contractor::find_restriction_bypasses(ways 
                    from_dir},
          0});
   dijkstra.run(w, *w.r_, 241, blocked, nullptr,
-                nullptr, direction::kForward); // TODO SHORTCUTS
+                nullptr, direction::kForward, shortcut_storage);
   for (auto const& to : outgoing_neighbors_[node]) {
     if (std::find(to_restrictions.begin(), to_restrictions.end(),
                        w.r_->get_way_pos(node, w.r_->node_ways_[to.node_idx][to.node.way_])) != to_restrictions.end()) {
@@ -166,22 +169,24 @@ std::vector<contractor::bypass_path> contractor::find_restriction_bypasses(ways 
             cost_t expected_cost = dijkstra.get_cost(path.nodes[i + 1]) -
                       dijkstra.get_cost(path.nodes[i]);
             car::adjacent<direction::kForward, false>(
-                *w.r_, current, nullptr, nullptr, nullptr,
+                *w.r_, current, nullptr, nullptr, nullptr, nullptr,
                 [&](car::node const target, std::uint32_t const cost,
-                    distance_t const dist, way_idx_t const way, std::uint16_t const,
-                    std::uint16_t const,
+                    distance_t const dist, way_idx_t const way,
+                    std::uint16_t const, std::uint16_t const,
                     elevation_storage::elevation const, bool) {
                   if (target == next && cost == expected_cost) {
                     if (shortcut_storage->is_shortcut(way)) {
-                      auto segments = shortcut_storage->get_shortcut_segments(way);
-                      path.segments.insert(path.segments.end(), segments.begin(), segments.end());
+                      auto segments =
+                          shortcut_storage->get_shortcut_segments(way);
+                      path.segments.insert(path.segments.end(),
+                                           segments.begin(), segments.end());
                     } else {
                       path.segments.push_back(ShortcutSegment{
-                        .w = way,
-                        .from = current.n_,
-                        .to = next.n_,
-                        .distance = dist,
-                        .cost = cost,
+                          .w = way,
+                          .from = current.n_,
+                          .to = next.n_,
+                          .distance = dist,
+                          .cost = cost,
                       });
                     }
                     path.total_distance += dist;
@@ -208,7 +213,6 @@ std::vector<contractor::bypass_path> contractor::find_restriction_bypasses(ways 
 void contractor::contract_node(ways& w, ways const& w_without, bitvec<node_idx_t>* blocked, shortcut_storage* shortcuts, node_idx_t node) {
   blocked->set(node, true);
   auto& existing_neighbors = outgoing_neighbors_[node];
-
   for (std::size_t i{0U}; i < incoming_neighbors_[node].size(); ++i) {
     auto const& from = incoming_neighbors_[node][i];
     if (w.r_->node_is_restricted_[node] && !shortcuts->is_shortcut(from.way)) {
@@ -336,7 +340,7 @@ void contractor::contract_node(ways& w, ways const& w_without, bitvec<node_idx_t
            0});
 
     dijkstra.run(w, *w.r_, max_direct_cost + 1, blocked, nullptr,
-                   nullptr, direction::kForward); // TODO SHORTCUTS
+                   nullptr, direction::kForward, shortcuts);
 
     for (std::size_t j{0U}; j < outgoing_neighbors_[node].size(); ++j) {
       auto const& to = outgoing_neighbors_[node][j];
