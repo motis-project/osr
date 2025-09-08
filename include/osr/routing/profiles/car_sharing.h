@@ -324,6 +324,7 @@ struct car_sharing {
                        bitvec<node_idx_t> const* blocked,
                        sharing_data const* sharing,
                        elevation_storage const* elevations,
+                       ch::shortcut_storage const*,
                        Fn&& fn) {
     assert(sharing != nullptr);
 
@@ -340,7 +341,7 @@ struct car_sharing {
                                        bool const include_additional_edges,
                                        cost_t const switch_penalty = 0) {
       footp::template adjacent<SearchDir, WithBlocked>(
-          w, to_foot(n), blocked, nullptr, elevations,
+          w, to_foot(n), blocked, nullptr, elevations, nullptr,
           [&](footp::node const neighbor, std::uint32_t const cost,
               distance_t const dist, way_idx_t const way,
               std::uint16_t const from, std::uint16_t const to,
@@ -368,7 +369,7 @@ struct car_sharing {
     auto const& continue_with_vehicle = [&](bool const include_additional_edges,
                                             cost_t const switch_penalty = 0) {
       car::adjacent<SearchDir, WithBlocked>(
-          w, to_rental(n), blocked, nullptr, elevations,
+          w, to_rental(n), blocked, nullptr, elevations, nullptr,
           [&](car::node const neighbor, std::uint32_t const cost,
               distance_t const dist, way_idx_t const way,
               std::uint16_t const from, std::uint16_t const to,

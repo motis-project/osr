@@ -8,10 +8,18 @@
 
 #include "osr/elevation_storage.h"
 #include "osr/routing/mode.h"
-#include "osr/routing/route.h"
 #include "osr/ways.h"
+#include "osr/preprocessing/contraction_hierarchies/storage.h"
 
 namespace osr {
+struct path;
+
+namespace ch {
+
+struct shortcut_data;
+struct shortcut_storage;
+
+} // namespace osr::ch
 
 struct sharing_data;
 
@@ -66,7 +74,7 @@ struct car {
   };
 
   struct entry {
-    static constexpr auto const kMaxWays = way_pos_t{16U};
+    static constexpr auto const kMaxWays = way_pos_t{333U};
     static constexpr auto const kN = kMaxWays * 2U /* FWD+BWD */;
 
     entry() { utl::fill(cost_, kInfeasible); }
@@ -166,12 +174,43 @@ struct car {
                        bitvec<node_idx_t> const* blocked,
                        sharing_data const*,
                        elevation_storage const*,
+                       ch::shortcut_storage const* shortcuts,
                        Fn&& fn) {
     auto way_pos = way_pos_t{0U};
+    auto const WITH_SHORTCUT = shortcuts != nullptr;
+
+    auto node_resolved_way = w.node_ways_[n.n_][n.way_];
+    auto node_resolved_dir = n.dir_;
+    //fmt::print("start node resolving way: {} dir: {}\n",node_resolved_way, to_str(node_resolved_dir));
+    if (n.n_ == node_idx_t{254U}) {
+      //fmt::print("node: {} way: {} dir: {}\n", n.n_, n.way_, to_str(n.dir_));
+    }
+    if (WITH_SHORTCUT) {
+      auto n_way = w.node_ways_[n.n_][n.way_];
+      if(shortcuts->is_shortcut(n_way)) {
+        auto resolved = SearchDir == direction::kForward ? shortcuts->resolve_last_way_and_dir(n_way,n.dir_): shortcuts->resolve_first_way_and_dir(n_way,n.dir_);
+        node_resolved_way = resolved.way;
+        node_resolved_dir = resolved.dir;
+      }
+    }
+    //fmt::print("Resolved node way: {} dir: {}\n",node_resolved_way, to_str(node_resolved_dir));
     for (auto const [way, i] :
          utl::zip_unchecked(w.node_ways_[n.n_], w.node_in_way_idx_[n.n_])) {
+      auto const way_is_shortcut = WITH_SHORTCUT ? shortcuts->is_shortcut(way) : false;
+
+
       auto const expand = [&](direction const way_dir, std::uint16_t const from,
                               std::uint16_t const to) {
+
+        auto resolved_way = way;
+        auto resolved_dir = way_dir;
+
+        if (way_is_shortcut) {
+          auto resolved = SearchDir == direction::kForward? shortcuts->resolve_first_way_and_dir(way,way_dir) : shortcuts->resolve_last_way_and_dir(way,way_dir);
+          resolved_way = resolved.way;
+          resolved_dir = resolved.dir;
+        }
+
         // NOLINTNEXTLINE(clang-analyzer-core.CallAndMessage)
         auto const target_node = w.way_nodes_[way][to];
         if constexpr (WithBlocked) {
@@ -186,7 +225,7 @@ struct car {
         }
 
         auto const target_way_prop = w.way_properties_[way];
-        if (way_cost(target_way_prop, way_dir, 0U) == kInfeasible) {
+        if (!way_is_shortcut && way_cost(target_way_prop, way_dir, 0U) == kInfeasible) {
           return;
         }
 
@@ -194,11 +233,12 @@ struct car {
           return;
         }
 
-        auto const is_u_turn = way_pos == n.way_ && way_dir == opposite(n.dir_);
+        //auto const is_u_turn = way_pos == n.way_ && way_dir == opposite(n.dir_);
+        auto const is_u_turn = resolved_way == node_resolved_way && resolved_dir == opposite(node_resolved_dir);
         auto const dist = w.way_node_dist_[way][std::min(from, to)];
         auto const target =
             node{target_node, w.get_way_pos(target_node, way, to), way_dir};
-        auto const cost = way_cost(target_way_prop, way_dir, dist) +
+        auto const cost = (way_is_shortcut ? way_cost_s(target_way_prop, way_dir, dist,shortcuts->get_shortcut(way)) : way_cost(target_way_prop, way_dir, dist)) +
                           node_cost(target_node_prop) +
                           (is_u_turn ? kUturnPenalty : 0U);
         fn(target, cost, dist, way, from, to, elevation_storage::elevation{},
@@ -215,7 +255,24 @@ struct car {
       ++way_pos;
     }
   }
-
+  static constexpr cost_t way_cost_s(way_properties const& e,
+                                   direction const dir,
+                                   std::uint16_t const dist,
+                                   ch::shortcut_data const* shortcut) {
+    if (e.is_car_accessible() &&
+        (dir == direction::kForward || !e.is_oneway_car())) {
+      cost_t cost = 0;
+      if (shortcut != nullptr) {
+        cost = shortcut->cost;
+      } else {
+        cost = dist / e.max_speed_m_per_s();
+      }
+      return (cost) * (e.is_destination() ? 5U : 1U) +
+             (e.is_destination() ? 120U : 0U);
+        } else {
+          return kInfeasible;
+        }
+  }
   static bool is_dest_reachable(ways::routing const& w,
                                 node const n,
                                 way_idx_t const way,

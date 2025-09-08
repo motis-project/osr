@@ -17,6 +17,7 @@
 #include "osr/routing/route.h"
 #include "osr/routing/sharing_data.h"
 #include "osr/ways.h"
+#include "osr/preprocessing/contraction_hierarchies/storage.h"
 
 namespace osr {
 
@@ -272,6 +273,7 @@ struct bike_sharing {
                        bitvec<node_idx_t> const* blocked,
                        sharing_data const* sharing,
                        elevation_storage const* elevations,
+                       ch::shortcut_storage const*,
                        Fn&& fn) {
     assert(sharing != nullptr);
 
@@ -288,7 +290,7 @@ struct bike_sharing {
                                        bool const include_additional_edges,
                                        cost_t const switch_penalty = 0) {
       footp::template adjacent<SearchDir, WithBlocked>(
-          w, to_foot(n), blocked, nullptr, elevations,
+          w, to_foot(n), blocked, nullptr, elevations, nullptr,
           [&](footp::node const neighbor, std::uint32_t const cost,
               distance_t const dist, way_idx_t const way,
               std::uint16_t const from, std::uint16_t const to,
@@ -316,7 +318,7 @@ struct bike_sharing {
     auto const& continue_on_bike = [&](bool const include_additional_edges,
                                        cost_t const switch_penalty = 0) {
       bikep::adjacent<SearchDir, WithBlocked>(
-          w, to_bike(n), blocked, nullptr, elevations,
+          w, to_bike(n), blocked, nullptr, elevations, nullptr,
           [&](bikep::node const neighbor, std::uint32_t const cost,
               distance_t const dist, way_idx_t const way,
               std::uint16_t const from, std::uint16_t const to,

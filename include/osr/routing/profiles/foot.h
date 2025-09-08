@@ -6,6 +6,7 @@
 #include "osr/routing/mode.h"
 #include "osr/routing/tracking.h"
 #include "osr/ways.h"
+#include "osr/preprocessing/contraction_hierarchies/storage.h"
 
 namespace osr {
 
@@ -155,6 +156,7 @@ struct foot {
                        bitvec<node_idx_t> const* blocked,
                        sharing_data const*,
                        elevation_storage const*,
+                       ch::shortcut_storage const*,
                        Fn&& fn) {
     for (auto const [way, i] :
          utl::zip_unchecked(w.node_ways_[n.n_], w.node_in_way_idx_[n.n_])) {
