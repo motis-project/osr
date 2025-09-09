@@ -47,7 +47,8 @@ struct bike_sharing {
                      .is_sidewalk_separate_ = false,
                      .motor_vehicle_no_ = false,
                      .has_toll_ = false,
-                     .is_big_street_ = false};
+                     .is_big_street_ = false,
+                     .importance_ = 0};
 
   static constexpr auto const kAdditionalNodeProperties =
       node_properties{.from_level_ = 0,
@@ -58,7 +59,8 @@ struct bike_sharing {
                       .is_entrance_ = false,
                       .is_multi_level_ = false,
                       .is_parking_ = false,
-                      .to_level_ = 0};
+                      .to_level_ = 0,
+                      .importance_ = 0};
 
   enum class node_type : std::uint8_t {
     kInitialFoot,
