@@ -74,7 +74,7 @@ void shortcut_storage::add_shortcut_to_graph(ways& w,
 
   w.r_->way_properties_.push_back(way_properties{ false, false, true, false,
                                                  true, false, false, false, 3,
-                                                 0, 0, 0, false, false, false, false, false, false});
+                                                 0, 0, 0, false, false, false, false, false, false, 3});
 
   // neue Way in node hinzufügen
   if (add_to_nodes) {

@@ -20,16 +20,19 @@ struct config : public conf::configuration {
     param(in_, "in,i", "input directory for extracted Data");
     param(out_, "out,o", "output directory for preprocessed Data");
     param(order_, "order", "Order which to use (default rand, predefined = pre)");
-    param(seed_, "seed", "Seed for random order");
+    param(seed_, "seed", "Seed for any random order");
   }
   fs::path in_;
   fs::path out_;
-  std::string order_{"rand"};
+  std::string order_{"importance"};
   int seed_{-1};
 };
 
 std::unique_ptr<OrderStrategy> get_order_strategy(const config& c) {
-  return std::make_unique<RandomOrderStrategy>(c.seed_);
+  if (c.order_ == "rand") {
+    return std::make_unique<RandomOrderStrategy>(c.seed_);
+  }
+  return std::make_unique<node_importance_order_strategy>(c.seed_); // importance
 }
 
 int main(int argc, const char** argv) {

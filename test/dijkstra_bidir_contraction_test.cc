@@ -54,7 +54,7 @@ void load_with_ch(std::string_view raw_data, std::string_view data_dir) {
                    fs::copy_options::recursive);
         }
       }
-      std::unique_ptr<ch::OrderStrategy> node_order_strategy = std::make_unique<osr::ch::RandomOrderStrategy>(-1);;
+      std::unique_ptr<ch::OrderStrategy> node_order_strategy = std::make_unique<osr::ch::node_importance_order_strategy>(-1);;
       osr::ch::process_ch(data_dir, ch_path, node_order_strategy);
 
     }

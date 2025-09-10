@@ -48,7 +48,7 @@ void process_ch(std::filesystem::path const& in,
 
   order_strategy->compute_order(w);
 
-  fmt::println("node order computed result has {} nodes", order_strategy->get_node_order().size());
+  fmt::println("node order computed");
 
   fmt::println("End Setup for Contraction Hirachies");
   fmt::println("Begin Contraction Hirachies Processing\n");
