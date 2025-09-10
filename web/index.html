@@ -113,6 +113,35 @@
             border-radius: 4px;
         }
 
+        #message-box {
+            background-color: #f44336;
+            color: white;
+            position: absolute;
+            bottom: 5px;
+            left: 50%;
+            z-index: 1100;
+            text-align: center;
+            text-decoration: none;
+            padding: 10px;
+            border-radius: 4px;
+            transform: translateX(-50%);
+        }
+
+        #message-box-btn {
+            margin-left: 15px;
+            color: white;
+            font-weight: bold;
+            float: right;
+            font-size: 22px;
+            line-height: 20px;
+            cursor: pointer;
+            transition: 0.3s;
+        }
+
+        #message-box-btn:hover {
+            color: black;
+        }
+
         .context {
             margin: 0.5em;
         }
@@ -136,16 +165,22 @@
 <select id="routing-algorithm" onchange="selectRoutingAlgorithm(event)">
     <option value="dijkstra" selected>dijkstra</option>
     <option value="bidirectional">bidirectional A*</option>
+    <option value="contraction hierarchies">contraction hierarchies</option>
 </select>
 <div id="journey-info">
     Test
 </div>
+<div id="message-box" >
+    <span id="message-box-btn" onclick="this.parentElement.style.display='none';">&times;</span>
+    <span id="message-content"></span>
+</div>
+<script>document.getElementById("message-box").style.display='none';</script>
 <div id="map"></div>
 <script type="module">
     import {style} from "./style.js";
 
-    const start = [8.65749737, 50.10416625]
-    const destination = [8.65750757, 50.10417645];
+    const start = [7.4246, 43.7384]
+    const destination = [7.4246, 43.7384];
     const query = {
         start, destination,
         max: 14400,
@@ -248,6 +283,10 @@
         });
         try {
             const r = await response.json();
+            if(r.message !== "") {
+                document.getElementById("message-box").style.display="";
+                document.getElementById("message-content").innerText=r.message;
+            }
             const min = Math.floor(r.metadata.duration / 60);
             const sec = r.metadata.duration % 60;
             const m = Math.round(r.metadata.distance);

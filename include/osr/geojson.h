@@ -38,6 +38,7 @@ inline std::string to_featurecollection(ways const& w,
                                         bool const with_properties = true) {
   return boost::json::serialize(boost::json::object{
       {"type", "FeatureCollection"},
+      {"message", ""},
       {"metadata", with_properties ? boost::json::value{{"duration", p->cost_},
                                                         {"distance", p->dist_}}
                                    : boost::json::value{{}}},
@@ -179,6 +180,7 @@ struct geojson_writer {
           {"car", p.is_car_accessible()},
           {"bike", p.is_bike_accessible()},
           {"foot", p.is_walk_accessible()},
+          {"importance", p.importance()},
           {"is_restricted", w_.r_->node_is_restricted_[n]},
           {"is_entrance", p.is_entrance()},
           {"is_elevator", p.is_elevator()},

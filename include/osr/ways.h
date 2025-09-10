@@ -103,6 +103,7 @@ struct way_properties {
   bool motor_vehicle_no_ : 1;
   bool has_toll_ : 1;
   bool is_big_street_ : 1;
+  std::uint8_t importance_ : 3; // only used during extract
 };
 
 static_assert(sizeof(way_properties) == 4);
@@ -115,6 +116,7 @@ struct node_properties {
   constexpr bool is_multi_level() const { return is_multi_level_; }
   constexpr bool is_entrance() const { return is_entrance_; }
   constexpr bool is_parking() const { return is_parking_; }
+  constexpr std::uint8_t importance() const { return importance_; }
 
   constexpr level_t from_level() const { return level_t{from_level_}; }
   constexpr level_t to_level() const { return level_t{to_level_}; }
@@ -142,6 +144,7 @@ struct node_properties {
   bool is_parking_ : 1;
 
   std::uint8_t to_level_ : 5;
+  std::uint8_t importance_ : 3;
 };
 
 static_assert(sizeof(node_properties) == 3);
@@ -152,7 +155,8 @@ struct ways {
   void add_restriction(std::vector<resolved_restriction>&);
   void compute_big_street_neighbors();
   void connect_ways();
-  void build_components();
+  void build_components_and_importance();
+  void build_CH();
 
   std::optional<way_idx_t> find_way(osm_way_idx_t const i) {
     auto const it = std::lower_bound(begin(way_osm_idx_), end(way_osm_idx_), i);
@@ -275,6 +279,44 @@ struct ways {
     vec<pair<node_idx_t, level_bits_t>> multi_level_elevators_;
 
     vec_map<way_idx_t, component_idx_t> way_component_;
+
+    typedef std::int64_t node_identifier;
+    struct node {
+      node_idx_t n_;
+      way_pos_t way_;
+      direction dir_;
+      node_identifier id_;
+      template<typename T> T conv() const {
+        return T{n_, way_, dir_};
+      }
+      bool operator==(const node&) const = default;
+      friend std::ostream& operator<<(std::ostream& os, const node& n) {
+        return os << "(" << n.n_ << ", " << static_cast<int>(n.way_) << ", " << n.dir_ << ")";
+      }
+    };
+
+    typedef std::int64_t edge_idx_t;
+    struct contracted_edge {
+      edge_idx_t contracted_child1_;
+      edge_idx_t contracted_child2_;
+      node_identifier from_;
+      node_identifier to_;
+      cost_t cost_;
+
+      bool is_contracted() const {
+        return contracted_child1_ != 0U || contracted_child2_ != 0U;
+      }
+      static edge_idx_t invalid() { return std::numeric_limits<edge_idx_t>::max(); }
+    };
+
+    bool is_CH_available() const {
+      return !contracted_edges_.empty();
+    }
+
+    vec_map<edge_idx_t, contracted_edge> contracted_edges_;
+    vec_map<node_identifier, node> identifier_to_node_;
+    vec_map<node_idx_t, node_identifier> node_idx_to_identifier_;
+    vecvec<node_identifier, edge_idx_t> upwards_edges_outgoing_, downwards_edges_incoming_;
   };
 
   cista::wrapped<routing> r_;

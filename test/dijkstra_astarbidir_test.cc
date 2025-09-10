@@ -33,14 +33,14 @@ constexpr auto const kPrintDebugGeojson = false;
 constexpr auto const kMaxMatchDistance = 100;
 constexpr auto const kMaxAllowedPathDifferenceRatio = 0.5;
 
-void load(std::string_view raw_data, std::string_view data_dir) {
+void load(std::string_view raw_data, std::string_view data_dir, bool const with_ch=false) {
   if (!fs::exists(data_dir)) {
     if (fs::exists(raw_data)) {
       auto const p = fs::path{data_dir};
       auto ec = std::error_code{};
       fs::remove_all(p, ec);
       fs::create_directories(p, ec);
-      osr::extract(false, raw_data, data_dir, fs::path{});
+      osr::extract(false, raw_data, data_dir, fs::path{}, with_ch);
     }
   }
 }
@@ -48,7 +48,9 @@ void load(std::string_view raw_data, std::string_view data_dir) {
 void run(ways const& w,
          lookup const& l,
          unsigned const n_samples,
-         unsigned const max_cost) {
+         unsigned const max_cost,
+         routing_algorithm const algo=routing_algorithm::kAStarBi,
+         std::string const& algo_name="a* bidir") {
 
   auto const from_tos = [&]() {
     auto prng = std::mt19937{};
@@ -108,7 +110,7 @@ void run(ways const& w,
     auto const experiment =
         route(w, l, search_profile::kCar, from_loc, to_loc, from_matches_span,
               to_matches_span, max_cost, direction::kForward, nullptr, nullptr,
-              nullptr, routing_algorithm::kAStarBi);
+              nullptr, algo);
     auto const experiment_time =
         std::chrono::steady_clock::now() - experiment_start;
 
@@ -136,7 +138,7 @@ void run(ways const& w,
       };
 
       print_result("dijkstra", reference, reference_time);
-      print_result("a* bidir", experiment, experiment_time);
+      print_result(algo_name, experiment, experiment_time);
 
     } else {
       ++n_congruent;
@@ -197,7 +199,7 @@ TEST(dijkstra_astarbidir, hamburg) {
   auto const raw_data = "test/hamburg.osm.pbf";
   auto const data_dir = "test/hamburg";
   auto const num_samples = 5000U;
-  auto const max_cost = 2 * 3600U;
+  auto const max_cost = 3 * 3600U;
 
   if (!fs::exists(raw_data) && !fs::exists(data_dir)) {
     GTEST_SKIP() << raw_data << " not found";

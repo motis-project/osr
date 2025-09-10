@@ -22,6 +22,17 @@ struct car {
   using key = node_idx_t;
 
   struct node {
+    [[nodiscard]] ways::routing::node conv(const std::int64_t id_) const {
+      return ways::routing::node{n_, way_, dir_, id_};
+    }
+    [[nodiscard]] bool is_end_of_way(ways::routing const& r_) const {
+      const auto edge_idx = r_.node_ways_[n_][way_];
+      const auto way = r_.way_nodes_[edge_idx];
+      return n_ == way[0].v_ || n_ == way[way.size()-1].v_;
+    }
+    friend bool operator<(const node n1, const node n2) {
+      return n1.n_ < n2.n_ || (n1.n_ == n2.n_ && entry::get_index_alt(n1) < entry::get_index_alt(n2));
+    }
     friend bool operator==(node, node) = default;
 
     static constexpr node invalid() noexcept {
@@ -108,6 +119,10 @@ struct car {
 
     static constexpr std::size_t get_index(node const n) {
       return (n.dir_ == direction::kForward ? 0U : 1U) * kMaxWays + n.way_;
+    }
+
+    static constexpr std::size_t get_index_alt(node const n) {
+      return n.way_ * 2 + (n.dir_ == direction::kForward ? 0U : 1U);
     }
 
     static constexpr direction to_dir(bool const b) {

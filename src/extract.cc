@@ -60,22 +60,37 @@ bool is_number(std::string_view s) {
          utl::all_of(s, [](char const c) { return std::isdigit(c); });
 }
 
-bool is_big_street(tags const& t) {
+std::uint8_t get_importance(tags const& t) {
   switch (cista::hash(t.highway_)) {
-    case cista::hash("motorway"):
-    case cista::hash("motorway_link"):
-    case cista::hash("trunk"):
-    case cista::hash("trunk_link"):
-    case cista::hash("primary"):
-    case cista::hash("primary_link"):
+    case cista::hash("pedestrian"):
+    case cista::hash("busway"):
+    case cista::hash("footway"):
+    case cista::hash("cycleway"):
+    case cista::hash("bridleway"):
+    case cista::hash("steps"):
+    case cista::hash("corridor"):
+    case cista::hash("path"): return 0;
+    case cista::hash("track"): return 1;
+    case cista::hash("living_street"):
+    case cista::hash("service"): return 2;
+    case cista::hash("residential"): return 3;
+    case cista::hash("road"): return 4;
+    case cista::hash("unclassified"):
+    case cista::hash("tertiary"):
+    case cista::hash("tertiary_link"): return 5;
     case cista::hash("secondary"):
     case cista::hash("secondary_link"):
-    case cista::hash("tertiary"):
-    case cista::hash("tertiary_link"):
-    case cista::hash("unclassified"): return true;
-    default: return false;
+    case cista::hash("primary"):
+    case cista::hash("primary_link"): return 6;
+    case cista::hash("trunk"):
+    case cista::hash("trunk_link"):
+    case cista::hash("motorway"):
+    case cista::hash("motorway_link"): return 7;
+    default: return 4;
   }
 }
+
+bool is_big_street(std::uint8_t const importance) { return importance > 4; }
 
 speed_limit get_speed_limit(tags const& t) {
   if (is_number(t.max_speed_) /* TODO: support units (kmh/mph) */) {
@@ -140,7 +155,8 @@ way_properties get_way_properties(tags const& t) {
   p.motor_vehicle_no_ =
       (t.motor_vehicle_ == "no"sv) || (t.vehicle_ == override::kBlacklist);
   p.has_toll_ = t.toll_;
-  p.is_big_street_ = is_big_street(t);
+  p.importance_ = get_importance(t);
+  p.is_big_street_ = is_big_street(p.importance_);
   return p;
 }
 
@@ -157,6 +173,7 @@ std::pair<node_properties, level_bits_t> get_node_properties(tags const& t) {
   p.is_multi_level_ = is_multi;
   p.is_parking_ = t.is_parking_;
   p.to_level_ = to_idx(to);
+  p.importance_ = 0;
   return {p, t.level_bits_};
 }
 
@@ -453,7 +470,7 @@ struct mark_inaccessible_handler : public osm::handler::Handler {
     }
 
     if (track_platforms_ && t.is_platform_) {
-      // Wnsure nodes are created even if they are not part of a routable way.
+      // Ensure nodes are created even if they are not part of a routable way.
       w_.node_way_counter_.increment(n.positive_id());
     }
   }
@@ -491,7 +508,8 @@ struct rel_ways_handler : public osm::handler::Handler {
 void extract(bool const with_platforms,
              fs::path const& in,
              fs::path const& out,
-             fs::path const& elevation_dir) {
+             fs::path const& elevation_dir,
+             bool with_contraction_hierarchies) {
   auto ec = std::error_code{};
   fs::remove_all(out, ec);
   if (!fs::is_directory(out)) {
@@ -581,7 +599,6 @@ void extract(bool const with_platforms,
   w.sync();
 
   w.connect_ways();
-  w.build_components();
 
   auto r = std::vector<resolved_restriction>{};
   {
@@ -600,6 +617,7 @@ void extract(bool const with_platforms,
     pt->update(pt->in_high_);
   }
 
+  w.build_components_and_importance();
   w.add_restriction(r);
 
   utl::sort(w.r_->multi_level_elevators_);
@@ -620,6 +638,10 @@ void extract(bool const with_platforms,
 
   pt->status("Big Street Neighbors").in_high(w.n_ways()).out_bounds(95, 99);
   w.compute_big_street_neighbors();
+  if (with_contraction_hierarchies) {
+    pt->status("Build Contraction Hierarchy");
+    w.build_CH();
+  }
   w.r_->write(out);
 
   pt->status("Build R-Tree").in_high(1).out_bounds(99, 100);
