@@ -181,7 +181,7 @@ TEST(dijkstra_astarbidir, monaco_fwd) {
   auto const raw_data = "test/monaco.osm.pbf";
   auto const data_dir = "test/monaco";
   auto const num_samples = 10000U;
-  auto const max_cost = 3600U;
+  auto const max_cost = 2 * 3600U;
   auto constexpr dir = direction::kForward;
 
   if (!fs::exists(raw_data) && !fs::exists(data_dir)) {
@@ -199,7 +199,7 @@ TEST(dijkstra_astarbidir, monaco_bwd) {
   auto const raw_data = "test/monaco.osm.pbf";
   auto const data_dir = "test/monaco";
   auto const num_samples = 10000U;
-  auto const max_cost = 3600U;
+  auto const max_cost = 2 * 3600U;
   auto constexpr dir = direction::kBackward;
 
   if (!fs::exists(raw_data) && !fs::exists(data_dir)) {
