@@ -21,6 +21,7 @@
 #include "osr/geojson.h"
 #include "osr/lookup.h"
 #include "osr/routing/algorithms.h"
+#include "osr/routing/parameters.h"
 #include "osr/routing/profiles/bike.h"
 #include "osr/routing/profiles/bike_sharing.h"
 #include "osr/routing/profiles/car.h"
@@ -28,6 +29,7 @@
 #include "osr/routing/profiles/car_sharing.h"
 #include "osr/routing/profiles/foot.h"
 #include "osr/routing/route.h"
+#include "osr/routing/with_profile.h"
 
 using namespace net;
 using net::web_server;
@@ -129,12 +131,20 @@ struct http_server::impl {
     auto const max_it = q.find("max");
     auto const max = static_cast<cost_t>(
         max_it == q.end() ? 3600 : max_it->value().as_int64());
+    auto const foot_speed_result =
+        q.try_at("footSpeed")->try_to_number<float>();
+    auto const params =
+        profile == search_profile::kFoot && foot_speed_result.has_value()
+            ? foot<false,
+                   elevator_tracking>::parameters{.speed_meters_per_second_ =
+                                                      foot_speed_result.value()}
+            : get_parameters(profile);
 
     try {
-      auto const p = route(w_, l_, profile, from, to, max, dir, 100, nullptr,
+      auto const p = route(params, w_, l_, profile, from, to, max, dir, 100, nullptr,
                            nullptr, elevations_, routing_algo);
 
-      auto const p1 = route(w_, l_, profile, from, std::vector{to}, max, dir, 100,
+      auto const p1 = route(params, w_, l_, profile, from, std::vector{to}, max, dir, 100,
                             nullptr, nullptr, elevations_);
 
       auto const print = [](char const* name, std::optional<path> const& p) {
@@ -197,44 +207,15 @@ struct http_server::impl {
     auto gj = geojson_writer{.w_ = w_};
     l_.find({min, max}, [&](way_idx_t const w) { gj.write_way(w); });
 
-    switch (profile) {
-      case search_profile::kFoot:
-        send_graph_response<foot<false, elevator_tracking>>(req, cb, gj);
-        break;
-      case search_profile::kWheelchair:
-        send_graph_response<foot<true, elevator_tracking>>(req, cb, gj);
-        break;
-      case search_profile::kBike:
-        send_graph_response<bike<kElevationNoCost>>(req, cb, gj);
-        break;
-      case search_profile::kBikeElevationLow:
-        send_graph_response<bike<kElevationLowCost>>(req, cb, gj);
-        break;
-      case search_profile::kBikeElevationHigh:
-        send_graph_response<bike<kElevationHighCost>>(req, cb, gj);
-        break;
-      case search_profile::kCar: send_graph_response<car>(req, cb, gj); break;
-      case search_profile::kCarParking:
-        send_graph_response<car_parking<false>>(req, cb, gj);
-        break;
-      case search_profile::kCarParkingWheelchair:
-        send_graph_response<car_parking<true>>(req, cb, gj);
-        break;
-      case search_profile::kBikeSharing:
-        send_graph_response<bike_sharing>(req, cb, gj);
-        break;
-      case search_profile::kCarSharing:
-        send_graph_response<car_sharing<track_node_tracking>>(req, cb, gj);
-        break;
-      default: throw utl::fail("not implemented");
-    }
+    with_profile(profile,
+                 [&]<Profile P>(P&&) { send_graph_response<P>(req, cb, gj); });
   }
 
-  template <typename Profile>
+  template <Profile P>
   void send_graph_response(web_server::http_req_t const& req,
                            web_server::http_res_cb_t const& cb,
                            geojson_writer& gj) {
-    gj.finish(&get_dijkstra<Profile>());
+    gj.finish(&get_dijkstra<P>());
     cb(json_response(req, gj.string()));
   }
 

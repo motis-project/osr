@@ -24,6 +24,7 @@
 #include "osr/routing/profiles/car_sharing.h"
 #include "osr/routing/profiles/foot.h"
 #include "osr/routing/sharing_data.h"
+#include "osr/routing/with_profile.h"
 #include "osr/util/infinite.h"
 #include "osr/util/reverse.h"
 
@@ -31,6 +32,33 @@ namespace osr {
 
 constexpr auto const kMaxMatchingDistanceSquaredRatio = 9.0;
 constexpr auto const kBottomKDefinitelyConsidered = 5;
+
+template <Profile P>
+bidirectional<P>& get_bidirectional() {
+  static auto s = boost::thread_specific_ptr<bidirectional<P>>{};
+  if (s.get() == nullptr) {
+    s.reset(new bidirectional<P>{});
+  }
+  return *s.get();
+}
+
+template <Profile P>
+contraction_hierarchies<P>& get_contraction_hierarchies() {
+  static auto s = boost::thread_specific_ptr<contraction_hierarchies<P>>{};
+  if (s.get() == nullptr) {
+    s.reset(new contraction_hierarchies<P>{});
+  }
+  return *s.get();
+}
+
+template <Profile P>
+dijkstra<P>& get_dijkstra() {
+  static auto s = boost::thread_specific_ptr<dijkstra<P>>{};
+  if (s.get() == nullptr) {
+    s.reset(new dijkstra<P>{});
+  }
+  return *s.get();
+}
 
 struct connecting_way {
   constexpr bool valid() const { return way_ != way_idx_t::invalid(); }
@@ -51,19 +79,20 @@ routing_algorithm to_algorithm(std::string_view s) {
   throw utl::fail("unknown routing algorithm: {}", s);
 }
 
-template <direction SearchDir, bool WithBlocked, typename Profile>
-connecting_way find_connecting_way(ways const& w,
+template <direction SearchDir, bool WithBlocked, Profile P>
+connecting_way find_connecting_way(typename P::parameters const& params,
+                                   ways const& w,
                                    ways::routing const& r,
                                    bitvec<node_idx_t> const* blocked,
                                    sharing_data const* sharing,
                                    elevation_storage const* elevations,
-                                   typename Profile::node const from,
-                                   typename Profile::node const to,
+                                   typename P::node const from,
+                                   typename P::node const to,
                                    cost_t const expected_cost) {
   auto conn = std::optional<connecting_way>{};
-  Profile::template adjacent<SearchDir, WithBlocked>(
-      r, from, blocked, sharing, elevations,
-      [&](typename Profile::node const target, std::uint32_t const cost,
+  P::template adjacent<SearchDir, WithBlocked>(
+      params, r, from, blocked, sharing, elevations,
+      [&](typename P::node const target, std::uint32_t const cost,
           distance_t const dist, way_idx_t const way, std::uint16_t const a_idx,
           std::uint16_t const b_idx,
           elevation_storage::elevation const elevation, bool) {
@@ -86,22 +115,25 @@ connecting_way find_connecting_way(ways const& w,
   return *conn;
 }
 
-template <typename Profile>
-connecting_way find_connecting_way(ways const& w,
+template <Profile P>
+connecting_way find_connecting_way(typename P::parameters const& params,
+                                   ways const& w,
                                    bitvec<node_idx_t> const* blocked,
                                    sharing_data const* sharing,
                                    elevation_storage const* elevations,
-                                   typename Profile::node const from,
-                                   typename Profile::node const to,
+                                   typename P::node const from,
+                                   typename P::node const to,
                                    cost_t const expected_cost,
                                    direction const dir) {
   auto const call = [&]<bool WithBlocked>() {
     if (dir == direction::kForward) {
-      return find_connecting_way<direction::kForward, WithBlocked, Profile>(
-          w, *w.r_, blocked, sharing, elevations, from, to, expected_cost);
+      return find_connecting_way<direction::kForward, WithBlocked, P>(
+          params, w, *w.r_, blocked, sharing, elevations, from, to,
+          expected_cost);
     } else {
-      return find_connecting_way<direction::kBackward, WithBlocked, Profile>(
-          w, *w.r_, blocked, sharing, elevations, from, to, expected_cost);
+      return find_connecting_way<direction::kBackward, WithBlocked, P>(
+          params, w, *w.r_, blocked, sharing, elevations, from, to,
+          expected_cost);
     }
   };
 
@@ -112,20 +144,21 @@ connecting_way find_connecting_way(ways const& w,
   }
 }
 
-template <typename Profile>
-double add_path(ways const& w,
+template <Profile P>
+double add_path(typename P::parameters const& params,
+                ways const& w,
                 ways::routing const& r,
                 bitvec<node_idx_t> const* blocked,
                 sharing_data const* sharing,
                 elevation_storage const* elevations,
-                typename Profile::node const from,
-                typename Profile::node const to,
+                typename P::node const from,
+                typename P::node const to,
                 cost_t const expected_cost,
                 std::vector<path::segment>& path,
                 direction const dir) {
   auto const& [way, from_idx, to_idx, is_loop, distance, elevation] =
-      find_connecting_way<Profile>(w, blocked, sharing, elevations, from, to,
-                                   expected_cost, dir);
+      find_connecting_way<P>(params, w, blocked, sharing, elevations, from, to,
+                             expected_cost, dir);
 
   auto j = 0U;
   auto active = false;
@@ -195,13 +228,14 @@ double add_path(ways const& w,
   return distance;
 }
 
-template <typename Profile>
-path reconstruct_bi(ways const& w,
+template <Profile P>
+path reconstruct_bi(typename P::parameters const& params,
+                    ways const& w,
                     lookup const& l,
                     bitvec<node_idx_t> const* blocked,
                     sharing_data const* sharing,
                     elevation_storage const* elevations,
-                    bidirectional<Profile> const& b,
+                    bidirectional<P> const& b,
                     location const& from,
                     location const& to,
                     way_candidate const& start,
@@ -222,8 +256,8 @@ path reconstruct_bi(ways const& w,
       auto const expected_cost = static_cast<cost_t>(
           e.cost(forward_n) - b.template get_cost<direction::kForward>(*pred));
       forward_dist +=
-          add_path<Profile>(w, *w.r_, blocked, sharing, elevations, *pred,
-                            forward_n, expected_cost, forward_segments, dir);
+          add_path<P>(params, w, *w.r_, blocked, sharing, elevations, *pred,
+                      forward_n, expected_cost, forward_segments, dir);
     } else {
       break;
     }
@@ -234,8 +268,8 @@ path reconstruct_bi(ways const& w,
       forward_n.get_node() == start.left_.node_ ? start.left_ : start.right_;
 
   forward_segments.push_back(
-      {.polyline_ = l.get_node_candidate_path<Profile>(
-           start, start_node_candidate, false, from),
+      {.polyline_ =
+           l.get_node_candidate_path(start, start_node_candidate, false, from),
        .from_level_ = start_node_candidate.lvl_,
        .to_level_ = start_node_candidate.lvl_,
        .from_ = dir == direction::kBackward ? forward_n.get_node()
@@ -260,9 +294,9 @@ path reconstruct_bi(ways const& w,
       auto const expected_cost =
           static_cast<cost_t>(e.cost(backward_n) -
                               b.template get_cost<direction::kBackward>(*pred));
-      backward_dist += add_path<Profile>(w, *w.r_, blocked, sharing, elevations,
-                                         *pred, backward_n, expected_cost,
-                                         backward_segments, opposite(dir));
+      backward_dist += add_path<P>(params, w, *w.r_, blocked, sharing,
+                                   elevations, *pred, backward_n, expected_cost,
+                                   backward_segments, opposite(dir));
     } else {
       break;
     }
@@ -273,8 +307,8 @@ path reconstruct_bi(ways const& w,
       backward_n.get_node() == dest.left_.node_ ? dest.left_ : dest.right_;
 
   backward_segments.push_back(
-      {.polyline_ = l.get_node_candidate_path<Profile>(
-           dest, dest_node_candidate, true, to),
+      {.polyline_ =
+           l.get_node_candidate_path(dest, dest_node_candidate, true, to),
        .from_level_ = dest_node_candidate.lvl_,
        .to_level_ = dest_node_candidate.lvl_,
        .from_ = dir == direction::kForward ? backward_n.get_node()
@@ -310,13 +344,14 @@ path reconstruct_bi(ways const& w,
   return p;
 }
 
-template <typename Profile>
-path reconstruct_ch(ways const& w,
+template <Profile P>
+path reconstruct_ch(typename P::parameters const& params,
+                    ways const& w,
                     lookup const& l,
                     bitvec<node_idx_t> const* blocked,
                     sharing_data const* sharing,
                     elevation_storage const* elevations,
-                    contraction_hierarchies<Profile> const& c,
+                    contraction_hierarchies<P> const& c,
                     location const& from,
                     location const& to,
                     way_candidate const& start,
@@ -324,7 +359,7 @@ path reconstruct_ch(ways const& w,
                     cost_t const cost,
                     direction const dir) {
   auto const list_of_edges = c.uncontract_edges(w);
-  auto [nodes, costs]= eliminate_cycles<Profile>(w, list_of_edges);
+  auto [nodes, costs]= eliminate_cycles<P>(w, list_of_edges);
 
   auto segments = std::vector<path::segment>{};
   auto dist = 0.0;
@@ -336,7 +371,7 @@ path reconstruct_ch(ways const& w,
       starting_node.get_node() == start.right_.node_ ? start.right_ : start.left_;
 
   segments.push_back(
-      {.polyline_ = l.get_node_candidate_path<Profile>(
+      {.polyline_ = l.get_node_candidate_path<P>(
            start, start_node_candidate, false, from),
        .from_level_ = start_node_candidate.lvl_,
        .to_level_ = start_node_candidate.lvl_,
@@ -348,7 +383,7 @@ path reconstruct_ch(ways const& w,
        .mode_ = starting_node.get_mode()});
 
   for (size_t index = 0; index < costs.size(); ++index) {
-    dist += add_path<Profile>(
+    dist += add_path<P>(
         w, *w.r_, blocked, sharing, elevations,
         nodes[index],
         nodes[index + 1],
@@ -361,7 +396,7 @@ path reconstruct_ch(ways const& w,
     final_node.get_node() == dest.left_.node_ ? dest.left_ : dest.right_;
 
   segments.push_back(
-      {.polyline_ = l.get_node_candidate_path<Profile>(
+      {.polyline_ = l.get_node_candidate_path<P>(
            dest, dest_node_candidate, false, to),
        .from_level_ = dest_node_candidate.lvl_,
        .to_level_ = dest_node_candidate.lvl_,
@@ -387,26 +422,27 @@ path reconstruct_ch(ways const& w,
   return p;
 }
 
-template <typename Profile>
-path reconstruct(ways const& w,
+template <Profile P>
+path reconstruct(typename P::parameters const& params,
+                 ways const& w,
                  lookup const& l,
                  bitvec<node_idx_t> const* blocked,
                  sharing_data const* sharing,
                  elevation_storage const* elevations,
-                 dijkstra<Profile> const& d,
+                 dijkstra<P> const& d,
                  location const& from,
                  location const& to,
                  way_candidate const& start,
                  way_candidate const& dest,
                  node_candidate const& dest_nc,
-                 typename Profile::node const dest_node,
+                 typename P::node const dest_node,
                  cost_t const cost,
                  direction const dir) {
 
   auto n = dest_node;
   auto segments = std::vector<path::segment>{
-      {.polyline_ = l.get_node_candidate_path<Profile>(
-           dest, dest_nc, dir == direction::kForward, to),
+      {.polyline_ = l.get_node_candidate_path(dest, dest_nc,
+                                              dir == direction::kForward, to),
        .from_level_ = dest_nc.lvl_,
        .to_level_ = dest_nc.lvl_,
        .from_ =
@@ -424,8 +460,8 @@ path reconstruct(ways const& w,
     if (pred.has_value()) {
       auto const expected_cost =
           static_cast<cost_t>(e.cost(n) - d.get_cost(*pred));
-      dist += add_path<Profile>(w, *w.r_, blocked, sharing, elevations, *pred,
-                                n, expected_cost, segments, dir);
+      dist += add_path<P>(params, w, *w.r_, blocked, sharing, elevations, *pred,
+                          n, expected_cost, segments, dir);
     } else {
       break;
     }
@@ -435,7 +471,7 @@ path reconstruct(ways const& w,
   auto const& start_nc =
       n.get_node() == start.left_.node_ ? start.left_ : start.right_;
   segments.push_back(
-      {.polyline_ = l.get_node_candidate_path<Profile>(
+      {.polyline_ = l.get_node_candidate_path(
            start, start_nc, dir == direction::kBackward, from),
        .from_level_ = start_nc.lvl_,
        .to_level_ = start_nc.lvl_,
@@ -476,13 +512,14 @@ bool component_seen(ways const& w,
   return false;
 }
 
-template <typename Profile>
+template <Profile P>
 std::optional<std::tuple<node_candidate const*,
                          way_candidate const*,
-                         typename Profile::node,
+                         typename P::node,
                          path>>
-best_candidate(ways const& w,
-               dijkstra<Profile>& d,
+best_candidate(typename P::parameters const& params,
+               ways const& w,
+               dijkstra<P>& d,
                level_t const lvl,
                match_view_t m,
                cost_t const max,
@@ -492,11 +529,11 @@ best_candidate(ways const& w,
                double const limit_squared_max_matching_distance) {
   auto const get_best = [&](way_candidate const& dest,
                             node_candidate const* x) {
-    auto best_node = Profile::node::invalid();
+    auto best_node = P::node::invalid();
     auto best_cost = path{.cost_ = std::numeric_limits<cost_t>::max()};
-    Profile::resolve_all(*w.r_, x->node_, lvl, [&](auto&& node) {
-      if (!Profile::is_dest_reachable(*w.r_, node, dest.way_,
-                                      flip(opposite(dir), x->way_dir_), dir)) {
+    P::resolve_all(*w.r_, x->node_, lvl, [&](auto&& node) {
+      if (!P::is_dest_reachable(params, *w.r_, node, dest.way_,
+                                flip(opposite(dir), x->way_dir_), dir)) {
         return;
       }
 
@@ -525,7 +562,7 @@ best_candidate(ways const& w,
         j > kBottomKDefinitelyConsidered) {
       break;
     }
-    auto best_node = Profile::node::invalid();
+    auto best_node = P::node::invalid();
     auto best_cost = path{.cost_ = std::numeric_limits<cost_t>::max()};
     auto best = static_cast<node_candidate const*>(nullptr);
 
@@ -570,10 +607,11 @@ std::optional<path> try_direct(osr::location const& from,
   }
 }
 
-template <typename Profile>
-std::optional<path> route_bidirectional(ways const& w,
+template <Profile P>
+std::optional<path> route_bidirectional(typename P::parameters const& params,
+                                        ways const& w,
                                         lookup const& l,
-                                        bidirectional<Profile>& b,
+                                        bidirectional<P>& b,
                                         location const& from,
                                         location const& to,
                                         match_view_t from_match,
@@ -587,7 +625,7 @@ std::optional<path> route_bidirectional(ways const& w,
     return *direct;
   }
 
-  b.reset(max, from, to);
+  b.reset(params, max, from, to);
   if (b.radius_ == max) {
     return std::nullopt;
   }
@@ -604,11 +642,11 @@ std::optional<path> route_bidirectional(ways const& w,
     auto const start_way = start.way_;
     for (auto const* nc : {&start.left_, &start.right_}) {
       if (nc->valid() && nc->cost_ < max) {
-        Profile::resolve_start_node(
+        P::resolve_start_node(
             *w.r_, start.way_, nc->node_, from.lvl_, dir, [&](auto const node) {
-              auto label = typename Profile::label{node, nc->cost_};
+              auto label = typename P::label{node, nc->cost_};
               label.track(label, *w.r_, start_way, node.get_node(), false);
-              b.add_start(w, label, sharing);
+              b.add_start(params, w, label, sharing);
             });
       }
     }
@@ -629,12 +667,12 @@ std::optional<path> route_bidirectional(ways const& w,
       auto const end_way = end.way_;
       for (auto const* nc : {&end.left_, &end.right_}) {
         if (nc->valid() && nc->cost_ < max) {
-          Profile::resolve_start_node(
+          P::resolve_start_node(
               *w.r_, end_way, nc->node_, to.lvl_, opposite(dir),
               [&](auto const node) {
-                auto label = typename Profile::label{node, nc->cost_};
+                auto label = typename P::label{node, nc->cost_};
                 label.track(label, *w.r_, end_way, node.get_node(), false);
-                b.add_end(w, label, sharing);
+                b.add_end(params, w, label, sharing);
               });
         }
       }
@@ -642,7 +680,7 @@ std::optional<path> route_bidirectional(ways const& w,
         continue;
       }
       auto const should_continue =
-          b.run(w, *w.r_, max, blocked, sharing, elevations, dir);
+          b.run(params, w, *w.r_, max, blocked, sharing, elevations, dir);
 
       if (b.meet_point_1_.get_node() == node_idx_t::invalid()) {
         if (should_continue) {
@@ -653,8 +691,8 @@ std::optional<path> route_bidirectional(ways const& w,
 
       auto const cost = b.get_cost_to_mp(b.meet_point_1_, b.meet_point_2_);
 
-      return reconstruct_bi(w, l, blocked, sharing, elevations, b, from, to,
-                            start, end, cost, dir);
+      return reconstruct_bi(params, w, l, blocked, sharing, elevations, b, from,
+                            to, start, end, cost, dir);
     }
     b.pq1_.clear();
     b.pq2_.clear();
@@ -664,8 +702,9 @@ std::optional<path> route_bidirectional(ways const& w,
   return std::nullopt;
 }
 
-template <typename Profile>
-std::optional<path> route_contraction_hierarchies(ways const& w,
+template <Profile P>
+std::optional<path> route_contraction_hierarchies(typename P::parameters const& params,
+                                                  ways const& w,
                                                   lookup const& l,
                                                   contraction_hierarchies<Profile>& c,
                                                   location const& from,
@@ -746,10 +785,11 @@ std::optional<path> route_contraction_hierarchies(ways const& w,
   return std::nullopt;
 }
 
-template <typename Profile>
-std::optional<path> route_dijkstra(ways const& w,
+template <Profile P>
+std::optional<path> route_dijkstra(typename P::parameters const& params,
+                                   ways const& w,
                                    lookup const& l,
-                                   dijkstra<Profile>& d,
+                                   dijkstra<P>& d,
                                    location const& from,
                                    location const& to,
                                    match_view_t from_match,
@@ -782,7 +822,7 @@ std::optional<path> route_dijkstra(ways const& w,
 
     for (auto const* nc : {&start.left_, &start.right_}) {
       if (nc->valid() && nc->cost_ < max) {
-        Profile::resolve_start_node(
+        P::resolve_start_node(
             *w.r_, start.way_, nc->node_, from.lvl_, dir,
             [&](auto const node) { d.add_start(w, {node, nc->cost_}); });
       }
@@ -792,27 +832,29 @@ std::optional<path> route_dijkstra(ways const& w,
       continue;
     }
 
-    should_continue = d.run(w, *w.r_, max, blocked, sharing, elevations, dir) &&
-                      should_continue;
+    should_continue =
+        d.run(params, w, *w.r_, max, blocked, sharing, elevations, dir) &&
+        should_continue;
 
-    auto const c =
-        best_candidate(w, d, to.lvl_, to_match, max, dir, should_continue,
-                       start, limit_squared_max_matching_distance);
+    auto const c = best_candidate(params, w, d, to.lvl_, to_match, max, dir,
+                                  should_continue, start,
+                                  limit_squared_max_matching_distance);
     if (c.has_value()) {
       auto const [nc, wc, node, p] = *c;
-      return reconstruct<Profile>(w, l, blocked, sharing, elevations, d, from,
-                                  to, start, *wc, *nc, node, p.cost_, dir);
+      return reconstruct<P>(params, w, l, blocked, sharing, elevations, d, from,
+                            to, start, *wc, *nc, node, p.cost_, dir);
     }
   }
 
   return std::nullopt;
 }
 
-template <typename Profile>
+template <Profile P>
 std::vector<std::optional<path>> route(
+    typename P::parameters const& params,
     ways const& w,
     lookup const& l,
-    dijkstra<Profile>& d,
+    dijkstra<P>& d,
     location const& from,
     std::vector<location> const& to,
     match_view_t from_match,
@@ -841,17 +883,18 @@ std::vector<std::optional<path>> route(
     auto const start_way = start.way_;
     for (auto const* nc : {&start.left_, &start.right_}) {
       if (nc->valid() && nc->cost_ < max) {
-        Profile::resolve_start_node(
+        P::resolve_start_node(
             *w.r_, start.way_, nc->node_, from.lvl_, dir, [&](auto const node) {
-              auto label = typename Profile::label{node, nc->cost_};
+              auto label = typename P::label{node, nc->cost_};
               label.track(label, *w.r_, start_way, node.get_node(), false);
               d.add_start(w, label);
             });
       }
     }
 
-    should_continue = d.run(w, *w.r_, max, blocked, sharing, elevations, dir) &&
-                      should_continue;
+    should_continue =
+        d.run(params, w, *w.r_, max, blocked, sharing, elevations, dir) &&
+        should_continue;
 
     auto found = 0U;
     for (auto const [m, t, r] : utl::zip(to_match, to, result)) {
@@ -866,14 +909,14 @@ std::vector<std::optional<path>> route(
             kMaxMatchingDistanceSquaredRatio;
 
         auto const c =
-            best_candidate(w, d, t.lvl_, m, max, dir, should_continue, start,
-                           limit_squared_max_matching_distance);
+            best_candidate(params, w, d, t.lvl_, m, max, dir, should_continue,
+                           start, limit_squared_max_matching_distance);
         if (c.has_value()) {
           auto [nc, wc, n, p] = *c;
           d.cost_.at(n.get_key()).write(n, p);
           if (do_reconstruct(p)) {
-            p = reconstruct<Profile>(w, l, blocked, sharing, elevations, d,
-                                     from, t, start, *wc, *nc, n, p.cost_, dir);
+            p = reconstruct<P>(params, w, l, blocked, sharing, elevations, d,
+                               from, t, start, *wc, *nc, n, p.cost_, dir);
             p.uses_elevator_ = true;
           }
           r = std::make_optional(p);
@@ -890,7 +933,8 @@ std::vector<std::optional<path>> route(
   return result;
 }
 
-std::optional<path> route_bidirectional(ways const& w,
+std::optional<path> route_bidirectional(profile_parameters const& params,
+                                        ways const& w,
                                         lookup const& l,
                                         search_profile const profile,
                                         location const& from,
@@ -901,50 +945,25 @@ std::optional<path> route_bidirectional(ways const& w,
                                         bitvec<node_idx_t> const* blocked,
                                         sharing_data const* sharing,
                                         elevation_storage const* elevations) {
-  auto const r =
-      [&]<typename Profile>(bidirectional<Profile>& b) -> std::optional<path> {
+  return with_profile(profile, [&]<Profile P>(P&&) -> std::optional<path> {
+    auto const& pp = std::get<typename P::parameters>(params);
     auto const from_match =
-        l.match<Profile>(from, false, dir, max_match_distance, blocked);
+        l.match<P>(pp, from, false, dir, max_match_distance, blocked);
     auto const to_match =
-        l.match<Profile>(to, true, dir, max_match_distance, blocked);
+        l.match<P>(pp, to, true, dir, max_match_distance, blocked);
 
     if (from_match.empty() || to_match.empty()) {
       return std::nullopt;
     }
 
-    return route_bidirectional(w, l, b, from, to, from_match, to_match, max,
-                               dir, blocked, sharing, elevations);
-  };
-
-  switch (profile) {
-    case search_profile::kFoot:
-      return r(get_bidirectional<foot<false, elevator_tracking>>());
-    case search_profile::kWheelchair:
-      return r(get_bidirectional<foot<true, elevator_tracking>>());
-    case search_profile::kBike:
-      return r(get_bidirectional<bike<kElevationNoCost>>());
-    case search_profile::kBikeElevationLow:
-      return r(get_bidirectional<bike<kElevationLowCost>>());
-    case search_profile::kBikeElevationHigh:
-      return r(get_bidirectional<bike<kElevationHighCost>>());
-    case search_profile::kCar: return r(get_bidirectional<car>());
-    case search_profile::kCarParking:
-      return r(get_bidirectional<car_parking<false, true>>());
-    case search_profile::kCarParkingWheelchair:
-      return r(get_bidirectional<car_parking<true, true>>());
-    case search_profile::kCarDropOff:
-      return r(get_bidirectional<car_parking<false, false>>());
-    case search_profile::kCarDropOffWheelchair:
-      return r(get_bidirectional<car_parking<true, false>>());
-    case search_profile::kBikeSharing:
-      return r(get_bidirectional<bike_sharing>());
-    case search_profile::kCarSharing:
-      return r(get_bidirectional<car_sharing<track_node_tracking>>());
-  }
-  throw utl::fail("not implemented");
+    return route_bidirectional(pp, w, l, get_bidirectional<P>(), from, to,
+                               from_match, to_match, max, dir, blocked, sharing,
+                               elevations);
+  });
 }
 
 std::vector<std::optional<path>> route(
+    profile_parameters const& params,
     ways const& w,
     lookup const& l,
     search_profile const profile,
@@ -957,49 +976,25 @@ std::vector<std::optional<path>> route(
     sharing_data const* sharing,
     elevation_storage const* elevations,
     std::function<bool(path const&)> const& do_reconstruct) {
-  auto const r = [&]<typename Profile>(
-                     dijkstra<Profile>& d) -> std::vector<std::optional<path>> {
-    auto const from_match =
-        l.match<Profile>(from, false, dir, max_match_distance, blocked);
-    if (from_match.empty()) {
-      return std::vector<std::optional<path>>(to.size());
-    }
-    auto const to_match = utl::to_vec(to, [&](auto&& x) {
-      return l.match<Profile>(x, true, dir, max_match_distance, blocked);
-    });
-    return route(w, l, d, from, to, from_match, to_match, max, dir, blocked,
-                 sharing, elevations, do_reconstruct);
-  };
-
-  switch (profile) {
-    case search_profile::kFoot:
-      return r(get_dijkstra<foot<false, elevator_tracking>>());
-    case search_profile::kWheelchair:
-      return r(get_dijkstra<foot<true, elevator_tracking>>());
-    case search_profile::kBike:
-      return r(get_dijkstra<bike<kElevationNoCost>>());
-    case search_profile::kBikeElevationLow:
-      return r(get_dijkstra<bike<kElevationLowCost>>());
-    case search_profile::kBikeElevationHigh:
-      return r(get_dijkstra<bike<kElevationHighCost>>());
-    case search_profile::kCar: return r(get_dijkstra<car>());
-    case search_profile::kCarDropOff:
-      return r(get_dijkstra<car_parking<false, false>>());
-    case search_profile::kCarDropOffWheelchair:
-      return r(get_dijkstra<car_parking<true, false>>());
-    case search_profile::kCarParking:
-      return r(get_dijkstra<car_parking<false, true>>());
-    case search_profile::kCarParkingWheelchair:
-      return r(get_dijkstra<car_parking<true, true>>());
-    case search_profile::kBikeSharing: return r(get_dijkstra<bike_sharing>());
-    case search_profile::kCarSharing:
-      return r(get_dijkstra<car_sharing<track_node_tracking>>());
-  }
-
-  throw utl::fail("not implemented");
+  return with_profile(
+      profile, [&]<Profile P>(P&&) -> std::vector<std::optional<path>> {
+        auto const& pp = std::get<typename P::parameters>(params);
+        auto const from_match =
+            l.match<P>(pp, from, false, dir, max_match_distance, blocked);
+        if (from_match.empty()) {
+          return std::vector<std::optional<path>>(to.size());
+        }
+        auto const to_match = utl::to_vec(to, [&](auto&& x) {
+          return l.match<P>(pp, x, true, dir, max_match_distance, blocked);
+        });
+        return route(pp, w, l, get_dijkstra<P>(), from, to, from_match,
+                     to_match, max, dir, blocked, sharing, elevations,
+                     do_reconstruct);
+      });
 }
 
-std::optional<path> route_contraction_hierarchies(ways const& w,
+std::optional<path> route_contraction_hierarchies(profile_parameters const& params,
+                                                  ways const& w,
                                                   lookup const& l,
                                                   search_profile const profile,
                                                   location const& from,
@@ -1016,40 +1011,25 @@ std::optional<path> route_contraction_hierarchies(ways const& w,
   if (profile != search_profile::kCar) {
     throw utl::fail("CH routing only implemented for profile car");
   }
-  auto const r =
-      [&]<typename Profile>(contraction_hierarchies<Profile>& c) -> std::optional<path> {
+  return with_profile(profile, [&]<Profile P>(P&&) -> std::optional<path> {
+    auto const& pp = std::get<typename P::parameters>(params);
     auto const from_match =
-        l.match<Profile>(from, false, dir, max_match_distance, blocked);
+        l.match<P>(pp, from, false, dir, max_match_distance, blocked);
     auto const to_match =
-        l.match<Profile>(to, true, dir, max_match_distance, blocked);
+        l.match<P>(pp, to, true, dir, max_match_distance, blocked);
 
     if (from_match.empty() || to_match.empty()) {
       return std::nullopt;
     }
 
-    return route_contraction_hierarchies(w, l, c, from, to, from_match, to_match, max,
-                               dir, blocked, sharing, elevations);
-  };
-
-  switch (profile) {
-    case search_profile::kCar: return r(get_contraction_hierarchies<car>());
-    case search_profile::kFoot:
-    case search_profile::kWheelchair:
-    case search_profile::kBike:
-    case search_profile::kBikeElevationLow:
-    case search_profile::kBikeElevationHigh:
-    case search_profile::kCarDropOff:
-    case search_profile::kCarDropOffWheelchair:
-    case search_profile::kCarParking:
-    case search_profile::kCarParkingWheelchair:
-    case search_profile::kBikeSharing:
-    case search_profile::kCarSharing:
-      throw utl::fail("CH routing only implemented for profile car");
-  }
-  throw utl::fail("CH routing only implemented for profile car");
+    return route_contraction_hierarchies(pp, w, l, get_contraction_hierarchies<P>(), from, to,
+                               from_match, to_match, max, dir, blocked, sharing,
+                               elevations);
+  });
 }
 
-std::optional<path> route_dijkstra(ways const& w,
+std::optional<path> route_dijkstra(profile_parameters const& params,
+                                   ways const& w,
                                    lookup const& l,
                                    search_profile const profile,
                                    location const& from,
@@ -1060,50 +1040,24 @@ std::optional<path> route_dijkstra(ways const& w,
                                    bitvec<node_idx_t> const* blocked,
                                    sharing_data const* sharing,
                                    elevation_storage const* elevations) {
-  auto const r =
-      [&]<typename Profile>(dijkstra<Profile>& d) -> std::optional<path> {
+  return with_profile(profile, [&]<Profile P>(P&&) -> std::optional<path> {
+    auto const& pp = std::get<typename P::parameters>(params);
     auto const from_match =
-        l.match<Profile>(from, false, dir, max_match_distance, blocked);
+        l.match<P>(pp, from, false, dir, max_match_distance, blocked);
     auto const to_match =
-        l.match<Profile>(to, true, dir, max_match_distance, blocked);
+        l.match<P>(pp, to, true, dir, max_match_distance, blocked);
 
     if (from_match.empty() || to_match.empty()) {
       return std::nullopt;
     }
 
-    return route_dijkstra(w, l, d, from, to, from_match, to_match, max, dir,
-                          blocked, sharing, elevations);
-  };
-
-  switch (profile) {
-    case search_profile::kFoot:
-      return r(get_dijkstra<foot<false, elevator_tracking>>());
-    case search_profile::kWheelchair:
-      return r(get_dijkstra<foot<true, elevator_tracking>>());
-    case search_profile::kBike:
-      return r(get_dijkstra<bike<kElevationNoCost>>());
-    case search_profile::kBikeElevationLow:
-      return r(get_dijkstra<bike<kElevationLowCost>>());
-    case search_profile::kBikeElevationHigh:
-      return r(get_dijkstra<bike<kElevationHighCost>>());
-    case search_profile::kCar: return r(get_dijkstra<car>());
-    case search_profile::kCarDropOff:
-      return r(get_dijkstra<car_parking<false, false>>());
-    case search_profile::kCarDropOffWheelchair:
-      return r(get_dijkstra<car_parking<true, false>>());
-    case search_profile::kCarParking:
-      return r(get_dijkstra<car_parking<false, true>>());
-    case search_profile::kCarParkingWheelchair:
-      return r(get_dijkstra<car_parking<true, true>>());
-    case search_profile::kBikeSharing: return r(get_dijkstra<bike_sharing>());
-    case search_profile::kCarSharing:
-      return r(get_dijkstra<car_sharing<track_node_tracking>>());
-  }
-
-  throw utl::fail("not implemented");
+    return route_dijkstra(pp, w, l, get_dijkstra<P>(), from, to, from_match,
+                          to_match, max, dir, blocked, sharing, elevations);
+  });
 }
 
 std::vector<std::optional<path>> route(
+    profile_parameters const& params,
     ways const& w,
     lookup const& l,
     search_profile const profile,
@@ -1120,42 +1074,15 @@ std::vector<std::optional<path>> route(
   if (from_match.empty()) {
     return std::vector<std::optional<path>>(to.size());
   }
-
-  auto const r = [&]<typename Profile>(
-                     dijkstra<Profile>& d) -> std::vector<std::optional<path>> {
-    return route(w, l, d, from, to, from_match, to_match, max, dir, blocked,
-                 sharing, elevations, do_reconstruct);
-  };
-
-  switch (profile) {
-    case search_profile::kFoot:
-      return r(get_dijkstra<foot<false, elevator_tracking>>());
-    case search_profile::kWheelchair:
-      return r(get_dijkstra<foot<true, elevator_tracking>>());
-    case search_profile::kBike:
-      return r(get_dijkstra<bike<kElevationNoCost>>());
-    case search_profile::kBikeElevationLow:
-      return r(get_dijkstra<bike<kElevationLowCost>>());
-    case search_profile::kBikeElevationHigh:
-      return r(get_dijkstra<bike<kElevationHighCost>>());
-    case search_profile::kCar: return r(get_dijkstra<car>());
-    case search_profile::kCarDropOff:
-      return r(get_dijkstra<car_parking<false, false>>());
-    case search_profile::kCarDropOffWheelchair:
-      return r(get_dijkstra<car_parking<true, false>>());
-    case search_profile::kCarParking:
-      return r(get_dijkstra<car_parking<false, true>>());
-    case search_profile::kCarParkingWheelchair:
-      return r(get_dijkstra<car_parking<true, true>>());
-    case search_profile::kBikeSharing: return r(get_dijkstra<bike_sharing>());
-    case search_profile::kCarSharing:
-      return r(get_dijkstra<car_sharing<track_node_tracking>>());
-  }
-
-  throw utl::fail("not implemented");
+  return with_profile(profile, [&]<Profile P>(P&&) {
+    return route(std::get<typename P::parameters>(params), w, l,
+                 get_dijkstra<P>(), from, to, from_match, to_match, max, dir,
+                 blocked, sharing, elevations, do_reconstruct);
+  });
 }
 
-std::optional<path> route(ways const& w,
+std::optional<path> route(profile_parameters const& params,
+                          ways const& w,
                           lookup const& l,
                           search_profile const profile,
                           location const& from,
@@ -1177,100 +1104,36 @@ std::optional<path> route(ways const& w,
     algo = routing_algorithm::kDijkstra;  // TODO
   }
 
-  auto const run_dijkstra =
-      [&]<typename Profile>(dijkstra<Profile>& d) -> std::optional<path> {
-    return route_dijkstra(w, l, d, from, to, from_match, to_match, max, dir,
-                          blocked, sharing, elevations);
-  };
-
-  auto const run_bidirectional =
-      [&]<typename Profile>(bidirectional<Profile>& b) {
-        return route_bidirectional(w, l, b, from, to, from_match, to_match, max,
-                                   dir, blocked, sharing, elevations);
-      };
-
-  auto const run_contraction_hierarchies =
-      [&]<typename Profile>(contraction_hierarchies<Profile>& c) {
-        return route_contraction_hierarchies(w, l, c, from, to, from_match,
-                                             to_match, max, dir, blocked,
-                                             sharing, elevations);
-      };
-
   switch (algo) {
     case routing_algorithm::kDijkstra:
-      switch (profile) {
-        case search_profile::kFoot:
-          return run_dijkstra(get_dijkstra<foot<false, elevator_tracking>>());
-        case search_profile::kWheelchair:
-          return run_dijkstra(get_dijkstra<foot<true, elevator_tracking>>());
-        case search_profile::kBike:
-          return run_dijkstra(get_dijkstra<bike<kElevationNoCost>>());
-        case search_profile::kBikeElevationLow:
-          return run_dijkstra(get_dijkstra<bike<kElevationLowCost>>());
-        case search_profile::kBikeElevationHigh:
-          return run_dijkstra(get_dijkstra<bike<kElevationHighCost>>());
-        case search_profile::kCar: return run_dijkstra(get_dijkstra<car>());
-        case search_profile::kCarDropOff:
-          return run_dijkstra(get_dijkstra<car_parking<false, false>>());
-        case search_profile::kCarDropOffWheelchair:
-          return run_dijkstra(get_dijkstra<car_parking<true, false>>());
-        case search_profile::kCarParking:
-          return run_dijkstra(get_dijkstra<car_parking<false, true>>());
-        case search_profile::kCarParkingWheelchair:
-          return run_dijkstra(get_dijkstra<car_parking<true, true>>());
-        case search_profile::kBikeSharing:
-          return run_dijkstra(get_dijkstra<bike_sharing>());
-        case search_profile::kCarSharing:
-          return run_dijkstra(get_dijkstra<car_sharing<track_node_tracking>>());
-      }
-      break;
+      return with_profile(profile, [&]<Profile P>(P&&) {
+        return route_dijkstra(std::get<typename P::parameters>(params), w, l,
+                              get_dijkstra<P>(), from, to, from_match, to_match,
+                              max, dir, blocked, sharing, elevations);
+      });
     case routing_algorithm::kAStarBi:
-      switch (profile) {
-        case search_profile::kFoot:
-          return run_bidirectional(
-              get_bidirectional<foot<false, elevator_tracking>>());
-        case search_profile::kWheelchair:
-          return run_bidirectional(
-              get_bidirectional<foot<true, elevator_tracking>>());
-        case search_profile::kBike:
-          return run_bidirectional(get_bidirectional<bike<kElevationNoCost>>());
-        case search_profile::kBikeElevationLow:
-          return run_bidirectional(
-              get_bidirectional<bike<kElevationLowCost>>());
-        case search_profile::kBikeElevationHigh:
-          return run_bidirectional(
-              get_bidirectional<bike<kElevationHighCost>>());
-        case search_profile::kCar:
-          return run_bidirectional(get_bidirectional<car>());
-        case search_profile::kCarDropOff:
-          return run_bidirectional(
-              get_bidirectional<car_parking<false, false>>());
-        case search_profile::kCarDropOffWheelchair:
-          return run_bidirectional(
-              get_bidirectional<car_parking<true, false>>());
-        case search_profile::kCarParking:
-          return run_bidirectional(
-              get_bidirectional<car_parking<false, true>>());
-        case search_profile::kCarParkingWheelchair:
-          return run_bidirectional(
-              get_bidirectional<car_parking<true, true>>());
-        case search_profile::kBikeSharing:
-          return run_bidirectional(get_bidirectional<bike_sharing>());
-        case search_profile::kCarSharing:
-          return run_bidirectional(
-              get_bidirectional<car_sharing<track_node_tracking>>());
-      }
-      break;
+      return with_profile(profile, [&]<Profile P>(P&&) {
+        return route_bidirectional(std::get<typename P::parameters>(params), w,
+                                   l, get_bidirectional<P>(), from, to,
+                                   from_match, to_match, max, dir, blocked,
+                                   sharing, elevations);
+      });
     case routing_algorithm::kContractionHierarchies:
       if (profile == search_profile::kCar) {
-        return run_contraction_hierarchies(get_contraction_hierarchies<car>());
+        return with_profile(profile, [&]<Profile P>(P&&) {
+          return route_contraction_hierarchies(std::get<typename P::parameters>(params), w,
+                                     l, get_contraction_hierarchies<P>(), from, to,
+                                     from_match, to_match, max, dir, blocked,
+                                     sharing, elevations);
+        });
       }
       break;
   }
   throw utl::fail("not implemented");
 }
 
-std::optional<path> route(ways const& w,
+std::optional<path> route(profile_parameters const& params,
+                          ways const& w,
                           lookup const& l,
                           search_profile const profile,
                           location const& from,
@@ -1290,10 +1153,10 @@ std::optional<path> route(ways const& w,
   }
   switch (algo) {
     case routing_algorithm::kDijkstra:
-      return route_dijkstra(w, l, profile, from, to, max, dir,
+      return route_dijkstra(params, w, l, profile, from, to, max, dir,
                             max_match_distance, blocked, sharing, elevations);
     case routing_algorithm::kAStarBi:
-      return route_bidirectional(w, l, profile, from, to, max, dir,
+      return route_bidirectional(params, w, l, profile, from, to, max, dir,
                                  max_match_distance, blocked, sharing,
                                  elevations);
     case routing_algorithm::kContractionHierarchies:
@@ -1303,44 +1166,5 @@ std::optional<path> route(ways const& w,
   }
   throw utl::fail("not implemented");
 }
-
-template <typename Profile>
-bidirectional<Profile>& get_bidirectional() {
-  static auto s = boost::thread_specific_ptr<bidirectional<Profile>>{};
-  if (s.get() == nullptr) {
-    s.reset(new bidirectional<Profile>{});
-  }
-  return *s.get();
-}
-
-template <typename Profile>
-contraction_hierarchies<Profile>& get_contraction_hierarchies() {
-  static auto s = boost::thread_specific_ptr<contraction_hierarchies<Profile>>{};
-  if (s.get() == nullptr) {
-    s.reset(new contraction_hierarchies<Profile>{});
-  }
-  return *s.get();
-}
-
-template <typename Profile>
-dijkstra<Profile>& get_dijkstra() {
-  static auto s = boost::thread_specific_ptr<dijkstra<Profile>>{};
-  if (s.get() == nullptr) {
-    s.reset(new dijkstra<Profile>{});
-  }
-  return *s.get();
-}
-
-template bidirectional<foot<true, osr::noop_tracking>>&
-get_bidirectional<foot<true, osr::noop_tracking>>();
-
-template bidirectional<foot<false, osr::noop_tracking>>&
-get_bidirectional<foot<false, osr::noop_tracking>>();
-
-template dijkstra<foot<true, osr::noop_tracking>>&
-get_dijkstra<foot<true, osr::noop_tracking>>();
-
-template dijkstra<foot<false, osr::noop_tracking>>&
-get_dijkstra<foot<false, osr::noop_tracking>>();
 
 }  // namespace osr

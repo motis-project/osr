@@ -8,9 +8,9 @@
 
 #include "osr/elevation_storage.h"
 #include "osr/routing/mode.h"
+#include "osr/routing/path.h"
 #include "osr/routing/profiles/car.h"
 #include "osr/routing/profiles/foot.h"
-#include "osr/routing/route.h"
 #include "osr/ways.h"
 
 namespace osr {
@@ -36,6 +36,12 @@ struct car_parking {
     }
     std::unreachable();
   }
+
+  struct parameters {
+    using profile_t = car_parking<IsWheelchair, UseParking>;
+    car::parameters const car_{};
+    footp::parameters const foot_{};
+  };
 
   struct node {
     friend bool operator==(node const& a, node const& b) {
@@ -238,7 +244,8 @@ struct car_parking {
   }
 
   template <direction SearchDir, bool WithBlocked, typename Fn>
-  static void adjacent(ways::routing const& w,
+  static void adjacent(parameters const& params,
+                       ways::routing const& w,
                        node const n,
                        bitvec<node_idx_t> const* blocked,
                        sharing_data const*,
@@ -255,7 +262,7 @@ struct car_parking {
 
     if (n.is_foot_node() || (kFwd && n.is_car_node() && is_parking)) {
       footp::template adjacent<SearchDir, WithBlocked>(
-          w, to_foot(n), blocked, nullptr, elevations,
+          params.foot_, w, to_foot(n), blocked, nullptr, elevations,
           [&](footp::node const neighbor, std::uint32_t const cost,
               distance_t const dist, way_idx_t const way,
               std::uint16_t const from, std::uint16_t const to,
@@ -268,7 +275,7 @@ struct car_parking {
 
     if (n.is_car_node() || (kBwd && n.is_foot_node() && is_parking)) {
       car::template adjacent<SearchDir, WithBlocked>(
-          w, to_car(n), blocked, nullptr, elevations,
+          params.car_, w, to_car(n), blocked, nullptr, elevations,
           [&](car::node const neighbor, std::uint32_t const cost,
               distance_t const dist, way_idx_t const way,
               std::uint16_t const from, std::uint16_t const to,
@@ -302,7 +309,8 @@ struct car_parking {
               [&](footp::node const fn) { f(to_node(fn)); });
   }
 
-  static bool is_dest_reachable(ways::routing const& w,
+  static bool is_dest_reachable(parameters const& params,
+                                ways::routing const& w,
                                 node const n,
                                 way_idx_t const way,
                                 direction const way_dir,
@@ -310,25 +318,26 @@ struct car_parking {
     return !UseParking || w.way_properties_[way].is_parking() ||
            (search_dir == direction::kForward
                 ? n.is_foot_node() &&
-                      footp::is_dest_reachable(w, to_foot(n), way, way_dir,
-                                               search_dir)
+                      footp::is_dest_reachable(params.foot_, w, to_foot(n), way,
+                                               way_dir, search_dir)
                 : n.is_car_node() &&
-                      car::is_dest_reachable(w, to_car(n), way, way_dir,
-                                             search_dir));
+                      car::is_dest_reachable(params.car_, w, to_car(n), way,
+                                             way_dir, search_dir));
   }
 
-  static constexpr cost_t way_cost(way_properties const& e,
+  static constexpr cost_t way_cost(parameters const& params,
+                                   way_properties const& e,
                                    direction const dir,
                                    std::uint16_t const dist) {
-    return footp::way_cost(e, dir, dist);
+    return footp::way_cost(params.foot_, e, dir, dist);
   }
 
   static constexpr cost_t node_cost(node_properties const n) {
     return footp::node_cost(n);
   }
 
-  static constexpr double heuristic(double dist) {
-    return car::heuristic(dist);
+  static constexpr double heuristic(parameters const& params, double dist) {
+    return car::heuristic(params.car_, dist);
   }
 
   static constexpr node get_reverse(node n) {
