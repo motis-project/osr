@@ -6,18 +6,19 @@
 #include "osr/routing/dial.h"
 #include "osr/types.h"
 #include "osr/ways.h"
+#include "osr/routing/profile.h"
 #include "profiles/car.h"
 
 namespace osr {
 
-template <typename Profile>
+template <Profile P>
 struct contraction_hierarchies_m_to_n {
-  using profile_t = Profile;
-  using key = typename Profile::key;
-  using label = typename Profile::label;
-  using node = typename Profile::node;
-  using entry = typename Profile::entry;
-  using hash = typename Profile::hash;
+  using profile_t = P;
+  using key = typename P::key;
+  using label = typename P::label;
+  using node = typename P::node;
+  using entry = typename P::entry;
+  using hash = typename P::hash;
   using cost_map = typename ankerl::unordered_dense::map<key, entry, hash>;
 
   struct get_bucket {

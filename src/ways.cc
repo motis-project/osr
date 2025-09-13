@@ -13,6 +13,7 @@
 #include "osr/elevation_storage.h"
 #include "osr/routing/contraction_hierarchies.h"
 #include "osr/routing/profiles/car.h"
+#include "osr/routing/parameters.h"
 #include "osr/types.h"
 
 namespace osr {
@@ -364,6 +365,7 @@ std::uint8_t get_importance(const cista::wrapped<ways::routing>& r_, ways::routi
 }
 
 void ways::build_CH() {
+  auto params = std::get<car::parameters>(get_parameters(search_profile::kCar));
   auto const number_of_nodes = r_->node_ways_.data_.size() * 2;
   std::vector<std::vector<routing::edge_idx_t>> outgoing_edges(number_of_nodes), incoming_edges(number_of_nodes);
   std::map<car::node, routing::node_identifier> node_to_id;
@@ -409,7 +411,7 @@ void ways::build_CH() {
           outgoing_edges[node_to_id[head]].push_back(edge_index);
           incoming_edges[node_to_id[tail]].push_back(edge_index);
         };
-        car::adjacent<direction::kForward, false>(*r_, head, nullptr, nullptr, nullptr, add_existing_edge);
+        car::adjacent<direction::kForward, false>(params, *r_, head, nullptr, nullptr, nullptr, add_existing_edge);
       }
     }
   }

@@ -368,11 +368,11 @@ path reconstruct_ch(typename P::parameters const& params,
 
   auto const& start_node_candidate =
       dir == direction::kForward ? starting_node.get_node() == start.left_.node_ ? start.left_ : start.right_ :
-      starting_node.get_node() == start.right_.node_ ? start.right_ : start.left_;
+      starting_node.get_node() == dest.right_.node_ ? dest.right_ : dest.left_;
 
   segments.push_back(
-      {.polyline_ = l.get_node_candidate_path<P>(
-           start, start_node_candidate, false, from),
+      {.polyline_ = l.get_node_candidate_path(
+           dir == direction::kForward ? start : dest, start_node_candidate, false, from),
        .from_level_ = start_node_candidate.lvl_,
        .to_level_ = start_node_candidate.lvl_,
        .from_ = node_idx_t::invalid(),
@@ -384,7 +384,7 @@ path reconstruct_ch(typename P::parameters const& params,
 
   for (size_t index = 0; index < costs.size(); ++index) {
     dist += add_path<P>(
-        w, *w.r_, blocked, sharing, elevations,
+        params, w, *w.r_, blocked, sharing, elevations,
         nodes[index],
         nodes[index + 1],
         costs[index], segments, direction::kForward);
@@ -393,10 +393,11 @@ path reconstruct_ch(typename P::parameters const& params,
   auto final_node = nodes.back();
 
   auto const& dest_node_candidate =
-    final_node.get_node() == dest.left_.node_ ? dest.left_ : dest.right_;
+      dir == direction::kForward ? final_node.get_node() == dest.left_.node_ ? dest.left_ : dest.right_ :
+      final_node.get_node() == start.right_.node_ ? start.right_ : start.left_;
 
   segments.push_back(
-      {.polyline_ = l.get_node_candidate_path<P>(
+      {.polyline_ = l.get_node_candidate_path(
            dest, dest_node_candidate, false, to),
        .from_level_ = dest_node_candidate.lvl_,
        .to_level_ = dest_node_candidate.lvl_,
@@ -706,7 +707,7 @@ template <Profile P>
 std::optional<path> route_contraction_hierarchies(typename P::parameters const& params,
                                                   ways const& w,
                                                   lookup const& l,
-                                                  contraction_hierarchies<Profile>& c,
+                                                  contraction_hierarchies<P>& c,
                                                   location const& from,
                                                   location const& to,
                                                   match_view_t from_match,
@@ -716,6 +717,11 @@ std::optional<path> route_contraction_hierarchies(typename P::parameters const& 
                                                   bitvec<node_idx_t> const* blocked,
                                                   sharing_data const* sharing,
                                                   elevation_storage const* elevations) {
+  if (dir == direction::kBackward) {
+    return route_contraction_hierarchies<P>(params, w, l, c, to, from, to_match,
+      from_match, max, direction::kForward, blocked, sharing, elevations);
+  }
+
   if (auto const direct = try_direct(from, to); direct.has_value()) {
     return *direct;
   }
@@ -728,9 +734,9 @@ std::optional<path> route_contraction_hierarchies(typename P::parameters const& 
     auto const start_way = start.way_;
     for (auto const* nc : {&start.left_, &start.right_}) {
       if (nc->valid() && nc->cost_ < max) {
-        Profile::resolve_start_node(
+        P::resolve_start_node(
             *w.r_, start.way_, nc->node_, from.lvl_, dir, [&](auto const node) {
-              auto label = typename Profile::label{node, nc->cost_};
+              auto label = typename P::label{node, nc->cost_};
               label.track(label, *w.r_, start_way, node.get_node(), false);
               c.add_start(label);
             });
@@ -749,12 +755,12 @@ std::optional<path> route_contraction_hierarchies(typename P::parameters const& 
       auto const end_way = end.way_;
       for (auto const* nc : {&end.left_, &end.right_}) {
         if (nc->valid() && nc->cost_ < max) {
-          Profile::resolve_all(*w.r_, nc->node_, to.lvl_, [&](auto&& node) {
-            if (!Profile::is_dest_reachable(*w.r_, node, end_way,
+          P::resolve_all(*w.r_, nc->node_, to.lvl_, [&](auto&& node) {
+            if (!P::is_dest_reachable(params, *w.r_, node, end_way,
                                             flip(opposite(dir), nc->way_dir_), dir)) {
               return;
             }
-            auto label = typename Profile::label{node, nc->cost_};
+            auto label = typename P::label{node, nc->cost_};
             label.track(label, *w.r_, end_way, node.get_node(), false);
             c.add_end(label);
           });
@@ -775,7 +781,7 @@ std::optional<path> route_contraction_hierarchies(typename P::parameters const& 
 
       auto const cost = c.get_cost_to_mp();
 
-      return reconstruct_ch(w, l, blocked, sharing, elevations, c, from, to,
+      return reconstruct_ch(params, w, l, blocked, sharing, elevations, c, from, to,
                             start, end, cost, dir);
     }
     c.pq_.clear();
@@ -1012,17 +1018,17 @@ std::optional<path> route_contraction_hierarchies(profile_parameters const& para
     throw utl::fail("CH routing only implemented for profile car");
   }
   return with_profile(profile, [&]<Profile P>(P&&) -> std::optional<path> {
-    auto const& pp = std::get<typename P::parameters>(params);
+    auto const& pp = std::get<car::parameters>(params);
     auto const from_match =
-        l.match<P>(pp, from, false, dir, max_match_distance, blocked);
+        l.match<car>(pp, from, false, dir, max_match_distance, blocked);
     auto const to_match =
-        l.match<P>(pp, to, true, dir, max_match_distance, blocked);
+        l.match<car>(pp, to, true, dir, max_match_distance, blocked);
 
     if (from_match.empty() || to_match.empty()) {
       return std::nullopt;
     }
 
-    return route_contraction_hierarchies(pp, w, l, get_contraction_hierarchies<P>(), from, to,
+    return route_contraction_hierarchies(pp, w, l, get_contraction_hierarchies<car>(), from, to,
                                from_match, to_match, max, dir, blocked, sharing,
                                elevations);
   });
@@ -1121,8 +1127,8 @@ std::optional<path> route(profile_parameters const& params,
     case routing_algorithm::kContractionHierarchies:
       if (profile == search_profile::kCar) {
         return with_profile(profile, [&]<Profile P>(P&&) {
-          return route_contraction_hierarchies(std::get<typename P::parameters>(params), w,
-                                     l, get_contraction_hierarchies<P>(), from, to,
+          return route_contraction_hierarchies(std::get<car::parameters>(params), w,
+                                     l, get_contraction_hierarchies<car>(), from, to,
                                      from_match, to_match, max, dir, blocked,
                                      sharing, elevations);
         });
@@ -1160,9 +1166,9 @@ std::optional<path> route(profile_parameters const& params,
                                  max_match_distance, blocked, sharing,
                                  elevations);
     case routing_algorithm::kContractionHierarchies:
-      return route_contraction_hierarchies(w, l, profile, from, to, max, dir,
-                                           max_match_distance, blocked, sharing,
-                                           elevations);
+      return route_contraction_hierarchies(params, w, l, profile, from, to, max,
+                                           dir, max_match_distance, blocked,
+                                           sharing, elevations);
   }
   throw utl::fail("not implemented");
 }

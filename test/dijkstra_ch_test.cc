@@ -27,20 +27,16 @@
 namespace fs = std::filesystem;
 using namespace osr;
 
-constexpr auto const kUseMultithreading = true;
-constexpr auto const kPrintDebugGeojson = false;
-constexpr auto const kMaxMatchDistance = 100;
-constexpr auto const kMaxAllowedPathDifferenceRatio = 0.5;
-
 void load(std::string_view, std::string_view, bool);
-void run(ways const&, lookup const&, unsigned, unsigned, routing_algorithm,
-         std::string const&);
+void run(ways const&, lookup const&, unsigned, unsigned, direction,
+  routing_algorithm, std::string const&);
 
 TEST(dijkstra_ch, monaco) {
   auto const raw_data = "test/monaco.osm.pbf";
   auto const data_dir = "test/monaco";
   auto const num_samples = 10000U;
   auto const max_cost = 3600U;
+  auto constexpr dir = direction::kForward;
 
   if (!fs::exists(raw_data) && !fs::exists(data_dir)) {
     GTEST_SKIP() << raw_data << " not found";
@@ -50,7 +46,7 @@ TEST(dijkstra_ch, monaco) {
   auto const w = osr::ways{data_dir, cista::mmap::protection::READ};
   auto const l = osr::lookup{w, data_dir, cista::mmap::protection::READ};
 
-  run(w, l, num_samples, max_cost, routing_algorithm::kContractionHierarchies, "CH");
+  run(w, l, num_samples, max_cost, dir, routing_algorithm::kContractionHierarchies, "CH");
 }
 
 TEST(dijkstra_ch, andorra) {
@@ -58,6 +54,7 @@ TEST(dijkstra_ch, andorra) {
   auto const data_dir = "test/andorra";
   auto const num_samples = 10000U;
   auto const max_cost = 10000U;
+  auto constexpr dir = direction::kForward;
 
   if (!fs::exists(raw_data) && !fs::exists(data_dir)) {
     GTEST_SKIP() << raw_data << " not found";
@@ -66,7 +63,7 @@ TEST(dijkstra_ch, andorra) {
   auto const w = osr::ways{data_dir, cista::mmap::protection::READ};
   auto const l = osr::lookup{w, data_dir, cista::mmap::protection::READ};
 
-  run(w, l, num_samples, max_cost, routing_algorithm::kContractionHierarchies, "CH");
+  run(w, l, num_samples, max_cost, dir, routing_algorithm::kContractionHierarchies, "CH");
 }
 
 TEST(dijkstra_ch, guyana) {
@@ -74,6 +71,7 @@ TEST(dijkstra_ch, guyana) {
   auto const data_dir = "test/guyana";
   auto const num_samples = 1500U;
   auto const max_cost = 30000U;
+  auto constexpr dir = direction::kForward;
 
   if (!fs::exists(raw_data) && !fs::exists(data_dir)) {
     GTEST_SKIP() << raw_data << " not found";
@@ -82,7 +80,7 @@ TEST(dijkstra_ch, guyana) {
   auto const w = osr::ways{data_dir, cista::mmap::protection::READ};
   auto const l = osr::lookup{w, data_dir, cista::mmap::protection::READ};
 
-  run(w, l, num_samples, max_cost, routing_algorithm::kContractionHierarchies, "CH");
+  run(w, l, num_samples, max_cost, dir, routing_algorithm::kContractionHierarchies, "CH");
 }
 
 TEST(dijkstra_ch, hamburg) {
@@ -90,6 +88,7 @@ TEST(dijkstra_ch, hamburg) {
   auto const data_dir = "test/hamburg";
   auto const num_samples = 5000U;
   auto const max_cost = 3 * 3600U;
+  auto constexpr dir = direction::kForward;
 
   if (!fs::exists(raw_data) && !fs::exists(data_dir)) {
     GTEST_SKIP() << raw_data << " not found";
@@ -99,7 +98,7 @@ TEST(dijkstra_ch, hamburg) {
   auto const w = osr::ways{data_dir, cista::mmap::protection::READ};
   auto const l = osr::lookup{w, data_dir, cista::mmap::protection::READ};
 
-  run(w, l, num_samples, max_cost, routing_algorithm::kContractionHierarchies, "CH");
+  run(w, l, num_samples, max_cost, dir, routing_algorithm::kContractionHierarchies, "CH");
 }
 
 TEST(dijkstra_ch, switzerland) {
@@ -107,6 +106,7 @@ TEST(dijkstra_ch, switzerland) {
   auto const data_dir = "test/switzerland";
   auto const num_samples = 1000U;
   auto const max_cost = 5 * 3600U;
+  auto constexpr dir = direction::kForward;
 
   if (!fs::exists(raw_data) && !fs::exists(data_dir)) {
     GTEST_SKIP() << raw_data << " not found";
@@ -116,7 +116,7 @@ TEST(dijkstra_ch, switzerland) {
   auto const w = osr::ways{data_dir, cista::mmap::protection::READ};
   auto const l = osr::lookup{w, data_dir, cista::mmap::protection::READ};
 
-  run(w, l, num_samples, max_cost, routing_algorithm::kContractionHierarchies, "CH");
+  run(w, l, num_samples, max_cost, dir, routing_algorithm::kContractionHierarchies, "CH");
 }
 
 TEST(dijkstra_ch, DISABLED_germany) {
@@ -124,6 +124,7 @@ TEST(dijkstra_ch, DISABLED_germany) {
   auto const data_dir = "test/germany";
   constexpr auto const num_samples = 50U;
   constexpr auto const max_cost = 12 * 3600U;
+  auto constexpr dir = direction::kForward;
 
   if (!fs::exists(raw_data) && !fs::exists(data_dir)) {
     GTEST_SKIP() << raw_data << " not found";
@@ -133,5 +134,5 @@ TEST(dijkstra_ch, DISABLED_germany) {
   auto const w = osr::ways{data_dir, cista::mmap::protection::READ};
   auto const l = osr::lookup{w, data_dir, cista::mmap::protection::READ};
 
-  run(w, l, num_samples, max_cost, routing_algorithm::kContractionHierarchies, "CH");
+  run(w, l, num_samples, max_cost, dir, routing_algorithm::kContractionHierarchies, "CH");
 }

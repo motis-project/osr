@@ -12,6 +12,8 @@
 #include "osr/routing/dial.h"
 #include "osr/types.h"
 #include "osr/ways.h"
+#include "osr/routing/profile.h"
+#include "osr/routing/parameters.h"
 #include "profiles/car.h"
 
 namespace osr {
@@ -24,14 +26,14 @@ struct ch_config {
   static bool constexpr kRemoveCycles = false;
 };
 
-template <typename Profile>
+template <Profile P>
 struct contraction_hierarchies {
-  using profile_t = Profile;
-  using key = typename Profile::key;
-  using label = typename Profile::label;
-  using node = typename Profile::node;
-  using entry = typename Profile::entry;
-  using hash = typename Profile::hash;
+  using profile_t = P;
+  using key = typename P::key;
+  using label = typename P::label;
+  using node = typename P::node;
+  using entry = typename P::entry;
+  using hash = typename P::hash;
   using cost_map = typename ankerl::unordered_dense::map<key, entry, hash>;
   bool static constexpr kDebug = false;
 
@@ -366,21 +368,21 @@ inline void local_1_hop_ch(
   }
 }
 
-template <typename Profile>
+template <typename P>
 [[nodiscard]]
-std::pair<std::vector<typename Profile::node>, std::vector<cost_t>> eliminate_cycles(
+std::pair<std::vector<typename P::node>, std::vector<cost_t>> eliminate_cycles(
       ways const& w, std::list<ways::routing::edge_idx_t> const& list_of_edges) {
 
   std::vector<cost_t> costs;
-  std::vector<typename Profile::node> profile_nodes;
+  std::vector<typename P::node> profile_nodes;
 
   auto const start_ID = w.r_->contracted_edges_[list_of_edges.front()].from_;
-  auto start_node = w.r_->identifier_to_node_[start_ID];
+  auto const start_node = w.r_->identifier_to_node_[start_ID];
 
-  profile_nodes.push_back(start_node.conv<typename Profile::node>());
+  profile_nodes.push_back(start_node.conv<typename P::node>());
   for (auto const edge_idx : list_of_edges) {
     auto edge = w.r_->contracted_edges_[edge_idx];
-    profile_nodes.push_back(w.r_->identifier_to_node_[edge.to_].conv<typename Profile::node>());
+    profile_nodes.push_back(w.r_->identifier_to_node_[edge.to_].conv<typename P::node>());
     costs.push_back(edge.cost_);
   }
 
@@ -388,6 +390,7 @@ std::pair<std::vector<typename Profile::node>, std::vector<cost_t>> eliminate_cy
     return std::make_pair(profile_nodes, costs);
   }
 
+  auto params = std::get<car::parameters>(get_parameters(search_profile::kCar));
   for (size_t index = 0; index < profile_nodes.size(); ++index) {
     auto it = std::find_if(profile_nodes.rbegin(), profile_nodes.rend(),
       [&](auto const& node) { return node.n_ == profile_nodes[index].n_; });
@@ -402,7 +405,7 @@ std::pair<std::vector<typename Profile::node>, std::vector<cost_t>> eliminate_cy
     cost_t sum_of_costs = std::accumulate(costs.begin() + static_cast<long>(index), costs.begin() + dist, 0);
     cost_t sum_of_costs_2 = costs[dist] + sum_of_costs;
 
-    Profile::template adjacent<direction::kForward, false>(*w.r_,
+    P::template adjacent<direction::kForward, false>(params, *w.r_,
       profile_nodes[index], nullptr, nullptr, nullptr, [&](car::node const tail,
       std::uint32_t const cost, distance_t, way_idx_t, std::uint16_t,
       std::uint16_t, elevation_storage::elevation, bool) {
