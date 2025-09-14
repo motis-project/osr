@@ -1,4 +1,5 @@
 #include "osr/routing/route.h"
+#include "osr/preprocessing/ch_preprocessing.h"
 
 #include <cstdint>
 #include <algorithm>
@@ -15,6 +16,7 @@
 #include "osr/elevation_storage.h"
 #include "osr/lookup.h"
 #include "osr/routing/bidirectional.h"
+#include "osr/routing/bidirectional_dijkstra.h"
 #include "osr/routing/dijkstra.h"
 #include "osr/routing/profiles/bike.h"
 #include "osr/routing/profiles/bike_sharing.h"
@@ -50,6 +52,19 @@ dijkstra<P>& get_dijkstra() {
   return *s.get();
 }
 
+template <Profile P>
+bidirectional_dijkstra<P>& get_bidirectional_dijkstra(bool use_ch_preprocessing = false) {
+  static auto s = boost::thread_specific_ptr<bidirectional_dijkstra<P>>{};
+  if (s.get() == nullptr) {
+    if (use_ch_preprocessing) {
+      s.reset(new bidirectional_dijkstra<P>{true, &ch_preprocessor<P>()});
+    } else {
+      s.reset(new bidirectional_dijkstra<P>{});
+    }
+  }
+  return *s.get();
+}
+
 struct connecting_way {
   constexpr bool valid() const { return way_ != way_idx_t::invalid(); }
 
@@ -64,6 +79,7 @@ routing_algorithm to_algorithm(std::string_view s) {
   switch (cista::hash(s)) {
     case cista::hash("dijkstra"): return routing_algorithm::kDijkstra;
     case cista::hash("bidirectional"): return routing_algorithm::kAStarBi;
+    case cista::hash("bidirectional_dijkstra"): return routing_algorithm::kBiDijkstra;
   }
   throw utl::fail("unknown routing algorithm: {}", s);
 }
@@ -911,6 +927,7 @@ std::optional<path> route(profile_parameters const& params,
                                    from_match, to_match, max, dir, blocked,
                                    sharing, elevations);
       });
+      case routing_algorithm::kBiDijkstra: return std::nullopt;
   }
   throw utl::fail("not implemented");
 }
@@ -942,6 +959,8 @@ std::optional<path> route(profile_parameters const& params,
       return route_bidirectional(params, w, l, profile, from, to, max, dir,
                                  max_match_distance, blocked, sharing,
                                  elevations);
+    case routing_algorithm::kBiDijkstra:
+        return std::nullopt;
   }
   throw utl::fail("not implemented");
 }
