@@ -55,10 +55,10 @@ way_idx_t shortcut_storage::add_shortcut(ways& w,
 
   way_idx_t shortcut_way = way_idx_t{w.r_->way_nodes_.size()};
 
-  construct_way_on_shortcut_arrays(w,shortcut_way, shortcut);
-
   // neue Way hinzufügen
   add_shortcut_to_graph(w,shortcut,shortcut_way, true);
+
+  construct_way_on_shortcut_arrays(w,shortcut_way, shortcut);
   return shortcut_way;
 }
 void shortcut_storage::add_shortcut_to_graph(ways& w,

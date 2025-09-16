@@ -18,8 +18,8 @@ struct node_order {
     }
   }
 
-  void add_node(node_idx_t const n) {
-    order_to_store_[n] = order_count_++; // store the current count and increment it afterwards
+  void add_node(node_idx_t const n, bool stall = false) {
+    order_to_store_[n] = stall ? order_count_ : order_count_++; // store the current count and increment it afterwards
   }
 
   uint64_t get_order(node_idx_t const n) {
@@ -62,12 +62,37 @@ struct shortcut_storage {
   vec<shortcut_data> shortcuts_;
 
   std::unique_ptr<node_order> node_order_;
-
+  std::vector<way_pos_t> shortcut_way_poses_at_to_node;
+  std::vector<way_pos_t> shortcut_way_poses_at_from_node;
+  std::vector<bool> shortcut_has_restricted_nodes;
   way_idx_t max_way_idx_; // This will contain the last non shortcut way_idx_t so if there are 10 ways it will be 9
 
-  cista::raw::ankerl_map<way_idx_t, way_and_dir> first_way_on_shortcut;
-  cista::raw::ankerl_map<way_idx_t, way_and_dir> last_way_on_shortcut;
+  std::vector<way_and_dir> first_way_on_shortcut;
+  std::vector<way_and_dir> last_way_on_shortcut;
+
   void set_max_way_idx(way_idx_t const max_way_idx) { max_way_idx_ = max_way_idx; }
+
+  bool shortcut_has_restricted_node(way_idx_t const way) {
+    if (!is_shortcut(way)) {
+      return false;
+    }
+    return shortcut_has_restricted_nodes[to_shortcut_idx(way)];
+  }
+
+  way_pos_t get_way_pos_at_to_node(way_idx_t const way_idx) const {
+    if (!is_shortcut(way_idx)) {
+      throw std::invalid_argument("way index is no shortcut");
+    }
+    return shortcut_way_poses_at_to_node[to_shortcut_idx(way_idx)];
+  }
+
+  way_pos_t get_way_pos_at_from_node(way_idx_t const way_idx) const {
+    if (!is_shortcut(way_idx)) {
+      throw std::invalid_argument("way index is no shortcut");
+    }
+    return shortcut_way_poses_at_from_node[to_shortcut_idx(way_idx)];
+  }
+
   uint64_t get_node_order(node_idx_t const n) const {
     return node_order_->get_order(n);
   }
@@ -78,7 +103,11 @@ struct shortcut_storage {
 
   shortcut_data const* get_shortcut(way_idx_t idx) const {
     if (!is_shortcut(idx)) { return nullptr;}
-    return &shortcuts_.at(cista::to_idx(idx) - cista::to_idx(max_way_idx_) - 1);
+    return &shortcuts_.at(to_shortcut_idx(idx));
+  }
+
+  size_t to_shortcut_idx(way_idx_t const idx) const {
+    return cista::to_idx(idx) - cista::to_idx(max_way_idx_) - 1;
   }
 
   bool shortcut_is_selfloop(way_idx_t const idx) const {
@@ -95,17 +124,17 @@ struct shortcut_storage {
 
   way_idx_t resolve_first_way(way_idx_t const way) {
     if (!is_shortcut(way)) return way;
-    return first_way_on_shortcut[way].way;
+    return first_way_on_shortcut[to_shortcut_idx(way)].way;
   }
 
   way_and_dir resolve_first_way_and_dir(way_idx_t const way, direction dir, way_pos_t way_pos = way_pos_t{0U}) const {
     if (!is_shortcut(way)) return way_and_dir{way, dir, way_pos};
-    return first_way_on_shortcut.at(way);
+    return first_way_on_shortcut[to_shortcut_idx(way)];
   }
 
   way_and_dir resolve_last_way_and_dir(way_idx_t const way, direction dir, way_pos_t way_pos = way_pos_t{0U}) const {
     if (!is_shortcut(way)) return way_and_dir{way, dir, way_pos};
-    return last_way_on_shortcut.at(way);
+    return last_way_on_shortcut[to_shortcut_idx(way)];
   }
   struct SegmentFrame {
     way_idx_t w;
@@ -164,19 +193,24 @@ struct shortcut_storage {
   way_idx_t add_shortcut(ways& w, shortcut_data const& shortcut);
 
   void construct_way_on_shortcut_arrays(ways const& ways, way_idx_t const shortcut_way, shortcut_data const& shortcut) {
+    if (to_shortcut_idx(shortcut_way) != first_way_on_shortcut.size()) {
+      throw std::runtime_error("shortcut construction failed");
+    }
+    shortcut_way_poses_at_to_node.push_back(ways.r_->get_way_pos(shortcut.to, shortcut_way, 1));
+    shortcut_way_poses_at_from_node.push_back(ways.r_->get_way_pos(shortcut.from, shortcut_way, 0));
+    shortcut_has_restricted_nodes.push_back(ways.r_->node_is_restricted_[shortcut.from] || ways.r_->node_is_restricted_[shortcut.via_node] || ways.r_->node_is_restricted_[shortcut.to] || shortcut_has_restricted_node(shortcut.upward_way) || shortcut_has_restricted_node(shortcut.downward_way));
     if (is_shortcut(shortcut.upward_way)) {
-      first_way_on_shortcut.insert_or_assign(
-          shortcut_way, first_way_on_shortcut[shortcut.upward_way]);
+      first_way_on_shortcut.push_back(
+          first_way_on_shortcut[to_shortcut_idx(shortcut.upward_way)]);
     } else {
-      first_way_on_shortcut.insert_or_assign(
-          shortcut_way, way_and_dir{shortcut.upward_way, shortcut.upward_dir, ways.r_->get_way_pos(shortcut.from, shortcut.upward_way)});
+      first_way_on_shortcut.push_back(
+          way_and_dir{shortcut.upward_way, shortcut.upward_dir, ways.r_->get_way_pos(shortcut.from, shortcut.upward_way)});
     }
     if (is_shortcut(shortcut.downward_way)) {
-      last_way_on_shortcut.insert_or_assign(
-          shortcut_way, last_way_on_shortcut[shortcut.downward_way]);
+      last_way_on_shortcut.push_back(
+          last_way_on_shortcut[to_shortcut_idx(shortcut.downward_way)]);
     } else {
-      last_way_on_shortcut.insert_or_assign(
-          shortcut_way,
+      last_way_on_shortcut.push_back(
           way_and_dir{shortcut.downward_way, shortcut.downward_dir, ways.r_->get_way_pos(shortcut.to, shortcut.downward_way)});
     }
   }
