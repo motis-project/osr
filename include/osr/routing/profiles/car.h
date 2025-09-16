@@ -74,13 +74,21 @@ struct car {
   };
 
   struct entry {
-    static constexpr auto const kMaxWays = way_pos_t{333U};
+    static constexpr auto const kMaxWays = way_pos_t{16U};
     static constexpr auto const kN = kMaxWays * 2U /* FWD+BWD */;
 
-    entry() { utl::fill(cost_, kInfeasible); }
+    entry() {
+      cost_.resize(kN,kInfeasible);
+      pred_.resize(kN, node_idx_t::invalid());
+      pred_dir_.resize(kN);
+      pred_way_.resize(kN);
+    }
 
     constexpr std::optional<node> pred(node const n) const noexcept {
       auto const idx = get_index(n);
+      if (idx >= cost_.size()) {
+        return std::nullopt;
+      }
       return pred_[idx] == node_idx_t::invalid()
                  ? std::nullopt
                  : std::optional{node{pred_[idx], pred_way_[idx],
@@ -88,7 +96,8 @@ struct car {
     }
 
     constexpr cost_t cost(node const n) const noexcept {
-      return cost_[get_index(n)];
+      auto const idx = get_index(n);
+      return idx >= cost_.size() ? kInfeasible : cost_[idx];
     }
 
     constexpr bool update(label const&,
@@ -96,6 +105,13 @@ struct car {
                           cost_t const c,
                           node const pred) noexcept {
       auto const idx = get_index(n);
+      if (idx >= cost_.size()) {
+        size_t new_size = (idx + 1) * 2;
+        cost_.resize(new_size, kInfeasible);
+        pred_way_.resize(new_size);
+        pred_.resize(new_size, node_idx_t::invalid());
+        pred_dir_.resize(new_size);
+      }
       if (c < cost_[idx]) {
         cost_[idx] = c;
         pred_[idx] = pred.n_;
@@ -110,11 +126,12 @@ struct car {
 
     static constexpr node get_node(node_idx_t const n,
                                    std::size_t const index) {
-      return node{n, static_cast<way_pos_t>(index % kMaxWays),
-                  to_dir((index / kMaxWays) != 0U)};
+      return node{n, static_cast<way_pos_t>((index - (index % 2) / 2)),
+                  to_dir((index % 2) != 0U)};
     }
 
     static constexpr std::size_t get_index(node const n) {
+      return (n.dir_ == direction::kForward ? 0U : 1U) + 2 * n.way_;
       return (n.dir_ == direction::kForward ? 0U : 1U) * kMaxWays + n.way_;
     }
 
@@ -126,10 +143,10 @@ struct car {
       return d == direction::kForward ? false : true;
     }
 
-    std::array<node_idx_t, kN> pred_;
-    std::array<way_pos_t, kN> pred_way_;
-    std::bitset<kN> pred_dir_;
-    std::array<cost_t, kN> cost_;
+    std::vector<node_idx_t> pred_;
+    std::vector<way_pos_t> pred_way_;
+    std::vector<bool> pred_dir_;
+    std::vector<cost_t> cost_;
   };
 
   struct hash {
@@ -236,8 +253,19 @@ struct car {
         //auto const is_u_turn = way_pos == n.way_ && way_dir == opposite(n.dir_);
         auto const is_u_turn = resolved_way == node_resolved_way && resolved_dir == opposite(node_resolved_dir);
         auto const dist = w.way_node_dist_[way][std::min(from, to)];
+        auto pos = way_pos_t{0U};
+        if (way_is_shortcut && false) {
+          if (to == 0) {
+            pos = shortcuts->get_way_pos_at_from_node(way);
+          } else {
+            pos = shortcuts->get_way_pos_at_to_node(way);
+          }
+        } else {
+          pos = w.get_way_pos(target_node, way, to);
+        }
+
         auto const target =
-            node{target_node, w.get_way_pos(target_node, way, to), way_dir};
+            node{target_node, pos, way_dir};
         auto const cost = (way_is_shortcut ? way_cost_s(target_way_prop, way_dir, dist,shortcuts->get_shortcut(way)) : way_cost(target_way_prop, way_dir, dist)) +
                           node_cost(target_node_prop) +
                           (is_u_turn ? kUturnPenalty : 0U);
