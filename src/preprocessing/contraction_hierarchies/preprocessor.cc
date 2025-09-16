@@ -73,6 +73,6 @@ void process_ch(std::filesystem::path const& in,
   shortcuts.save(out);
   w.r_->write(out);
 
-  fmt::println("Shortcuts saved to [file={}]", in);
+  fmt::println("Shortcuts saved to [file={}]", out);
 }
 } // namespace osr::ch

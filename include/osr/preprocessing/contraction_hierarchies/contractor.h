@@ -15,8 +15,8 @@ struct neighbor_data {
 };
 
 struct contractor {
-  std::unordered_map<node_idx_t, std::vector<neighbor_data>> outgoing_neighbors_;
-  std::unordered_map<node_idx_t, std::vector<neighbor_data>> incoming_neighbors_;
+  std::vector<std::vector<neighbor_data>> outgoing_neighbors_;
+  std::vector<std::vector<neighbor_data>> incoming_neighbors_;
 
   static bool has_uturn(way_idx_t from,
                           direction from_dir,
@@ -45,6 +45,22 @@ struct contractor {
         nodes.back() == other.nodes.back());
     }
   };
+
+  /*bool has_shortcut(node_idx_t from, node_idx_t to, way_idx_t from_way, way_idx_t to_way, direction from_dir, direction to_dir, shortcut_storage* shortcut_storage) {
+    auto const& neighbors = outgoing_neighbors_[to_idx(from)];
+    return std::ranges::any_of(neighbors, [to, from_way, to_way, from_dir, to_dir, shortcut_storage](auto const& neighbor) {
+      if (neighbor.node_idx == to) {
+        if (shortcut_storage->is_shortcut(neighbor.way)) {
+          auto const* sh = shortcut_storage->get_shortcut(neighbor.way);
+          auto const from_resolved = shortcut_storage->resolve_first_way_and_dir(sh->upward_way, sh->downward_dir);
+          auto const to_resolved = shortcut_storage->resolve_last_way_and_dir(sh->downward_way, sh->downward_dir);
+          return from_resolved.way == from_way && to_resolved.way == to_way && from_dir == from_resolved.dir && to_dir == to_resolved.dir;
+        }
+      }
+      return false;
+    });
+  }*/
+
   std::vector<bypass_path> find_restriction_bypasses(ways const& w,
                                                   bitvec<node_idx_t>* blocked,
                                                   node_idx_t node,
