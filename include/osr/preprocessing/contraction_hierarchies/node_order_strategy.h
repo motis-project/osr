@@ -20,19 +20,31 @@ struct node_importance_order_strategy : public OrderStrategy {
     if (seed == -1) {
       seed_ = time(nullptr);
     }
+    fmt::println("seeded node order with: {}", seed_);
   }
   int seed_;
-  std::unordered_map<size_t, std::vector<node_idx_t>> order_;
-  int current_node_importance = 0;
+  std::vector<std::vector<node_idx_t>> order_;
+  size_t max_importance_ = 0;
+  size_t current_node_importance = 0;
   void compute_order(ways const& w) override {
     int const n = w.n_nodes();
     for (node_idx_t idx{0U}; idx < n; ++idx) {
-      order_[w.r_->node_properties_[idx].importance_].push_back(idx);
+      auto importance = w.r_->node_properties_[idx].importance_;
+      if (importance > max_importance_) {
+        max_importance_ = importance;
+      }
+      if (importance >= order_.size()) {
+        order_.resize(importance + 1);
+      }
+      order_[importance].push_back(idx);
     }
   }
 
   bool has_next() override {
-    if (order_[current_node_importance].empty()) {
+    while (order_[current_node_importance].empty()) {
+      if (current_node_importance == max_importance_) {
+        break;
+      }
       ++current_node_importance;
     }
     return !order_[current_node_importance].empty();
