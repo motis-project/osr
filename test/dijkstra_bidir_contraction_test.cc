@@ -34,7 +34,7 @@ constexpr auto const kPrintDebugGeojson = false;
 constexpr auto const kMaxMatchDistance = 100;
 constexpr auto const kMaxAllowedPathDifferenceRatio = 0.5;
 
-void load_with_ch(std::string_view raw_data, std::string_view data_dir) {
+void load_with_ch(std::string_view raw_data, std::string_view data_dir, std::string_view ch_dir) {
   if (!fs::exists(data_dir)) {
     if (fs::exists(raw_data)) {
       auto const p = fs::path{data_dir};
@@ -42,22 +42,23 @@ void load_with_ch(std::string_view raw_data, std::string_view data_dir) {
       fs::remove_all(p, ec);
       fs::create_directories(p, ec);
       osr::extract(false, raw_data, data_dir, fs::path{});
-
-      auto ch_path = p;
-      ch_path += "_contraction_hierarchie";
-
-      if (!fs::exists(ch_path)) {
-        fmt::println("Creating new contraction hierarchie directory: {}", ch_path);
-        fs::create_directory(ch_path);
-        for (const auto& entry : fs::directory_iterator(p)) {
-          fs::copy(entry.path(), ch_path / entry.path().filename(),
-                   fs::copy_options::recursive);
-        }
-      }
-      std::unique_ptr<ch::OrderStrategy> node_order_strategy = std::make_unique<osr::ch::node_importance_order_strategy>(-1);;
-      osr::ch::process_ch(data_dir, ch_path, node_order_strategy);
-
     }
+  }
+  if (fs::exists(data_dir) && !fs::exists(ch_dir)) {
+    auto const p = fs::path{data_dir};
+    auto const ch = fs::path{ch_dir};
+
+    if (!fs::exists(ch)) {
+      fmt::println("Creating new contraction hierarchie directory: {}", ch);
+      fs::create_directory(ch);
+      for (const auto& entry : fs::directory_iterator(p)) {
+        fs::copy(entry.path(), ch / entry.path().filename(),
+                 fs::copy_options::recursive);
+      }
+    }
+    std::unique_ptr<ch::OrderStrategy> node_order_strategy = std::make_unique<osr::ch::node_importance_order_strategy>(-1);;
+    osr::ch::process_ch(data_dir, ch, node_order_strategy);
+
   }
 }
 
@@ -205,7 +206,7 @@ TEST(dijkstra_ch_bidir, monaco) {
     GTEST_SKIP() << raw_data << " not found";
   }
 
-  load_with_ch(raw_data, data_dir);
+  load_with_ch(raw_data, data_dir, data_dir_contraction_hierarchie);
   auto w = osr::ways{data_dir, cista::mmap::protection::READ};
   auto w_shortcuts = osr::ways{data_dir_contraction_hierarchie, cista::mmap::protection::READ};
   auto const l = osr::lookup{w, data_dir, cista::mmap::protection::READ};
@@ -237,7 +238,7 @@ TEST(dijkstra_ch_bidir, aachen) {
     GTEST_SKIP() << raw_data << " not found";
   }
 
-  load_with_ch(raw_data, data_dir);
+  load_with_ch(raw_data, data_dir, data_dir_contraction_hierarchie);
   auto w = osr::ways{data_dir, cista::mmap::protection::READ};
   auto w_shortcuts = osr::ways{data_dir_contraction_hierarchie, cista::mmap::protection::READ};
   auto const l = osr::lookup{w, data_dir, cista::mmap::protection::READ};
@@ -260,16 +261,16 @@ TEST(dijkstra_ch_bidir, aachen) {
 
 TEST(dijkstra_ch_bidir, hamburg) {
   auto const raw_data = "test/hamburg.osm.pbf";
-  auto const data_dir = "test/hamburg";
-  auto const data_dir_contraction_hierarchie = "test/hamburg_contraction_hierarchie";
+  auto const data_dir = "build/osr-hamburg";
+  auto const data_dir_contraction_hierarchie = "build/osr-hamburg-ch";
   auto const num_samples = 10000U;
-  auto const max_cost = 2 * 3600U;
+  auto const max_cost = 2.5 * 3600U;
 
   if (!fs::exists(raw_data) && !fs::exists(data_dir)) {
     GTEST_SKIP() << raw_data << " not found";
   }
 
-  load_with_ch(raw_data, data_dir);
+  load_with_ch(raw_data, data_dir, data_dir_contraction_hierarchie);
   auto w = osr::ways{data_dir, cista::mmap::protection::READ};
   auto w_shortcuts = osr::ways{data_dir_contraction_hierarchie, cista::mmap::protection::READ};
   auto const l = osr::lookup{w, data_dir, cista::mmap::protection::READ};
@@ -301,7 +302,7 @@ TEST(dijkstra_ch_bidir, switzerland) {
     GTEST_SKIP() << raw_data << " not found";
   }
 
-  load_with_ch(raw_data, data_dir);
+  load_with_ch(raw_data, data_dir, data_dir_contraction_hierarchie);
   auto w = osr::ways{data_dir, cista::mmap::protection::READ};
   auto w_shortcuts = osr::ways{data_dir_contraction_hierarchie, cista::mmap::protection::READ};
   auto const l = osr::lookup{w, data_dir, cista::mmap::protection::READ};
@@ -333,7 +334,7 @@ TEST(dijkstra_ch_bidir, DISABLED_germany) {
     GTEST_SKIP() << raw_data << " not found";
   }
 
-  load_with_ch(raw_data, data_dir);
+  load_with_ch(raw_data, data_dir, data_dir_contraction_hierarchie);
   auto w = osr::ways{data_dir, cista::mmap::protection::READ};
   auto w_shortcuts = osr::ways{data_dir_contraction_hierarchie, cista::mmap::protection::READ};
   auto const l = osr::lookup{w, data_dir, cista::mmap::protection::READ};
