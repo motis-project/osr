@@ -21,7 +21,7 @@ namespace osr {
 struct sharing_data;
 struct ch_config {
   static bool constexpr kUseHeuristic = false;
-  static float constexpr kHeuristicThresholdFactor = 0.8;
+  static float constexpr kHeuristicThresholdFactor = 0.8f;
   static bool constexpr kUseNodeImportance = true;
   static bool constexpr kRemoveCycles = false;
 };
