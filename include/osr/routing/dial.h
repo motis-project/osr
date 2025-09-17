@@ -118,7 +118,7 @@ struct dial_ch {
 public:
   dist_t get_next_bucket() {
     assert(size_ != 0);
-    auto bucket = current_bucket_ % buckets_.size();
+    dist_t bucket = current_bucket_ % buckets_.size();
     while (buckets_[bucket].empty()) {
       bucket = (bucket + 1) % buckets_.size();
       ++current_bucket_;

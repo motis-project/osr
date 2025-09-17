@@ -125,7 +125,7 @@ struct contraction_hierarchies {
       if (f_cost != kInfeasible && b_cost != kInfeasible) {
         auto candidate_cost = f_cost + b_cost;
         if (candidate_cost < best_cost_) {
-          best_cost_ = candidate_cost;
+          best_cost_ = static_cast<cost_t>(candidate_cost);
           meet_point_ = curr;
         }
       }
@@ -210,7 +210,7 @@ struct contraction_hierarchies {
       } else {
         ++meet_point_ID;
       }
-    };
+    }
     assert(found);
     auto current_ID = meet_point_ID;
     while (true) {
@@ -281,7 +281,7 @@ inline void dijkstra_ch(
   ch_dial_.clear();
   ch_dial_.n_buckets(cutoff + 1);
   ch_dial_.push(std::make_pair(start, 0U));
-  index_handler[start] = std::make_pair(0U, search_ID);
+  index_handler[static_cast<std::size_t>(start)] = std::make_pair(0U, search_ID);
 
   std::size_t destinations_finished = 0;
 
@@ -289,7 +289,7 @@ inline void dijkstra_ch(
     auto [fst, snd] = ch_dial_.pop();
     ways::routing::node_identifier const node_ID = fst;
     cost_t const current_cost = snd;
-    if (auto [cost, seen_ID] = index_handler[node_ID];
+    if (auto [cost, seen_ID] = index_handler[static_cast<std::size_t>(node_ID)];
         current_cost > cost && search_ID == seen_ID) { // check if the element was already seen
       continue;
     }
@@ -298,15 +298,15 @@ inline void dijkstra_ch(
       ++destinations_finished;
     }
 
-    for (auto const edge_idx : outgoing_edges[node_ID]) {
+    for (auto const edge_idx : outgoing_edges[static_cast<std::size_t>(node_ID)]) {
       auto edge = r_.contracted_edges_[edge_idx];
       assert(node_to_level[edge.to_] > min_level);
       auto new_cost = current_cost + edge.cost_;
-      auto [prev_cost, prev_search_ID] = index_handler[edge.to_];
+      auto [prev_cost, prev_search_ID] = index_handler[static_cast<std::size_t>(edge.to_)];
       if (prev_search_ID == search_ID && prev_cost <= new_cost) continue;
       if (new_cost > cutoff) continue;
       ch_dial_.push(std::make_pair(edge.to_, new_cost));
-      index_handler[edge.to_] = std::make_pair(new_cost, search_ID);
+      index_handler[static_cast<std::size_t>(edge.to_)] = std::make_pair(new_cost, search_ID);
     }
   }
 
@@ -318,7 +318,7 @@ inline void local_1_hop_ch(
   std::vector<std::vector<ways::routing::edge_idx_t>>& incoming_edges,
   ways::routing& r_){
 
-  auto const& out_edges = outgoing_edges[start];
+  auto const& out_edges = outgoing_edges[static_cast<std::size_t>(start)];
   std::map<ways::routing::node_identifier, std::pair<ways::routing::edge_idx_t, cost_t>> neighbor_to_edge_idx_cost;
   std::unordered_set<ways::routing::node_identifier> out_neighbors;
 
@@ -328,14 +328,14 @@ inline void local_1_hop_ch(
     neighbor_to_edge_idx_cost[edge.to_] = std::make_pair(edge_idx, edge.cost_);
   }
 
-  auto const& in_edges = incoming_edges[start];
+  auto const& in_edges = incoming_edges[static_cast<std::size_t>(start)];
   for (auto const in_edge_idx : in_edges) {
     auto remaining_neighbors = out_neighbors;
 
     auto& in_edge = r_.contracted_edges_[in_edge_idx];
     auto const in_cost = in_edge.cost_;
     auto const in_neighbor_ID = in_edge.from_;
-    auto const& edges = outgoing_edges[in_neighbor_ID];
+    auto const& edges = outgoing_edges[static_cast<std::size_t>(in_neighbor_ID)];
 
     for (auto const edge_idx : edges) {
       auto& edge = r_.contracted_edges_[edge_idx];
@@ -362,8 +362,8 @@ inline void local_1_hop_ch(
         };
         r_.contracted_edges_.emplace_back(new_edge);
         auto new_edge_idx = r_.contracted_edges_.size() - 1;
-        outgoing_edges[in_neighbor_ID].push_back(new_edge_idx);
-        incoming_edges[neighbor].push_back(new_edge_idx);
+        outgoing_edges[static_cast<std::size_t>(in_neighbor_ID)].push_back(new_edge_idx);
+        incoming_edges[static_cast<std::size_t>(neighbor)].push_back(new_edge_idx);
     }
   }
 }
@@ -400,9 +400,9 @@ std::pair<std::vector<typename P::node>, std::vector<cost_t>> eliminate_cycles(
       profile_nodes.resize(index + 1);
       costs.resize(index);
       return std::make_pair(profile_nodes, costs);
-    };
+    }
     auto dist = std::distance(profile_nodes.begin(), it.base()) - 1;
-    cost_t sum_of_costs = std::accumulate(costs.begin() + static_cast<long>(index), costs.begin() + dist, 0);
+    cost_t sum_of_costs = static_cast<cost_t>(std::accumulate(costs.begin() + static_cast<long>(index), costs.begin() + dist, 0));
     cost_t sum_of_costs_2 = costs[dist] + sum_of_costs;
 
     P::template adjacent<direction::kForward, false>(params, *w.r_,

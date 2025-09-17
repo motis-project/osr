@@ -248,7 +248,7 @@ void ways::connect_ways() {
   std::filesystem::remove(p_ / "tmp_node_in_way_idx_index.bin", e);
 }
 
-std::vector<ways::routing::node_identifier> outgoing_neighbors;
+static std::vector<ways::routing::node_identifier> outgoing_neighbors;
 void contract_node(ways::routing& r_,
                    std::vector<std::vector<ways::routing::edge_idx_t>>& outgoing_edges,
                    std::vector<std::vector<ways::routing::edge_idx_t>>& incoming_edges,
@@ -257,8 +257,8 @@ void contract_node(ways::routing& r_,
                    ways::routing::node_identifier to_contract,
                    std::uint64_t* search_ID
   ) {
-  auto const& out_edges = outgoing_edges[to_contract];
-  auto const own_level = node_to_level[to_contract];
+  auto const& out_edges = outgoing_edges[static_cast<std::size_t>(to_contract)];
+  auto const own_level = node_to_level[static_cast<std::size_t>(to_contract)];
 
   if constexpr (ch_config::kUseHeuristic) {
     if (static_cast<double>(own_level) > ch_config::kHeuristicThresholdFactor * static_cast<double>(outgoing_edges.size())) {
@@ -270,12 +270,12 @@ void contract_node(ways::routing& r_,
   // remove edges adjacent to to_contract
   for (auto outgoing_edge_idx : out_edges) {
     auto const edge = r_.contracted_edges_[outgoing_edge_idx];
-    [[maybe_unused]] auto const tmp = std::erase(incoming_edges[edge.to_], outgoing_edge_idx);
+    [[maybe_unused]] auto const tmp = std::erase(incoming_edges[static_cast<std::size_t>(edge.to_)], outgoing_edge_idx);
     assert(tmp == 1);
   }
-  for (auto incoming_edge_idx : incoming_edges[to_contract]) {
+  for (auto incoming_edge_idx : incoming_edges[static_cast<std::size_t>(to_contract)]) {
     auto const edge = r_.contracted_edges_[incoming_edge_idx];
-    [[maybe_unused]] auto const tmp =std::erase(outgoing_edges[edge.from_], incoming_edge_idx);
+    [[maybe_unused]] auto const tmp =std::erase(outgoing_edges[static_cast<std::size_t>(edge.from_)], incoming_edge_idx);
     assert(tmp == 1);
   }
 
