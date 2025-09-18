@@ -18,6 +18,26 @@
   url=git@github.com:felixguendling/cista.git
   branch=master
   commit=847b27100b7e730370b810ce62206a66b0bf2d79
+[LuaJIT]
+  url=git@github.com:motis-project/LuaJIT.git
+  branch=master
+  commit=f4bc3f109a4cc5bc262b2a2c683dae5a75f61377
+[clipper]
+  url=git@github.com:motis-project/clipper.git
+  branch=master
+  commit=2abf72015b85f1cfd38706b21d4f28b8c359c7d5
+[concurrentqueue]
+  url=git@github.com:motis-project/concurrentqueue.git
+  branch=master
+  commit=ab6b0b5334a005ef6ff1365ba5af87404de39d29
+[miniz]
+  url=git@github.com:motis-project/miniz.git
+  branch=master
+  commit=e857234a23de8e5a2d05d266e518220a495db0ce
+[pbf-sdf-fonts]
+  url=git@github.com:motis-project/pbf-sdf-fonts.git
+  branch=master
+  commit=66f0c760272c7bdd0efeaac5aab5520b9194225e
 [googletest]
   url=git@github.com:motis-project/googletest.git
   branch=master
@@ -29,7 +49,7 @@
 [protozero]
   url=git@github.com:motis-project/protozero.git
   branch=master
-  commit=8c9f3fa97c2cfdceef86d0b61818ae98e9328f29
+  commit=a94574f49d3820dc2f90121f8d5c5ffb6210b5b2
 [zlib-ng]
   url=git@github.com:motis-project/zlib-ng.git
   branch=develop
