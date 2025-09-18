@@ -1,15 +1,14 @@
 #pragma once
 
-#include <bitset>
-
 #include "boost/json/object.hpp"
 
-#include "utl/helpers/algorithm.h"
+#include <bitset>
 
 #include "osr/elevation_storage.h"
 #include "osr/routing/mode.h"
 #include "osr/routing/path.h"
 #include "osr/ways.h"
+#include "utl/helpers/algorithm.h"
 
 namespace osr {
 
@@ -32,10 +31,11 @@ struct car {
     [[nodiscard]] bool is_end_of_way(ways::routing const& r_) const {
       const auto edge_idx = r_.node_ways_[n_][way_];
       const auto way = r_.way_nodes_[edge_idx];
-      return n_ == way[0].v_ || n_ == way[way.size()-1].v_;
+      return n_ == way[0].v_ || n_ == way[way.size() - 1].v_;
     }
     friend bool operator<(const node n1, const node n2) {
-      return n1.n_ < n2.n_ || (n1.n_ == n2.n_ && entry::get_index_alt(n1) < entry::get_index_alt(n2));
+      return n1.n_ < n2.n_ || (n1.n_ == n2.n_ && entry::get_index_alt(n1) <
+                                                     entry::get_index_alt(n2));
     }
     friend bool operator==(node, node) = default;
 
@@ -71,8 +71,8 @@ struct car {
     constexpr node get_node() const noexcept { return {n_, way_, dir_}; }
     constexpr cost_t cost() const noexcept { return cost_; }
 
-    void track(
-        label const&, ways::routing const&, way_idx_t, node_idx_t, bool) {}
+    void track(label const&, ways::routing const&, way_idx_t, node_idx_t,
+               bool) {}
 
     node_idx_t n_;
     way_pos_t way_;
@@ -98,9 +98,7 @@ struct car {
       return cost_[get_index(n)];
     }
 
-    constexpr bool update(label const&,
-                          node const n,
-                          cost_t const c,
+    constexpr bool update(label const&, node const n, cost_t const c,
                           node const pred) noexcept {
       auto const idx = get_index(n);
       if (c < cost_[idx]) {
@@ -152,11 +150,8 @@ struct car {
   };
 
   template <typename Fn>
-  static void resolve_start_node(ways::routing const& w,
-                                 way_idx_t const way,
-                                 node_idx_t const n,
-                                 level_t,
-                                 direction,
+  static void resolve_start_node(ways::routing const& w, way_idx_t const way,
+                                 node_idx_t const n, level_t, direction,
                                  Fn&& f) {
     auto const ways = w.node_ways_[n];
     for (auto i = way_pos_t{0U}; i != ways.size(); ++i) {
@@ -168,9 +163,7 @@ struct car {
   }
 
   template <typename Fn>
-  static void resolve_all(ways::routing const& w,
-                          node_idx_t const n,
-                          level_t,
+  static void resolve_all(ways::routing const& w, node_idx_t const n, level_t,
                           Fn&& f) {
     auto const ways = w.node_ways_[n];
     for (auto i = way_pos_t{0U}; i != ways.size(); ++i) {
@@ -180,13 +173,9 @@ struct car {
   }
 
   template <direction SearchDir, bool WithBlocked, typename Fn>
-  static void adjacent(parameters const& params,
-                       ways::routing const& w,
-                       node const n,
-                       bitvec<node_idx_t> const* blocked,
-                       sharing_data const*,
-                       elevation_storage const*,
-                       Fn&& fn) {
+  static void adjacent(parameters const& params, ways::routing const& w,
+                       node const n, bitvec<node_idx_t> const* blocked,
+                       sharing_data const*, elevation_storage const*, Fn&& fn) {
     auto way_pos = way_pos_t{0U};
     for (auto const [way, i] :
          utl::zip_unchecked(w.node_ways_[n.n_], w.node_in_way_idx_[n.n_])) {
@@ -237,10 +226,8 @@ struct car {
   }
 
   static bool is_dest_reachable(parameters const& params,
-                                ways::routing const& w,
-                                node const n,
-                                way_idx_t const way,
-                                direction const way_dir,
+                                ways::routing const& w, node const n,
+                                way_idx_t const way, direction const way_dir,
                                 direction const search_dir) {
     auto const target_way_prop = w.way_properties_[way];
     if (way_cost(params, target_way_prop, way_dir, 0U) == kInfeasible) {
@@ -254,8 +241,7 @@ struct car {
     return true;
   }
 
-  static constexpr cost_t way_cost(parameters const&,
-                                   way_properties const& e,
+  static constexpr cost_t way_cost(parameters const&, way_properties const& e,
                                    direction const dir,
                                    std::uint16_t const dist) {
     if (e.is_car_accessible() &&

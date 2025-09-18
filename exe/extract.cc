@@ -20,7 +20,8 @@ struct config : public conf::configuration {
     param(out_, "out,o", "output directory");
     param(elevation_data_, "elevation_data,e", "directory with elevation data");
     param(with_platforms_, "with_platforms,p", "extract platform info");
-    param(with_ch_, "with_contraction_hierarchies,ch", "build CH during extraction");
+    param(with_ch_, "with_contraction_hierarchies,ch",
+          "build CH during extraction");
   }
 
   std::filesystem::path in_, out_, elevation_data_;

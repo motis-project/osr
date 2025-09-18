@@ -1,9 +1,8 @@
 #pragma once
 
 #if defined(_WIN32) || defined(_WIN64)
-#include "windows.h"
-
 #include "Memoryapi.h"
+#include "windows.h"
 #define mlock(addr, size) VirtualLock((LPVOID)addr, (SIZE_T)size)
 #else
 #include <sys/mman.h>
@@ -11,13 +10,13 @@
 #include <filesystem>
 #include <ranges>
 
+#include "cista/memory_holder.h"
 #include "fmt/ranges.h"
 #include "fmt/std.h"
-
 #include "osmium/osm/way.hpp"
-
-#include "cista/memory_holder.h"
-
+#include "osr/point.h"
+#include "osr/types.h"
+#include "osr/util/multi_counter.h"
 #include "utl/enumerate.h"
 #include "utl/equal_ranges_linear.h"
 #include "utl/helpers/algorithm.h"
@@ -25,10 +24,6 @@
 #include "utl/timer.h"
 #include "utl/verify.h"
 #include "utl/zip.h"
-
-#include "osr/point.h"
-#include "osr/types.h"
-#include "osr/util/multi_counter.h"
 
 namespace osr {
 
@@ -103,7 +98,7 @@ struct way_properties {
   bool motor_vehicle_no_ : 1;
   bool has_toll_ : 1;
   bool is_big_street_ : 1;
-  std::uint8_t importance_ : 3; // only used during extract
+  std::uint8_t importance_ : 3;  // only used during extract
 };
 
 static_assert(sizeof(way_properties) == 4);
@@ -218,8 +213,7 @@ struct ways {
       return 0U;
     }
 
-    way_pos_t get_way_pos(node_idx_t const node,
-                          way_idx_t const way,
+    way_pos_t get_way_pos(node_idx_t const node, way_idx_t const way,
                           std::uint16_t const node_in_way_idx) const {
       auto const ways = node_ways_[node];
       for (auto i = way_pos_t{0U}; i != ways.size(); ++i) {
@@ -233,8 +227,7 @@ struct ways {
     }
 
     template <direction SearchDir>
-    bool is_restricted(node_idx_t const n,
-                       std::uint8_t const from,
+    bool is_restricted(node_idx_t const n, std::uint8_t const from,
                        std::uint8_t const to) const {
       if (!node_is_restricted_[n]) {
         return false;
@@ -246,8 +239,7 @@ struct ways {
       return utl::find(r, needle) != end(r);
     }
 
-    bool is_restricted(node_idx_t const n,
-                       std::uint8_t const from,
+    bool is_restricted(node_idx_t const n, std::uint8_t const from,
                        std::uint8_t const to,
                        direction const search_dir) const {
       return search_dir == direction::kForward
@@ -286,12 +278,14 @@ struct ways {
       way_pos_t way_;
       direction dir_;
       node_identifier id_;
-      template<typename T> T conv() const {
+      template <typename T>
+      T conv() const {
         return T{n_, way_, dir_};
       }
       bool operator==(const node&) const = default;
       friend std::ostream& operator<<(std::ostream& os, const node& n) {
-        return os << "(" << n.n_ << ", " << static_cast<int>(n.way_) << ", " << n.dir_ << ")";
+        return os << "(" << n.n_ << ", " << static_cast<int>(n.way_) << ", "
+                  << n.dir_ << ")";
       }
     };
 
@@ -306,17 +300,18 @@ struct ways {
       bool is_contracted() const {
         return contracted_child1_ != 0U || contracted_child2_ != 0U;
       }
-      static edge_idx_t invalid() { return std::numeric_limits<edge_idx_t>::max(); }
+      static edge_idx_t invalid() {
+        return std::numeric_limits<edge_idx_t>::max();
+      }
     };
 
-    bool is_CH_available() const {
-      return !contracted_edges_.empty();
-    }
+    bool is_CH_available() const { return !contracted_edges_.empty(); }
 
     vec_map<edge_idx_t, contracted_edge> contracted_edges_;
     vec_map<node_identifier, node> identifier_to_node_;
     vec_map<node_idx_t, node_identifier> node_idx_to_identifier_;
-    vecvec<node_identifier, edge_idx_t> upwards_edges_outgoing_, downwards_edges_incoming_;
+    vecvec<node_identifier, edge_idx_t> upwards_edges_outgoing_,
+        downwards_edges_incoming_;
   };
 
   cista::wrapped<routing> r_;

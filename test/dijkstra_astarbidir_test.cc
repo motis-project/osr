@@ -33,7 +33,9 @@ constexpr auto const kPrintDebugGeojson = false;
 constexpr auto const kMaxMatchDistance = 100;
 constexpr auto const kMaxAllowedPathDifferenceRatio = 0.5;
 
-void load(std::string_view raw_data, std::string_view data_dir, bool const with_ch=false) {
+void load(std::string_view raw_data,
+          std::string_view data_dir,
+          bool const with_ch = false) {
   if (!fs::exists(data_dir)) {
     if (fs::exists(raw_data)) {
       auto const p = fs::path{data_dir};
@@ -50,8 +52,8 @@ void run(ways const& w,
          unsigned const n_samples,
          unsigned const max_cost,
          direction const dir,
-         routing_algorithm const algo=routing_algorithm::kAStarBi,
-         std::string const& algo_name="a* bidir") {
+         routing_algorithm const algo = routing_algorithm::kAStarBi,
+         std::string const& algo_name = "a* bidir") {
 
   auto const from_tos = [&]() {
     auto prng = std::mt19937{};

@@ -29,7 +29,7 @@ struct dijkstra {
   void reset(cost_t const max) {
     pq_.clear();
     pq_.n_buckets(max + 1U);
-    assert(max + 1U != 0); // catch overflows
+    assert(max + 1U != 0);  // catch overflows
     cost_.clear();
     max_reached_ = false;
   }
@@ -52,13 +52,9 @@ struct dijkstra {
   }
 
   template <direction SearchDir, bool WithBlocked>
-  bool run(P::parameters const& params,
-           ways const& w,
-           ways::routing const& r,
-           cost_t const max,
-           bitvec<node_idx_t> const* blocked,
-           sharing_data const* sharing,
-           elevation_storage const* elevations) {
+  bool run(P::parameters const& params, ways const& w, ways::routing const& r,
+           cost_t const max, bitvec<node_idx_t> const* blocked,
+           sharing_data const* sharing, elevation_storage const* elevations) {
     while (!pq_.empty()) {
       auto l = pq_.pop();
       if (get_cost(l.get_node()) < l.cost()) {
@@ -107,13 +103,9 @@ struct dijkstra {
     return !max_reached_;
   }
 
-  bool run(P::parameters const& params,
-           ways const& w,
-           ways::routing const& r,
-           cost_t const max,
-           bitvec<node_idx_t> const* blocked,
-           sharing_data const* sharing,
-           elevation_storage const* elevations,
+  bool run(P::parameters const& params, ways const& w, ways::routing const& r,
+           cost_t const max, bitvec<node_idx_t> const* blocked,
+           sharing_data const* sharing, elevation_storage const* elevations,
            direction const dir) {
     if (blocked == nullptr) {
       return dir == direction::kForward

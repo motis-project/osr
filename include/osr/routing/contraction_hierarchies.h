@@ -1,19 +1,19 @@
 #pragma once
 
-#include <list>
-#include <map>
-#include <unordered_set>
 #include <algorithm>
 #include <iterator>
+#include <list>
+#include <map>
 #include <numeric>
+#include <unordered_set>
 
 #include "osr/elevation_storage.h"
 #include "osr/routing/additional_edge.h"
 #include "osr/routing/dial.h"
+#include "osr/routing/parameters.h"
+#include "osr/routing/profile.h"
 #include "osr/types.h"
 #include "osr/ways.h"
-#include "osr/routing/profile.h"
-#include "osr/routing/parameters.h"
 #include "profiles/car.h"
 
 namespace osr {
@@ -101,15 +101,14 @@ struct contraction_hierarchies {
 
   template <direction SearchDir, bool WithBlocked>
   bool run([[maybe_unused]] ways const& w,
-           [[maybe_unused]] ways::routing const& r,
-           cost_t const max,
+           [[maybe_unused]] ways::routing const& r, cost_t const max,
            [[maybe_unused]] bitvec<node_idx_t> const* blocked,
            [[maybe_unused]] sharing_data const* sharing,
            [[maybe_unused]] elevation_storage const* elevations) {
     while (!pq_.empty()) {
       auto const l = pq_.pop();
       auto const curr = l.get_node();
-      auto to_id = [&](node const& n) -> std::int64_t {
+      auto to_id = [&](node const& n) -> std::uint64_t {
         auto start = r.node_idx_to_identifier_[n.get_node()];
         for (auto candidate = start; candidate < start + entry::kN;
              ++candidate) {
@@ -139,8 +138,8 @@ struct contraction_hierarchies {
           }
           auto neighbor =
               r.identifier_to_node_[edge.to_].template conv<car::node>();
-          if (get_cost_map<SearchDir>()[neighbor.n_].update(l, neighbor,
-                                         static_cast<cost_t>(total), curr)) {
+          if (get_cost_map<SearchDir>()[neighbor.n_].update(
+                  l, neighbor, static_cast<cost_t>(total), curr)) {
             auto next = label{neighbor, static_cast<cost_t>(total)};
             pq_.push(std::move(next));
             pred_edges1_[edge.to_] = edge_idx;
@@ -157,8 +156,8 @@ struct contraction_hierarchies {
           }
           auto neighbor =
               r.identifier_to_node_[edge.from_].template conv<car::node>();
-          if (get_cost_map<opposite(SearchDir)>()[neighbor.n_].update(l, neighbor,
-                                         static_cast<cost_t>(total), curr)) {
+          if (get_cost_map<opposite(SearchDir)>()[neighbor.n_].update(
+                  l, neighbor, static_cast<cost_t>(total), curr)) {
             auto next = label{neighbor, static_cast<cost_t>(total)};
             pq_.push(std::move(next));
             pred_edges2_[edge.from_] = edge_idx;
@@ -174,13 +173,9 @@ struct contraction_hierarchies {
     return !max_reached_1_ || !max_reached_2_;
   }
 
-  bool run(ways const& w,
-           ways::routing const& r,
-           cost_t const max,
-           bitvec<node_idx_t> const* blocked,
-           sharing_data const* sharing,
-           elevation_storage const* elevations,
-           direction const dir) {
+  bool run(ways const& w, ways::routing const& r, cost_t const max,
+           bitvec<node_idx_t> const* blocked, sharing_data const* sharing,
+           elevation_storage const* elevations, direction const dir) {
     if (blocked == nullptr) {
       return dir == direction::kForward
                  ? run<direction::kForward, false>(w, r, max, blocked, sharing,
@@ -265,18 +260,19 @@ using dial_element_t = std::pair<ways::routing::node_identifier, cost_t>;
 struct dial_element_to_bucket {
   cost_t operator()(dial_element_t const& el) const { return el.second; }
 };
-inline dial<dial_element_t, dial_element_to_bucket> ch_dial_{dial_element_to_bucket{}};
+inline dial<dial_element_t, dial_element_to_bucket> ch_dial_{
+    dial_element_to_bucket{}};
 
 inline void dijkstra_ch(
-  ways::routing::node_identifier start,
-  std::vector<ways::routing::node_identifier> const& destinations,
-  ways::routing& r_,
-  std::vector<std::vector<ways::routing::edge_idx_t>> const& outgoing_edges,
-  [[maybe_unused]] std::vector<ways::routing::node_identifier> const& node_to_level,
-  cost_t const cutoff,
-  std::uint64_t search_ID,
-  std::vector<std::pair<cost_t, std::uint64_t>>& index_handler,
-  [[maybe_unused]] ways::routing::node_identifier min_level) {
+    ways::routing::node_identifier start,
+    std::vector<ways::routing::node_identifier> const& destinations,
+    ways::routing& r_,
+    std::vector<std::vector<ways::routing::edge_idx_t>> const& outgoing_edges,
+    [[maybe_unused]] std::vector<ways::routing::node_identifier> const&
+        node_to_level,
+    cost_t const cutoff, std::uint64_t search_ID,
+    std::vector<std::pair<cost_t, std::uint64_t>>& index_handler,
+    [[maybe_unused]] ways::routing::node_identifier min_level) {
 
   ch_dial_.clear();
   ch_dial_.n_buckets(cutoff + 1);
@@ -290,7 +286,8 @@ inline void dijkstra_ch(
     ways::routing::node_identifier const node_ID = fst;
     cost_t const current_cost = snd;
     if (auto [cost, seen_ID] = index_handler[node_ID];
-        current_cost > cost && search_ID == seen_ID) { // check if the element was already seen
+        current_cost > cost &&
+        search_ID == seen_ID) {  // check if the element was already seen
       continue;
     }
 
@@ -309,17 +306,18 @@ inline void dijkstra_ch(
       index_handler[edge.to_] = std::make_pair(new_cost, search_ID);
     }
   }
-
 }
 
 inline void local_1_hop_ch(
-  ways::routing::node_identifier start,
-  std::vector<std::vector<ways::routing::edge_idx_t>>& outgoing_edges,
-  std::vector<std::vector<ways::routing::edge_idx_t>>& incoming_edges,
-  ways::routing& r_){
+    ways::routing::node_identifier start,
+    std::vector<std::vector<ways::routing::edge_idx_t>>& outgoing_edges,
+    std::vector<std::vector<ways::routing::edge_idx_t>>& incoming_edges,
+    ways::routing& r_) {
 
   auto const& out_edges = outgoing_edges[start];
-  std::map<ways::routing::node_identifier, std::pair<ways::routing::edge_idx_t, cost_t>> neighbor_to_edge_idx_cost;
+  std::map<ways::routing::node_identifier,
+           std::pair<ways::routing::edge_idx_t, cost_t>>
+      neighbor_to_edge_idx_cost;
   std::unordered_set<ways::routing::node_identifier> out_neighbors;
 
   for (auto const edge_idx : out_edges) {
@@ -340,8 +338,10 @@ inline void local_1_hop_ch(
     for (auto const edge_idx : edges) {
       auto& edge = r_.contracted_edges_[edge_idx];
       if (remaining_neighbors.erase(edge.to_) == 1) {
-        auto [seen_through, seen_with_cost] = neighbor_to_edge_idx_cost[edge.to_];
-        if (seen_with_cost < kInfeasible - in_cost && edge.cost_ > seen_with_cost + in_cost) {
+        auto [seen_through, seen_with_cost] =
+            neighbor_to_edge_idx_cost[edge.to_];
+        if (seen_with_cost < kInfeasible - in_cost &&
+            edge.cost_ > seen_with_cost + in_cost) {
           r_.contracted_edges_[edge_idx].cost_ = seen_with_cost + in_cost;
           r_.contracted_edges_[edge_idx].contracted_child1_ = in_edge_idx;
           r_.contracted_edges_[edge_idx].contracted_child2_ = seen_through;
@@ -353,17 +353,13 @@ inline void local_1_hop_ch(
       auto [seen_through, seen_with_cost] = neighbor_to_edge_idx_cost[neighbor];
       if (seen_with_cost >= kInfeasible - in_cost) continue;
       if (neighbor == in_neighbor_ID) continue;
-        auto new_edge = ways::routing::contracted_edge{
-          in_edge_idx,
-          seen_through,
-          in_neighbor_ID,
-          neighbor,
-          static_cast<cost_t>(seen_with_cost + in_cost)
-        };
-        r_.contracted_edges_.emplace_back(new_edge);
-        auto new_edge_idx = r_.contracted_edges_.size() - 1;
-        outgoing_edges[in_neighbor_ID].push_back(new_edge_idx);
-        incoming_edges[neighbor].push_back(new_edge_idx);
+      auto new_edge = ways::routing::contracted_edge{
+          in_edge_idx, seen_through, in_neighbor_ID, neighbor,
+          static_cast<cost_t>(seen_with_cost + in_cost)};
+      r_.contracted_edges_.emplace_back(new_edge);
+      auto new_edge_idx = r_.contracted_edges_.size() - 1;
+      outgoing_edges[in_neighbor_ID].push_back(new_edge_idx);
+      incoming_edges[neighbor].push_back(new_edge_idx);
     }
   }
 }
@@ -371,7 +367,7 @@ inline void local_1_hop_ch(
 template <typename P>
 [[nodiscard]]
 std::pair<std::vector<typename P::node>, std::vector<cost_t>> eliminate_cycles(
-      ways const& w, std::list<ways::routing::edge_idx_t> const& list_of_edges) {
+    ways const& w, std::list<ways::routing::edge_idx_t> const& list_of_edges) {
 
   std::vector<cost_t> costs;
   std::vector<typename P::node> profile_nodes;
@@ -382,7 +378,8 @@ std::pair<std::vector<typename P::node>, std::vector<cost_t>> eliminate_cycles(
   profile_nodes.push_back(start_node.conv<typename P::node>());
   for (auto const edge_idx : list_of_edges) {
     auto edge = w.r_->contracted_edges_[edge_idx];
-    profile_nodes.push_back(w.r_->identifier_to_node_[edge.to_].conv<typename P::node>());
+    profile_nodes.push_back(
+        w.r_->identifier_to_node_[edge.to_].conv<typename P::node>());
     costs.push_back(edge.cost_);
   }
 
@@ -392,8 +389,9 @@ std::pair<std::vector<typename P::node>, std::vector<cost_t>> eliminate_cycles(
 
   auto params = std::get<car::parameters>(get_parameters(search_profile::kCar));
   for (size_t index = 0; index < profile_nodes.size(); ++index) {
-    auto it = std::find_if(profile_nodes.rbegin(), profile_nodes.rend(),
-      [&](auto const& node) { return node.n_ == profile_nodes[index].n_; });
+    auto it = std::find_if(
+        profile_nodes.rbegin(), profile_nodes.rend(),
+        [&](auto const& node) { return node.n_ == profile_nodes[index].n_; });
     if (*it == profile_nodes[index]) continue;
 
     if (it == profile_nodes.rbegin()) {
@@ -402,33 +400,43 @@ std::pair<std::vector<typename P::node>, std::vector<cost_t>> eliminate_cycles(
       return std::make_pair(profile_nodes, costs);
     }
     auto dist = std::distance(profile_nodes.begin(), it.base()) - 1;
-    cost_t sum_of_costs = static_cast<cost_t>(std::accumulate(costs.begin() + static_cast<long>(index), costs.begin() + dist, 0));
-    cost_t sum_of_costs_2 = costs[static_cast<std::size_t>(dist)] + sum_of_costs;
+    cost_t sum_of_costs = static_cast<cost_t>(std::accumulate(
+        costs.begin() + static_cast<long>(index), costs.begin() + dist, 0));
+    cost_t sum_of_costs_2 =
+        costs[static_cast<std::size_t>(dist)] + sum_of_costs;
 
-    P::template adjacent<direction::kForward, false>(params, *w.r_,
-      profile_nodes[index], nullptr, nullptr, nullptr, [&](car::node const tail,
-      std::uint32_t const cost, distance_t, way_idx_t, std::uint16_t,
-      std::uint16_t, elevation_storage::elevation, bool) {
-        if (tail == *it.base() && cost <= sum_of_costs_2) {
-          assert(cost == sum_of_costs_2);
-          profile_nodes.erase(profile_nodes.begin()
-            + static_cast<typename std::vector<typename P::node>::difference_type>(index) + 1,
-            profile_nodes.begin() + dist + 1);
-          costs.erase(costs.begin() + static_cast<long>(index), costs.begin() + dist);
-          costs[index] = sum_of_costs_2;
-        }
-        if (tail == *it && cost <= sum_of_costs) {
-          assert(cost == sum_of_costs);
-          profile_nodes.erase(profile_nodes.begin()
-            + static_cast<typename std::vector<typename P::node>::difference_type>(index) + 1,
-            profile_nodes.begin() + dist);
-          costs.erase(costs.begin() + static_cast<long>(index), costs.begin() + (dist - 1));
-          costs[index] = sum_of_costs;
-        }
-      });
+    P::template adjacent<direction::kForward, false>(
+        params, *w.r_, profile_nodes[index], nullptr, nullptr, nullptr,
+        [&](car::node const tail, std::uint32_t const cost, distance_t,
+            way_idx_t, std::uint16_t, std::uint16_t,
+            elevation_storage::elevation, bool) {
+          if (tail == *it.base() && cost <= sum_of_costs_2) {
+            assert(cost == sum_of_costs_2);
+            profile_nodes.erase(
+                profile_nodes.begin() +
+                    static_cast<typename std::vector<
+                        typename P::node>::difference_type>(index) +
+                    1,
+                profile_nodes.begin() + dist + 1);
+            costs.erase(costs.begin() + static_cast<long>(index),
+                        costs.begin() + dist);
+            costs[index] = sum_of_costs_2;
+          }
+          if (tail == *it && cost <= sum_of_costs) {
+            assert(cost == sum_of_costs);
+            profile_nodes.erase(
+                profile_nodes.begin() +
+                    static_cast<typename std::vector<
+                        typename P::node>::difference_type>(index) +
+                    1,
+                profile_nodes.begin() + dist);
+            costs.erase(costs.begin() + static_cast<long>(index),
+                        costs.begin() + (dist - 1));
+            costs[index] = sum_of_costs;
+          }
+        });
   }
   return std::make_pair(profile_nodes, costs);
 }
 
 }  // namespace osr
-

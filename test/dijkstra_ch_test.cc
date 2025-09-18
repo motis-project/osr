@@ -28,8 +28,13 @@ namespace fs = std::filesystem;
 using namespace osr;
 
 void load(std::string_view, std::string_view, bool);
-void run(ways const&, lookup const&, unsigned, unsigned, direction,
-  routing_algorithm, std::string const&);
+void run(ways const&,
+         lookup const&,
+         unsigned,
+         unsigned,
+         direction,
+         routing_algorithm,
+         std::string const&);
 
 TEST(dijkstra_ch, monaco) {
   auto const raw_data = "test/monaco.osm.pbf";
@@ -46,7 +51,8 @@ TEST(dijkstra_ch, monaco) {
   auto const w = osr::ways{data_dir, cista::mmap::protection::READ};
   auto const l = osr::lookup{w, data_dir, cista::mmap::protection::READ};
 
-  run(w, l, num_samples, max_cost, dir, routing_algorithm::kContractionHierarchies, "CH");
+  run(w, l, num_samples, max_cost, dir,
+      routing_algorithm::kContractionHierarchies, "CH");
 }
 
 TEST(dijkstra_ch, andorra) {
@@ -63,7 +69,8 @@ TEST(dijkstra_ch, andorra) {
   auto const w = osr::ways{data_dir, cista::mmap::protection::READ};
   auto const l = osr::lookup{w, data_dir, cista::mmap::protection::READ};
 
-  run(w, l, num_samples, max_cost, dir, routing_algorithm::kContractionHierarchies, "CH");
+  run(w, l, num_samples, max_cost, dir,
+      routing_algorithm::kContractionHierarchies, "CH");
 }
 
 TEST(dijkstra_ch, guyana) {
@@ -80,7 +87,8 @@ TEST(dijkstra_ch, guyana) {
   auto const w = osr::ways{data_dir, cista::mmap::protection::READ};
   auto const l = osr::lookup{w, data_dir, cista::mmap::protection::READ};
 
-  run(w, l, num_samples, max_cost, dir, routing_algorithm::kContractionHierarchies, "CH");
+  run(w, l, num_samples, max_cost, dir,
+      routing_algorithm::kContractionHierarchies, "CH");
 }
 
 TEST(dijkstra_ch, hamburg) {
@@ -98,7 +106,8 @@ TEST(dijkstra_ch, hamburg) {
   auto const w = osr::ways{data_dir, cista::mmap::protection::READ};
   auto const l = osr::lookup{w, data_dir, cista::mmap::protection::READ};
 
-  run(w, l, num_samples, max_cost, dir, routing_algorithm::kContractionHierarchies, "CH");
+  run(w, l, num_samples, max_cost, dir,
+      routing_algorithm::kContractionHierarchies, "CH");
 }
 
 TEST(dijkstra_ch, switzerland) {
@@ -116,7 +125,8 @@ TEST(dijkstra_ch, switzerland) {
   auto const w = osr::ways{data_dir, cista::mmap::protection::READ};
   auto const l = osr::lookup{w, data_dir, cista::mmap::protection::READ};
 
-  run(w, l, num_samples, max_cost, dir, routing_algorithm::kContractionHierarchies, "CH");
+  run(w, l, num_samples, max_cost, dir,
+      routing_algorithm::kContractionHierarchies, "CH");
 }
 
 TEST(dijkstra_ch, DISABLED_germany) {
@@ -134,5 +144,6 @@ TEST(dijkstra_ch, DISABLED_germany) {
   auto const w = osr::ways{data_dir, cista::mmap::protection::READ};
   auto const l = osr::lookup{w, data_dir, cista::mmap::protection::READ};
 
-  run(w, l, num_samples, max_cost, dir, routing_algorithm::kContractionHierarchies, "CH");
+  run(w, l, num_samples, max_cost, dir,
+      routing_algorithm::kContractionHierarchies, "CH");
 }

@@ -4,9 +4,9 @@
 #include <set>
 
 #include "osr/routing/dial.h"
+#include "osr/routing/profile.h"
 #include "osr/types.h"
 #include "osr/ways.h"
-#include "osr/routing/profile.h"
 #include "profiles/car.h"
 
 namespace osr {
@@ -24,7 +24,6 @@ struct contraction_hierarchies_m_to_n {
   struct get_bucket {
     cost_t operator()(label const& l) { return l.cost(); }
   };
-
 
   void clear_mp() {
     meet_points_.clear();
@@ -46,23 +45,26 @@ struct contraction_hierarchies_m_to_n {
     dests_.clear();
   }
 
-  void add_starts_and_destinations(std::vector<label> const& starts, std::vector<label> const& dests) {
-    for (auto const& start: starts) {
-      for (auto const& dest: dests) {
+  void add_starts_and_destinations(std::vector<label> const& starts,
+                                   std::vector<label> const& dests) {
+    for (auto const& start : starts) {
+      for (auto const& dest : dests) {
         meet_points_.insert(std::make_pair(start, dest), node::invalid());
         best_cost_.insert(std::make_pair(start, dest), kInfeasible);
       }
     }
-    for (auto const& start: starts) {
+    for (auto const& start : starts) {
       cost1_.insert(start, {});
-      cost1_[start][start.get_node().get_key()].update(start, start.get_node(), start.cost(),node::invalid());
+      cost1_[start][start.get_node().get_key()].update(
+          start, start.get_node(), start.cost(), node::invalid());
       pq_.push(start);
       pred_edges1_.insert(std::make_pair(start, {}));
       starts_.insert(start);
     }
-    for (auto const& dest: dests) {
+    for (auto const& dest : dests) {
       cost1_.insert(dest, {});
-      cost1_[dest][dest.get_node().get_key()].update(dest, dest.get_node(), dest.cost(),node::invalid());
+      cost1_[dest][dest.get_node().get_key()].update(
+          dest, dest.get_node(), dest.cost(), node::invalid());
       pq_.push(dest);
       pred_edges2_.insert(std::make_pair(dest, {}));
       dests_.insert(dest);
@@ -91,8 +93,7 @@ struct contraction_hierarchies_m_to_n {
     return f_cost + b_cost;
   }
 
-  void run(ways::routing const& r,
-           cost_t const max) {
+  void run(ways::routing const& r, cost_t const max) {
 
     while (!pq_.empty()) {
       auto const l = pq_.pop();
@@ -131,8 +132,8 @@ struct contraction_hierarchies_m_to_n {
               }
               auto neighbor =
                   r.identifier_to_node_[edge.to_].template conv<car::node>();
-              if (cost1_[start][neighbor.n_].update(l, neighbor,
-                                             static_cast<cost_t>(total), curr)) {
+              if (cost1_[start][neighbor.n_].update(
+                      l, neighbor, static_cast<cost_t>(total), curr)) {
                 auto next = label{neighbor, static_cast<cost_t>(total)};
                 pq_.push(std::move(next));
                 pred_edges1_[start][edge.to_] = edge_idx;
@@ -149,8 +150,8 @@ struct contraction_hierarchies_m_to_n {
               }
               auto neighbor =
                   r.identifier_to_node_[edge.from_].template conv<car::node>();
-              if (cost2_[dest][neighbor.n_].update(l, neighbor,
-                                             static_cast<cost_t>(total), curr)) {
+              if (cost2_[dest][neighbor.n_].update(
+                      l, neighbor, static_cast<cost_t>(total), curr)) {
                 auto next = label{neighbor, static_cast<cost_t>(total)};
                 pq_.push(std::move(next));
                 pred_edges2_[dest][edge.from_] = edge_idx;
@@ -165,14 +166,17 @@ struct contraction_hierarchies_m_to_n {
   dial_ch<label, get_bucket> pq_{get_bucket{}};
   std::map<std::pair<label, label>, node> meet_points_;
   std::map<std::pair<label, label>, cost_t> best_cost_;
-  std::map<label, ankerl::unordered_dense::map<key, entry, hash>> cost1_, cost2_;
-  std::map<label, std::map<ways::routing::node_identifier, ways::routing::edge_idx_t>>
+  std::map<label, ankerl::unordered_dense::map<key, entry, hash>> cost1_,
+      cost2_;
+  std::map<label,
+           std::map<ways::routing::node_identifier, ways::routing::edge_idx_t>>
       pred_edges1_;
-  std::map<label, std::map<ways::routing::node_identifier, ways::routing::edge_idx_t>>
+  std::map<label,
+           std::map<ways::routing::node_identifier, ways::routing::edge_idx_t>>
       pred_edges2_;
   std::set<label> starts_, dests_;
   std::set<label> max_reached_1_;
   std::set<label> max_reached_2_;
 };
 
-} // namespace osr
+}  // namespace osr
