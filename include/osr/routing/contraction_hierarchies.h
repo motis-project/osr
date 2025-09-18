@@ -300,7 +300,7 @@ inline void dijkstra_ch(
 
     for (auto const edge_idx : outgoing_edges[static_cast<std::size_t>(node_ID)]) {
       auto edge = r_.contracted_edges_[edge_idx];
-      assert(node_to_level[edge.to_] > min_level);
+      assert(node_to_level[static_cast<std::size_t>(edge.to_)] > min_level);
       auto new_cost = current_cost + edge.cost_;
       auto [prev_cost, prev_search_ID] = index_handler[static_cast<std::size_t>(edge.to_)];
       if (prev_search_ID == search_ID && prev_cost <= new_cost) continue;
@@ -403,7 +403,7 @@ std::pair<std::vector<typename P::node>, std::vector<cost_t>> eliminate_cycles(
     }
     auto dist = std::distance(profile_nodes.begin(), it.base()) - 1;
     cost_t sum_of_costs = static_cast<cost_t>(std::accumulate(costs.begin() + static_cast<long>(index), costs.begin() + dist, 0));
-    cost_t sum_of_costs_2 = costs[dist] + sum_of_costs;
+    cost_t sum_of_costs_2 = costs[static_cast<std::size_t>(dist)] + sum_of_costs;
 
     P::template adjacent<direction::kForward, false>(params, *w.r_,
       profile_nodes[index], nullptr, nullptr, nullptr, [&](car::node const tail,
@@ -411,13 +411,17 @@ std::pair<std::vector<typename P::node>, std::vector<cost_t>> eliminate_cycles(
       std::uint16_t, elevation_storage::elevation, bool) {
         if (tail == *it.base() && cost <= sum_of_costs_2) {
           assert(cost == sum_of_costs_2);
-          profile_nodes.erase(profile_nodes.begin() + index + 1, profile_nodes.begin() + dist + 1);
+          profile_nodes.erase(profile_nodes.begin()
+            + static_cast<typename std::vector<typename P::node>::difference_type>(index) + 1,
+            profile_nodes.begin() + dist + 1);
           costs.erase(costs.begin() + static_cast<long>(index), costs.begin() + dist);
           costs[index] = sum_of_costs_2;
         }
         if (tail == *it && cost <= sum_of_costs) {
           assert(cost == sum_of_costs);
-          profile_nodes.erase(profile_nodes.begin() + index + 1, profile_nodes.begin() + dist);
+          profile_nodes.erase(profile_nodes.begin()
+            + static_cast<typename std::vector<typename P::node>::difference_type>(index) + 1,
+            profile_nodes.begin() + dist);
           costs.erase(costs.begin() + static_cast<long>(index), costs.begin() + (dist - 1));
           costs[index] = sum_of_costs;
         }

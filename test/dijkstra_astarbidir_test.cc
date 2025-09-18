@@ -190,7 +190,7 @@ TEST(dijkstra_astarbidir, monaco_fwd) {
     GTEST_SKIP() << raw_data << " not found";
   }
 
-  load(raw_data, data_dir);
+  load(raw_data, data_dir, true);
   auto const w = osr::ways{data_dir, cista::mmap::protection::READ};
   auto const l = osr::lookup{w, data_dir, cista::mmap::protection::READ};
 
@@ -208,7 +208,7 @@ TEST(dijkstra_astarbidir, monaco_bwd) {
     GTEST_SKIP() << raw_data << " not found";
   }
 
-  load(raw_data, data_dir);
+  load(raw_data, data_dir, true);
   auto const w = osr::ways{data_dir, cista::mmap::protection::READ};
   auto const l = osr::lookup{w, data_dir, cista::mmap::protection::READ};
 
@@ -226,7 +226,7 @@ TEST(dijkstra_astarbidir, hamburg) {
     GTEST_SKIP() << raw_data << " not found";
   }
 
-  load(raw_data, data_dir);
+  load(raw_data, data_dir, true);
   auto const w = osr::ways{data_dir, cista::mmap::protection::READ};
   auto const l = osr::lookup{w, data_dir, cista::mmap::protection::READ};
 
@@ -244,7 +244,7 @@ TEST(dijkstra_astarbidir, switzerland) {
     GTEST_SKIP() << raw_data << " not found";
   }
 
-  load(raw_data, data_dir);
+  load(raw_data, data_dir, true);
   auto const w = osr::ways{data_dir, cista::mmap::protection::READ};
   auto const l = osr::lookup{w, data_dir, cista::mmap::protection::READ};
 
