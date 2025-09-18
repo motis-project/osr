@@ -21,7 +21,7 @@
 [googletest]
   url=git@github.com:motis-project/googletest.git
   branch=master
-  commit=34a46558609e05865c197f0260ab36daa7cbbb6e
+  commit=9758d168fd1ccff2d76f3bd6ef802943d0f8f7e5
 [utl]
   url=git@github.com:motis-project/utl.git
   branch=master
