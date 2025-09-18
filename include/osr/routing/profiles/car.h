@@ -26,7 +26,7 @@ struct car {
   };
 
   struct node {
-    [[nodiscard]] ways::routing::node conv(const std::int64_t id_) const {
+    [[nodiscard]] ways::routing::node conv(const std::uint64_t id_) const {
       return ways::routing::node{n_, way_, dir_, id_};
     }
     [[nodiscard]] bool is_end_of_way(ways::routing const& r_) const {

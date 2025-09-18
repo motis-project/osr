@@ -280,7 +280,7 @@ struct ways {
 
     vec_map<way_idx_t, component_idx_t> way_component_;
 
-    typedef std::int64_t node_identifier;
+    typedef std::uint64_t node_identifier;
     struct node {
       node_idx_t n_;
       way_pos_t way_;
@@ -295,7 +295,7 @@ struct ways {
       }
     };
 
-    typedef std::int64_t edge_idx_t;
+    typedef std::uint64_t edge_idx_t;
     struct contracted_edge {
       edge_idx_t contracted_child1_;
       edge_idx_t contracted_child2_;
