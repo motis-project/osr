@@ -1,8 +1,8 @@
 #pragma once
 
 #if defined(_WIN32) || defined(_WIN64)
+#include <windows.h>
 #include "Memoryapi.h"
-#include "windows.h"
 #define mlock(addr, size) VirtualLock((LPVOID)addr, (SIZE_T)size)
 #else
 #include <sys/mman.h>
