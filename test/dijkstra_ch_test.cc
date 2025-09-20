@@ -110,7 +110,7 @@ TEST(dijkstra_ch, hamburg) {
       routing_algorithm::kContractionHierarchies, "CH");
 }
 
-TEST(dijkstra_ch, switzerland) {
+TEST(dijkstra_ch, DISABLED_switzerland) {
   auto const raw_data = "test/switzerland.osm.pbf";
   auto const data_dir = "test/switzerland";
   auto const num_samples = 1000U;

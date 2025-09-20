@@ -246,7 +246,7 @@ TEST(dijkstra_astarbidir, switzerland) {
     GTEST_SKIP() << raw_data << " not found";
   }
 
-  load(raw_data, data_dir, true);
+  load(raw_data, data_dir, false);
   auto const w = osr::ways{data_dir, cista::mmap::protection::READ};
   auto const l = osr::lookup{w, data_dir, cista::mmap::protection::READ};
 
