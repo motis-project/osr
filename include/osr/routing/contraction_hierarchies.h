@@ -101,7 +101,8 @@ struct contraction_hierarchies {
 
   template <direction SearchDir, bool WithBlocked>
   bool run([[maybe_unused]] ways const& w,
-           [[maybe_unused]] ways::routing const& r, cost_t const max,
+           [[maybe_unused]] ways::routing const& r,
+           cost_t const max,
            [[maybe_unused]] bitvec<node_idx_t> const* blocked,
            [[maybe_unused]] sharing_data const* sharing,
            [[maybe_unused]] elevation_storage const* elevations) {
@@ -173,9 +174,13 @@ struct contraction_hierarchies {
     return !max_reached_1_ || !max_reached_2_;
   }
 
-  bool run(ways const& w, ways::routing const& r, cost_t const max,
-           bitvec<node_idx_t> const* blocked, sharing_data const* sharing,
-           elevation_storage const* elevations, direction const dir) {
+  bool run(ways const& w,
+           ways::routing const& r,
+           cost_t const max,
+           bitvec<node_idx_t> const* blocked,
+           sharing_data const* sharing,
+           elevation_storage const* elevations,
+           direction const dir) {
     if (blocked == nullptr) {
       return dir == direction::kForward
                  ? run<direction::kForward, false>(w, r, max, blocked, sharing,
@@ -270,7 +275,8 @@ inline void dijkstra_ch(
     std::vector<std::vector<ways::routing::edge_idx_t>> const& outgoing_edges,
     [[maybe_unused]] std::vector<ways::routing::node_identifier> const&
         node_to_level,
-    cost_t const cutoff, std::uint64_t search_ID,
+    cost_t const cutoff,
+    std::uint64_t search_ID,
     std::vector<std::pair<cost_t, std::uint64_t>>& index_handler,
     [[maybe_unused]] ways::routing::node_identifier min_level) {
 

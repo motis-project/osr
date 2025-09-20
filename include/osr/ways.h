@@ -213,7 +213,8 @@ struct ways {
       return 0U;
     }
 
-    way_pos_t get_way_pos(node_idx_t const node, way_idx_t const way,
+    way_pos_t get_way_pos(node_idx_t const node,
+                          way_idx_t const way,
                           std::uint16_t const node_in_way_idx) const {
       auto const ways = node_ways_[node];
       for (auto i = way_pos_t{0U}; i != ways.size(); ++i) {
@@ -227,7 +228,8 @@ struct ways {
     }
 
     template <direction SearchDir>
-    bool is_restricted(node_idx_t const n, std::uint8_t const from,
+    bool is_restricted(node_idx_t const n,
+                       std::uint8_t const from,
                        std::uint8_t const to) const {
       if (!node_is_restricted_[n]) {
         return false;
@@ -239,7 +241,8 @@ struct ways {
       return utl::find(r, needle) != end(r);
     }
 
-    bool is_restricted(node_idx_t const n, std::uint8_t const from,
+    bool is_restricted(node_idx_t const n,
+                       std::uint8_t const from,
                        std::uint8_t const to,
                        direction const search_dir) const {
       return search_dir == direction::kForward
