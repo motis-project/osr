@@ -65,4 +65,4 @@
 [net]
   url=git@github.com:motis-project/net.git
   branch=master
-  commit=75611343512242c64a5b3f50f3a660a17298339d
+  commit=6cb1613c8a5c7b1cc22f00c0367db432b3ccd77e
