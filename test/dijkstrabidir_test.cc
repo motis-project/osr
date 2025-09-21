@@ -81,9 +81,8 @@ static void run_bidijkstra_consistency(ways const& w,
 
     auto const node_pinned_matches =
         [&](location const& loc, node_idx_t const n, bool const reverse) {
-          auto matches =
-              l.match<car>(car::parameters{}, loc, reverse, dir,
-                           kMaxMatchDistance, nullptr);
+          auto matches = l.match<car>(car::parameters{}, loc, reverse, dir,
+                                      kMaxMatchDistance, nullptr);
           std::erase_if(matches, [&](auto const& wc) {
             return wc.left_.node_ != n && wc.right_.node_ != n;
           });
@@ -104,8 +103,8 @@ static void run_bidijkstra_consistency(ways const& w,
     auto const baseline_start = std::chrono::steady_clock::now();
     auto const baseline_route =
         route(car::parameters{}, w, l, search_profile::kCar, from_loc, to_loc,
-              from_span, to_span, max_cost, dir, nullptr,
-              nullptr, nullptr, routing_algorithm::kDijkstra);
+              from_span, to_span, max_cost, dir, nullptr, nullptr, nullptr,
+              routing_algorithm::kDijkstra);
     auto const baseline_time =
         std::chrono::steady_clock::now() - baseline_start;
 
@@ -113,8 +112,8 @@ static void run_bidijkstra_consistency(ways const& w,
     auto const bidir_start = std::chrono::steady_clock::now();
     auto const bidir_route =
         route(car::parameters{}, w, l, search_profile::kCar, from_loc, to_loc,
-              from_span, to_span, max_cost, dir, nullptr,
-              nullptr, nullptr, routing_algorithm::kBiDijkstra);
+              from_span, to_span, max_cost, dir, nullptr, nullptr, nullptr,
+              routing_algorithm::kBiDijkstra);
     auto const bidir_time = std::chrono::steady_clock::now() - bidir_start;
 
     auto congruent = false;
