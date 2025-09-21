@@ -22,6 +22,13 @@ struct ch_preprocessor {
   using dijkstra_t = dijkstra<Profile>;
   using parameters_t = typename Profile::parameters;
 
+  // Hasher for Profile::node that delegates to Profile::hash using node.get_key().
+  struct node_hash {
+    std::size_t operator()(node const& n) const noexcept {
+      return static_cast<std::size_t>(typename Profile::hash{}(n.get_key()));
+    }
+  };
+
   struct shortcut {
     node from_;
     node to_;
@@ -29,66 +36,61 @@ struct ch_preprocessor {
     node via_;
   };
 
-  void run(ways const& w,
+  void run(parameters_t const& params,
+           ways const& w,
            ways::routing const& r,
            bitvec<node_idx_t> const* blocked,
            sharing_data const* sharing,
            elevation_storage const* elevations) {
     calculate_node_priorities(w, r, blocked, sharing, elevations);
-    contract_all_nodes(w, r, blocked, sharing, elevations);
+    contract_all_nodes(params, w, r, blocked, sharing, elevations);
   }
 
   void calculate_node_priorities(ways const& w,
                                  ways::routing const& r,
-                                 bitvec<node_idx_t> const* blocked,
-                                 sharing_data const* sharing,
-                                 elevation_storage const* elevations) {
-    for (auto const& osm_node_idx : w.node_to_osm_) {
-      auto const n = get_node(r, w.get_node_idx(osm_node_idx));
-      auto priority = calculate_priority(n, w, r, blocked, sharing, elevations);
-      node_priorities_[n] = priority;
+                                 bitvec<node_idx_t> const* /*blocked*/,
+                                 sharing_data const* /*sharing*/,
+                                 elevation_storage const* /*elevations*/) {
+    // Use precomputed node importance directly as priority (lower = contract earlier).
+    node_priorities_.clear();
+    for (node_idx_t::value_t i = 0U; i < w.n_nodes(); ++i) {
+      auto const idx = node_idx_t{i};
+      node n{};
+      Profile::resolve_all(r, idx, level_t{}, [&](node const& nr) { n = nr; });
+      node_priorities_[n] = r.node_properties_[idx].importance();
     }
   }
 
   int calculate_priority(node const& n,
-                         ways const& w,
+                         ways const& /*w*/,
                          ways::routing const& r,
-                         bitvec<node_idx_t> const* blocked,
-                         sharing_data const* sharing,
-                         elevation_storage const* elevations) {
-    auto in_neighbors =
-        get_neighbors(r, n, blocked, sharing, elevations, direction::kBackward);
-    auto out_neighbors =
-        get_neighbors(r, n, blocked, sharing, elevations, direction::kForward);
-
-    int shortcuts_count = 0;
-    int const edges_removed = static_cast<int>(in_neighbors.size() + out_neighbors.size());
-
-    for (auto const& v : in_neighbors) {
-      for (auto const& u : out_neighbors) {
-        if (v != u &&
-            is_shortcut(v, n, u, w, r, blocked, sharing, elevations)) {
-          ++shortcuts_count;
-        }
-      }
-    }
-    return shortcuts_count - edges_removed;
+                         bitvec<node_idx_t> const* /*blocked*/,
+                         sharing_data const* /*sharing*/,
+                         elevation_storage const* /*elevations*/) {
+    // Priority is fixed to the node's importance (lower first).
+    return r.node_properties_[n.get_node()].importance();
   }
 
-  void contract_all_nodes(ways const& w,
+  void contract_all_nodes(parameters_t const& params,
+                          ways const& w,
                           ways::routing const& r,
                           bitvec<node_idx_t> const* blocked,
                           sharing_data const* sharing,
                           elevation_storage const* elevations) {
     using priority_pair = std::pair<int, node>;
-    std::priority_queue<priority_pair, std::vector<priority_pair>, std::greater<>> pq;
+    struct priority_cmp {
+      bool operator()(priority_pair const& a, priority_pair const& b) const noexcept {
+        return a.first > b.first; // min-heap by priority only
+      }
+    };
+    std::priority_queue<priority_pair, std::vector<priority_pair>, priority_cmp> pq;
 
     for (auto const& [n, priority] : node_priorities_) {
       pq.emplace(priority, n);
     }
 
     int level = 0;
-    std::unordered_set<node> contracted;
+    std::unordered_set<node, node_hash> contracted;
     while (!pq.empty()) {
       auto [priority, n] = pq.top();
       pq.pop();
@@ -97,6 +99,7 @@ struct ch_preprocessor {
         continue;
       }
 
+      // Re-evaluate priority based on importance (fixed); if it differs, requeue.
       auto const current_priority =
           calculate_priority(n, w, r, blocked, sharing, elevations);
       if (current_priority != priority) {
@@ -105,10 +108,11 @@ struct ch_preprocessor {
         continue;
       }
 
-      auto affected_nodes = contract_node(n, r, w, blocked, sharing, elevations);
+      auto affected_nodes = contract_node(params, n, r, w, blocked, sharing, elevations);
       contracted.emplace(n);
       node_levels_[n] = level++;
 
+      // Update priorities of affected nodes (still based on their importance, stable).
       for (auto const& affected : affected_nodes) {
         if (!contracted.contains(affected)) {
           auto new_priority =
@@ -120,7 +124,8 @@ struct ch_preprocessor {
     }
   }
 
-  bool is_shortcut(node const& v,
+  bool is_shortcut(parameters_t const& params,
+                   node const& v,
                    node const& n,
                    node const& u,
                    ways const& w,
@@ -128,8 +133,8 @@ struct ch_preprocessor {
                    bitvec<node_idx_t> const* blocked,
                    sharing_data const* sharing,
                    elevation_storage const* elevations) {
-    auto const cost_vn = get_cost(v, n, r, blocked, sharing, elevations);
-    auto const cost_nu = get_cost(n, u, r, blocked, sharing, elevations);
+    auto const cost_vn = get_cost(params, v, n, r, blocked, sharing, elevations);
+    auto const cost_nu = get_cost(params, n, u, r, blocked, sharing, elevations);
     if (cost_vn >= kInfeasible || cost_nu >= kInfeasible) { return false; }
 
     auto const shortcut_cost = static_cast<cost_t>(cost_vn + cost_nu);
@@ -138,27 +143,28 @@ struct ch_preprocessor {
     return witness_cost > shortcut_cost;
   }
 
-  std::unordered_set<node> contract_node(node const& u,
+  std::unordered_set<node, node_hash> contract_node(parameters_t const& params,
+                                         node const& u,
                                          ways::routing const& r,
                                          ways const& w,
                                          bitvec<node_idx_t> const* blocked,
                                          sharing_data const* sharing,
                                          elevation_storage const* elevations) {
     auto in_neighbors =
-        get_neighbors(r, u, blocked, sharing, elevations, direction::kBackward);
+        get_neighbors(params, r, u, blocked, sharing, elevations, direction::kBackward);
     auto out_neighbors =
-        get_neighbors(r, u, blocked, sharing, elevations, direction::kForward);
+        get_neighbors(params, r, u, blocked, sharing, elevations, direction::kForward);
 
-    std::unordered_set<node> affected_nodes;
+    std::unordered_set<node, node_hash> affected_nodes;
 
     for (auto const& v_i : in_neighbors) {
-      auto const cost_vu = get_cost(v_i, u, r, blocked, sharing, elevations);
+      auto const cost_vu = get_cost(params, v_i, u, r, blocked, sharing, elevations);
       if (cost_vu >= kInfeasible) { continue; }
       affected_nodes.insert(v_i);
 
       for (auto const& w_j : out_neighbors) {
         if (v_i == w_j) { continue; }
-        auto const cost_uw = get_cost(u, w_j, r, blocked, sharing, elevations);
+        auto const cost_uw = get_cost(params, u, w_j, r, blocked, sharing, elevations);
         if (cost_uw >= kInfeasible) { continue; }
         affected_nodes.insert(w_j);
         auto const shortcut_cost = static_cast<cost_t>(cost_vu + cost_uw);
@@ -206,7 +212,8 @@ struct ch_preprocessor {
     }
   }
 
-  std::vector<node> get_neighbors(ways::routing const& r,
+  std::vector<node> get_neighbors(parameters_t const& params,
+                                  ways::routing const& r,
                                   node const& n,
                                   bitvec<node_idx_t> const* blocked,
                                   sharing_data const* sharing,
@@ -218,14 +225,14 @@ struct ch_preprocessor {
       if constexpr (std::is_same_v<decltype(dir_tag), std::integral_constant<direction, direction::kForward>>) {
         if constexpr (blocked_tag.value) {
           Profile::template adjacent<direction::kForward, true>(
-              r, n, blocked, sharing, elevations,
+              params, r, n, blocked, sharing, elevations,
               [&](node const neighbor, cost_t const cost, distance_t, way_idx_t,
                   std::uint16_t, std::uint16_t, elevation_storage::elevation, bool) {
                 if (cost < kInfeasible) { neighbors.push_back(neighbor); }
               });
         } else {
           Profile::template adjacent<direction::kForward, false>(
-              r, n, blocked, sharing, elevations,
+              params, r, n, blocked, sharing, elevations,
               [&](node const neighbor, cost_t const cost, distance_t, way_idx_t,
                   std::uint16_t, std::uint16_t, elevation_storage::elevation, bool) {
                 if (cost < kInfeasible) { neighbors.push_back(neighbor); }
@@ -234,14 +241,14 @@ struct ch_preprocessor {
       } else { // backward
         if constexpr (blocked_tag.value) {
           Profile::template adjacent<direction::kBackward, true>(
-              r, n, blocked, sharing, elevations,
+              params, r, n, blocked, sharing, elevations,
               [&](node const neighbor, cost_t const cost, distance_t, way_idx_t,
                   std::uint16_t, std::uint16_t, elevation_storage::elevation, bool) {
                 if (cost < kInfeasible) { neighbors.push_back(neighbor); }
               });
         } else {
           Profile::template adjacent<direction::kBackward, false>(
-              r, n, blocked, sharing, elevations,
+              params, r, n, blocked, sharing, elevations,
               [&](node const neighbor, cost_t const cost, distance_t, way_idx_t,
                   std::uint16_t, std::uint16_t, elevation_storage::elevation, bool) {
                 if (cost < kInfeasible) { neighbors.push_back(neighbor); }
@@ -268,7 +275,8 @@ struct ch_preprocessor {
     return neighbors;
   }
 
-  cost_t get_cost(node const& from,
+  cost_t get_cost(parameters_t const& params,
+                  node const& from,
                   node const& to,
                   ways::routing const& r,
                   bitvec<node_idx_t> const* blocked,
@@ -278,14 +286,14 @@ struct ch_preprocessor {
     // forward adjacency only (caller ensures correct direction semantics)
     if (blocked == nullptr) {
       Profile::template adjacent<direction::kForward, false>(
-          r, from, blocked, sharing, elevations,
+          params, r, from, blocked, sharing, elevations,
           [&](node const neighbor, cost_t const cost, distance_t, way_idx_t,
               std::uint16_t, std::uint16_t, elevation_storage::elevation, bool) {
             if (neighbor == to && cost < final_cost) { final_cost = cost; }
           });
     } else {
       Profile::template adjacent<direction::kForward, true>(
-          r, from, blocked, sharing, elevations,
+          params, r, from, blocked, sharing, elevations,
           [&](node const neighbor, cost_t const cost, distance_t, way_idx_t,
               std::uint16_t, std::uint16_t, elevation_storage::elevation, bool) {
             if (neighbor == to && cost < final_cost) { final_cost = cost; }
@@ -346,11 +354,18 @@ struct ch_preprocessor {
     return result;
   }
 
-  std::unordered_map<node, int> node_levels_;
-  std::unordered_map<node, std::vector<shortcut>> shortcuts_;
+  std::unordered_map<node, int, node_hash> node_levels_;
+  std::unordered_map<node, std::vector<shortcut>, node_hash> shortcuts_;
 
 private:
-  std::unordered_map<node, int> node_priorities_;
+  std::unordered_map<node, int, node_hash> node_priorities_;
 };
+
+// Provide a thread-local CH preprocessor per profile in header so templates can use it.
+template <typename Profile>
+inline ch_preprocessor<Profile>& get_ch_preprocessor() {
+  static thread_local ch_preprocessor<Profile> s;
+  return s;
+}
 
 }  // namespace osr

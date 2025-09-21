@@ -1,12 +1,7 @@
 #pragma once
-
-#include <limits>
-
 #include "utl/verify.h"
 
 #include "osr/elevation_storage.h"
-#include "osr/location.h"
-#include "osr/routing/additional_edge.h"
 #include "osr/routing/dial.h"
 #include "osr/routing/profile.h"
 #include "osr/routing/sharing_data.h"
@@ -115,9 +110,9 @@ struct bidirectional_dijkstra {
     }
 
     if (use_ch_preprocessing_ && ch_pre_ != nullptr) {
-      auto neighbors = ch_pre_->get_neighbors(r, curr, blocked, sharing, elevations, SearchDir == direction::kForward ? direction::kForward : direction::kBackward);
+      auto neighbors = ch_pre_->get_neighbors(params, r, curr, blocked, sharing, elevations, SearchDir == direction::kForward ? direction::kForward : direction::kBackward);
       for (auto const& neighbor : neighbors) {
-        cost_t edge_cost = ch_pre_->get_cost(curr, neighbor, r, blocked, sharing, elevations);
+        cost_t edge_cost = ch_pre_->get_cost(params, curr, neighbor, r, blocked, sharing, elevations);
         if (edge_cost >= kInfeasible) continue;
         auto const total = curr_cost + edge_cost;
         if (total >= max) {
@@ -182,7 +177,7 @@ struct bidirectional_dijkstra {
           auto const pred = pred_it->second.pred(curr);
           if (!pred.has_value()) { return; }
           if (use_ch_preprocessing_ && ch_pre_ != nullptr) {
-            cost_t edge_cost = ch_pre_->get_cost(*pred, curr, r, blocked, sharing, elevations);
+            cost_t edge_cost = ch_pre_->get_cost(params, *pred, curr, r, blocked, sharing, elevations);
             if (edge_cost < kInfeasible) {
               auto const opposite_it = opposite_cost_map->find(pred->get_key());
               if (opposite_it != end(*opposite_cost_map)) {
@@ -298,7 +293,7 @@ struct bidirectional_dijkstra {
     }
   }
 
-  bidirectional_dijkstra(bool use_ch_preprocessing = false, ch_preprocessor_t const* ch_pre = nullptr)
+  explicit bidirectional_dijkstra(bool use_ch_preprocessing = false, ch_preprocessor_t const* ch_pre = nullptr)
       : use_ch_preprocessing_{use_ch_preprocessing}, ch_pre_{ch_pre} {}
 
   void set_ch_preprocessor(ch_preprocessor_t const* ch_pre) { ch_pre_ = ch_pre; }
@@ -316,3 +311,4 @@ struct bidirectional_dijkstra {
 };
 
 } // namespace osr
+
