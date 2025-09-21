@@ -8,6 +8,7 @@
 
 #include "osr/elevation_storage.h"
 #include "osr/routing/mode.h"
+#include "osr/routing/path.h"
 #include "osr/ways.h"
 #include "osr/preprocessing/contraction_hierarchies/storage.h"
 
@@ -28,6 +29,10 @@ struct car {
   static constexpr auto const kUturnPenalty = cost_t{120U};
 
   using key = node_idx_t;
+
+  struct parameters {
+    using profile_t = car;
+  };
 
   struct node {
     friend bool operator==(node, node) = default;
@@ -185,7 +190,8 @@ struct car {
   }
 
   template <direction SearchDir, bool WithBlocked, typename Fn>
-  static void adjacent(ways::routing const& w,
+  static void adjacent(parameters const& params,
+                       ways::routing const& w,
                        node const n,
                        bitvec<node_idx_t> const* blocked,
                        sharing_data const*,
@@ -237,7 +243,7 @@ struct car {
         }
 
         auto const target_way_prop = w.way_properties_[way];
-        if (!way_is_shortcut && way_cost(target_way_prop, way_dir, 0U) == kInfeasible) {
+        if (!way_is_shortcut && way_cost(params, target_way_prop, way_dir, 0U) == kInfeasible) {
           return;
         }
 
@@ -261,7 +267,7 @@ struct car {
 
         auto const target =
             node{target_node, pos, way_dir};
-        auto const cost = (way_is_shortcut ? way_cost_s(target_way_prop, way_dir, dist,shortcuts->get_shortcut(way)) : way_cost(target_way_prop, way_dir, dist)) +
+        auto const cost = (way_is_shortcut ? way_cost_s(target_way_prop, way_dir, dist,shortcuts->get_shortcut(way)) : way_cost(params, target_way_prop, way_dir, dist)) +
                           node_cost(target_node_prop) +
                           (is_u_turn ? kUturnPenalty : 0U);
         fn(target, cost, dist, way, from, to, elevation_storage::elevation{},
@@ -296,13 +302,14 @@ struct car {
           return kInfeasible;
         }
   }
-  static bool is_dest_reachable(ways::routing const& w,
+  static bool is_dest_reachable(parameters const& params,
+                                ways::routing const& w,
                                 node const n,
                                 way_idx_t const way,
                                 direction const way_dir,
                                 direction const search_dir) {
     auto const target_way_prop = w.way_properties_[way];
-    if (way_cost(target_way_prop, way_dir, 0U) == kInfeasible) {
+    if (way_cost(params, target_way_prop, way_dir, 0U) == kInfeasible) {
       return false;
     }
 
@@ -313,7 +320,8 @@ struct car {
     return true;
   }
 
-  static constexpr cost_t way_cost(way_properties const& e,
+  static constexpr cost_t way_cost(parameters const&,
+                                   way_properties const& e,
                                    direction const dir,
                                    std::uint16_t const dist) {
     if (e.is_car_accessible() &&
@@ -329,7 +337,7 @@ struct car {
     return n.is_car_accessible() ? 0U : kInfeasible;
   }
 
-  static constexpr double heuristic(double const dist) {
+  static constexpr double heuristic(parameters const&, double const dist) {
     return dist / (130U / 3.6);
   }
   static constexpr node get_reverse(node const n) {

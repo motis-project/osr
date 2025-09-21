@@ -81,7 +81,7 @@
             background: #bdffb1;
         }
 
-        #profile, #direction, #routing-algorithm {
+        #profile, #direction, #routing-algorithm, #foot-speed {
             position: absolute;
             top: 5px;
             right: 5px;
@@ -97,6 +97,10 @@
 
         #routing-algorithm {
             top: 91px;
+        }
+
+        #foot-speed {
+            top: 134px;
         }
 
         #journey-info {
@@ -138,6 +142,7 @@
     <option value="bidirectional">bidirectional A*</option>
     <option value="contraction_hierarchy">contraction hierarchy</option>
 </select>
+<input id="foot-speed" type="number" value="1.2" min="0.1" step="0.1" onchange="setSpeed(event)" />
 <div id="journey-info">
     Test
 </div>
@@ -152,7 +157,8 @@
         max: 14400,
         profile: document.getElementById('profile').value,
         direction: document.getElementById('direction').value,
-        routing: document.getElementById('routing-algorithm').value
+        routing: document.getElementById('routing-algorithm').value,
+        footSpeed: document.getElementById('foot-speed').value
     };
 
     const meta = document.getElementById('journey-info');
@@ -244,7 +250,8 @@
                 profile: query.profile,
                 direction: query.direction,
                 max: 14400,
-                routing: query.routing
+                routing: query.routing,
+                footSpeed: parseFloat(query.footSpeed)
             })
         });
         try {
@@ -483,6 +490,22 @@
 
     window.selectRoutingAlgorithm = async (e) => {
         query.routing = e.target.value;
+        map.getSource('path').setData(await getRoute());
+    }
+    window.setSpeed = async (e) => {
+        const speed = e.target.value;
+        if (!speed) {
+            console.log("Invalid speed")
+            return;
+        }
+        if (speed < 0.1) {
+            console.log(`Invalid speed ${speed} < 0.1`);
+            const input = document.getElementById("foot-speed");
+            input.value = "0.1";
+            query.walkSpeed = "0.1";
+        } else {
+            query.footSpeed = speed;
+        }
         map.getSource('path').setData(await getRoute());
     }
 

@@ -21,7 +21,7 @@ void contractor::calculate_neighbors(ways const& w) {
         const car::node n{.n_ = node, .way_ = way_pos, .dir_ = dir};
 
         car::adjacent<direction::kForward, false>(
-            *w.r_, n, nullptr, nullptr, nullptr, nullptr,
+            car::parameters{}, *w.r_, n, nullptr, nullptr, nullptr, nullptr,
             [&](car::node const neighbor, std::uint32_t const cost,
                 distance_t const distance, way_idx_t const n_way, std::uint16_t,
                 std::uint16_t, elevation_storage::elevation const, bool) {
@@ -134,7 +134,7 @@ std::vector<contractor::bypass_path> contractor::find_restriction_bypasses(
                    w.r_->get_way_pos(from_node, from_way),
                    from_dir},
          0});
-  dijkstra.run(w, *w.r_, 241, nullptr, nullptr,
+  dijkstra.run(car::parameters{},w, *w.r_, 241, nullptr, nullptr,
                 nullptr, direction::kForward, shortcut_storage);
   for (auto const& to : outgoing_neighbors_[to_idx(node)]) {
     if(shortcut_storage->is_shortcut(to.way)) {
@@ -174,7 +174,7 @@ std::vector<contractor::bypass_path> contractor::find_restriction_bypasses(
             cost_t expected_cost = dijkstra.get_cost(path.nodes[i + 1]) -
                       dijkstra.get_cost(path.nodes[i]);
             car::adjacent<direction::kForward, false>(
-                *w.r_, current, nullptr, nullptr, nullptr, nullptr,
+                car::parameters{}, *w.r_, current, nullptr, nullptr, nullptr, nullptr,
                 [&](car::node const target, std::uint32_t const cost_n,
                     distance_t const dist, way_idx_t const way,
                     std::uint16_t const, std::uint16_t const,
@@ -324,7 +324,7 @@ void contractor::contract_node(ways& w, ways const& w_without, bitvec<node_idx_t
                           from.node.dir_},
            0});
 
-    dijkstra.run(w, *w.r_, max_direct_cost + 1, blocked, nullptr,
+    dijkstra.run(car::parameters{}, w, *w.r_, max_direct_cost + 1, blocked, nullptr,
                    nullptr, direction::kForward, shortcuts);
 
     for (std::size_t j{0U}; j < outgoing_neighbors_[to_idx(node)].size(); ++j) {

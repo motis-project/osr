@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.10)
-project(osr)
+project(osr LANGUAGES C CXX ASM)
 
 cmake_policy(SET CMP0079 NEW)
 
@@ -93,7 +93,8 @@ if ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "Clang")
 elseif ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "AppleClang")
     set(osr-compile-options -Wall -Wextra -Werror -Wno-unknown-pragmas)
 elseif (MSVC)
-    set(osr-compile-options /WX)
+    # Will create more than 65,279 sections in debug mode
+    set(osr-compile-options /WX /bigobj)
 else ()
     set(osr-compile-options
             -Wall

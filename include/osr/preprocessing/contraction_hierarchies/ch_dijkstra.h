@@ -23,15 +23,15 @@ struct shortcut_storage;
 
 struct sharing_data;
 
-template <typename Profile>
+
 struct bidi_dijkstra_ch {
-  using profile_t = Profile;
-  using key = typename Profile::key;
-  using label = typename Profile::label;
-  using node = typename Profile::node;
-  using entry = typename Profile::entry;
-  using hash = typename Profile::hash;
-  using cost_map = typename ankerl::unordered_dense::map<key, entry, hash>;
+  using profile_t = car;
+  using key = car::key;
+  using label = car::label;
+  using node = car::node;
+  using entry = car::entry;
+  using hash = car::hash;
+  using cost_map = ankerl::unordered_dense::map<key, entry, hash>;
   constexpr static auto const kDistanceLatDegrees =
       geo::kEarthRadiusMeters * geo::kPI / 180;
   constexpr static auto const kDebug = false;
@@ -144,8 +144,8 @@ struct bidi_dijkstra_ch {
       std::cout << "\n";
     }
     auto const order = shortcuts->node_order_->get_order(curr.get_node());
-    Profile::template adjacent<SearchDir, WithBlocked>(
-        r, curr, blocked, sharing, elevations, shortcuts,
+    car::adjacent<SearchDir, WithBlocked>(
+        car::parameters{}, r, curr, blocked, sharing, elevations, shortcuts,
         [&](node const neighbor, std::uint32_t const cost, distance_t,
             way_idx_t const way, std::uint16_t, std::uint16_t,
             elevation_storage::elevation const, bool const track) {
