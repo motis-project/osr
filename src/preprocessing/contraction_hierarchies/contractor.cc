@@ -6,7 +6,7 @@ namespace osr::ch {
 
 
 void contractor::calculate_neighbors(ways const& w) {
-  auto pt = utl::get_active_progress_tracker_or_activate("ch-contraction");
+  auto const pt = utl::get_active_progress_tracker_or_activate("ch-contraction");
   pt->status("calculate neighbours").in_high(w.n_nodes()).out_bounds(0,100);
   outgoing_neighbors_.resize(w.n_nodes());
   incoming_neighbors_.resize(w.n_nodes());
@@ -23,7 +23,7 @@ void contractor::calculate_neighbors(ways const& w) {
         car::adjacent<direction::kForward, false>(
             *w.r_, n, nullptr, nullptr, nullptr, nullptr,
             [&](car::node const neighbor, std::uint32_t const cost,
-                distance_t distance, way_idx_t const n_way, std::uint16_t,
+                distance_t const distance, way_idx_t const n_way, std::uint16_t,
                 std::uint16_t, elevation_storage::elevation const, bool) {
               if (neighbor.get_node() == node) {
                 return;
@@ -54,24 +54,24 @@ void contractor::calculate_neighbors(ways const& w) {
     }
   }
   for (node_idx_t node{0U}; node < outgoing_neighbors_.size(); ++node) {
-    auto const outgoing_neighbours = outgoing_neighbors_[to_idx(node)];
-    for (auto const& outgoing_neighbour : outgoing_neighbours) {
-      incoming_neighbors_[to_idx(outgoing_neighbour.node_idx)].push_back(
+    for (auto const outgoing_neighbours = outgoing_neighbors_[to_idx(node)];
+         const auto& [neighbor_node_idx, neighbor_cost, neighbor_way, neighbor_distance, neighbor_node] : outgoing_neighbours) {
+      incoming_neighbors_[to_idx(neighbor_node_idx)].push_back(
             neighbor_data{
                 .node_idx = node,
-                .cost = outgoing_neighbour.cost,
-                .way = outgoing_neighbour.way,
-                .distance = outgoing_neighbour.distance,
+                .cost = neighbor_cost,
+                .way = neighbor_way,
+                .distance = neighbor_distance,
                 .node = car::node{
-                    node, w.r_->get_way_pos(node, outgoing_neighbour.way),
-                    outgoing_neighbour.node.dir_}});
+                    node, w.r_->get_way_pos(node, neighbor_way),
+                    neighbor_node.dir_}});
     }
   }
 }
 
 std::unordered_map<node_idx_t, std::vector<way_idx_t>> node_selfloops;
 
-bool node_has_sefloop(node_idx_t node) {
+bool node_has_sefloop(node_idx_t const node) {
   return node_selfloops.contains(node);
 }
 
@@ -108,13 +108,13 @@ std::vector<contractor::bypass_path> find_subloops(contractor::bypass_path const
   return loops;
 }
 
-std::vector<contractor::bypass_path> contractor::find_restriction_bypasses(ways const& w,
-                                                  bitvec<node_idx_t>* blocked,
-                                                 node_idx_t node,
-                                                 node_idx_t from_node,
-                                                 way_idx_t from_way,
-                                                 direction from_dir,
-                                                 shortcut_storage const* shortcut_storage) {
+std::vector<contractor::bypass_path> contractor::find_restriction_bypasses(
+    ways const& w,
+    node_idx_t const node,
+    node_idx_t const from_node,
+    way_idx_t const from_way,
+    direction const from_dir,
+    shortcut_storage const* shortcut_storage) const {
   std::vector<bypass_path> bypasses;
 
   if (!w.r_->node_is_restricted_[node] ||
@@ -134,16 +134,16 @@ std::vector<contractor::bypass_path> contractor::find_restriction_bypasses(ways 
                    w.r_->get_way_pos(from_node, from_way),
                    from_dir},
          0});
-  dijkstra.run(w, *w.r_, 241, blocked, nullptr,
+  dijkstra.run(w, *w.r_, 241, nullptr, nullptr,
                 nullptr, direction::kForward, shortcut_storage);
   for (auto const& to : outgoing_neighbors_[to_idx(node)]) {
     if(shortcut_storage->is_shortcut(to.way)) {
       continue;
     }
-    if (std::find(to_restrictions.begin(), to_restrictions.end(),
+    if (std::ranges::find(
+            to_restrictions,
                        w.r_->get_way_pos(node, w.r_->node_ways_[to.node_idx][to.node.way_])) != to_restrictions.end()) {
-      auto cost = dijkstra.get_cost(to.node);
-      if (cost != kInfeasible) {
+      if (auto const cost = dijkstra.get_cost(to.node); cost != kInfeasible) {
         bypass_path path;
         auto node_it = to.node;
         while (true) {
@@ -157,7 +157,7 @@ std::vector<contractor::bypass_path> contractor::find_restriction_bypasses(ways 
 
           node_it = *pred;
         }
-        std::reverse(path.nodes.begin(), path.nodes.end());
+        std::ranges::reverse(path.nodes);
         if (path.nodes.size() > 2) {
           path.total_cost = dijkstra.get_cost(path.nodes[path.nodes.size()-2]) -
                       dijkstra.get_cost(path.nodes[1]);
@@ -175,11 +175,11 @@ std::vector<contractor::bypass_path> contractor::find_restriction_bypasses(ways 
                       dijkstra.get_cost(path.nodes[i]);
             car::adjacent<direction::kForward, false>(
                 *w.r_, current, nullptr, nullptr, nullptr, nullptr,
-                [&](car::node const target, std::uint32_t const cost,
+                [&](car::node const target, std::uint32_t const cost_n,
                     distance_t const dist, way_idx_t const way,
                     std::uint16_t const, std::uint16_t const,
                     elevation_storage::elevation const, bool) {
-                  if (target == next && cost == expected_cost) {
+                  if (target == next && cost_n == expected_cost) {
                     if (shortcut_storage->is_shortcut(way)) {
                       auto segments =
                           shortcut_storage->get_shortcut_segments(way);
@@ -191,7 +191,7 @@ std::vector<contractor::bypass_path> contractor::find_restriction_bypasses(ways 
                           .from = current.n_,
                           .to = next.n_,
                           .distance = dist,
-                          .cost = cost,
+                          .cost = cost_n,
                       });
                     }
                     path.total_distance += dist;
@@ -214,7 +214,47 @@ std::vector<contractor::bypass_path> contractor::find_restriction_bypasses(ways 
   }
   return bypasses;
 }
+void contractor::add_loop(
+  ways& w,
+  shortcut_storage* shortcuts,
+  node_idx_t const node,
+  bypass_path const& bypass
+) {
+  way_idx_t const shortcut_way = shortcuts->add_shortcut(
+              w, shortcut_data{.from = node,
+                                  .to = node,
+                                  .cost = bypass.total_cost,
+                                  .distance = static_cast<unsigned short>(bypass.total_distance),
+                                  .via_node = node,
+                                  .upward_way = w.r_->node_ways_[bypass.nodes[0].n_][bypass.nodes[0].way_],
+                                  .upward_dir = bypass.nodes[0].dir_,
+                                  .upward_distance = static_cast<distance_t>(0), // these are not needed because the path will be entirly recontructed with .loop_segments data
+                                  .upward_cost = static_cast<cost_t>(0),
+                                  .downward_dir = bypass.nodes[bypass.nodes.size()-1].dir_,
+                                  .downward_way = w.r_->node_ways_[bypass.nodes[bypass.nodes.size()-1].n_][bypass.nodes[bypass.nodes.size()-1].way_],
+                                  .downward_distance = static_cast<distance_t>(0),
+                                  .downward_cost = static_cast<cost_t>(0),
+                                  .selfloop_way_idx = way_idx_t::invalid(),
+                                  .loop_segments = bypass.segments,
+                                  });
+  node_selfloops[node].push_back(shortcut_way);
 
+  auto const from_shortcut_pos = w.r_->get_way_pos(node, shortcut_way);
+  auto const to_shortcut_pos = way_pos_t{
+    static_cast<unsigned short int>(from_shortcut_pos + 1)};
+  for (const auto& [from_, to_] : w.r_->node_restrictions_[node]) {
+    if (to_ == bypass.nodes[0].way_ &&
+          to_ != from_) {
+      w.r_->node_restrictions_[node].push_back(
+            restriction{from_, from_shortcut_pos});
+          }
+    if (from_ == bypass.nodes[bypass.nodes.size() - 1].way_ &&
+          to_ != from_) {
+      w.r_->node_restrictions_[node].push_back(
+            restriction{to_shortcut_pos, to_});
+          }
+  }
+}
 void contractor::contract_node(ways& w, ways const& w_without, bitvec<node_idx_t>* blocked, shortcut_storage* shortcuts, node_idx_t node) {
   blocked->set(node, true);
   auto& existing_neighbors = outgoing_neighbors_[to_idx(node)];
@@ -226,79 +266,17 @@ void contractor::contract_node(ways& w, ways const& w_without, bitvec<node_idx_t
             return n.node_idx == node;
         });
       if (it != outgoing_neighbors_[to_idx(from.node_idx)].end()) {
-        auto bypasses = find_restriction_bypasses(w_without, nullptr, node,from.node_idx, from.way, from.node.dir_,shortcuts);
-        for (auto const& bypass : bypasses) {
-          way_idx_t shortcut_way = shortcuts->add_shortcut(
-              w, shortcut_data{.from = node,
-                                  .to = node,
-                                  .cost = bypass.total_cost,
-                                  .distance = static_cast<unsigned short>(bypass.total_distance),
-                                  .via_node = node,
-                                  .upward_way = w.r_->node_ways_[bypass.nodes[0].n_][bypass.nodes[0].way_],
-                                  .upward_dir = bypass.nodes[0].dir_,
-                                  .upward_distance = from.distance,
-                                  .upward_cost = from.cost,
-                                  .downward_dir = bypass.nodes[bypass.nodes.size()-1].dir_,
-                                  .downward_way = w.r_->node_ways_[bypass.nodes[bypass.nodes.size()-1].n_][bypass.nodes[bypass.nodes.size()-1].way_],
-                                  .downward_distance = from.distance,
-                                  .downward_cost = from.cost,
-                                  .selfloop_way_idx = way_idx_t::invalid(),
-                                  .loop_segments = bypass.segments,
-                                  });
-          node_selfloops[node].push_back(shortcut_way);
+        for (auto bypasses = find_restriction_bypasses(
+                 w_without, node, from.node_idx, from.way,
+                 from.node.dir_, shortcuts);
+             auto const& bypass : bypasses) {
+          add_loop(w,shortcuts,node, bypass);
 
-          auto from_shortcut_pos = w.r_->get_way_pos(node, shortcut_way);
-          auto to_shortcut_pos = way_pos_t{
-            static_cast<unsigned short int>(from_shortcut_pos + 1)};
-          for (auto const& r : w.r_->node_restrictions_[node]) {
-            if (r.to_ == bypass.nodes[0].way_ &&
-                  r.to_ != r.from_) {
-              w.r_->node_restrictions_[node].push_back(
-                    restriction{r.from_, from_shortcut_pos});
-            }
-            if (r.from_ == bypass.nodes[bypass.nodes.size() - 1].way_ &&
-                  r.to_ != r.from_) {
-              w.r_->node_restrictions_[node].push_back(
-                    restriction{to_shortcut_pos, r.to_});
-            }
-          }
-          std::vector<bypass_path> sub_loops = find_subloops(bypass);
-          for (auto const& sub_loop : sub_loops) {
+          for (std::vector<bypass_path> sub_loops = find_subloops(bypass);
+               auto const& sub_loop : sub_loops) {
             node_idx_t sub_loop_node = sub_loop.nodes[0].n_;
             if (sub_loop_node == node){ continue; }
-            way_idx_t shortcut_way = shortcuts->add_shortcut(
-              w, shortcut_data{.from = sub_loop_node,
-                                  .to = sub_loop_node,
-                                  .cost = sub_loop.total_cost,
-                                  .distance = static_cast<unsigned short>(sub_loop.total_distance),
-                                  .via_node = sub_loop_node,
-                                  .upward_way = w.r_->node_ways_[sub_loop.nodes[0].n_][sub_loop.nodes[0].way_],
-                                  .upward_dir = sub_loop.nodes[0].dir_,
-                                  .upward_distance = from.distance,
-                                  .upward_cost = from.cost,
-                                  .downward_dir = sub_loop.nodes[sub_loop.nodes.size()-1].dir_,
-                                  .downward_way = w.r_->node_ways_[sub_loop.nodes[sub_loop.nodes.size()-1].n_][sub_loop.nodes[sub_loop.nodes.size()-1].way_],
-                                  .downward_distance = from.distance,
-                                  .downward_cost = from.cost,
-                                  .selfloop_way_idx = way_idx_t::invalid(),
-                                  .loop_segments = sub_loop.segments,
-                                  });
-            node_selfloops[sub_loop_node].push_back(shortcut_way);
-            auto from_shortcut_pos = w.r_->get_way_pos(sub_loop_node, shortcut_way);
-            auto to_shortcut_pos = way_pos_t{
-                static_cast<unsigned short int>(from_shortcut_pos + 1)};
-            for (auto const& r : w.r_->node_restrictions_[sub_loop_node]) {
-              if (r.to_ == sub_loop.nodes[0].way_ &&
-                    r.to_ != r.from_) {
-                w.r_->node_restrictions_[sub_loop_node].push_back(
-                    restriction{r.from_, from_shortcut_pos});
-                    }
-              if (r.from_ == sub_loop.nodes[sub_loop.nodes.size() - 1].way_ &&
-                r.to_ != r.from_) {
-                w.r_->node_restrictions_[sub_loop_node].push_back(
-                    restriction{to_shortcut_pos, r.to_});
-                }
-            }
+            add_loop(w,shortcuts, sub_loop_node, sub_loop);
           }
         }
       }
@@ -436,17 +414,17 @@ void contractor::contract_node(ways& w, ways const& w_without, bitvec<node_idx_t
       auto min_cost = kInfeasible;
       auto min_node = to.node;
       car::resolve_all(*w.r_, to.node_idx, level_t{},
-          [&](car::node const nodee) {
-          if (from.node_idx == to.node_idx && from.way == w.r_->node_ways_[to.node_idx][nodee.way_] && from.node.dir_ == nodee.dir_) {
+          [&](car::node const r_node) {
+          if (from.node_idx == to.node_idx && from.way == w.r_->node_ways_[to.node_idx][r_node.way_] && from.node.dir_ == r_node.dir_) {
            return;
           }
-          if (!is_restriction_subset_at_node(w, to.node_idx, to.node.way_, nodee.way_)) {
+          if (!is_restriction_subset_at_node(w, to.node_idx, to.node.way_, r_node.way_)) {
            return;
           }
-          auto cost = dijkstra.get_cost(nodee);
+          auto cost = dijkstra.get_cost(r_node);
           if (cost < min_cost) {
             min_cost = cost;
-            min_node = nodee;
+            min_node = r_node;
           }
       });
       cost_t const path_cost = min_cost;
@@ -469,14 +447,16 @@ void contractor::contract_node(ways& w, ways const& w_without, bitvec<node_idx_t
           node_it = *pred;
         }
 
-        std::reverse(path.begin(), path.end());
+        std::ranges::reverse(path);
         if (path.size() >= 2) {
           way_idx_t first_way_idx = w.r_->node_ways_[path[1].n_][path[1].way_];
 
           way_and_dir first_way_resolved = shortcuts->resolve_first_way_and_dir(first_way_idx, path.front().dir_);
-          way_and_dir from_way_resolved = shortcuts->resolve_first_way_and_dir(from.way, from.node.dir_);
 
-          if (first_way_resolved.way != from_way_resolved.way || (first_way_resolved.way == from_way_resolved.way && first_way_resolved.dir == from_way_resolved.dir)) {
+          if (way_and_dir from_way_resolved =
+                  shortcuts->resolve_first_way_and_dir(from.way,
+                                                       from.node.dir_);
+              first_way_resolved.way != from_way_resolved.way || (first_way_resolved.way == from_way_resolved.way && first_way_resolved.dir == from_way_resolved.dir)) {
             if (has_restriction) {
               add_shortcut = path_cost + 120 > direct_cost;
             }
@@ -523,11 +503,11 @@ void contractor::contract_node(ways& w, ways const& w_without, bitvec<node_idx_t
                                 direction::kForward}});
         if (w.r_->node_is_restricted_[from.node_idx]) {
           auto shortcut_pos = w.r_->get_way_pos(from.node_idx, shortcut_way);
-          for (auto const& r : w.r_->node_restrictions_[from.node_idx]) {
-            if (r.to_ == w.r_->get_way_pos(from.node_idx, from.way) &&
-                  r.to_ != r.from_) {
+          for (const auto& [from_, to_] : w.r_->node_restrictions_[from.node_idx]) {
+            if (to_ == w.r_->get_way_pos(from.node_idx, from.way) &&
+                  to_ != from_) {
               w.r_->node_restrictions_[from.node_idx].push_back(
-                    restriction{r.from_, shortcut_pos});
+                    restriction{from_, shortcut_pos});
             }
           }
         }
@@ -535,11 +515,11 @@ void contractor::contract_node(ways& w, ways const& w_without, bitvec<node_idx_t
           auto shortcut_pos = from.node_idx != to.node_idx
                 ? w.r_->get_way_pos(to.node_idx, shortcut_way)
                 : way_pos_t{static_cast<unsigned short int>(w.r_->get_way_pos(to.node_idx, shortcut_way) + 1)};
-          for (auto const& r : w.r_->node_restrictions_[to.node_idx]) {
-            if (r.from_ == w.r_->get_way_pos(to.node_idx, to.way) &&
-                  r.to_ != r.from_) {
+          for (const auto& [from_, to_] : w.r_->node_restrictions_[to.node_idx]) {
+            if (from_ == w.r_->get_way_pos(to.node_idx, to.way) &&
+                  to_ != from_) {
               w.r_->node_restrictions_[to.node_idx].push_back(
-                    restriction{shortcut_pos, r.to_});
+                    restriction{shortcut_pos, to_});
             }
           }
         }

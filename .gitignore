@@ -5,3 +5,5 @@
 /.clang-tidy
 /.vs
 /out
+/test/monaco*
+/test/hamburg*

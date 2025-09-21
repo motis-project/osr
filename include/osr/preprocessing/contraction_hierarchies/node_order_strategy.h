@@ -5,8 +5,8 @@
 
 namespace osr::ch {
 
-struct OrderStrategy {
-  virtual ~OrderStrategy() = default;
+struct order_strategy {
+  virtual ~order_strategy() = default;
 
   virtual void compute_order(
     ways const& w
@@ -15,7 +15,7 @@ struct OrderStrategy {
   virtual node_idx_t next_node() = 0;
 };
 
-struct node_importance_order_strategy : public OrderStrategy {
+struct node_importance_order_strategy final : public order_strategy {
   explicit node_importance_order_strategy(int const seed) : seed_(seed) {
     if (seed == -1) {
       seed_ = time(nullptr);
@@ -29,7 +29,7 @@ struct node_importance_order_strategy : public OrderStrategy {
   void compute_order(ways const& w) override {
     int const n = w.n_nodes();
     for (node_idx_t idx{0U}; idx < n; ++idx) {
-      auto importance = w.r_->node_properties_[idx].importance_;
+      auto const importance = w.r_->node_properties_[idx].importance_;
       if (importance > max_importance_) {
         max_importance_ = importance;
       }
@@ -67,8 +67,8 @@ struct node_importance_order_strategy : public OrderStrategy {
   }
 };
 
-struct RandomOrderStrategy : public OrderStrategy {
-  explicit RandomOrderStrategy(int const seed) : seed_(seed) {
+struct random_order_strategy final : public order_strategy {
+  explicit random_order_strategy(int const seed) : seed_(seed) {
     if (seed == -1) {
       seed_ = time(nullptr);
     }
@@ -95,10 +95,10 @@ struct RandomOrderStrategy : public OrderStrategy {
     return node;
   }
 
-  node_idx_t rnd_vec_elem(std::vector<node_idx_t>& v) {
-    int n = v.size();
+  node_idx_t rnd_vec_elem(std::vector<node_idx_t>& v) const {
+    auto const n = v.size();
     srand(seed_);
-    int idx = rand() % n;
+    size_t const idx = rand() % n;
     node_idx_t const result = v[idx];
 
     std::swap(v[idx], v[n - 1]);

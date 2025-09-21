@@ -18,14 +18,14 @@ struct contractor {
   std::vector<std::vector<neighbor_data>> outgoing_neighbors_;
   std::vector<std::vector<neighbor_data>> incoming_neighbors_;
 
-  static bool has_uturn(way_idx_t from,
-                          direction from_dir,
-                          way_idx_t to,
-                          direction to_dir,
-                          shortcut_storage* shortcut_storage) {
-    way_and_dir from_way_and_dir =
+  static bool has_uturn(way_idx_t const from,
+                          direction const from_dir,
+                          way_idx_t const to,
+                          direction const to_dir,
+                          shortcut_storage const* shortcut_storage) {
+    auto const from_way_and_dir =
         shortcut_storage->resolve_last_way_and_dir(from, from_dir);
-    way_and_dir to_way_and_dir =
+    auto const to_way_and_dir =
         shortcut_storage->resolve_first_way_and_dir(to, to_dir);
     return (from_way_and_dir.way == to_way_and_dir.way &&
         from_way_and_dir.dir == opposite(to_way_and_dir.dir));
@@ -45,7 +45,12 @@ struct contractor {
         nodes.back() == other.nodes.back());
     }
   };
-
+  static void add_loop(
+    ways& w,
+    shortcut_storage* shortcuts,
+    node_idx_t node,
+                       const bypass_path& bypass
+  );
   /*bool has_shortcut(node_idx_t from, node_idx_t to, way_idx_t from_way, way_idx_t to_way, direction from_dir, direction to_dir, shortcut_storage* shortcut_storage) {
     auto const& neighbors = outgoing_neighbors_[to_idx(from)];
     return std::ranges::any_of(neighbors, [to, from_way, to_way, from_dir, to_dir, shortcut_storage](auto const& neighbor) {
@@ -62,41 +67,41 @@ struct contractor {
   }*/
 
   std::vector<bypass_path> find_restriction_bypasses(ways const& w,
-                                                  bitvec<node_idx_t>* blocked,
                                                   node_idx_t node,
                                                   node_idx_t from_node,
                                                   way_idx_t from_way,
                                                   direction from_dir,
-                                                  shortcut_storage const* shortcut_storage);
-  std::vector<way_pos_t> get_restriction_to_ways(ways const& w,
-                                           node_idx_t node,
-                                           way_idx_t from_way,
-                                           shortcut_storage const* shortcut_storage) {
+                                                  shortcut_storage const* shortcut_storage) const;
+  static std::vector<way_pos_t> get_restriction_to_ways(
+      ways const& w,
+      node_idx_t const node,
+      way_idx_t const from_way,
+      shortcut_storage const* shortcut_storage) {
     std::vector<way_pos_t> to_ways;
 
     if (!w.r_->node_is_restricted_[node]) {
       return to_ways;
     }
     auto const from_way_pos = w.r_->get_way_pos(node, from_way);
-    auto const& node_restrictions = w.r_->node_restrictions_[node];
 
-    for (auto const& restriction : node_restrictions) {
-      if (restriction.from_ == from_way_pos && !shortcut_storage->is_shortcut(w.r_->node_ways_[node][restriction.to_])) {
-        to_ways.push_back(restriction.to_);
+    for (auto const& node_restrictions = w.r_->node_restrictions_[node];
+         const auto& [from_, to_] : node_restrictions) {
+      if (from_ == from_way_pos && !shortcut_storage->is_shortcut(w.r_->node_ways_[node][to_])) {
+        to_ways.push_back(to_);
       }
     }
     return to_ways;
   }
-  bool is_restriction_subset_at_node(ways const& w, node_idx_t node, way_pos_t way1_pos, way_pos_t way2_pos) {
+  static bool is_restriction_subset_at_node(ways const& w, node_idx_t const node, way_pos_t const way1_pos, way_pos_t const way2_pos) {
     if (!w.r_->node_is_restricted_[node]) {
       return true;
     }
-    auto const& node_restrictions = w.r_->node_restrictions_[node];
-    for (auto const& restr : node_restrictions) {
-      if (restr.from_ == way2_pos) {
+    for (auto const& node_restrictions = w.r_->node_restrictions_[node];
+         const auto& [from_, to_] : node_restrictions) {
+      if (from_ == way2_pos) {
         bool found_matching = false;
-        for (auto const& way1_restr : node_restrictions) {
-          if (way1_restr.from_ == way1_pos && way1_restr.to_ == restr.to_) {
+        for (const auto& [way1_from_, way1_to_] : node_restrictions) {
+          if (way1_from_ == way1_pos && way1_to_ == to_) {
             found_matching = true;
             break;
           }
@@ -109,9 +114,9 @@ struct contractor {
     return true;
   }
 
-  static cost_t get_possible_shortcut_cost(neighbor_data from,
-                                           neighbor_data to,
-                                           shortcut_storage* shortcut_storage) {
+  static cost_t get_possible_shortcut_cost(neighbor_data const& from,
+                                           neighbor_data const& to,
+                                           shortcut_storage const* shortcut_storage) {
     if (has_uturn(from.way, from.node.dir_, to.way, to.node.dir_,
                   shortcut_storage)) {
       return from.cost + to.cost + car::kUturnPenalty;

@@ -15,8 +15,8 @@ using namespace osr;
 using namespace osr::ch;
 namespace fs = std::filesystem;
 
-struct config : public conf::configuration {
-  config(fs::path in) : configuration{"Options"}, in_{std::move(in)} {
+struct config final : public conf::configuration {
+  explicit config(fs::path in) : configuration{"Options"}, in_{std::move(in)} {
     param(in_, "in,i", "input directory for extracted Data");
     param(out_, "out,o", "output directory for preprocessed Data");
     param(order_, "order", "Order which to use (default rand, predefined = pre)");
@@ -31,14 +31,14 @@ struct config : public conf::configuration {
   size_t stall_{95};
 };
 
-std::unique_ptr<OrderStrategy> get_order_strategy(const config& c) {
+std::unique_ptr<order_strategy> get_order_strategy(const config& c) {
   if (c.order_ == "rand") {
-    return std::make_unique<RandomOrderStrategy>(c.seed_);
+    return std::make_unique<random_order_strategy>(c.seed_);
   }
   return std::make_unique<node_importance_order_strategy>(c.seed_); // importance
 }
 
-int main(int argc, const char** argv) {
+int main(int const argc, char const** argv) {
   auto c = config{"osr-germany"};
 
   conf::options_parser parser({&c});

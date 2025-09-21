@@ -18,17 +18,17 @@ void process_all_nodes(
   bitvec<node_idx_t>* blocked,
   shortcut_storage& shortcuts,
   contractor& c,
-  std::unique_ptr<OrderStrategy> const& order_strategy,
+  std::unique_ptr<order_strategy> const& order_strategy,
   osr::ch::node_order* order,
-  size_t stall
+  size_t const stall
   ) {
   int processed = 0;
-  auto pt = utl::get_active_progress_tracker_or_activate("contraction-hierarchy");
+  auto const pt = utl::get_active_progress_tracker_or_activate("contraction-hierarchy");
   auto const total_nodes = w.n_nodes();
   pt->status("Contracting nodes").in_high(total_nodes).out_bounds(0, 100);
-  auto stall_f = static_cast<float>(stall) / static_cast<float>(100);
+  auto const stall_f = static_cast<float>(stall) / static_cast<float>(100);
   while (order_strategy->has_next()) {
-    node_idx_t node = order_strategy->next_node();
+    auto const node = order_strategy->next_node();
     if (static_cast<float>(processed) / static_cast<float>(total_nodes) >= stall_f) {
       order->add_node(node, true);
       continue;
@@ -41,9 +41,9 @@ void process_all_nodes(
 
 void process_ch(std::filesystem::path const& in,
                 std::filesystem::path const& out,
-                std::unique_ptr<OrderStrategy>& order_strategy,
-                size_t stall) {
-  fmt::println("Begin Setup for Contraction Hirachies");
+                std::unique_ptr<order_strategy> const& order_strategy,
+                size_t const stall) {
+  fmt::println("Begin Setup for Contraction Hierarchies");
 
   auto w = ways{out, cista::mmap::protection::READ};
   auto const w_without = ways{in, cista::mmap::protection::READ};
@@ -57,10 +57,10 @@ void process_ch(std::filesystem::path const& in,
 
   fmt::println("node order computed");
 
-  fmt::println("End Setup for Contraction Hirachies");
-  fmt::println("Begin Contraction Hirachies Processing\n");
+  fmt::println("End Setup for Contraction Hierarchies");
+  fmt::println("Begin Contraction Hierarchies Processing\n");
 
-  auto start = high_resolution_clock::now();
+  auto const start = high_resolution_clock::now();
   auto c = contractor();
   auto shortcuts = shortcut_storage{};
 
@@ -72,9 +72,9 @@ void process_ch(std::filesystem::path const& in,
   process_all_nodes(w, w_without, &blocked, shortcuts, c, order_strategy, &node_order, stall);
 
   fmt::println("Found {} shortcuts", shortcuts.shortcuts_.size());
-  fmt::println("End Contraction Hirachies Processing");
-  auto stop = high_resolution_clock::now();
-  auto duration = duration_cast<seconds>(stop - start);
+  fmt::println("End Contraction Hierarchies Processing");
+  auto const stop = high_resolution_clock::now();
+  auto const duration = duration_cast<seconds>(stop - start);
   fmt::println("Computation Time: {} s", duration.count());
 
   shortcuts.save(out);

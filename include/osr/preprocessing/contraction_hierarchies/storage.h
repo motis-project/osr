@@ -9,7 +9,7 @@ namespace osr::ch {
 struct node_order {
   mm_vec_map<node_idx_t, uint64_t> order_to_store_;
   uint64_t order_count_{0U};
-  node_order(std::filesystem::path p, cista::mmap::protection mode) : order_to_store_(cista::mmap{(p / "node_order.bin").generic_string().c_str(), mode}), order_count_(0U) { }
+  node_order(std::filesystem::path p, cista::mmap::protection const mode) : order_to_store_(cista::mmap{(p / "node_order.bin").generic_string().c_str(), mode}), order_count_(0U) { }
 
   void init(size_t const& n) {
     order_count_ = 0U;
@@ -18,7 +18,7 @@ struct node_order {
     }
   }
 
-  void add_node(node_idx_t const n, bool stall = false) {
+  void add_node(node_idx_t const n, bool const stall = false) {
     order_to_store_[n] = stall ? order_count_ : order_count_++; // store the current count and increment it afterwards
   }
 
@@ -101,7 +101,7 @@ struct shortcut_storage {
     return idx > max_way_idx_;
   }
 
-  shortcut_data const* get_shortcut(way_idx_t idx) const {
+  shortcut_data const* get_shortcut(way_idx_t const idx) const {
     if (!is_shortcut(idx)) { return nullptr;}
     return &shortcuts_.at(to_shortcut_idx(idx));
   }
@@ -122,17 +122,17 @@ struct shortcut_storage {
 
   void load(std::filesystem::path const& p);
 
-  way_idx_t resolve_first_way(way_idx_t const way) {
+  way_idx_t resolve_first_way(way_idx_t const way) const {
     if (!is_shortcut(way)) return way;
     return first_way_on_shortcut[to_shortcut_idx(way)].way;
   }
 
-  way_and_dir resolve_first_way_and_dir(way_idx_t const way, direction dir, way_pos_t way_pos = way_pos_t{0U}) const {
+  way_and_dir resolve_first_way_and_dir(way_idx_t const way, direction const dir, way_pos_t const way_pos = way_pos_t{0U}) const {
     if (!is_shortcut(way)) return way_and_dir{way, dir, way_pos};
     return first_way_on_shortcut[to_shortcut_idx(way)];
   }
 
-  way_and_dir resolve_last_way_and_dir(way_idx_t const way, direction dir, way_pos_t way_pos = way_pos_t{0U}) const {
+  way_and_dir resolve_last_way_and_dir(way_idx_t const way, direction const dir, way_pos_t const way_pos = way_pos_t{0U}) const {
     if (!is_shortcut(way)) return way_and_dir{way, dir, way_pos};
     return last_way_on_shortcut[to_shortcut_idx(way)];
   }
@@ -162,29 +162,29 @@ struct shortcut_storage {
     st.push({sh->upward_way, sh, true});
 
     while (!st.empty()) {
-      SegmentFrame const& frame = st.top();
+      const auto& [w, s, is_left_child] = st.top();
       st.pop();
 
-      if (!is_shortcut(frame.w)) {
-        if (frame.is_left_child) {
-          out.push_back(ShortcutSegment{frame.w, frame.s->from, frame.s->via_node, frame.s->upward_distance, frame.s->upward_cost});
+      if (!is_shortcut(w)) {
+        if (is_left_child) {
+          out.push_back(ShortcutSegment{w, s->from, s->via_node, s->upward_distance, s->upward_cost});
         } else {
-          out.push_back(ShortcutSegment{frame.w,frame.s->via_node, frame.s->to, frame.s->downward_distance, frame.s->downward_cost});
+          out.push_back(ShortcutSegment{w,s->via_node, s->to, s->downward_distance, s->downward_cost});
         }
         continue;
       }
-      auto const& sh = get_shortcut(frame.w);
-      if (!sh->loop_segments.empty()) {
-        for (auto const& s : sh->loop_segments) {
-          out.push_back(s);
+      if (auto const& sh_data = get_shortcut(w);
+          !sh_data->loop_segments.empty()) {
+        for (auto const& seg : sh_data->loop_segments) {
+          out.push_back(seg);
         }
       } else {
-        st.push({sh->downward_way, sh, false});
-        if (cista::to_idx(sh->selfloop_way_idx) != std::numeric_limits<std::uint32_t>::max()) {
-          auto const sh_selfloop = get_shortcut(sh->selfloop_way_idx);
-          st.push({sh->selfloop_way_idx, sh_selfloop, false}); // is_left_child is not important here
+        st.push({sh_data->downward_way, sh_data, false});
+        if (cista::to_idx(sh_data->selfloop_way_idx) != std::numeric_limits<std::uint32_t>::max()) {
+          auto const sh_selfloop = get_shortcut(sh_data->selfloop_way_idx);
+          st.push({sh_data->selfloop_way_idx, sh_selfloop, false}); // is_left_child is not important here
         }
-        st.push({sh->upward_way, sh, true});
+        st.push({sh_data->upward_way, sh_data, true});
       }
     }
     return out;

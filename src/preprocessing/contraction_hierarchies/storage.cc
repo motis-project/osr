@@ -7,22 +7,21 @@ struct serialized_data {
   way_idx_t max_way_idx_;
 };
 
-void shortcut_storage::save(std::filesystem::path const& path) const {
-
-  auto data = serialized_data{shortcuts_, max_way_idx_};
-  cista::write(path / "shortcuts.bin", data);
+void shortcut_storage::save(std::filesystem::path const& p) const {
+  auto const data = serialized_data{shortcuts_, max_way_idx_};
+  cista::write(p / "shortcuts.bin", data);
 }
 
-void shortcut_storage::load(std::filesystem::path const& path) {
-  auto loaded = cista::read<serialized_data>(path / "shortcuts.bin");
+void shortcut_storage::load(std::filesystem::path const& p) {
+  auto loaded = cista::read<serialized_data>(p / "shortcuts.bin");
   fmt::print("load {} shortcuts\n", loaded->shortcuts_.size());
   for (auto& shortcut : loaded->shortcuts_) {
     if (shortcut.loop_segments.empty()) {
       shortcuts_.push_back(shortcut);
     }else {
       vec<ShortcutSegment> loop_segments;
-      for (auto const& s : shortcut.loop_segments) {
-        loop_segments.push_back(ShortcutSegment{s.w,s.from,s.to,s.distance,s.cost});
+      for (const auto& [w, from, to, distance, cost] : shortcut.loop_segments) {
+        loop_segments.push_back(ShortcutSegment{w,from,to,distance,cost});
       }
       shortcuts_.push_back(shortcut_data{
         shortcut.from,
@@ -51,7 +50,7 @@ way_idx_t shortcut_storage::add_shortcut(ways& w,
                                          shortcut_data const& shortcut) {
   shortcuts_.push_back(shortcut);
 
-  way_idx_t shortcut_way = way_idx_t{w.r_->way_nodes_.size()};
+  auto const shortcut_way = way_idx_t{w.r_->way_nodes_.size()};
 
   // neue Way hinzufügen
   add_shortcut_to_graph(w,shortcut,shortcut_way, true);
@@ -62,7 +61,7 @@ way_idx_t shortcut_storage::add_shortcut(ways& w,
 void shortcut_storage::add_shortcut_to_graph(ways& w,
                                                   shortcut_data const& shortcut,
                                                   way_idx_t way_idx,
-                                                  bool add_to_nodes) {
+                                                  bool const add_to_nodes) {
   auto way_nodes = w.r_->way_nodes_.add_back_sized(0U);
   way_nodes.push_back(shortcut.from);
   way_nodes.push_back(shortcut.to);
@@ -85,27 +84,27 @@ void shortcut_storage::add_shortcut_to_graph(ways& w,
 }
 
 void add_shortcut_restrictions(osr::ways& w,
-                              const shortcut_data& shortcut, way_idx_t shortcut_way) {
-  auto from = shortcut.from;
-  auto to = shortcut.to;
+                              const shortcut_data& shortcut, way_idx_t const shortcut_way) {
+  auto const from = shortcut.from;
+  auto const to = shortcut.to;
   if (w.r_->node_is_restricted_[from]) {
-    auto shortcut_pos = w.r_->get_way_pos(from, shortcut_way);
-    for (auto const& r : w.r_->node_restrictions_[from]) {
+    auto const shortcut_pos = w.r_->get_way_pos(from, shortcut_way);
+    for (const auto& [from_, to_] : w.r_->node_restrictions_[from]) {
 
-      if (r.to_ == w.r_->get_way_pos(from, shortcut.upward_way) &&
-          r.to_ != r.from_) {
+      if (to_ == w.r_->get_way_pos(from, shortcut.upward_way) &&
+          to_ != from_) {
         w.r_->node_restrictions_[from].push_back(
-            restriction{r.from_, shortcut_pos});
+            restriction{from_, shortcut_pos});
           }
     }
   }
   if (w.r_->node_is_restricted_[to]) {
-    auto shortcut_pos = w.r_->get_way_pos(to, shortcut_way);
-    for (auto const& r : w.r_->node_restrictions_[to]) {
-      if (r.from_ == w.r_->get_way_pos(to, shortcut.downward_way) &&
-          r.to_ != r.from_) {
+    auto const shortcut_pos = w.r_->get_way_pos(to, shortcut_way);
+    for (const auto& [from_, to_] : w.r_->node_restrictions_[to]) {
+      if (from_ == w.r_->get_way_pos(to, shortcut.downward_way) &&
+          to_ != from_) {
         w.r_->node_restrictions_[to].push_back(
-            restriction{shortcut_pos, r.to_});
+            restriction{shortcut_pos, to_});
       }
     }
   }
@@ -114,7 +113,7 @@ void add_shortcut_restrictions(osr::ways& w,
 void shortcut_storage::load_all_shortcuts_in_graph(osr::ways& w) {
   for (auto i = 0U; i < shortcuts_.size(); ++i) {
     auto const& shortcut = shortcuts_[i];
-    way_idx_t shortcut_way = way_idx_t{max_way_idx_ + i + 1U};
+    auto const shortcut_way = way_idx_t{max_way_idx_ + i + 1U};
     //add_shortcut_to_graph(w, shortcut, shortcut_way, true);
     construct_way_on_shortcut_arrays(w,shortcut_way, shortcut);
     //add_shortcut_restrictions(w, shortcut, shortcut_way);

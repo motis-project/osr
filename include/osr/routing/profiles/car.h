@@ -106,7 +106,7 @@ struct car {
                           node const pred) noexcept {
       auto const idx = get_index(n);
       if (idx >= cost_.size()) {
-        size_t new_size = (idx + 1) * 2;
+        auto const new_size = (idx + 1) * 2;
         cost_.resize(new_size, kInfeasible);
         pred_way_.resize(new_size);
         pred_.resize(new_size, node_idx_t::invalid());
@@ -195,21 +195,17 @@ struct car {
     auto way_pos = way_pos_t{0U};
     auto const WITH_SHORTCUT = shortcuts != nullptr;
 
-    auto node_resolved_way = w.node_ways_[n.n_][n.way_];
-    auto node_resolved_dir = n.dir_;
-    //fmt::print("start node resolving way: {} dir: {}\n",node_resolved_way, to_str(node_resolved_dir));
-    if (n.n_ == node_idx_t{254U}) {
-      //fmt::print("node: {} way: {} dir: {}\n", n.n_, n.way_, to_str(n.dir_));
-    }
+    [[maybe_unused]] auto node_resolved_way = w.node_ways_[n.n_][n.way_];
+    [[maybe_unused]] auto node_resolved_dir = n.dir_;
+
     if (WITH_SHORTCUT) {
-      auto n_way = w.node_ways_[n.n_][n.way_];
-      if(shortcuts->is_shortcut(n_way)) {
-        auto resolved = SearchDir == direction::kForward ? shortcuts->resolve_last_way_and_dir(n_way,n.dir_): shortcuts->resolve_first_way_and_dir(n_way,n.dir_);
+      if (auto const n_way = w.node_ways_[n.n_][n.way_];
+          shortcuts->is_shortcut(n_way)) {
+        auto const resolved = SearchDir == direction::kForward ? shortcuts->resolve_last_way_and_dir(n_way,n.dir_): shortcuts->resolve_first_way_and_dir(n_way,n.dir_);
         node_resolved_way = resolved.way;
         node_resolved_dir = resolved.dir;
       }
     }
-    //fmt::print("Resolved node way: {} dir: {}\n",node_resolved_way, to_str(node_resolved_dir));
     for (auto const [way, i] :
          utl::zip_unchecked(w.node_ways_[n.n_], w.node_in_way_idx_[n.n_])) {
       auto const way_is_shortcut = WITH_SHORTCUT ? shortcuts->is_shortcut(way) : false;
@@ -222,7 +218,7 @@ struct car {
         auto resolved_dir = way_dir;
 
         if (way_is_shortcut) {
-          auto resolved = SearchDir == direction::kForward? shortcuts->resolve_first_way_and_dir(way,way_dir) : shortcuts->resolve_last_way_and_dir(way,way_dir);
+          auto const resolved = SearchDir == direction::kForward? shortcuts->resolve_first_way_and_dir(way,way_dir) : shortcuts->resolve_last_way_and_dir(way,way_dir);
           resolved_way = resolved.way;
           resolved_dir = resolved.dir;
         }

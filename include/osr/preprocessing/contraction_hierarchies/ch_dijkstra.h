@@ -220,22 +220,22 @@ struct bidi_dijkstra_ch {
         auto min_cost = std::numeric_limits<cost_t>::max();
         auto node_size = w.r_->node_ways_[curr.get_key()].size();
         car::node min_node;
-        auto min_node_has_uturn = false;
         for (auto p = way_pos_t{0U}; p < node_size; ++p) {
-          car::node n = {curr.get_key(),p,direction::kForward};
-          car::node n2 = {curr.get_key(),p,direction::kBackward};
-          auto ncost = opposite_candidate->second.cost(n);
-          auto nncost = opposite_candidate->second.cost(n2);
-          if (ncost < min_cost) {
-            min_cost = ncost;
-            min_node = n;
+          car::node fwd = {curr.get_key(),p,direction::kForward};
+          car::node bwd = {curr.get_key(),p,direction::kBackward};
+          auto fwd_cost = opposite_candidate->second.cost(fwd);
+          auto bwd_cost = opposite_candidate->second.cost(bwd);
+          if (fwd_cost < min_cost) {
+            min_cost = fwd_cost;
+            min_node = fwd;
           }
-          if (nncost < min_cost) {
-            min_cost = nncost;
-            min_node = n2;
+          if (bwd_cost < min_cost) {
+            min_cost = bwd_cost;
+            min_node = bwd;
           }
         }
         if (min_cost != kInfeasible) {
+          auto min_node_has_uturn = false;
           if (w.r_->is_restricted(
                     curr.get_key(), curr.way_, min_node.way_, SearchDir)) {
             return;
@@ -245,10 +245,11 @@ struct bidi_dijkstra_ch {
           auto backward_way = SearchDir == direction::kForward ? w.r_->node_ways_[curr.get_key()][min_node.way_] : w.r_->node_ways_[curr.get_key()][curr.way_];
           auto backward_dir = SearchDir == direction::kForward ? min_node.dir_ : curr.dir_;
 
-          way_and_dir backward_resolved_way_and_dir = shortcuts->resolve_first_way_and_dir(backward_way, backward_dir);
-          way_and_dir forward_resolved_way_and_dir = shortcuts->resolve_last_way_and_dir(forward_way, forward_dir);
+          auto const backward_resolved_way_and_dir = shortcuts->resolve_first_way_and_dir(backward_way, backward_dir);
 
-          if (forward_resolved_way_and_dir.way == backward_resolved_way_and_dir.way && forward_resolved_way_and_dir.dir == opposite(backward_resolved_way_and_dir.dir)) {
+          if (auto const forward_resolved_way_and_dir =
+                  shortcuts->resolve_last_way_and_dir(forward_way, forward_dir);
+              forward_resolved_way_and_dir.way == backward_resolved_way_and_dir.way && forward_resolved_way_and_dir.dir == opposite(backward_resolved_way_and_dir.dir)) {
             min_cost += car::kUturnPenalty;
             min_node_has_uturn = true;
           }

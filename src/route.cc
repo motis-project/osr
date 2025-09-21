@@ -250,7 +250,7 @@ double add_path(ways const& w,
     //             w.node_to_osm_[w.r_->way_nodes_[way][from_idx]],
     //             w.r_->way_nodes_[way][to_idx],
     //             w.node_to_osm_[w.r_->way_nodes_[way][to_idx]]);
-    std::reverse(segments.begin(), segments.end());
+    std::ranges::reverse(segments);
     for (auto const& segment : segments) {
       add_path<Profile>(w, r, sharing, from, to, segment.cost, path, segment.w,
                         segment.distance, elevation,
@@ -331,7 +331,7 @@ path reconstruct_contraction_path(ways const& w,
       auto const expected_cost =
           static_cast<cost_t>(e.cost(backward_n) -
                               b.template get_cost<direction::kBackward>(*pred));
-      // fmt::print("expected cost: {}\n", expected_cost);
+
       backward_dist += add_path<Profile>(
           w, *w.r_, blocked, sharing, elevations, *pred, backward_n,
           expected_cost, backward_segments, opposite(dir), shortcuts);
@@ -340,7 +340,7 @@ path reconstruct_contraction_path(ways const& w,
     }
     backward_n = *pred;
   }
-  std::reverse(backward_segments.begin(), backward_segments.end());
+  std::ranges::reverse(backward_segments);
   auto const& dest_node_candidate =
       backward_n.get_node() == dest.left_.node_ ? dest.left_ : dest.right_;
 
@@ -358,7 +358,7 @@ path reconstruct_contraction_path(ways const& w,
        .dist_ = static_cast<distance_t>(dest_node_candidate.dist_to_node_),
        .mode_ = backward_n.get_mode()});
 
-  std::reverse(forward_segments.begin(), forward_segments.end());
+  std::ranges::reverse(forward_segments);
 
   forward_segments.insert(forward_segments.end(), backward_segments.begin(),
                           backward_segments.end());
@@ -745,10 +745,8 @@ std::optional<path> route_bidi_dijkstra_ch_(
 
       if (b.meet_point_1_.get_node() == node_idx_t::invalid()) {
         if (should_continue) {
-          // fmt::println("SHOULD CONTINUE IS TRUE AND MEETPOINT IS EMPTY");
           continue;
         }
-        // fmt::println("SHOULD CONTINUE IS FALSE AND MEETPOINT IS EMPTY");
         return std::nullopt;
       }
       // fmt::println("Meetpoint is 1:{} 2:{}",
