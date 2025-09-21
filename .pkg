@@ -1,7 +1,7 @@
 [boost]
   url=git@github.com:motis-project/boost.git
   branch=master
-  commit=73549ebca677fe6214202a1ab580362b4f80e653
+  commit=f0eca85b563887be8f26c4856c53d4e5080e6976
 [osmium]
   url=git@github.com:motis-project/libosmium.git
   branch=master
@@ -13,35 +13,35 @@
 [geo]
   url=git@github.com:motis-project/geo.git
   branch=master
-  commit=f3b11c02ac063786ec388b00816b03c73914c8af
+  commit=d862550fd867cd5435225b5f0998981ec4fc2ae3
 [cista]
   url=git@github.com:felixguendling/cista.git
   branch=master
-  commit=847b27100b7e730370b810ce62206a66b0bf2d79
+  commit=02fc087619fc913aca2c3fd3e07ec12279b8d6c6
 [googletest]
   url=git@github.com:motis-project/googletest.git
   branch=master
-  commit=34a46558609e05865c197f0260ab36daa7cbbb6e
+  commit=9758d168fd1ccff2d76f3bd6ef802943d0f8f7e5
 [utl]
   url=git@github.com:motis-project/utl.git
   branch=master
-  commit=538a11dec577de7238c7640491b3d4e091a33e08
+  commit=e3cfd4286ac0080e8f9694ebf7f7dc44b87a1803
 [protozero]
   url=git@github.com:motis-project/protozero.git
   branch=master
-  commit=8c9f3fa97c2cfdceef86d0b61818ae98e9328f29
+  commit=a94574f49d3820dc2f90121f8d5c5ffb6210b5b2
 [zlib-ng]
   url=git@github.com:motis-project/zlib-ng.git
   branch=develop
-  commit=68ab3e2d80253ec5dc3c83691d9ff70477b32cd3
+  commit=d68e1d908e789c31c1f2fafe4bd8e09cb91e21c5
 [tiles]
   url=git@github.com:motis-project/tiles.git
   branch=master
-  commit=6513820682dda589594f705b0ac7007d7bc7cdad
+  commit=fb8187e7b1ff30f0fffa6e508575b6b1d6c33791
 [mimalloc]
   url=git@github.com:motis-project/mimalloc.git
   branch=master
-  commit=2a557cafb2e9e7c872358a83a63c62a7e14330b3
+  commit=189b0ac416b94848bc0a7702f7e97fe6ebd91829
 [rapidjson]
   url=git@github.com:motis-project/rapidjson.git
   branch=master
@@ -53,11 +53,11 @@
 [fmt]
   url=git@github.com:motis-project/fmt.git
   branch=master
-  commit=edb385ac526c24bc917ec4a41bb0edb28f0ca59e
+  commit=dc10f83be70ac2873d5f8d1ce317596f1fd318a2
 [unordered_dense]
   url=git@github.com:motis-project/unordered_dense.git
   branch=main
-  commit=b33b037377ca966bbdd9cccc3417e46e88f83bfb
+  commit=2c7230ae7f9c30849a5b089fb4a5d11896b45dcf
 [expat]
   url=git@github.com:motis-project/expat.git
   branch=master
@@ -65,4 +65,4 @@
 [net]
   url=git@github.com:motis-project/net.git
   branch=master
-  commit=75611343512242c64a5b3f50f3a660a17298339d
+  commit=6cb1613c8a5c7b1cc22f00c0367db432b3ccd77e

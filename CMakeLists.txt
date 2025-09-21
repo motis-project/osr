@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.10)
-project(osr)
+project(osr LANGUAGES C CXX ASM)
 
 cmake_policy(SET CMP0079 NEW)
 
