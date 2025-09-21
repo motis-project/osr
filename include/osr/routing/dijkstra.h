@@ -29,6 +29,7 @@ struct dijkstra {
   void reset(cost_t const max) {
     pq_.clear();
     pq_.n_buckets(max + 1U);
+    assert(max + 1U != 0);  // catch overflows
     cost_.clear();
     max_reached_ = false;
   }

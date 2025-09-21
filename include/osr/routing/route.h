@@ -25,6 +25,9 @@ struct dijkstra;
 template <Profile>
 struct bidirectional;
 
+template <Profile>
+struct contraction_hierarchies;
+
 struct sharing_data;
 
 template <Profile P>
@@ -32,6 +35,9 @@ bidirectional<P>& get_bidirectional();
 
 template <Profile P>
 dijkstra<P>& get_dijkstra();
+
+template <Profile P>
+contraction_hierarchies<P>& get_contraction_hierarchies();
 
 std::vector<std::optional<path>> route(
     profile_parameters const&,

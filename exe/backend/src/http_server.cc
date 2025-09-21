@@ -140,28 +140,34 @@ struct http_server::impl {
                                                       foot_speed_result.value()}
             : get_parameters(profile);
 
-    auto const p = route(params, w_, l_, profile, from, to, max, dir, 100,
-                         nullptr, nullptr, elevations_, routing_algo);
+    try {
+      auto const p = route(params, w_, l_, profile, from, to, max, dir, 100,
+                           nullptr, nullptr, elevations_, routing_algo);
 
-    auto const p1 = route(params, w_, l_, profile, from, std::vector{to}, max,
-                          dir, 100, nullptr, nullptr, elevations_);
+      auto const p1 = route(params, w_, l_, profile, from, std::vector{to}, max,
+                            dir, 100, nullptr, nullptr, elevations_);
 
-    auto const print = [](char const* name, std::optional<path> const& p) {
-      if (p.has_value()) {
-        std::cout << name << " cost: " << p->cost_ << "\n";
-      } else {
-        std::cout << name << ": not found\n";
+      auto const print = [](char const* name, std::optional<path> const& p) {
+        if (p.has_value()) {
+          std::cout << name << " cost: " << p->cost_ << "\n";
+        } else {
+          std::cout << name << ": not found\n";
+        }
+      };
+      print("p", p);
+      print("p1", p1.at(0));
+
+      if (!p.has_value()) {
+        cb(json_response(req, "could not find a valid path",
+                         http::status::not_found));
+        return;
       }
-    };
-    print("p", p);
-    print("p1", p1.at(0));
-
-    if (!p.has_value()) {
-      cb(json_response(req, "could not find a valid path",
-                       http::status::not_found));
-      return;
+      cb(json_response(req, to_featurecollection(w_, p)));
+    } catch (std::runtime_error const& e) {
+      cb(json_response(
+          req, boost::json::serialize(json::object{{"message", e.what()}}),
+          http::status::not_found));
     }
-    cb(json_response(req, to_featurecollection(w_, p)));
   }
 
   void handle_levels(web_server::http_req_t const& req,

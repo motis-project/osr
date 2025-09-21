@@ -33,14 +33,16 @@ constexpr auto const kPrintDebugGeojson = false;
 constexpr auto const kMaxMatchDistance = 100;
 constexpr auto const kMaxAllowedPathDifferenceRatio = 0.5;
 
-void load(std::string_view raw_data, std::string_view data_dir) {
+void load(std::string_view raw_data,
+          std::string_view data_dir,
+          bool const with_ch = false) {
   if (!fs::exists(data_dir)) {
     if (fs::exists(raw_data)) {
       auto const p = fs::path{data_dir};
       auto ec = std::error_code{};
       fs::remove_all(p, ec);
       fs::create_directories(p, ec);
-      osr::extract(false, raw_data, data_dir, fs::path{});
+      osr::extract(false, raw_data, data_dir, fs::path{}, with_ch);
     }
   }
 }
@@ -49,7 +51,9 @@ void run(ways const& w,
          lookup const& l,
          unsigned const n_samples,
          unsigned const max_cost,
-         direction const dir) {
+         direction const dir,
+         routing_algorithm const algo = routing_algorithm::kAStarBi,
+         std::string const& algo_name = "a* bidir") {
 
   auto const from_tos = [&]() {
     auto prng = std::mt19937{};
@@ -109,7 +113,7 @@ void run(ways const& w,
     auto const experiment =
         route(car::parameters{}, w, l, search_profile::kCar, from_loc, to_loc,
               from_matches_span, to_matches_span, max_cost, dir, nullptr,
-              nullptr, nullptr, routing_algorithm::kAStarBi);
+              nullptr, nullptr, algo);
     auto const experiment_time =
         std::chrono::steady_clock::now() - experiment_start;
 
@@ -137,7 +141,7 @@ void run(ways const& w,
       };
 
       print_result("dijkstra", reference, reference_time);
-      print_result("a* bidir", experiment, experiment_time);
+      print_result(algo_name, experiment, experiment_time);
 
     } else {
       ++n_congruent;
@@ -188,7 +192,7 @@ TEST(dijkstra_astarbidir, monaco_fwd) {
     GTEST_SKIP() << raw_data << " not found";
   }
 
-  load(raw_data, data_dir);
+  load(raw_data, data_dir, true);
   auto const w = osr::ways{data_dir, cista::mmap::protection::READ};
   auto const l = osr::lookup{w, data_dir, cista::mmap::protection::READ};
 
@@ -206,7 +210,7 @@ TEST(dijkstra_astarbidir, monaco_bwd) {
     GTEST_SKIP() << raw_data << " not found";
   }
 
-  load(raw_data, data_dir);
+  load(raw_data, data_dir, true);
   auto const w = osr::ways{data_dir, cista::mmap::protection::READ};
   auto const l = osr::lookup{w, data_dir, cista::mmap::protection::READ};
 
@@ -224,7 +228,7 @@ TEST(dijkstra_astarbidir, hamburg) {
     GTEST_SKIP() << raw_data << " not found";
   }
 
-  load(raw_data, data_dir);
+  load(raw_data, data_dir, true);
   auto const w = osr::ways{data_dir, cista::mmap::protection::READ};
   auto const l = osr::lookup{w, data_dir, cista::mmap::protection::READ};
 
@@ -242,7 +246,7 @@ TEST(dijkstra_astarbidir, switzerland) {
     GTEST_SKIP() << raw_data << " not found";
   }
 
-  load(raw_data, data_dir);
+  load(raw_data, data_dir, false);
   auto const w = osr::ways{data_dir, cista::mmap::protection::READ};
   auto const l = osr::lookup{w, data_dir, cista::mmap::protection::READ};
 

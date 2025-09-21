@@ -20,10 +20,12 @@ struct config : public conf::configuration {
     param(out_, "out,o", "output directory");
     param(elevation_data_, "elevation_data,e", "directory with elevation data");
     param(with_platforms_, "with_platforms,p", "extract platform info");
+    param(with_ch_, "with_contraction_hierarchies,ch",
+          "build CH during extraction");
   }
 
   std::filesystem::path in_, out_, elevation_data_;
-  bool with_platforms_{false};
+  bool with_platforms_{false}, with_ch_{false};
 };
 
 int main(int ac, char const** av) {
@@ -45,5 +47,5 @@ int main(int ac, char const** av) {
   utl::activate_progress_tracker("osr");
   auto const silencer = utl::global_progress_bars{false};
 
-  extract(c.with_platforms_, c.in_, c.out_, c.elevation_data_);
+  extract(c.with_platforms_, c.in_, c.out_, c.elevation_data_, c.with_ch_);
 }

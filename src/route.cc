@@ -15,6 +15,7 @@
 #include "osr/elevation_storage.h"
 #include "osr/lookup.h"
 #include "osr/routing/bidirectional.h"
+#include "osr/routing/contraction_hierarchies.h"
 #include "osr/routing/dijkstra.h"
 #include "osr/routing/profiles/bike.h"
 #include "osr/routing/profiles/bike_sharing.h"
@@ -42,6 +43,15 @@ bidirectional<P>& get_bidirectional() {
 }
 
 template <Profile P>
+contraction_hierarchies<P>& get_contraction_hierarchies() {
+  static auto s = boost::thread_specific_ptr<contraction_hierarchies<P>>{};
+  if (s.get() == nullptr) {
+    s.reset(new contraction_hierarchies<P>{});
+  }
+  return *s.get();
+}
+
+template <Profile P>
 dijkstra<P>& get_dijkstra() {
   static auto s = boost::thread_specific_ptr<dijkstra<P>>{};
   if (s.get() == nullptr) {
@@ -64,6 +74,8 @@ routing_algorithm to_algorithm(std::string_view s) {
   switch (cista::hash(s)) {
     case cista::hash("dijkstra"): return routing_algorithm::kDijkstra;
     case cista::hash("bidirectional"): return routing_algorithm::kAStarBi;
+    case cista::hash("contraction hierarchies"):
+      return routing_algorithm::kContractionHierarchies;
   }
   throw utl::fail("unknown routing algorithm: {}", s);
 }
@@ -330,6 +342,89 @@ path reconstruct_bi(typename P::parameters const& params,
                 .segments_ = forward_segments};
 
   b.cost2_.at(backward_n.get_key()).write(backward_n, p);
+  return p;
+}
+
+template <Profile P>
+path reconstruct_ch(typename P::parameters const& params,
+                    ways const& w,
+                    lookup const& l,
+                    bitvec<node_idx_t> const* blocked,
+                    sharing_data const* sharing,
+                    elevation_storage const* elevations,
+                    contraction_hierarchies<P> const& c,
+                    location const& from,
+                    location const& to,
+                    way_candidate const& start,
+                    way_candidate const& dest,
+                    cost_t const cost,
+                    direction const dir) {
+  auto const list_of_edges = c.uncontract_edges(w);
+  auto [nodes, costs] = eliminate_cycles<P>(w, list_of_edges);
+
+  auto segments = std::vector<path::segment>{};
+  auto dist = 0.0;
+
+  auto starting_node = nodes.front();
+
+  auto const& start_node_candidate =
+      dir == direction::kForward ? starting_node.get_node() == start.left_.node_
+                                       ? start.left_
+                                       : start.right_
+      : starting_node.get_node() == dest.right_.node_ ? dest.right_
+                                                      : dest.left_;
+
+  segments.push_back(
+      {.polyline_ =
+           l.get_node_candidate_path(dir == direction::kForward ? start : dest,
+                                     start_node_candidate, false, from),
+       .from_level_ = start_node_candidate.lvl_,
+       .to_level_ = start_node_candidate.lvl_,
+       .from_ = node_idx_t::invalid(),
+       .to_ = starting_node.get_node(),
+       .way_ = way_idx_t::invalid(),
+       .cost_ = start_node_candidate.cost_,
+       .dist_ = static_cast<distance_t>(start_node_candidate.dist_to_node_),
+       .mode_ = starting_node.get_mode()});
+
+  for (size_t index = 0; index < costs.size(); ++index) {
+    dist += add_path<P>(params, w, *w.r_, blocked, sharing, elevations,
+                        nodes[index], nodes[index + 1], costs[index], segments,
+                        direction::kForward);
+  }
+
+  auto final_node = nodes.back();
+
+  auto const& dest_node_candidate =
+      dir == direction::kForward
+          ? final_node.get_node() == dest.left_.node_ ? dest.left_ : dest.right_
+      : final_node.get_node() == start.right_.node_ ? start.right_
+                                                    : start.left_;
+
+  segments.push_back(
+      {.polyline_ =
+           l.get_node_candidate_path(dest, dest_node_candidate, false, to),
+       .from_level_ = dest_node_candidate.lvl_,
+       .to_level_ = dest_node_candidate.lvl_,
+       .from_ = final_node.get_node(),
+       .to_ = node_idx_t::invalid(),
+       .way_ = way_idx_t::invalid(),
+       .cost_ = dest_node_candidate.cost_,
+       .dist_ = static_cast<distance_t>(dest_node_candidate.dist_to_node_),
+       .mode_ = final_node.get_mode()});
+
+  auto total_dist = start_node_candidate.dist_to_node_ + dist +
+                    dest_node_candidate.dist_to_node_;
+
+  auto path_elevation = elevation_storage::elevation{};
+  for (auto const& segment : segments) {
+    path_elevation += segment.elevation_;
+  }
+  auto p = path{.cost_ = cost,
+                .dist_ = total_dist,
+                .elevation_ = path_elevation,
+                .segments_ = segments};
+
   return p;
 }
 
@@ -614,6 +709,96 @@ std::optional<path> route_bidirectional(typename P::parameters const& params,
 }
 
 template <Profile P>
+std::optional<path> route_contraction_hierarchies(
+    typename P::parameters const& params,
+    ways const& w,
+    lookup const& l,
+    contraction_hierarchies<P>& c,
+    location const& from,
+    location const& to,
+    match_view_t from_match,
+    match_view_t to_match,
+    cost_t const max,
+    direction const dir,
+    bitvec<node_idx_t> const* blocked,
+    sharing_data const* sharing,
+    elevation_storage const* elevations) {
+  if (dir == direction::kBackward) {
+    return route_contraction_hierarchies<P>(
+        params, w, l, c, to, from, to_match, from_match, max,
+        direction::kForward, blocked, sharing, elevations);
+  }
+
+  if (auto const direct = try_direct(from, to); direct.has_value()) {
+    return *direct;
+  }
+
+  c.reset(max);
+  for (auto const [i, start] : utl::enumerate(from_match)) {
+    if (c.max_reached_1_ && component_seen(w, from_match, i)) {
+      continue;
+    }
+    auto const start_way = start.way_;
+    for (auto const* nc : {&start.left_, &start.right_}) {
+      if (nc->valid() && nc->cost_ < max) {
+        P::resolve_start_node(
+            *w.r_, start.way_, nc->node_, from.lvl_, dir, [&](auto const node) {
+              auto label = typename P::label{node, nc->cost_};
+              label.track(label, *w.r_, start_way, node.get_node(), false);
+              c.add_start(label);
+            });
+      }
+    }
+    if (c.pq_.empty()) {
+      continue;
+    }
+    for (auto const [j, end] : utl::enumerate(to_match)) {
+      if (w.r_->way_component_[start.way_] != w.r_->way_component_[end.way_]) {
+        continue;
+      }
+      if (c.max_reached_2_ && component_seen(w, to_match, j)) {
+        continue;
+      }
+      auto const end_way = end.way_;
+      for (auto const* nc : {&end.left_, &end.right_}) {
+        if (nc->valid() && nc->cost_ < max) {
+          P::resolve_all(*w.r_, nc->node_, to.lvl_, [&](auto&& node) {
+            if (!P::is_dest_reachable(params, *w.r_, node, end_way,
+                                      flip(opposite(dir), nc->way_dir_), dir)) {
+              return;
+            }
+            auto label = typename P::label{node, nc->cost_};
+            label.track(label, *w.r_, end_way, node.get_node(), false);
+            c.add_end(label);
+          });
+        }
+      }
+      if (c.pq_.empty()) {
+        continue;
+      }
+      auto const should_continue =
+          c.run(w, *w.r_, max, blocked, sharing, elevations, dir);
+
+      if (c.meet_point_.get_node() == node_idx_t::invalid()) {
+        if (should_continue) {
+          continue;
+        }
+        return std::nullopt;
+      }
+
+      auto const cost = c.get_cost_to_mp();
+
+      return reconstruct_ch(params, w, l, blocked, sharing, elevations, c, from,
+                            to, start, end, cost, dir);
+    }
+    c.pq_.clear();
+    c.cost2_.clear();
+    c.max_reached_2_ = false;
+  }
+  return std::nullopt;
+}
+
+template <Profile P>
 std::optional<path> route_dijkstra(typename P::parameters const& params,
                                    ways const& w,
                                    lookup const& l,
@@ -821,6 +1006,43 @@ std::vector<std::optional<path>> route(
       });
 }
 
+std::optional<path> route_contraction_hierarchies(
+    profile_parameters const& params,
+    ways const& w,
+    lookup const& l,
+    search_profile const profile,
+    location const& from,
+    location const& to,
+    cost_t const max,
+    direction const dir,
+    double const max_match_distance,
+    bitvec<node_idx_t> const* blocked,
+    sharing_data const* sharing,
+    elevation_storage const* elevations) {
+  if (!w.r_->is_CH_available()) {
+    throw utl::fail(
+        "CH routing not enabled, extract again with --ch flag enabled");
+  }
+  if (profile != search_profile::kCar) {
+    throw utl::fail("CH routing only implemented for profile car");
+  }
+  return with_profile(profile, [&]<Profile P>(P&&) -> std::optional<path> {
+    auto const& pp = std::get<car::parameters>(params);
+    auto const from_match =
+        l.match<car>(pp, from, false, dir, max_match_distance, blocked);
+    auto const to_match =
+        l.match<car>(pp, to, true, dir, max_match_distance, blocked);
+
+    if (from_match.empty() || to_match.empty()) {
+      return std::nullopt;
+    }
+
+    return route_contraction_hierarchies(
+        pp, w, l, get_contraction_hierarchies<car>(), from, to, from_match,
+        to_match, max, dir, blocked, sharing, elevations);
+  });
+}
+
 std::optional<path> route_dijkstra(profile_parameters const& params,
                                    ways const& w,
                                    lookup const& l,
@@ -911,6 +1133,16 @@ std::optional<path> route(profile_parameters const& params,
                                    from_match, to_match, max, dir, blocked,
                                    sharing, elevations);
       });
+    case routing_algorithm::kContractionHierarchies:
+      if (profile == search_profile::kCar) {
+        return with_profile(profile, [&]<Profile P>(P&&) {
+          return route_contraction_hierarchies(
+              std::get<car::parameters>(params), w, l,
+              get_contraction_hierarchies<car>(), from, to, from_match,
+              to_match, max, dir, blocked, sharing, elevations);
+        });
+      }
+      break;
   }
   throw utl::fail("not implemented");
 }
@@ -942,6 +1174,10 @@ std::optional<path> route(profile_parameters const& params,
       return route_bidirectional(params, w, l, profile, from, to, max, dir,
                                  max_match_distance, blocked, sharing,
                                  elevations);
+    case routing_algorithm::kContractionHierarchies:
+      return route_contraction_hierarchies(params, w, l, profile, from, to, max,
+                                           dir, max_match_distance, blocked,
+                                           sharing, elevations);
   }
   throw utl::fail("not implemented");
 }

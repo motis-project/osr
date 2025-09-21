@@ -1,8 +1,20 @@
 #include "osr/ways.h"
 
+#include <algorithm>
+#include <numeric>
+#include <random>
+#include <vector>
+
+#include "boost/geometry/algorithms/detail/overlay/get_turn_info.hpp"
 #include "utl/parallel_for.h"
 
 #include "cista/io.h"
+#include "osr/elevation_storage.h"
+#include "osr/routing/contraction_hierarchies.h"
+#include "osr/routing/parameters.h"
+#include "osr/routing/profiles/car.h"
+#include "osr/routing/sharing_data.h"
+#include "osr/types.h"
 
 namespace osr {
 
@@ -25,7 +37,7 @@ ways::ways(std::filesystem::path p, cista::mmap::protection const mode)
           mm_vec<std::uint64_t>(mm("way_has_conditional_access_no"))},
       way_conditional_access_no_{mm("way_conditional_access_no")} {}
 
-void ways::build_components() {
+void ways::build_components_and_importance() {
   auto q = hash_set<way_idx_t>{};
   auto flood_fill = [&](way_idx_t const way_idx, component_idx_t const c) {
     assert(q.empty());
@@ -34,6 +46,9 @@ void ways::build_components() {
       auto const next = *q.begin();
       q.erase(q.begin());
       for (auto const n : r_->way_nodes_[next]) {
+        r_->node_properties_[n].importance_ =
+            std::max(r_->node_properties_[n].importance_,
+                     r_->way_properties_[next].importance_);
         for (auto const w : r_->node_ways_[n]) {
           auto& wc = r_->way_component_[w];
           if (wc == component_idx_t::invalid()) {
@@ -46,7 +61,9 @@ void ways::build_components() {
   };
 
   auto pt = utl::get_active_progress_tracker_or_activate("osr");
-  pt->status("Build components").in_high(n_ways()).out_bounds(75, 90);
+  pt->status("Build components and importance")
+      .in_high(n_ways())
+      .out_bounds(75, 90);
 
   auto next_component_idx = component_idx_t{0U};
   r_->way_component_.resize(n_ways(), component_idx_t::invalid());
@@ -229,6 +246,285 @@ void ways::connect_ways() {
   std::filesystem::remove(p_ / "tmp_node_ways_index.bin", e);
   std::filesystem::remove(p_ / "tmp_node_in_way_idx_data.bin", e);
   std::filesystem::remove(p_ / "tmp_node_in_way_idx_index.bin", e);
+}
+
+static std::vector<ways::routing::node_identifier> outgoing_neighbors;
+void contract_node(
+    ways::routing& r_,
+    std::vector<std::vector<ways::routing::edge_idx_t>>& outgoing_edges,
+    std::vector<std::vector<ways::routing::edge_idx_t>>& incoming_edges,
+    const std::vector<ways::routing::node_identifier>& node_to_level,
+    std::vector<std::pair<cost_t, std::uint64_t>>& index_handler,
+    ways::routing::node_identifier to_contract,
+    std::uint64_t* search_ID) {
+  auto const& out_edges = outgoing_edges[to_contract];
+  auto const own_level = node_to_level[to_contract];
+
+  if constexpr (ch_config::kUseHeuristic) {
+    if (static_cast<double>(own_level) >
+        ch_config::kHeuristicThresholdFactor *
+            static_cast<double>(outgoing_edges.size())) {
+      local_1_hop_ch(to_contract, outgoing_edges, incoming_edges, r_);
+      return;
+    }
+  }
+
+  // remove edges adjacent to to_contract
+  for (auto outgoing_edge_idx : out_edges) {
+    auto const edge = r_.contracted_edges_[outgoing_edge_idx];
+    [[maybe_unused]] auto const tmp =
+        std::erase(incoming_edges[edge.to_], outgoing_edge_idx);
+    assert(tmp == 1);
+  }
+  for (auto incoming_edge_idx : incoming_edges[to_contract]) {
+    auto const edge = r_.contracted_edges_[incoming_edge_idx];
+    [[maybe_unused]] auto const tmp =
+        std::erase(outgoing_edges[edge.from_], incoming_edge_idx);
+    assert(tmp == 1);
+  }
+
+  outgoing_neighbors.clear();
+  cost_t max_outgoing_cost = 0U;
+
+  for (auto const outgoing_edge_idx : out_edges) {
+    auto outgoing_edge = r_.contracted_edges_[outgoing_edge_idx];
+    auto neighbor_ID = outgoing_edge.to_;
+    assert(node_to_level[neighbor_ID] > own_level);
+    outgoing_neighbors.push_back(neighbor_ID);
+    max_outgoing_cost = std::max(max_outgoing_cost, outgoing_edge.cost_);
+  }
+  if (outgoing_neighbors.empty()) {
+    return;
+  }
+
+  for (auto const incoming_edge_idx : incoming_edges[to_contract]) {
+    auto const incoming_edge = r_.contracted_edges_[incoming_edge_idx];
+    auto const in_neighbor_ID = incoming_edge.from_;
+    assert(node_to_level[in_neighbor_ID] > own_level);
+    const cost_t cutoff =
+        (max_outgoing_cost < kInfeasible - incoming_edge.cost_)
+            ? max_outgoing_cost + incoming_edge.cost_
+            : kInfeasible - 1;  // catch overflows
+    dijkstra_ch(in_neighbor_ID, outgoing_neighbors, r_, outgoing_edges,
+                node_to_level, cutoff, *search_ID, index_handler, own_level);
+    // check for obsolete edges
+    {
+      std::erase_if(outgoing_edges[in_neighbor_ID], [&](auto edge_idx) {
+        auto edge = r_.contracted_edges_[edge_idx];
+        auto const el = index_handler[edge.to_];
+        if (el.second == *search_ID && el.first < edge.cost_) {
+          [[maybe_unused]] auto const tmp =
+              std::erase(incoming_edges[edge.to_], edge_idx);
+          assert(tmp == 1);
+          return true;
+        }
+        return false;
+      });
+    }
+
+    for (auto const outgoing_edge_idx : out_edges) {
+      auto const outgoing_edge = r_.contracted_edges_[outgoing_edge_idx];
+      auto const out_neighbor_ID = outgoing_edge.to_;
+      if (incoming_edge.cost_ >= kInfeasible - outgoing_edge.cost_) {
+        continue;  // catch overflows
+      }
+      auto const cost =
+          static_cast<cost_t>(incoming_edge.cost_ + outgoing_edge.cost_);
+      // determine if a shortcut is necessary
+      auto el = index_handler[out_neighbor_ID];
+      if (el.second != *search_ID || el.first > cost) {
+        // if an edge already exists, replace it
+        bool found = false;
+        for (auto edge_idx : outgoing_edges[in_neighbor_ID]) {
+          if (auto& edge = r_.contracted_edges_[edge_idx];
+              edge.to_ == out_neighbor_ID) {
+            // assert(edge.cost > cost); // only valid if heuristic is disabled
+            if (edge.cost_ > cost) {
+              r_.contracted_edges_[edge_idx].cost_ = cost;
+              r_.contracted_edges_[edge_idx].contracted_child1_ =
+                  incoming_edge_idx;
+              r_.contracted_edges_[edge_idx].contracted_child2_ =
+                  outgoing_edge_idx;
+            }
+            found = true;
+            break;
+          }
+        }
+        if (!found) {
+          auto new_edge = ways::routing::contracted_edge{
+              incoming_edge_idx, outgoing_edge_idx, in_neighbor_ID,
+              out_neighbor_ID, cost};
+          r_.contracted_edges_.emplace_back(new_edge);
+          auto new_edge_idx = r_.contracted_edges_.size() - 1;
+          outgoing_edges[in_neighbor_ID].push_back(new_edge_idx);
+          incoming_edges[out_neighbor_ID].push_back(new_edge_idx);
+        }
+      }
+    }
+    ++*search_ID;
+  }
+}
+
+std::uint8_t get_importance(const cista::wrapped<ways::routing>& r_,
+                            ways::routing::node_identifier const n) {
+  return r_->node_properties_[r_->identifier_to_node_[n].n_].importance_;
+}
+
+void ways::build_CH() {
+  auto params = std::get<car::parameters>(get_parameters(search_profile::kCar));
+  auto const number_of_nodes = r_->node_ways_.data_.size() * 2;
+  std::vector<std::vector<routing::edge_idx_t>> outgoing_edges(number_of_nodes),
+      incoming_edges(number_of_nodes);
+  std::map<car::node, routing::node_identifier> node_to_id;
+  std::size_t current_index = 0;
+
+  for (auto node_idx = node_idx_t{0U}; node_idx < node_to_osm_.size();
+       ++node_idx) {
+    r_->node_idx_to_identifier_.emplace_back(current_index);
+    for (way_pos_t way_pos = 0; way_pos < r_->node_ways_[node_idx].size();
+         ++way_pos) {
+      for (auto const dir : {direction::kForward, direction::kBackward}) {
+        node_to_id.emplace(car::node{node_idx, way_pos, dir}, current_index);
+        r_->identifier_to_node_.emplace_back(
+            routing::node{node_idx, way_pos, dir, current_index});
+        current_index++;
+      }
+    }
+  }
+
+  // add existing edges to outgoing_edges and incoming_edges
+  for (auto node_idx = node_idx_t{0U}; node_idx < node_to_osm_.size();
+       ++node_idx) {
+    for (way_pos_t way_pos = 0; way_pos < r_->node_ways_[node_idx].size();
+         ++way_pos) {
+      for (auto const dir : {direction::kForward, direction::kBackward}) {
+        car::node head{node_idx, way_pos, dir};
+
+        auto const add_existing_edge =
+            [&](car::node const tail, std::uint32_t const cost, distance_t,
+                way_idx_t, std::uint16_t, std::uint16_t,
+                elevation_storage::elevation, bool) {
+              if (cost == kInfeasible || head == tail) {
+                return;
+              }
+              auto edge = routing::contracted_edge{0U, 0U, node_to_id[head],
+                                                   node_to_id[tail],
+                                                   static_cast<cost_t>(cost)};
+              r_->contracted_edges_.emplace_back(edge);
+              auto const edge_index = r_->contracted_edges_.size() - 1;
+              outgoing_edges[node_to_id[head]].push_back(edge_index);
+              incoming_edges[node_to_id[tail]].push_back(edge_index);
+            };
+        car::adjacent<direction::kForward, false>(
+            params, *r_, head, nullptr, nullptr, nullptr, add_existing_edge);
+      }
+    }
+  }
+  // add additional edges to avoid problems with nodes at end of way
+  for (auto [node, id] : node_to_id) {
+    if (node.is_end_of_way(*r_)) {
+      for (auto const out_edge_idx : outgoing_edges[id]) {
+        auto out_edge = r_->contracted_edges_[out_edge_idx];
+        if (out_edge.is_contracted()) {
+          continue;
+        }
+        for (auto const in_edge_idx : incoming_edges[id]) {
+          auto in_edge = r_->contracted_edges_[in_edge_idx];
+          if (in_edge.is_contracted() || in_edge.from_ == out_edge.to_) {
+            continue;
+          }
+          // if an edge already exists, shorten it if necessary
+          auto const total_cost =
+              static_cast<cost_t>(in_edge.cost_ + out_edge.cost_);
+          bool found = false;
+          for (auto const candidate_edge_idx : outgoing_edges[in_edge.from_]) {
+            auto candidate_edge = r_->contracted_edges_[candidate_edge_idx];
+            if (candidate_edge.to_ == out_edge.to_) {
+              found = true;
+
+              if (candidate_edge.cost_ > total_cost) {
+                r_->contracted_edges_[candidate_edge_idx].cost_ = total_cost;
+                r_->contracted_edges_[candidate_edge_idx].contracted_child1_ =
+                    in_edge_idx;
+                r_->contracted_edges_[candidate_edge_idx].contracted_child2_ =
+                    out_edge_idx;
+              }
+              break;
+            }
+          }
+          if (found) {
+            continue;
+          }
+          auto edge =
+              routing::contracted_edge{in_edge_idx, out_edge_idx, in_edge.from_,
+                                       out_edge.to_, total_cost};
+          r_->contracted_edges_.emplace_back(edge);
+          auto edge_index = r_->contracted_edges_.size() - 1;
+          outgoing_edges[in_edge.from_].push_back(edge_index);
+          incoming_edges[out_edge.to_].push_back(edge_index);
+        }
+      }
+    }
+  }
+
+  std::vector<routing::node_identifier> node_to_level(number_of_nodes);
+  std::vector<routing::node_identifier> level_to_node(number_of_nodes);
+  std::iota(level_to_node.begin(), level_to_node.end(),
+            routing::node_identifier{0});
+
+  std::ranges::shuffle(level_to_node, std::mt19937_64{});
+  if (ch_config::kUseNodeImportance) {
+    std::ranges::stable_sort(level_to_node, [&](auto n1, auto n2) {
+      return get_importance(r_, n1) < get_importance(r_, n2);
+    });
+  }
+  for (routing::node_identifier level = 0; level < number_of_nodes; ++level) {
+    node_to_level[level_to_node[level]] = level;
+  }
+
+  std::vector<std::pair<cost_t, std::uint64_t>> index_handler(number_of_nodes);
+  std::ranges::fill(
+      index_handler,
+      std::make_pair(kInfeasible, std::numeric_limits<std::uint64_t>::max()));
+  std::uint64_t search_ID = 0;
+
+  for (auto const identifier : level_to_node) {
+    contract_node(*r_, outgoing_edges, incoming_edges, node_to_level,
+                  index_handler, identifier, &search_ID);
+  }
+
+  std::size_t const total_upwards_edges = std::accumulate(
+      outgoing_edges.begin(), outgoing_edges.end(), std::size_t{0U},
+      [](auto sum, auto const& list) { return sum + list.size(); });
+  std::size_t const total_downwards_edges = std::accumulate(
+      outgoing_edges.begin(), outgoing_edges.end(), std::size_t{0U},
+      [](auto sum, auto const& list) { return sum + list.size(); });
+  r_->upwards_edges_outgoing_.bucket_starts_.resize(number_of_nodes + 1);
+  r_->downwards_edges_incoming_.bucket_starts_.resize(number_of_nodes + 1);
+  r_->upwards_edges_outgoing_.data_.resize(
+      static_cast<unsigned int>(total_upwards_edges));
+  r_->downwards_edges_incoming_.data_.resize(
+      static_cast<unsigned int>(total_downwards_edges));
+  unsigned int upwards_size = 0U, downwards_size = 0U;
+  for (const auto index : node_to_id | std::views::values) {
+    r_->upwards_edges_outgoing_
+        .bucket_starts_[static_cast<unsigned int>(index)] = upwards_size;
+    for (auto const edge_idx : outgoing_edges[index]) {
+      r_->upwards_edges_outgoing_.data_[upwards_size] = edge_idx;
+      ++upwards_size;
+    }
+    r_->downwards_edges_incoming_
+        .bucket_starts_[static_cast<unsigned int>(index)] = downwards_size;
+    for (auto const edge_idx : incoming_edges[index]) {
+      r_->downwards_edges_incoming_.data_[downwards_size] = edge_idx;
+      ++downwards_size;
+    }
+  }
+  r_->upwards_edges_outgoing_.bucket_starts_[number_of_nodes] = upwards_size;
+  r_->downwards_edges_incoming_.bucket_starts_[number_of_nodes] =
+      downwards_size;
+  r_->upwards_edges_outgoing_.data_.resize(upwards_size);
+  r_->downwards_edges_incoming_.data_.resize(downwards_size);
 }
 
 void ways::sync() {
