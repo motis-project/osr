@@ -191,7 +191,7 @@ struct foot {
                     way_cost(params, target_way_prop, way_dir, dist) +
                     node_cost(target_node_prop);
                 fn(node{target_node, target_lvl},
-                   static_cast<std::uint32_t>(cost), dist, way, from, to,
+                   static_cast<cost_t>(cost), dist, way, from, to,
                    elevation_storage::elevation{}, false);
               });
         } else {
@@ -203,7 +203,7 @@ struct foot {
           auto const dist = w.way_node_dist_[way][std::min(from, to)];
           auto const cost = way_cost(params, target_way_prop, way_dir, dist) +
                             node_cost(target_node_prop);
-          fn(node{target_node, *target_lvl}, static_cast<std::uint32_t>(cost),
+          fn(node{target_node, *target_lvl}, static_cast<cost_t>(cost),
              dist, way, from, to, elevation_storage::elevation{}, false);
         }
       };
