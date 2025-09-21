@@ -226,55 +226,32 @@ struct bidi_dijkstra_ch {
           car::node n2 = {curr.get_key(),p,direction::kBackward};
           auto ncost = opposite_candidate->second.cost(n);
           auto nncost = opposite_candidate->second.cost(n2);
-          auto n_has_uturn = false;
-          auto n2_has_uturn = false;
-          if (p < node_size) {
-            if (auto is_restricted = w.r_->is_restricted(
-                    curr.get_key(), curr.way_, p, SearchDir)) {
-              continue;
-            }
-            if (ncost < kInfeasible) {
-              auto forward_way = SearchDir == direction::kForward ? w.r_->node_ways_[curr.get_key()][curr.way_] : w.r_->node_ways_[curr.get_key()][p];
-              auto forward_dir = SearchDir == direction::kForward ? curr.dir_ : direction::kForward;
-              auto backward_way = SearchDir == direction::kForward ? w.r_->node_ways_[curr.get_key()][p] : w.r_->node_ways_[curr.get_key()][curr.way_];
-              auto backward_dir = SearchDir == direction::kForward ? direction::kForward : curr.dir_;
-
-              way_and_dir backward_resolved_way_and_dir = shortcuts->resolve_first_way_and_dir(backward_way, backward_dir);
-              way_and_dir forward_resolved_way_and_dir = shortcuts->resolve_last_way_and_dir(forward_way, forward_dir);
-
-              if (forward_resolved_way_and_dir.way == backward_resolved_way_and_dir.way && forward_resolved_way_and_dir.dir == opposite(backward_resolved_way_and_dir.dir)) {
-                ncost += car::kUturnPenalty;
-                n_has_uturn = true;
-
-              }
-            }
-            if (nncost < kInfeasible) {
-              auto forward_way = SearchDir == direction::kForward ? w.r_->node_ways_[curr.get_key()][curr.way_] : w.r_->node_ways_[curr.get_key()][p];
-              auto forward_dir = SearchDir == direction::kForward ? curr.dir_ : direction::kBackward;
-              auto backward_way = SearchDir == direction::kForward ? w.r_->node_ways_[curr.get_key()][p] : w.r_->node_ways_[curr.get_key()][curr.way_];
-              auto backward_dir = SearchDir == direction::kForward ? direction::kBackward : curr.dir_;
-
-              way_and_dir backward_resolved_way_and_dir = shortcuts->resolve_first_way_and_dir(backward_way, backward_dir);
-              way_and_dir forward_resolved_way_and_dir = shortcuts->resolve_last_way_and_dir(forward_way, forward_dir);
-
-              if (forward_resolved_way_and_dir.way == backward_resolved_way_and_dir.way && forward_resolved_way_and_dir.dir == opposite(backward_resolved_way_and_dir.dir)) {
-                nncost += car::kUturnPenalty;
-                n2_has_uturn = true;
-              }
-            }
-          }
           if (ncost < min_cost) {
             min_cost = ncost;
             min_node = n;
-            min_node_has_uturn = n_has_uturn;
           }
           if (nncost < min_cost) {
             min_cost = nncost;
             min_node = n2;
-            min_node_has_uturn = n2_has_uturn;
           }
         }
         if (min_cost != kInfeasible) {
+          if (w.r_->is_restricted(
+                    curr.get_key(), curr.way_, min_node.way_, SearchDir)) {
+            return;
+          }
+          auto forward_way = SearchDir == direction::kForward ? w.r_->node_ways_[curr.get_key()][curr.way_] : w.r_->node_ways_[curr.get_key()][min_node.way_];
+          auto forward_dir = SearchDir == direction::kForward ? curr.dir_ : min_node.dir_;
+          auto backward_way = SearchDir == direction::kForward ? w.r_->node_ways_[curr.get_key()][min_node.way_] : w.r_->node_ways_[curr.get_key()][curr.way_];
+          auto backward_dir = SearchDir == direction::kForward ? min_node.dir_ : curr.dir_;
+
+          way_and_dir backward_resolved_way_and_dir = shortcuts->resolve_first_way_and_dir(backward_way, backward_dir);
+          way_and_dir forward_resolved_way_and_dir = shortcuts->resolve_last_way_and_dir(forward_way, forward_dir);
+
+          if (forward_resolved_way_and_dir.way == backward_resolved_way_and_dir.way && forward_resolved_way_and_dir.dir == opposite(backward_resolved_way_and_dir.dir)) {
+            min_cost += car::kUturnPenalty;
+            min_node_has_uturn = true;
+          }
           evaluate_meetpoint(
               curr_cost, min_cost, min_node_has_uturn,
               SearchDir == direction::kForward ? curr : min_node,
