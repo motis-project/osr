@@ -413,41 +413,54 @@ path reconstruct(typename P::parameters const& params,
 }
 
 template <Profile P>
-path reconstruct_ch_preprocessing(typename P::parameters const& params,
-                                  ways const& w,
-                                  lookup const& l,
-                                  bitvec<node_idx_t> const* blocked,
-                                  sharing_data const* sharing,
-                                  elevation_storage const* elevations,
-                                  bidirectional_dijkstra<P> const& bd,
-                                  location const& from,
-                                  location const& to,
-                                  way_candidate const& start,
-                                  way_candidate const& dest,
-                                  cost_t const cost,
-                                  direction const dir) {
+std::optional<path> reconstruct_ch_preprocessing(
+    typename P::parameters const& params,
+    ways const& w,
+    lookup const& l,
+    bitvec<node_idx_t> const* blocked,
+    sharing_data const* sharing,
+    elevation_storage const* elevations,
+    bidirectional_dijkstra<P> const& bd,
+    location const& from,
+    location const& to,
+    way_candidate const& start,
+    way_candidate const& dest,
+    cost_t const cost,
+    direction const dir) {
+
+  // Use the same reconstruction logic as bidirectional but adapted for
+  // bidirectional_dijkstra
   auto forward_n = bd.meet_point_1_;
   auto forward_segments = std::vector<path::segment>{};
   auto forward_dist = 0.0;
 
+  // Reconstruct forward path
   while (true) {
-    auto const& e = bd.cost1_.at(forward_n.get_key());
+    auto const it = bd.cost1_.find(forward_n.get_key());
+    if (it == bd.cost1_.end()) {
+      break;
+    }
+    auto const& e = it->second;
     auto const pred = e.pred(forward_n);
     if (pred.has_value()) {
-      auto const expected_cost = static_cast<cost_t>(
-          e.cost(forward_n) - bd.template get_cost<direction::kForward>(*pred));
-      forward_dist +=
-          add_path<P>(params, w, *w.r_, blocked, sharing, elevations, *pred,
-                      forward_n, expected_cost, forward_segments, dir);
+      auto const pred_cost = bd.template get_cost<direction::kForward>(*pred);
+      auto const curr_cost =
+          bd.template get_cost<direction::kForward>(forward_n);
+      if (pred_cost != kInfeasible && curr_cost != kInfeasible) {
+        auto const expected_cost = static_cast<cost_t>(curr_cost - pred_cost);
+        forward_dist +=
+            add_path<P>(params, w, *w.r_, blocked, sharing, elevations, *pred,
+                        forward_n, expected_cost, forward_segments, dir);
+      }
     } else {
       break;
     }
     forward_n = *pred;
   }
 
+  // Add start segment
   auto const& start_node_candidate =
       forward_n.get_node() == start.left_.node_ ? start.left_ : start.right_;
-
   forward_segments.push_back(
       {.polyline_ =
            l.get_node_candidate_path(start, start_node_candidate, false, from),
@@ -462,29 +475,37 @@ path reconstruct_ch_preprocessing(typename P::parameters const& params,
        .dist_ = static_cast<distance_t>(start_node_candidate.dist_to_node_),
        .mode_ = forward_n.get_mode()});
 
+  // Reconstruct backward path
   auto backward_segments = std::vector<path::segment>{};
   auto backward_n = bd.meet_point_2_;
   auto backward_dist = 0.0;
 
   while (true) {
-    auto const& e = bd.cost2_.at(backward_n.get_key());
+    auto const it = bd.cost2_.find(backward_n.get_key());
+    if (it == bd.cost2_.end()) {
+      break;
+    }
+    auto const& e = it->second;
     auto const pred = e.pred(backward_n);
     if (pred.has_value()) {
-      auto const expected_cost = static_cast<cost_t>(
-          e.cost(backward_n) -
-          bd.template get_cost<direction::kBackward>(*pred));
-      backward_dist += add_path<P>(params, w, *w.r_, blocked, sharing,
-                                   elevations, *pred, backward_n, expected_cost,
-                                   backward_segments, opposite(dir));
+      auto const pred_cost = bd.template get_cost<direction::kBackward>(*pred);
+      auto const curr_cost =
+          bd.template get_cost<direction::kBackward>(backward_n);
+      if (pred_cost != kInfeasible && curr_cost != kInfeasible) {
+        auto const expected_cost = static_cast<cost_t>(curr_cost - pred_cost);
+        backward_dist += add_path<P>(
+            params, w, *w.r_, blocked, sharing, elevations, *pred, backward_n,
+            expected_cost, backward_segments, opposite(dir));
+      }
     } else {
       break;
     }
     backward_n = *pred;
   }
 
+  // Add destination segment
   auto const& dest_node_candidate =
       backward_n.get_node() == dest.left_.node_ ? dest.left_ : dest.right_;
-
   backward_segments.push_back(
       {.polyline_ =
            l.get_node_candidate_path(dest, dest_node_candidate, true, to),
@@ -499,26 +520,18 @@ path reconstruct_ch_preprocessing(typename P::parameters const& params,
        .dist_ = static_cast<distance_t>(dest_node_candidate.dist_to_node_),
        .mode_ = backward_n.get_mode()});
 
-  if (dir == direction::kForward) {
-    std::reverse(forward_segments.begin(), forward_segments.end());
-  } else {
-    std::reverse(backward_segments.begin(), backward_segments.end());
-  }
-  forward_segments.insert(forward_segments.end(), backward_segments.begin(),
-                          backward_segments.end());
+  // Combine segments
+  std::reverse(begin(forward_segments), end(forward_segments));
+  forward_segments.insert(end(forward_segments), begin(backward_segments),
+                          end(backward_segments));
 
-  auto total_dist = start_node_candidate.dist_to_node_ + forward_dist +
-                    backward_dist + dest_node_candidate.dist_to_node_;
-
-  auto path_elevation = elevation_storage::elevation{};
-  for (auto const& segment : forward_segments) {
-    path_elevation += segment.elevation_;
-  }
+  auto total_dist = forward_dist + backward_dist +
+                    static_cast<double>(start_node_candidate.dist_to_node_) +
+                    static_cast<double>(dest_node_candidate.dist_to_node_);
 
   return path{.cost_ = cost,
-              .dist_ = total_dist,
-              .elevation_ = path_elevation,
-              .segments_ = forward_segments};
+              .dist_ = static_cast<double>(total_dist),
+              .segments_ = std::move(forward_segments)};
 }
 
 bool component_seen(ways const& w,

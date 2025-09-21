@@ -106,11 +106,15 @@ struct bidirectional_dijkstra {
                   elevation_storage const* elevations,
                   dial<label, get_bucket>& pq,
                   cost_map& costs) {
-    auto const is_fwd = PathDir == direction::kForward;
+    if (pq.empty()) {
+      return false;
+    }
 
+    auto const is_fwd = PathDir == direction::kForward;
     auto const l = pq.pop();
     auto const curr = l.get_node();
     auto const curr_cost = get_cost<PathDir>(curr);
+
     if (curr_cost < l.cost()) {
       return true;
     }
@@ -118,7 +122,47 @@ struct bidirectional_dijkstra {
     if constexpr (kDebug) {
       std::cout << "EXTRACT ";
       curr.print(std::cout, w);
-      std::cout << "\n";
+      std::cout << " cost: " << l.cost() << "\n";
+    }
+
+    if (l.cost() >= max) {
+      if (is_fwd) {
+        max_reached_1_ = true;
+      } else {
+        max_reached_2_ = true;
+      }
+      return false;
+    }
+
+    auto const opposite_cost_map = is_fwd ? &cost2_ : &cost1_;
+    auto const opposite_candidate = opposite_cost_map->find(curr.get_key());
+    if (opposite_candidate != end(*opposite_cost_map)) {
+      cost_t best_other = kInfeasible;
+      node best_other_state = node::invalid();
+      P::resolve_all(r, curr.get_node(), level_t{0.0F}, [&](node const alt) {
+        auto const oc = opposite_candidate->second.cost(alt);
+        if (oc != kInfeasible && oc < best_other) {
+          best_other = oc;
+          best_other_state = alt;
+        }
+      });
+      if (best_other != kInfeasible) {
+        auto const tentative_cost = curr_cost + best_other;
+        if (tentative_cost < best_cost_) {
+          if (is_fwd) {
+            meet_point_1_ = curr;
+            meet_point_2_ = best_other_state;
+          } else {
+            meet_point_1_ = best_other_state;
+            meet_point_2_ = curr;
+          }
+          best_cost_ = static_cast<cost_t>(tentative_cost);
+
+          if constexpr (kDebug) {
+            std::cout << "  MEETING POINT FOUND! Cost: " << best_cost_ << "\n";
+          }
+        }
+      }
     }
 
     if (use_ch_preprocessing_ && ch_pre_ != nullptr) {
@@ -130,6 +174,7 @@ struct bidirectional_dijkstra {
         cost_t edge_cost = ch_pre_->get_cost(params, curr, neighbor, r, blocked,
                                              sharing, elevations);
         if (edge_cost >= kInfeasible) continue;
+
         auto const total = curr_cost + edge_cost;
         if (total >= max) {
           if (is_fwd) {
@@ -139,18 +184,15 @@ struct bidirectional_dijkstra {
           }
           continue;
         }
+
         if (total < max && costs[neighbor.get_key()].update(
                                l, neighbor, static_cast<cost_t>(total), curr)) {
           auto next = label{neighbor, static_cast<cost_t>(total)};
-          next.track(l, r, way_idx_t{}, neighbor.get_node(),
-                     false);  // way and track info not available for shortcut
+          next.track(l, r, way_idx_t{}, neighbor.get_node(), false);
           pq.push(std::move(next));
+
           if constexpr (kDebug) {
-            std::cout << " -> PUSH (CH)\n";
-          }
-        } else {
-          if constexpr (kDebug) {
-            std::cout << " -> DOMINATED (CH)\n";
+            std::cout << " -> PUSH (CH) neighbor cost: " << total << "\n";
           }
         }
       }
@@ -164,6 +206,7 @@ struct bidirectional_dijkstra {
               std::cout << "  NEIGHBOR ";
               neighbor.print(std::cout, w);
             }
+
             auto const total = curr_cost + edge_cost;
             if (total >= max) {
               if (is_fwd) {
@@ -173,14 +216,16 @@ struct bidirectional_dijkstra {
               }
               return;
             }
+
             if (total < max &&
                 costs[neighbor.get_key()].update(
                     l, neighbor, static_cast<cost_t>(total), curr)) {
               auto next = label{neighbor, static_cast<cost_t>(total)};
               next.track(l, r, way, neighbor.get_node(), track);
               pq.push(std::move(next));
+
               if constexpr (kDebug) {
-                std::cout << " -> PUSH\n";
+                std::cout << " -> PUSH cost: " << total << "\n";
               }
             } else {
               if constexpr (kDebug) {
@@ -190,114 +235,23 @@ struct bidirectional_dijkstra {
           });
     }
 
-    auto const evaluate_meetpoint = [&](cost_t cost, cost_t other_cost,
-                                        node meetpoint1, node meetpoint2) {
-      auto const tentative = cost + other_cost;
-      if (tentative < best_cost_) {
-        meet_point_1_ = meetpoint1;
-        meet_point_2_ = meetpoint2;
-        best_cost_ = static_cast<cost_t>(tentative);
-      }
-    };
-
-    auto const handle_meetpoint = [&]() {
-      auto const opposite_cost_map = is_fwd ? &cost2_ : &cost1_;
-      auto const opposite_candidate = opposite_cost_map->find(curr.get_key());
-      if (opposite_candidate != end(*opposite_cost_map)) {
-        auto const other_cost = opposite_candidate->second.cost(curr);
-        if (other_cost != kInfeasible) {
-          evaluate_meetpoint(curr_cost, other_cost, curr, curr);
-        } else {
-          auto const pred_it = costs.find(curr.get_key());
-          if (pred_it == end(costs)) {
-            return;
-          }
-          auto const pred = pred_it->second.pred(curr);
-          if (!pred.has_value()) {
-            return;
-          }
-          if (use_ch_preprocessing_ && ch_pre_ != nullptr) {
-            cost_t edge_cost = ch_pre_->get_cost(params, *pred, curr, r,
-                                                 blocked, sharing, elevations);
-            if (edge_cost < kInfeasible) {
-              auto const opposite_it = opposite_cost_map->find(pred->get_key());
-              if (opposite_it != end(*opposite_cost_map)) {
-                auto const opposite_curr = opposite_it->second.pred(*pred);
-                if (opposite_curr.has_value() &&
-                    opposite_curr->get_key() == curr.get_key()) {
-                  auto const opposite_curr_cost =
-                      opposite_candidate->second.cost(*opposite_curr);
-                  auto const pred_cost = get_cost<PathDir>(*pred);
-                  auto const opposite_pred_cost =
-                      opposite_it->second.cost(*pred);
-                  auto const choose = [&](cost_t c1, cost_t c2, node m1,
-                                          node m2) {
-                    evaluate_meetpoint(c1, c2, is_fwd ? m1 : m2,
-                                       is_fwd ? m2 : m1);
-                  };
-                  if (pred_cost + opposite_pred_cost >
-                      curr_cost + opposite_curr_cost) {
-                    choose(pred_cost, opposite_pred_cost, *pred, *pred);
-                  } else {
-                    choose(curr_cost, opposite_curr_cost, curr, *opposite_curr);
-                  }
-                }
-              }
-            }
-          } else {
-            P::template adjacent<opposite(SearchDir), WithBlocked>(
-                params, r, curr, blocked, sharing, elevations,
-                [&](node const neighbor, std::uint32_t const, distance_t,
-                    way_idx_t const, std::uint16_t, std::uint16_t,
-                    elevation_storage::elevation const, bool const) {
-                  if (neighbor.get_key() != pred->get_key()) {
-                    return;
-                  }
-                  auto const opposite_it =
-                      opposite_cost_map->find(neighbor.get_key());
-                  if (opposite_it == end(*opposite_cost_map)) {
-                    return;
-                  }
-                  auto const opposite_curr = opposite_it->second.pred(neighbor);
-                  if (!opposite_curr.has_value() ||
-                      opposite_curr->get_key() != curr.get_key()) {
-                    return;
-                  }
-                  auto const opposite_curr_cost =
-                      opposite_candidate->second.cost(*opposite_curr);
-                  auto const pred_cost = get_cost<PathDir>(*pred);
-                  auto const opposite_pred_cost =
-                      opposite_it->second.cost(neighbor);
-                  auto const choose = [&](cost_t c1, cost_t c2, node m1,
-                                          node m2) {
-                    evaluate_meetpoint(c1, c2, is_fwd ? m1 : m2,
-                                       is_fwd ? m2 : m1);
-                  };
-                  if (pred_cost + opposite_pred_cost >
-                      curr_cost + opposite_curr_cost) {
-                    choose(pred_cost, opposite_pred_cost, *pred, neighbor);
-                  } else {
-                    choose(curr_cost, opposite_curr_cost, curr, *opposite_curr);
-                  }
-                });
-          }
-        }
-      }
-    };
-
-    handle_meetpoint();
-
     if (best_cost_ != kInfeasible) {
       auto const top_f =
-          pq1_.empty() ? get_cost<direction::kForward>(meet_point_1_)
-                       : pq1_.buckets_[pq1_.get_next_bucket()].back().cost();
+          pq1_.empty() ? kInfeasible
+          : pq1_.buckets_[pq1_.get_next_bucket()].empty()
+              ? kInfeasible
+              : pq1_.buckets_[pq1_.get_next_bucket()].back().cost();
       auto const top_r =
-          pq2_.empty() ? get_cost<direction::kBackward>(meet_point_2_)
-                       : pq2_.buckets_[pq2_.get_next_bucket()].back().cost();
+          pq2_.empty() ? kInfeasible
+          : pq2_.buckets_[pq2_.get_next_bucket()].empty()
+              ? kInfeasible
+              : pq2_.buckets_[pq2_.get_next_bucket()].back().cost();
+
       if (top_f + top_r >= best_cost_) {
         return false;
       }
     }
+
     return true;
   }
 

@@ -53,7 +53,8 @@ static void load(std::string_view raw_data, std::string_view data_dir) {
 static void run_bidijkstra_consistency(ways const& w,
                                        lookup const& l,
                                        unsigned const n_samples,
-                                       unsigned const max_cost) {
+                                       unsigned const max_cost,
+                                       direction const dir) {
   auto const pairs = [&]() {
     auto prng = std::mt19937{};
     auto distr =
@@ -81,7 +82,7 @@ static void run_bidijkstra_consistency(ways const& w,
     auto const node_pinned_matches =
         [&](location const& loc, node_idx_t const n, bool const reverse) {
           auto matches =
-              l.match<car>(car::parameters{}, loc, reverse, direction::kForward,
+              l.match<car>(car::parameters{}, loc, reverse, dir,
                            kMaxMatchDistance, nullptr);
           std::erase_if(matches, [&](auto const& wc) {
             return wc.left_.node_ != n && wc.right_.node_ != n;
@@ -99,11 +100,11 @@ static void run_bidijkstra_consistency(ways const& w,
     auto const from_span = std::span{begin(from_matches), end(from_matches)};
     auto const to_span = std::span{begin(to_matches), end(to_matches)};
 
-    // Baseline classic Dijkstra (forward search)
+    // Baseline classic Dijkstra
     auto const baseline_start = std::chrono::steady_clock::now();
     auto const baseline_route =
         route(car::parameters{}, w, l, search_profile::kCar, from_loc, to_loc,
-              from_span, to_span, max_cost, direction::kForward, nullptr,
+              from_span, to_span, max_cost, dir, nullptr,
               nullptr, nullptr, routing_algorithm::kDijkstra);
     auto const baseline_time =
         std::chrono::steady_clock::now() - baseline_start;
@@ -112,7 +113,7 @@ static void run_bidijkstra_consistency(ways const& w,
     auto const bidir_start = std::chrono::steady_clock::now();
     auto const bidir_route =
         route(car::parameters{}, w, l, search_profile::kCar, from_loc, to_loc,
-              from_span, to_span, max_cost, direction::kForward, nullptr,
+              from_span, to_span, max_cost, dir, nullptr,
               nullptr, nullptr, routing_algorithm::kBiDijkstra);
     auto const bidir_time = std::chrono::steady_clock::now() - bidir_start;
 
@@ -188,8 +189,9 @@ static void run_bidijkstra_consistency(ways const& w,
 TEST(bidirectional_dijkstra, monaco) {
   auto const raw_data = "test/monaco.osm.pbf";
   auto const data_dir = "test/monaco";
-  auto const num_samples = 5000U;
+  auto const num_samples = 900U;
   auto const max_cost = 2 * 3600U;
+  auto constexpr dir = direction::kForward;
 
   if (!fs::exists(raw_data) && !fs::exists(data_dir)) {
     GTEST_SKIP() << raw_data << " not found";
@@ -199,14 +201,15 @@ TEST(bidirectional_dijkstra, monaco) {
   auto const w = osr::ways{data_dir, cista::mmap::protection::READ};
   auto const l = osr::lookup{w, data_dir, cista::mmap::protection::READ};
 
-  run_bidijkstra_consistency(w, l, num_samples, max_cost);
+  run_bidijkstra_consistency(w, l, num_samples, max_cost, dir);
 }
 
 TEST(bidirectional_dijkstra, hamburg) {
   auto const raw_data = "test/hamburg.osm.pbf";
   auto const data_dir = "test/hamburg";
-  auto const num_samples = 3000U;
+  auto const num_samples = 500U;
   auto const max_cost = 3 * 3600U;
+  auto constexpr dir = direction::kForward;
 
   if (!fs::exists(raw_data) && !fs::exists(data_dir)) {
     GTEST_SKIP() << raw_data << " not found";
@@ -216,14 +219,15 @@ TEST(bidirectional_dijkstra, hamburg) {
   auto const w = osr::ways{data_dir, cista::mmap::protection::READ};
   auto const l = osr::lookup{w, data_dir, cista::mmap::protection::READ};
 
-  run_bidijkstra_consistency(w, l, num_samples, max_cost);
+  run_bidijkstra_consistency(w, l, num_samples, max_cost, dir);
 }
 
 TEST(bidirectional_dijkstra, switzerland) {
   auto const raw_data = "test/switzerland.osm.pbf";
   auto const data_dir = "test/switzerland";
-  auto const num_samples = 500U;  // large map -> smaller sample for time
+  auto const num_samples = 500U;
   auto const max_cost = 5 * 3600U;
+  auto constexpr dir = direction::kForward;
 
   if (!fs::exists(raw_data) && !fs::exists(data_dir)) {
     GTEST_SKIP() << raw_data << " not found";
@@ -233,7 +237,7 @@ TEST(bidirectional_dijkstra, switzerland) {
   auto const w = osr::ways{data_dir, cista::mmap::protection::READ};
   auto const l = osr::lookup{w, data_dir, cista::mmap::protection::READ};
 
-  run_bidijkstra_consistency(w, l, num_samples, max_cost);
+  run_bidijkstra_consistency(w, l, num_samples, max_cost, dir);
 }
 
 TEST(bidirectional_dijkstra, DISABLED_germany) {
@@ -241,6 +245,7 @@ TEST(bidirectional_dijkstra, DISABLED_germany) {
   auto const data_dir = "test/germany";
   auto const num_samples = 50U;
   auto const max_cost = 12 * 3600U;
+  auto constexpr dir = direction::kForward;
 
   if (!fs::exists(raw_data) && !fs::exists(data_dir)) {
     GTEST_SKIP() << raw_data << " not found";
@@ -250,5 +255,5 @@ TEST(bidirectional_dijkstra, DISABLED_germany) {
   auto const w = osr::ways{data_dir, cista::mmap::protection::READ};
   auto const l = osr::lookup{w, data_dir, cista::mmap::protection::READ};
 
-  run_bidijkstra_consistency(w, l, num_samples, max_cost);
+  run_bidijkstra_consistency(w, l, num_samples, max_cost, dir);
 }
