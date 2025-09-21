@@ -119,14 +119,22 @@ struct http_server::impl {
   static bool get_use_ch_from_request(boost::json::object const& q) {
     auto const it = q.find("useCH");
     if (it != q.end()) {
-      if (it->value().is_bool()) { return it->value().as_bool(); }
+      if (it->value().is_bool()) {
+        return it->value().as_bool();
+      }
       if (it->value().is_string()) {
         auto s = it->value().as_string();
         return s == "1" || s == "true" || s == "True" || s == "yes";
       }
-      if (it->value().is_int64()) { return it->value().as_int64() != 0; }
-      if (it->value().is_uint64()) { return it->value().as_uint64() != 0; }
-      if (it->value().is_double()) { return it->value().as_double() != 0.0; }
+      if (it->value().is_int64()) {
+        return it->value().as_int64() != 0;
+      }
+      if (it->value().is_uint64()) {
+        return it->value().as_uint64() != 0;
+      }
+      if (it->value().is_double()) {
+        return it->value().as_double() != 0.0;
+      }
     }
     return false;
   }
