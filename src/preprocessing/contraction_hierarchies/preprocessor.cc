@@ -19,14 +19,20 @@ void process_all_nodes(
   shortcut_storage& shortcuts,
   contractor& c,
   std::unique_ptr<OrderStrategy> const& order_strategy,
-  osr::ch::node_order* order
+  osr::ch::node_order* order,
+  size_t stall
   ) {
   int processed = 0;
   auto pt = utl::get_active_progress_tracker_or_activate("contraction-hierarchy");
   auto const total_nodes = w.n_nodes();
   pt->status("Contracting nodes").in_high(total_nodes).out_bounds(0, 100);
+  auto stall_f = static_cast<float>(stall) / static_cast<float>(100);
   while (order_strategy->has_next()) {
     node_idx_t node = order_strategy->next_node();
+    if (static_cast<float>(processed) / static_cast<float>(total_nodes) >= stall_f) {
+      order->add_node(node, true);
+      continue;
+    }
     order->add_node(node);
     c.contract_node(w,w_without, blocked, &shortcuts, node);
     pt->update(++processed);
@@ -35,7 +41,8 @@ void process_all_nodes(
 
 void process_ch(std::filesystem::path const& in,
                 std::filesystem::path const& out,
-                std::unique_ptr<OrderStrategy>& order_strategy) {
+                std::unique_ptr<OrderStrategy>& order_strategy,
+                size_t stall) {
   fmt::println("Begin Setup for Contraction Hirachies");
 
   auto w = ways{out, cista::mmap::protection::READ};
@@ -62,7 +69,7 @@ void process_ch(std::filesystem::path const& in,
   c.calculate_neighbors(w);
 
   bitvec<node_idx_t> blocked(w.n_nodes());
-  process_all_nodes(w, w_without, &blocked, shortcuts, c, order_strategy, &node_order);
+  process_all_nodes(w, w_without, &blocked, shortcuts, c, order_strategy, &node_order, stall);
 
   fmt::println("Found {} shortcuts", shortcuts.shortcuts_.size());
   fmt::println("End Contraction Hirachies Processing");
