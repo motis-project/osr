@@ -2,20 +2,18 @@
 
 namespace osr::ch {
 
+struct serialized_data {
+  vec<shortcut_data> shortcuts_;
+  way_idx_t max_way_idx_;
+};
+
 void shortcut_storage::save(std::filesystem::path const& path) const {
-  struct serialized_data {
-    vec<shortcut_data> shortcuts_;
-    way_idx_t max_way_idx_;
-  };
+
   auto data = serialized_data{shortcuts_, max_way_idx_};
   cista::write(path / "shortcuts.bin", data);
 }
 
 void shortcut_storage::load(std::filesystem::path const& path) {
-  struct serialized_data {
-    vec<shortcut_data> shortcuts_;
-    way_idx_t max_way_idx_;
-  };
   auto loaded = cista::read<serialized_data>(path / "shortcuts.bin");
   fmt::print("load {} shortcuts\n", loaded->shortcuts_.size());
   for (auto& shortcut : loaded->shortcuts_) {

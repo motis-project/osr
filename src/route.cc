@@ -245,6 +245,11 @@ double add_path(ways const& w,
       shortcuts->is_shortcut(way) && std::is_same_v<Profile, car>) {
     std::vector<ch::ShortcutSegment> segments =
         shortcuts->get_shortcut_segments(way);
+    //fmt::println("Using shortcut {} from {} ({}) to {} ({})", way,
+    //             w.r_->way_nodes_[way][from_idx],
+    //             w.node_to_osm_[w.r_->way_nodes_[way][from_idx]],
+    //             w.r_->way_nodes_[way][to_idx],
+    //             w.node_to_osm_[w.r_->way_nodes_[way][to_idx]]);
     std::reverse(segments.begin(), segments.end());
     for (auto const& segment : segments) {
       add_path<Profile>(w, r, sharing, from, to, segment.cost, path, segment.w,

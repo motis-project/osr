@@ -144,6 +144,10 @@ struct http_server::impl {
     auto const print = [](char const* name, std::optional<path> const& p) {
       if (p.has_value()) {
         std::cout << name << " cost: " << p->cost_ << "\n";
+        for (auto& segment : p->segments_) {
+          fmt::print("  {} -{}-> {}", segment.from_, segment.way_, segment.to_);
+        }
+        fmt::print("\n");
       } else {
         std::cout << name << ": not found\n";
       }

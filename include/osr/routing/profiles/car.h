@@ -132,7 +132,6 @@ struct car {
 
     static constexpr std::size_t get_index(node const n) {
       return (n.dir_ == direction::kForward ? 0U : 1U) + 2 * n.way_;
-      return (n.dir_ == direction::kForward ? 0U : 1U) * kMaxWays + n.way_;
     }
 
     static constexpr direction to_dir(bool const b) {
