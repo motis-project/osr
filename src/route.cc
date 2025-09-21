@@ -47,7 +47,7 @@ template <Profile P>
 bidirectional_dijkstra<P>& get_bidirectional_dijkstra() {
   static auto s = boost::thread_specific_ptr<bidirectional_dijkstra<P>>{};
   if (s.get() == nullptr) {
-      s.reset(new bidirectional_dijkstra<P>{true, &get_ch_preprocessor<P>()});
+      s.reset(new bidirectional_dijkstra<P>{});
   }
   return *s.get();
 }

@@ -158,7 +158,7 @@ struct http_server::impl {
 
     // Call overload with CH toggle
     auto const p = route(params, w_, l_, profile, from, to, max, dir, 100,
-                         nullptr, nullptr, elevations_, routing_algo, use_ch);
+                         nullptr, nullptr, elevations_, routing_algo);
 
     auto const p1 = route(params, w_, l_, profile, from, std::vector{to}, max,
                           dir, 100, nullptr, nullptr, elevations_);
