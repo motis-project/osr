@@ -96,10 +96,10 @@ struct random_order_strategy final : public order_strategy {
     return node;
   }
 
-  node_idx_t rnd_vec_elem(std::vector<node_idx_t>& v) const {
+  static node_idx_t rnd_vec_elem(std::vector<node_idx_t>& v) {
     auto const n = v.size();
-    srand(seed_);
-    size_t const idx = rand() % n;
+
+    auto const idx = rand() % n;
     node_idx_t const result = v[idx];
 
     std::swap(v[idx], v[n - 1]);

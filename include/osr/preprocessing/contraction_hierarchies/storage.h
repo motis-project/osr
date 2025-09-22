@@ -116,7 +116,7 @@ struct shortcut_storage {
     return &shortcuts_[to_shortcut_idx(idx)];
   }
 
-  [[nodiscard]] size_t to_shortcut_idx(way_idx_t const idx) const {
+  [[nodiscard]] unsigned int to_shortcut_idx(way_idx_t const idx) const {
     return cista::to_idx(idx) - cista::to_idx(max_way_idx_) - 1;
   }
 

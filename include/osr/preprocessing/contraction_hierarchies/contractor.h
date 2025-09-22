@@ -120,7 +120,7 @@ struct contractor {
     return true;
   }
 
-  static cost_t get_possible_shortcut_cost(
+  static uint32_t get_possible_shortcut_cost(
       neighbor_data const& from,
       neighbor_data const& to,
       shortcut_storage const* shortcut_storage) {

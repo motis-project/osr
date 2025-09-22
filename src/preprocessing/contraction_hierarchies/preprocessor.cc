@@ -20,7 +20,7 @@ void process_all_nodes(ways& w,
                        std::unique_ptr<order_strategy> const& order_strategy,
                        osr::ch::node_order* order,
                        size_t const stall) {
-  int processed = 0;
+  size_t processed = 0;
   auto const pt =
       utl::get_active_progress_tracker_or_activate("contraction-hierarchy");
   auto const total_nodes = w.n_nodes();

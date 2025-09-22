@@ -262,18 +262,9 @@ struct car {
         auto const is_u_turn = resolved_way == node_resolved_way &&
                                resolved_dir == opposite(node_resolved_dir);
         auto const dist = w.way_node_dist_[way][std::min(from, to)];
-        auto pos = way_pos_t{0U};
-        if (way_is_shortcut && false) {
-          if (to == 0) {
-            pos = shortcuts->get_way_pos_at_from_node(way);
-          } else {
-            pos = shortcuts->get_way_pos_at_to_node(way);
-          }
-        } else {
-          pos = w.get_way_pos(target_node, way, to);
-        }
 
-        auto const target = node{target_node, pos, way_dir};
+        auto const target =
+            node{target_node, w.get_way_pos(target_node, way, to), way_dir};
         auto const cost =
             (way_is_shortcut
                  ? way_cost_s(target_way_prop, way_dir, dist,
@@ -302,7 +293,7 @@ struct car {
         (dir == direction::kForward || !e.is_oneway_car())) {
       cost_t cost = 0;
       if (shortcut != nullptr) {
-        cost = shortcut->cost;
+        cost = static_cast<cost_t>(shortcut->cost);
       } else {
         cost = dist / e.max_speed_m_per_s();
       }

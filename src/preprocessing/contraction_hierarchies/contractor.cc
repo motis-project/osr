@@ -70,7 +70,7 @@ void contractor::calculate_neighbors(ways const& w) {
   }
 }
 
-std::unordered_map<node_idx_t, std::vector<way_idx_t>> node_selfloops;
+static std::unordered_map<node_idx_t, std::vector<way_idx_t>> node_selfloops;
 
 bool node_has_sefloop(node_idx_t const node) {
   return node_selfloops.contains(node);
@@ -328,14 +328,15 @@ void contractor::contract_node(ways& w,
     }
 
     auto& dijkstra = get_dijkstra<car>();
-    dijkstra.reset(max_direct_cost + 1);
+    dijkstra.reset(static_cast<cost_t>(max_direct_cost + 1));
     dijkstra.add_start(
         w, {car::node{from.node_idx, w.r_->get_way_pos(from.node_idx, from.way),
                       from.node.dir_},
             0});
 
-    dijkstra.run(car::parameters{}, w, *w.r_, max_direct_cost + 1, blocked,
-                 nullptr, nullptr, direction::kForward, shortcuts);
+    dijkstra.run(car::parameters{}, w, *w.r_,
+                 static_cast<cost_t>(max_direct_cost + 1), blocked, nullptr,
+                 nullptr, direction::kForward, shortcuts);
 
     for (std::size_t j{0U}; j < outgoing_neighbors_[to_idx(node)].size(); ++j) {
       auto const& to = outgoing_neighbors_[to_idx(node)][j];
@@ -371,7 +372,7 @@ void contractor::contract_node(ways& w,
       bool shortest_possible_selfloop_found = false;
       if ((is_uturn || is_restricted) && node_has_sefloop(node)) {
         way_idx_t shortest_possible_selfloop = way_idx_t::invalid();
-        cost_t shortest_possible_selfloop_cost = kInfeasible;
+        uint32_t shortest_possible_selfloop_cost = kInfeasible;
         auto selfloops = node_selfloops[node];
         for (auto const& selfloop : selfloops) {
           if (!shortcuts->shortcut_is_selfloop(selfloop)) {
@@ -492,7 +493,8 @@ void contractor::contract_node(ways& w,
               (first_way_resolved.way == from_way_resolved.way &&
                first_way_resolved.dir == from_way_resolved.dir)) {
             if (has_restriction) {
-              add_shortcut = path_cost + 120 > direct_cost;
+              add_shortcut =
+                  static_cast<uint32_t>(path_cost + 120) > direct_cost;
             }
           }
         }
