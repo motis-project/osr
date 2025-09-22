@@ -101,13 +101,17 @@ int main(int argc, char const* argv[]) {
     use_ch = true;
   }
 
-  std::unique_ptr<ways> w_shortcuts = use_ch ? std::make_unique<ways>(opt.ch_dir_, cista::mmap::protection::READ) : nullptr;
+  std::unique_ptr<ways> w_shortcuts =
+      use_ch
+          ? std::make_unique<ways>(opt.ch_dir_, cista::mmap::protection::READ)
+          : nullptr;
   auto const ch_check_path = opt.ch_dir_ / "shortcuts.bin";
   bool const should_load = fs::exists(ch_check_path) && use_ch;
   if (!fs::exists(ch_check_path) && use_ch) {
     std::cout << ch_check_path << " does not exist\n";
   }
-  auto shortcuts = should_load ? std::make_unique<ch::shortcut_storage>() : nullptr;
+  auto shortcuts =
+      should_load ? std::make_unique<ch::shortcut_storage>() : nullptr;
   if (shortcuts != nullptr) {
     shortcuts->load(opt.ch_dir_);
     shortcuts->load_all_shortcuts_in_graph(std::ref(*w_shortcuts));
@@ -118,12 +122,16 @@ int main(int argc, char const* argv[]) {
   if (!fs::exists(ch_node_order_path) && use_ch) {
     std::cout << ch_node_order_path << " does not exist\n";
   }
-  auto node_order = should_load_node_order ? std::make_unique<ch::node_order>(opt.ch_dir_, cista::mmap::protection::READ) : nullptr;
+  auto node_order = should_load_node_order
+                        ? std::make_unique<ch::node_order>(
+                              opt.ch_dir_, cista::mmap::protection::READ)
+                        : nullptr;
   if (node_order != nullptr) {
     fmt::print("loaded node order\n");
   }
   if ((shortcuts == nullptr || node_order == nullptr) && use_ch) {
-    fmt::print("no shortcuts or node order found, skipping contraction hierarchy\n");
+    fmt::print(
+        "no shortcuts or node order found, skipping contraction hierarchy\n");
     shortcuts = nullptr;
     node_order = nullptr;
   } else if (use_ch) {
@@ -133,8 +141,15 @@ int main(int argc, char const* argv[]) {
 
   auto ioc = boost::asio::io_context{};
   auto pool = boost::asio::io_context{};
-  auto server = http_server{
-      ioc, pool, w, l, pl.get(), elevations.get(), opt.static_file_path_, shortcuts.get(), w_shortcuts.get()};
+  auto server = http_server{ioc,
+                            pool,
+                            w,
+                            l,
+                            pl.get(),
+                            elevations.get(),
+                            opt.static_file_path_,
+                            shortcuts.get(),
+                            w_shortcuts.get()};
 
   auto work_guard = boost::asio::make_work_guard(pool);
   auto threads = std::vector<std::thread>(std::max(1U, opt.threads_));

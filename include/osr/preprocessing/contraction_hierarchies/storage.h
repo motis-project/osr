@@ -9,7 +9,10 @@ namespace osr::ch {
 struct node_order {
   mm_vec_map<node_idx_t, uint64_t> order_to_store_;
   uint64_t order_count_{0U};
-  node_order(std::filesystem::path p, cista::mmap::protection const mode) : order_to_store_(cista::mmap{(p / "node_order.bin").generic_string().c_str(), mode}), order_count_(0U) { }
+  node_order(std::filesystem::path p, cista::mmap::protection const mode)
+      : order_to_store_(
+            cista::mmap{(p / "node_order.bin").generic_string().c_str(), mode}),
+        order_count_(0U) {}
 
   void init(size_t const& n) {
     order_count_ = 0U;
@@ -19,12 +22,12 @@ struct node_order {
   }
 
   void add_node(node_idx_t const n, bool const stall = false) {
-    order_to_store_[n] = stall ? order_count_ : order_count_++; // store the current count and increment it afterwards
+    order_to_store_[n] =
+        stall ? order_count_ : order_count_++;  // store the current count and
+                                                // increment it afterwards
   }
 
-  uint64_t get_order(node_idx_t const n) {
-    return order_to_store_[n];
-  }
+  uint64_t get_order(node_idx_t const n) { return order_to_store_[n]; }
 };
 
 struct ShortcutSegment {
@@ -49,7 +52,9 @@ struct shortcut_data {
   const way_idx_t downward_way;  // via -> to
   const distance_t downward_distance;  // distance of downward_way
   const uint32_t downward_cost;  // cost of downward_way
-  const way_idx_t selfloop_way_idx;  // special shortcut for selfloop (used to contract a 3 way pair where one is a self loop)
+  const way_idx_t
+      selfloop_way_idx;  // special shortcut for selfloop (used to contract a 3
+                         // way pair where one is a self loop)
   vec<ShortcutSegment> loop_segments{};
 };
 struct way_and_dir {
@@ -65,12 +70,15 @@ struct shortcut_storage {
   std::vector<way_pos_t> shortcut_way_poses_at_to_node;
   std::vector<way_pos_t> shortcut_way_poses_at_from_node;
   std::vector<bool> shortcut_has_restricted_nodes;
-  way_idx_t max_way_idx_; // This will contain the last non shortcut way_idx_t so if there are 10 ways it will be 9
+  way_idx_t max_way_idx_;  // This will contain the last non shortcut way_idx_t
+                           // so if there are 10 ways it will be 9
 
   std::vector<way_and_dir> first_way_on_shortcut;
   std::vector<way_and_dir> last_way_on_shortcut;
 
-  void set_max_way_idx(way_idx_t const max_way_idx) { max_way_idx_ = max_way_idx; }
+  void set_max_way_idx(way_idx_t const max_way_idx) {
+    max_way_idx_ = max_way_idx;
+  }
 
   bool shortcut_has_restricted_node(way_idx_t const way) {
     if (!is_shortcut(way)) {
@@ -97,12 +105,12 @@ struct shortcut_storage {
     return node_order_->get_order(n);
   }
 
-  bool is_shortcut(way_idx_t const idx) const {
-    return idx > max_way_idx_;
-  }
+  bool is_shortcut(way_idx_t const idx) const { return idx > max_way_idx_; }
 
   shortcut_data const* get_shortcut(way_idx_t const idx) const {
-    if (!is_shortcut(idx)) { return nullptr;}
+    if (!is_shortcut(idx)) {
+      return nullptr;
+    }
     return &shortcuts_.at(to_shortcut_idx(idx));
   }
 
@@ -127,12 +135,18 @@ struct shortcut_storage {
     return first_way_on_shortcut[to_shortcut_idx(way)].way;
   }
 
-  way_and_dir resolve_first_way_and_dir(way_idx_t const way, direction const dir, way_pos_t const way_pos = way_pos_t{0U}) const {
+  way_and_dir resolve_first_way_and_dir(way_idx_t const way,
+                                        direction const dir,
+                                        way_pos_t const way_pos = way_pos_t{
+                                            0U}) const {
     if (!is_shortcut(way)) return way_and_dir{way, dir, way_pos};
     return first_way_on_shortcut[to_shortcut_idx(way)];
   }
 
-  way_and_dir resolve_last_way_and_dir(way_idx_t const way, direction const dir, way_pos_t const way_pos = way_pos_t{0U}) const {
+  way_and_dir resolve_last_way_and_dir(way_idx_t const way,
+                                       direction const dir,
+                                       way_pos_t const way_pos = way_pos_t{
+                                           0U}) const {
     if (!is_shortcut(way)) return way_and_dir{way, dir, way_pos};
     return last_way_on_shortcut[to_shortcut_idx(way)];
   }
@@ -141,7 +155,8 @@ struct shortcut_storage {
     shortcut_data const* s;
     bool is_left_child;
   };
-  std::vector<ShortcutSegment> get_shortcut_segments(way_idx_t const way) const {
+  std::vector<ShortcutSegment> get_shortcut_segments(
+      way_idx_t const way) const {
     if (way == way_idx_t::invalid() || !is_shortcut(way)) {
       return {};
     }
@@ -155,9 +170,11 @@ struct shortcut_storage {
       return out;
     }
     st.push({sh->downward_way, sh, false});
-    if (cista::to_idx(sh->selfloop_way_idx) != std::numeric_limits<std::uint32_t>::max()) {
+    if (cista::to_idx(sh->selfloop_way_idx) !=
+        std::numeric_limits<std::uint32_t>::max()) {
       auto const sh_selfloop = get_shortcut(sh->selfloop_way_idx);
-      st.push({sh->selfloop_way_idx, sh_selfloop, false}); // is_left_child is not important here
+      st.push({sh->selfloop_way_idx, sh_selfloop,
+               false});  // is_left_child is not important here
     }
     st.push({sh->upward_way, sh, true});
 
@@ -167,9 +184,11 @@ struct shortcut_storage {
 
       if (!is_shortcut(w)) {
         if (is_left_child) {
-          out.push_back(ShortcutSegment{w, s->from, s->via_node, s->upward_distance, s->upward_cost});
+          out.push_back(ShortcutSegment{w, s->from, s->via_node,
+                                        s->upward_distance, s->upward_cost});
         } else {
-          out.push_back(ShortcutSegment{w,s->via_node, s->to, s->downward_distance, s->downward_cost});
+          out.push_back(ShortcutSegment{
+              w, s->via_node, s->to, s->downward_distance, s->downward_cost});
         }
         continue;
       }
@@ -180,9 +199,11 @@ struct shortcut_storage {
         }
       } else {
         st.push({sh_data->downward_way, sh_data, false});
-        if (cista::to_idx(sh_data->selfloop_way_idx) != std::numeric_limits<std::uint32_t>::max()) {
+        if (cista::to_idx(sh_data->selfloop_way_idx) !=
+            std::numeric_limits<std::uint32_t>::max()) {
           auto const sh_selfloop = get_shortcut(sh_data->selfloop_way_idx);
-          st.push({sh_data->selfloop_way_idx, sh_selfloop, false}); // is_left_child is not important here
+          st.push({sh_data->selfloop_way_idx, sh_selfloop,
+                   false});  // is_left_child is not important here
         }
         st.push({sh_data->upward_way, sh_data, true});
       }
@@ -192,32 +213,46 @@ struct shortcut_storage {
 
   way_idx_t add_shortcut(ways& w, shortcut_data const& shortcut);
 
-  void construct_way_on_shortcut_arrays(ways const& ways, way_idx_t const shortcut_way, shortcut_data const& shortcut) {
+  void construct_way_on_shortcut_arrays(ways const& ways,
+                                        way_idx_t const shortcut_way,
+                                        shortcut_data const& shortcut) {
     if (to_shortcut_idx(shortcut_way) != first_way_on_shortcut.size()) {
       throw std::runtime_error("shortcut construction failed");
     }
-    shortcut_way_poses_at_to_node.push_back(ways.r_->get_way_pos(shortcut.to, shortcut_way, 1));
-    shortcut_way_poses_at_from_node.push_back(ways.r_->get_way_pos(shortcut.from, shortcut_way, 0));
-    shortcut_has_restricted_nodes.push_back(ways.r_->node_is_restricted_[shortcut.from] || ways.r_->node_is_restricted_[shortcut.via_node] || ways.r_->node_is_restricted_[shortcut.to] || shortcut_has_restricted_node(shortcut.upward_way) || shortcut_has_restricted_node(shortcut.downward_way));
+    shortcut_way_poses_at_to_node.push_back(
+        ways.r_->get_way_pos(shortcut.to, shortcut_way, 1));
+    shortcut_way_poses_at_from_node.push_back(
+        ways.r_->get_way_pos(shortcut.from, shortcut_way, 0));
+    shortcut_has_restricted_nodes.push_back(
+        ways.r_->node_is_restricted_[shortcut.from] ||
+        ways.r_->node_is_restricted_[shortcut.via_node] ||
+        ways.r_->node_is_restricted_[shortcut.to] ||
+        shortcut_has_restricted_node(shortcut.upward_way) ||
+        shortcut_has_restricted_node(shortcut.downward_way));
     if (is_shortcut(shortcut.upward_way)) {
       first_way_on_shortcut.push_back(
           first_way_on_shortcut[to_shortcut_idx(shortcut.upward_way)]);
     } else {
-      first_way_on_shortcut.push_back(
-          way_and_dir{shortcut.upward_way, shortcut.upward_dir, ways.r_->get_way_pos(shortcut.from, shortcut.upward_way)});
+      first_way_on_shortcut.push_back(way_and_dir{
+          shortcut.upward_way, shortcut.upward_dir,
+          ways.r_->get_way_pos(shortcut.from, shortcut.upward_way)});
     }
     if (is_shortcut(shortcut.downward_way)) {
       last_way_on_shortcut.push_back(
           last_way_on_shortcut[to_shortcut_idx(shortcut.downward_way)]);
     } else {
-      last_way_on_shortcut.push_back(
-          way_and_dir{shortcut.downward_way, shortcut.downward_dir, ways.r_->get_way_pos(shortcut.to, shortcut.downward_way)});
+      last_way_on_shortcut.push_back(way_and_dir{
+          shortcut.downward_way, shortcut.downward_dir,
+          ways.r_->get_way_pos(shortcut.to, shortcut.downward_way)});
     }
   }
 
-  static void add_shortcut_to_graph(osr::ways& w, shortcut_data const& shortcut, way_idx_t way_idx, bool add_to_nodes);
+  static void add_shortcut_to_graph(osr::ways& w,
+                                    shortcut_data const& shortcut,
+                                    way_idx_t way_idx,
+                                    bool add_to_nodes);
 
   void load_all_shortcuts_in_graph(osr::ways& w);
 };
 
-} // namespace osr::ch
+}  // namespace osr::ch

@@ -8,8 +8,8 @@
 #include "osr/elevation_storage.h"
 #include "osr/lookup.h"
 #include "osr/platforms.h"
-#include "osr/ways.h"
 #include "osr/preprocessing/contraction_hierarchies/storage.h"
+#include "osr/ways.h"
 
 namespace osr::backend {
 
@@ -22,7 +22,7 @@ struct http_server {
               elevation_storage const*,
               std::string const& static_file_path,
               ch::shortcut_storage const*,
-              ways const*); // ch ways when shortcuts are on
+              ways const*);  // ch ways when shortcuts are on
   ~http_server();
   http_server(http_server const&) = delete;
   http_server& operator=(http_server const&) = delete;

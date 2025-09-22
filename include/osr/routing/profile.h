@@ -125,8 +125,8 @@ concept Profile =
                                 elevation_storage::elevation,
                                 bool const)> f) {
       {
-        P::template adjacent<direction::kBackward, false>(params, r, n, blocked,
-                                                          sharing, elevation, shortcuts, f)
+        P::template adjacent<direction::kBackward, false>(
+            params, r, n, blocked, sharing, elevation, shortcuts, f)
       } -> std::same_as<void>;
     };
 

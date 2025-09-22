@@ -6,10 +6,9 @@
 
 namespace osr::ch {
 
-void process_ch(
-  std::filesystem::path const& in,
-  std::filesystem::path const& out,
-  std::unique_ptr<order_strategy> const& order_strategy,
-  size_t stall);
+void process_ch(std::filesystem::path const& in,
+                std::filesystem::path const& out,
+                std::unique_ptr<order_strategy> const& order_strategy,
+                size_t stall);
 
-}// namespace osr::ch
+}  // namespace osr::ch

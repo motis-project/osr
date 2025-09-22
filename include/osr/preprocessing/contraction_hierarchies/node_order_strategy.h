@@ -8,9 +8,7 @@ namespace osr::ch {
 struct order_strategy {
   virtual ~order_strategy() = default;
 
-  virtual void compute_order(
-    ways const& w
-  ) = 0;
+  virtual void compute_order(ways const& w) = 0;
   virtual bool has_next() = 0;
   virtual node_idx_t next_node() = 0;
 };
@@ -86,9 +84,7 @@ struct random_order_strategy final : public order_strategy {
     order_ = result;
   }
 
-  bool has_next() override {
-    return !order_.empty();
-  }
+  bool has_next() override { return !order_.empty(); }
 
   node_idx_t next_node() override {
     node_idx_t const node = rnd_vec_elem(order_);
@@ -107,4 +103,4 @@ struct random_order_strategy final : public order_strategy {
   }
 };
 
-} // namespace osr::ch
+}  // namespace osr::ch

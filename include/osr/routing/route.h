@@ -8,13 +8,13 @@
 #include "osr/elevation_storage.h"
 #include "osr/location.h"
 #include "osr/lookup.h"
+#include "osr/preprocessing/contraction_hierarchies/ch_dijkstra.h"
 #include "osr/routing/algorithms.h"
 #include "osr/routing/mode.h"
 #include "osr/routing/parameters.h"
 #include "osr/routing/path.h"
 #include "osr/routing/profile.h"
 #include "osr/types.h"
-#include "osr/preprocessing/contraction_hierarchies/ch_dijkstra.h"
 
 namespace osr {
 

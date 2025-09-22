@@ -122,15 +122,19 @@ struct dijkstra {
     if (blocked == nullptr) {
       return dir == direction::kForward
                  ? run<direction::kForward, false>(params, w, r, max, blocked,
-                                                   sharing, elevations, shortcuts)
+                                                   sharing, elevations,
+                                                   shortcuts)
                  : run<direction::kBackward, false>(params, w, r, max, blocked,
-                                                    sharing, elevations, shortcuts);
+                                                    sharing, elevations,
+                                                    shortcuts);
     } else {
       return dir == direction::kForward
                  ? run<direction::kForward, true>(params, w, r, max, blocked,
-                                                  sharing, elevations, shortcuts)
+                                                  sharing, elevations,
+                                                  shortcuts)
                  : run<direction::kBackward, true>(params, w, r, max, blocked,
-                                                   sharing, elevations, shortcuts);
+                                                   sharing, elevations,
+                                                   shortcuts);
     }
   }
 

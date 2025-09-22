@@ -23,7 +23,6 @@ struct shortcut_storage;
 
 struct sharing_data;
 
-
 struct bidi_dijkstra_ch {
   using profile_t = car;
   using key = car::key;
@@ -71,7 +70,9 @@ struct bidi_dijkstra_ch {
     }
   }
 
-  void add_start(ways const& w, label const l, osr::sharing_data const* sharing) {
+  void add_start(ways const& w,
+                 label const l,
+                 osr::sharing_data const* sharing) {
     if (kDebug) {
       l.get_node().print(std::cout, w);
       std::cout << "starting" << l.get_node().n_ << std::endl;
@@ -110,11 +111,20 @@ struct bidi_dijkstra_ch {
     return f_cost + b_cost;
   }
 
-  static cost_t get_possible_shortcut_cost(ways::routing const& r, car::node from, cost_t from_cost, car::node to, cost_t to_cost,shortcut_storage const* shortcut_storage) {
+  static cost_t get_possible_shortcut_cost(
+      ways::routing const& r,
+      car::node from,
+      cost_t from_cost,
+      car::node to,
+      cost_t to_cost,
+      shortcut_storage const* shortcut_storage) {
 
-    way_and_dir from_way_and_dir = shortcut_storage->resolve_last_way_and_dir(r.node_ways_[from.n_][from.way_], from.dir_);
-    way_and_dir to_way_and_dir = shortcut_storage->resolve_first_way_and_dir(r.node_ways_[to.n_][to.way_], to.dir_);
-    if (from_way_and_dir.way == to_way_and_dir.way && from_way_and_dir.dir == opposite(to_way_and_dir.dir)) {
+    way_and_dir from_way_and_dir = shortcut_storage->resolve_last_way_and_dir(
+        r.node_ways_[from.n_][from.way_], from.dir_);
+    way_and_dir to_way_and_dir = shortcut_storage->resolve_first_way_and_dir(
+        r.node_ways_[to.n_][to.way_], to.dir_);
+    if (from_way_and_dir.way == to_way_and_dir.way &&
+        from_way_and_dir.dir == opposite(to_way_and_dir.dir)) {
       return from_cost + to_cost + car::kUturnPenalty;
     }
     return from_cost + to_cost;
@@ -152,7 +162,8 @@ struct bidi_dijkstra_ch {
           if (order > shortcuts->node_order_->get_order(neighbor.get_node())) {
             return;
           }
-          if (order > shortcuts->node_order_->get_order(neighbor.get_node()) && SearchDir == direction::kBackward) {
+          if (order > shortcuts->node_order_->get_order(neighbor.get_node()) &&
+              SearchDir == direction::kBackward) {
             return;
           }
 
@@ -189,8 +200,9 @@ struct bidi_dijkstra_ch {
           }
         });
 
-    auto const evaluate_meetpoint = [&](cost_t cost, cost_t other_cost, bool has_uturn,
-                                        node meetpoint1, node meetpoint2) {
+    auto const evaluate_meetpoint = [&](cost_t cost, cost_t other_cost,
+                                        bool has_uturn, node meetpoint1,
+                                        node meetpoint2) {
       if constexpr (kDebug) {
         std::cout << "  potential MEETPOINT found by start ";
         meetpoint1.print(std::cout, w);
@@ -200,14 +212,16 @@ struct bidi_dijkstra_ch {
         meet_point_1_ = meetpoint1;
         meet_point_2_ = meetpoint2;
         meet_point_has_uturn = has_uturn;
-        //assert(tentative == get_cost_to_mp(meet_point_1_, meet_point_2_));
+        // assert(tentative == get_cost_to_mp(meet_point_1_, meet_point_2_));
         best_cost_ = static_cast<cost_t>(tentative);
 
         if constexpr (kDebug) {
-          std::cout << " with cost " << best_cost_ << " (" << cost << "," << other_cost <<") -> ACCEPTED\n";
+          std::cout << " with cost " << best_cost_ << " (" << cost << ","
+                    << other_cost << ") -> ACCEPTED\n";
         }
       } else if constexpr (kDebug) {
-        std::cout << " with cost " << tentative << " (" << cost << "," << other_cost << ") -> DOMINATED\n";
+        std::cout << " with cost " << tentative << " (" << cost << ","
+                  << other_cost << ") -> DOMINATED\n";
       }
     };
 
@@ -221,8 +235,8 @@ struct bidi_dijkstra_ch {
         auto node_size = w.r_->node_ways_[curr.get_key()].size();
         car::node min_node;
         for (auto p = way_pos_t{0U}; p < node_size; ++p) {
-          car::node fwd = {curr.get_key(),p,direction::kForward};
-          car::node bwd = {curr.get_key(),p,direction::kBackward};
+          car::node fwd = {curr.get_key(), p, direction::kForward};
+          car::node bwd = {curr.get_key(), p, direction::kBackward};
           auto fwd_cost = opposite_candidate->second.cost(fwd);
           auto bwd_cost = opposite_candidate->second.cost(bwd);
           if (fwd_cost < min_cost) {
@@ -236,20 +250,32 @@ struct bidi_dijkstra_ch {
         }
         if (min_cost != kInfeasible) {
           auto min_node_has_uturn = false;
-          if (w.r_->is_restricted(
-                    curr.get_key(), curr.way_, min_node.way_, SearchDir)) {
+          if (w.r_->is_restricted(curr.get_key(), curr.way_, min_node.way_,
+                                  SearchDir)) {
             return;
           }
-          auto forward_way = SearchDir == direction::kForward ? w.r_->node_ways_[curr.get_key()][curr.way_] : w.r_->node_ways_[curr.get_key()][min_node.way_];
-          auto forward_dir = SearchDir == direction::kForward ? curr.dir_ : min_node.dir_;
-          auto backward_way = SearchDir == direction::kForward ? w.r_->node_ways_[curr.get_key()][min_node.way_] : w.r_->node_ways_[curr.get_key()][curr.way_];
-          auto backward_dir = SearchDir == direction::kForward ? min_node.dir_ : curr.dir_;
+          auto forward_way =
+              SearchDir == direction::kForward
+                  ? w.r_->node_ways_[curr.get_key()][curr.way_]
+                  : w.r_->node_ways_[curr.get_key()][min_node.way_];
+          auto forward_dir =
+              SearchDir == direction::kForward ? curr.dir_ : min_node.dir_;
+          auto backward_way =
+              SearchDir == direction::kForward
+                  ? w.r_->node_ways_[curr.get_key()][min_node.way_]
+                  : w.r_->node_ways_[curr.get_key()][curr.way_];
+          auto backward_dir =
+              SearchDir == direction::kForward ? min_node.dir_ : curr.dir_;
 
-          auto const backward_resolved_way_and_dir = shortcuts->resolve_first_way_and_dir(backward_way, backward_dir);
+          auto const backward_resolved_way_and_dir =
+              shortcuts->resolve_first_way_and_dir(backward_way, backward_dir);
 
           if (auto const forward_resolved_way_and_dir =
                   shortcuts->resolve_last_way_and_dir(forward_way, forward_dir);
-              forward_resolved_way_and_dir.way == backward_resolved_way_and_dir.way && forward_resolved_way_and_dir.dir == opposite(backward_resolved_way_and_dir.dir)) {
+              forward_resolved_way_and_dir.way ==
+                  backward_resolved_way_and_dir.way &&
+              forward_resolved_way_and_dir.dir ==
+                  opposite(backward_resolved_way_and_dir.dir)) {
             min_cost += car::kUturnPenalty;
             min_node_has_uturn = true;
           }
@@ -289,12 +315,12 @@ struct bidi_dijkstra_ch {
 
     while (!pq1_.empty() || !pq2_.empty()) {
       if (!pq1_.empty() && !abort_on_success(pq1_)) {
-        run_single<SearchDir, WithBlocked>(
-              w, r, max, blocked, sharing, elevations, pq1_, cost1_, shortcuts);
+        run_single<SearchDir, WithBlocked>(w, r, max, blocked, sharing,
+                                           elevations, pq1_, cost1_, shortcuts);
       }
       if (!pq2_.empty() && !abort_on_success(pq2_)) {
         run_single<opposite(SearchDir), WithBlocked>(
-              w, r, max, blocked, sharing, elevations, pq2_, cost2_, shortcuts);
+            w, r, max, blocked, sharing, elevations, pq2_, cost2_, shortcuts);
       }
       if (abort_on_success(pq2_) && abort_on_success(pq1_)) {
         break;
@@ -342,4 +368,4 @@ struct bidi_dijkstra_ch {
   bool max_reached_2_;
 };
 
-}  // namespace osr
+}  // namespace osr::ch

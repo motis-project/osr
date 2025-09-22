@@ -34,7 +34,10 @@ constexpr auto const kPrintDebugGeojson = false;
 constexpr auto const kMaxMatchDistance = 100;
 constexpr auto const kMaxAllowedPathDifferenceRatio = 0.5;
 
-void load_with_ch(std::string_view const raw_data, std::string_view const data_dir, std::string_view const ch_dir, size_t const stall = 95) {
+void load_with_ch(std::string_view const raw_data,
+                  std::string_view const data_dir,
+                  std::string_view const ch_dir,
+                  size_t const stall = 95) {
   if (!fs::exists(data_dir)) {
     if (fs::exists(raw_data)) {
       auto const p = fs::path{data_dir};
@@ -56,7 +59,9 @@ void load_with_ch(std::string_view const raw_data, std::string_view const data_d
                  fs::copy_options::recursive);
       }
     }
-    std::unique_ptr<ch::order_strategy> node_order_strategy = std::make_unique<osr::ch::node_importance_order_strategy>(-1);;
+    std::unique_ptr<ch::order_strategy> node_order_strategy =
+        std::make_unique<osr::ch::node_importance_order_strategy>(-1);
+    ;
     osr::ch::process_ch(data_dir, ch, node_order_strategy, stall);
   }
 }
@@ -94,8 +99,9 @@ void run(ways const& w,
 
     auto const node_pinned_matches =
         [&](location const& loc, node_idx_t const n, bool const reverse) {
-          auto matches = l.match<car>(car::parameters{}, loc, reverse, direction::kForward,
-                                      kMaxMatchDistance, nullptr);
+          auto matches =
+              l.match<car>(car::parameters{}, loc, reverse, direction::kForward,
+                           kMaxMatchDistance, nullptr);
           std::erase_if(matches, [&](auto const& wc) {
             return wc.left_.node_ != n && wc.right_.node_ != n;
           });
@@ -116,17 +122,18 @@ void run(ways const& w,
 
     auto const reference_start = std::chrono::steady_clock::now();
     auto const reference =
-        route(car::parameters{}, w, l, search_profile::kCar, from_loc, to_loc, from_matches_span,
-              to_matches_span, max_cost, direction::kForward, nullptr, nullptr,
-              nullptr, routing_algorithm::kDijkstra, nullptr);
+        route(car::parameters{}, w, l, search_profile::kCar, from_loc, to_loc,
+              from_matches_span, to_matches_span, max_cost, direction::kForward,
+              nullptr, nullptr, nullptr, routing_algorithm::kDijkstra, nullptr);
     auto const reference_time =
         std::chrono::steady_clock::now() - reference_start;
 
     auto const experiment_start = std::chrono::steady_clock::now();
-    auto const experiment =
-        route(car::parameters{}, w, l, search_profile::kCar, from_loc, to_loc, from_matches_span,
-              to_matches_span, max_cost, direction::kForward, nullptr, nullptr,
-              nullptr, routing_algorithm::kContractionHierarchy, shortcut_storage, &w_shortcuts);
+    auto const experiment = route(
+        car::parameters{}, w, l, search_profile::kCar, from_loc, to_loc,
+        from_matches_span, to_matches_span, max_cost, direction::kForward,
+        nullptr, nullptr, nullptr, routing_algorithm::kContractionHierarchy,
+        shortcut_storage, &w_shortcuts);
     auto const experiment_time =
         std::chrono::steady_clock::now() - experiment_start;
 
@@ -197,9 +204,10 @@ void run(ways const& w,
 TEST(dijkstra_ch_bidir, monaco) {
   auto const raw_data = "test/monaco.osm.pbf";
   auto const data_dir = "test/monaco";
-  auto const data_dir_contraction_hierarchie = "test/monaco_contraction_hierarchie";
+  auto const data_dir_contraction_hierarchie =
+      "test/monaco_contraction_hierarchie";
   auto constexpr num_samples = 10000U;
-  auto constexpr max_cost = 2*3600U;
+  auto constexpr max_cost = 2 * 3600U;
 
   if (!fs::exists(raw_data) && !fs::exists(data_dir)) {
     GTEST_SKIP() << raw_data << " not found";
@@ -207,7 +215,8 @@ TEST(dijkstra_ch_bidir, monaco) {
 
   load_with_ch(raw_data, data_dir, data_dir_contraction_hierarchie);
   auto w = osr::ways{data_dir, cista::mmap::protection::READ};
-  auto w_shortcuts = osr::ways{data_dir_contraction_hierarchie, cista::mmap::protection::READ};
+  auto w_shortcuts =
+      osr::ways{data_dir_contraction_hierarchie, cista::mmap::protection::READ};
   auto const l = osr::lookup{w, data_dir, cista::mmap::protection::READ};
 
   auto shortcuts = std::make_unique<ch::shortcut_storage>();
@@ -216,14 +225,15 @@ TEST(dijkstra_ch_bidir, monaco) {
     shortcuts->load_all_shortcuts_in_graph(w);
     fmt::print("loaded {} shortcuts\n", shortcuts->shortcuts_.size());
   }
-  auto node_order = std::make_unique<ch::node_order>(data_dir_contraction_hierarchie, cista::mmap::protection::READ);
+  auto node_order = std::make_unique<ch::node_order>(
+      data_dir_contraction_hierarchie, cista::mmap::protection::READ);
   if (node_order != nullptr) {
     fmt::print("loaded node order\n");
   }
   fmt::print("using contraction hierarchy\n");
   shortcuts->node_order_ = std::move(node_order);
 
-  run(w,w_shortcuts, l, num_samples, max_cost, shortcuts.get());
+  run(w, w_shortcuts, l, num_samples, max_cost, shortcuts.get());
 }
 
 TEST(dijkstra_ch_bidir, aachen) {
@@ -239,7 +249,8 @@ TEST(dijkstra_ch_bidir, aachen) {
 
   load_with_ch(raw_data, data_dir, data_dir_contraction_hierarchie);
   auto const w = osr::ways{data_dir, cista::mmap::protection::READ};
-  auto w_shortcuts = osr::ways{data_dir_contraction_hierarchie, cista::mmap::protection::READ};
+  auto w_shortcuts =
+      osr::ways{data_dir_contraction_hierarchie, cista::mmap::protection::READ};
   auto const l = osr::lookup{w, data_dir, cista::mmap::protection::READ};
 
   auto const shortcuts = std::make_unique<ch::shortcut_storage>();
@@ -248,7 +259,8 @@ TEST(dijkstra_ch_bidir, aachen) {
     shortcuts->load_all_shortcuts_in_graph(w_shortcuts);
     fmt::print("loaded {} shortcuts\n", shortcuts->shortcuts_.size());
   }
-  auto node_order = std::make_unique<ch::node_order>(data_dir_contraction_hierarchie, cista::mmap::protection::READ);
+  auto node_order = std::make_unique<ch::node_order>(
+      data_dir_contraction_hierarchie, cista::mmap::protection::READ);
   if (node_order != nullptr) {
     fmt::print("loaded node order\n");
   }
@@ -271,7 +283,8 @@ TEST(dijkstra_ch_bidir, hamburg) {
 
   load_with_ch(raw_data, data_dir, data_dir_contraction_hierarchie, 90);
   auto const w = osr::ways{data_dir, cista::mmap::protection::READ};
-  auto w_shortcuts = osr::ways{data_dir_contraction_hierarchie, cista::mmap::protection::READ};
+  auto w_shortcuts =
+      osr::ways{data_dir_contraction_hierarchie, cista::mmap::protection::READ};
   auto const l = osr::lookup{w, data_dir, cista::mmap::protection::READ};
 
   auto const shortcuts = std::make_unique<ch::shortcut_storage>();
@@ -280,7 +293,8 @@ TEST(dijkstra_ch_bidir, hamburg) {
     shortcuts->load_all_shortcuts_in_graph(w_shortcuts);
     fmt::print("loaded {} shortcuts\n", shortcuts->shortcuts_.size());
   }
-  auto node_order = std::make_unique<ch::node_order>(data_dir_contraction_hierarchie, cista::mmap::protection::READ);
+  auto node_order = std::make_unique<ch::node_order>(
+      data_dir_contraction_hierarchie, cista::mmap::protection::READ);
   if (node_order != nullptr) {
     fmt::print("loaded node order\n");
   }
@@ -293,7 +307,8 @@ TEST(dijkstra_ch_bidir, hamburg) {
 TEST(dijkstra_ch_bidir, switzerland) {
   auto const raw_data = "test/switzerland.osm.pbf";
   auto const data_dir = "test/switzerland";
-  auto const data_dir_contraction_hierarchie = "test/switzerland_contraction_hierarchie";
+  auto const data_dir_contraction_hierarchie =
+      "test/switzerland_contraction_hierarchie";
   auto constexpr num_samples = 1000U;
   auto constexpr max_cost = 5 * 3600U;
 
@@ -303,7 +318,8 @@ TEST(dijkstra_ch_bidir, switzerland) {
 
   load_with_ch(raw_data, data_dir, data_dir_contraction_hierarchie, 88);
   auto const w = osr::ways{data_dir, cista::mmap::protection::READ};
-  auto w_shortcuts = osr::ways{data_dir_contraction_hierarchie, cista::mmap::protection::READ};
+  auto w_shortcuts =
+      osr::ways{data_dir_contraction_hierarchie, cista::mmap::protection::READ};
   auto const l = osr::lookup{w, data_dir, cista::mmap::protection::READ};
 
   auto const shortcuts = std::make_unique<ch::shortcut_storage>();
@@ -312,7 +328,8 @@ TEST(dijkstra_ch_bidir, switzerland) {
     shortcuts->load_all_shortcuts_in_graph(w_shortcuts);
     fmt::print("loaded {} shortcuts\n", shortcuts->shortcuts_.size());
   }
-  auto node_order = std::make_unique<ch::node_order>(data_dir_contraction_hierarchie, cista::mmap::protection::READ);
+  auto node_order = std::make_unique<ch::node_order>(
+      data_dir_contraction_hierarchie, cista::mmap::protection::READ);
   if (node_order != nullptr) {
     fmt::print("loaded node order\n");
   }
@@ -325,7 +342,8 @@ TEST(dijkstra_ch_bidir, switzerland) {
 TEST(dijkstra_ch_bidir, DISABLED_germany) {
   auto const raw_data = "test/germany.osm.pbf";
   auto const data_dir = "test/germany";
-  auto const data_dir_contraction_hierarchie = "test/germany_contraction_hierarchie";
+  auto const data_dir_contraction_hierarchie =
+      "test/germany_contraction_hierarchie";
   constexpr auto num_samples = 50U;
   constexpr auto max_cost = 12 * 3600U;
 
@@ -335,7 +353,8 @@ TEST(dijkstra_ch_bidir, DISABLED_germany) {
 
   load_with_ch(raw_data, data_dir, data_dir_contraction_hierarchie);
   auto const w = osr::ways{data_dir, cista::mmap::protection::READ};
-  auto w_shortcuts = osr::ways{data_dir_contraction_hierarchie, cista::mmap::protection::READ};
+  auto w_shortcuts =
+      osr::ways{data_dir_contraction_hierarchie, cista::mmap::protection::READ};
   auto const l = osr::lookup{w, data_dir, cista::mmap::protection::READ};
 
   auto const shortcuts = std::make_unique<ch::shortcut_storage>();
@@ -344,7 +363,8 @@ TEST(dijkstra_ch_bidir, DISABLED_germany) {
     shortcuts->load_all_shortcuts_in_graph(w_shortcuts);
     fmt::print("loaded {} shortcuts\n", shortcuts->shortcuts_.size());
   }
-  auto node_order = std::make_unique<ch::node_order>(data_dir_contraction_hierarchie, cista::mmap::protection::READ);
+  auto node_order = std::make_unique<ch::node_order>(
+      data_dir_contraction_hierarchie, cista::mmap::protection::READ);
   if (node_order != nullptr) {
     fmt::print("loaded node order\n");
   }

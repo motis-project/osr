@@ -12,29 +12,29 @@
 using namespace std::chrono;
 namespace osr::ch {
 
-void process_all_nodes(
-  ways& w,
-  ways const& w_without,
-  bitvec<node_idx_t>* blocked,
-  shortcut_storage& shortcuts,
-  contractor& c,
-  std::unique_ptr<order_strategy> const& order_strategy,
-  osr::ch::node_order* order,
-  size_t const stall
-  ) {
+void process_all_nodes(ways& w,
+                       ways const& w_without,
+                       bitvec<node_idx_t>* blocked,
+                       shortcut_storage& shortcuts,
+                       contractor& c,
+                       std::unique_ptr<order_strategy> const& order_strategy,
+                       osr::ch::node_order* order,
+                       size_t const stall) {
   int processed = 0;
-  auto const pt = utl::get_active_progress_tracker_or_activate("contraction-hierarchy");
+  auto const pt =
+      utl::get_active_progress_tracker_or_activate("contraction-hierarchy");
   auto const total_nodes = w.n_nodes();
   pt->status("Contracting nodes").in_high(total_nodes).out_bounds(0, 100);
   auto const stall_f = static_cast<float>(stall) / static_cast<float>(100);
   while (order_strategy->has_next()) {
     auto const node = order_strategy->next_node();
-    if (static_cast<float>(processed) / static_cast<float>(total_nodes) >= stall_f) {
+    if (static_cast<float>(processed) / static_cast<float>(total_nodes) >=
+        stall_f) {
       order->add_node(node, true);
       continue;
     }
     order->add_node(node);
-    c.contract_node(w,w_without, blocked, &shortcuts, node);
+    c.contract_node(w, w_without, blocked, &shortcuts, node);
     pt->update(++processed);
   }
 }
@@ -51,7 +51,8 @@ void process_ch(std::filesystem::path const& in,
 
   node_order.init(w.n_nodes());
 
-  fmt::println("loaded extraction [file={}] with {} nodes and {} ways", in, w.n_nodes(), w.n_ways());
+  fmt::println("loaded extraction [file={}] with {} nodes and {} ways", in,
+               w.n_nodes(), w.n_ways());
 
   order_strategy->compute_order(w);
 
@@ -69,7 +70,8 @@ void process_ch(std::filesystem::path const& in,
   c.calculate_neighbors(w);
 
   bitvec<node_idx_t> blocked(w.n_nodes());
-  process_all_nodes(w, w_without, &blocked, shortcuts, c, order_strategy, &node_order, stall);
+  process_all_nodes(w, w_without, &blocked, shortcuts, c, order_strategy,
+                    &node_order, stall);
 
   fmt::println("Found {} shortcuts", shortcuts.shortcuts_.size());
   fmt::println("End Contraction Hierarchies Processing");
@@ -82,4 +84,4 @@ void process_ch(std::filesystem::path const& in,
 
   fmt::println("Shortcuts saved to [file={}]", out);
 }
-} // namespace osr::ch
+}  // namespace osr::ch

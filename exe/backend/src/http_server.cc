@@ -144,8 +144,9 @@ struct http_server::impl {
                                                       foot_speed_result.value()}
             : get_parameters(profile);
 
-    auto const p = route(params, w_, l_, profile, from, to, max, dir, 100,
-                         nullptr, nullptr, elevations_, routing_algo, shortcuts_, shortcut_ways_);
+    auto const p =
+        route(params, w_, l_, profile, from, to, max, dir, 100, nullptr,
+              nullptr, elevations_, routing_algo, shortcuts_, shortcut_ways_);
 
     auto const p1 = route(params, w_, l_, profile, from, std::vector{to}, max,
                           dir, 100, nullptr, nullptr, elevations_);
@@ -379,8 +380,15 @@ http_server::http_server(boost::asio::io_context& ioc,
                          std::string const& static_file_path,
                          ch::shortcut_storage const* shortcuts,
                          ways const* shortcut_ways)
-    : impl_{new impl(ioc, thread_pool, w, l, pl, elevation, static_file_path, shortcuts, shortcut_ways)} {
-}
+    : impl_{new impl(ioc,
+                     thread_pool,
+                     w,
+                     l,
+                     pl,
+                     elevation,
+                     static_file_path,
+                     shortcuts,
+                     shortcut_ways)} {}
 
 http_server::~http_server() = default;
 
