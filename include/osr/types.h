@@ -159,6 +159,8 @@ struct level_t {
   explicit constexpr level_t(float const f)
       : v_{static_cast<std::uint8_t>((f - kMinLevel) / 0.25F + 1U)} {}
 
+  auto cista_members() { return std::tie(v_); }
+
   constexpr float to_float() const {
     return (v_ == kNoLevel) ? 0.0F : (kMinLevel + ((v_ - 1U) / 4.0F));
   }
@@ -243,6 +245,32 @@ constexpr std::uint16_t to_kmh(speed_limit const l) {
 
 constexpr std::uint16_t to_meters_per_second(speed_limit const l) {
   return static_cast<std::uint16_t>(to_kmh(l) / 3.6);
+}
+
+// adjacent config
+enum class adj_conf {
+  kNone = 0U,
+  kBlocked = 1U << 1U,
+  kUseCH = 1U << 2U,
+  kNoOmitRestricted = 1U << 3U
+};
+
+constexpr adj_conf operator|(adj_conf const& a, adj_conf const& b) noexcept {
+  return adj_conf{static_cast<std::underlying_type_t<adj_conf>>(a) |
+                  static_cast<std::underlying_type_t<adj_conf>>(b)};
+}
+
+constexpr adj_conf operator&(adj_conf const& a, adj_conf const& b) noexcept {
+  return adj_conf{static_cast<std::underlying_type_t<adj_conf>>(a) &
+                  static_cast<std::underlying_type_t<adj_conf>>(b)};
+}
+
+constexpr bool is_enabled(adj_conf const in, adj_conf const flag) noexcept {
+  return (in & flag) == flag;
+}
+
+constexpr bool is_disabled(adj_conf const in, adj_conf const flag) noexcept {
+  return (in & flag) == adj_conf::kNone;
 }
 
 }  // namespace osr

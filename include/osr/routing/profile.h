@@ -8,6 +8,7 @@
 #include <string_view>
 
 #include "osr/elevation_storage.h"
+#include "osr/preprocessing/contraction_hierarchy/shortcut_storage.h"
 #include "osr/routing/mode.h"
 #include "osr/routing/path.h"
 #include "osr/routing/sharing_data.h"
@@ -50,18 +51,26 @@ concept IsLabel =
       { label.track(l, r, w, n, std::declval<bool>()) } -> std::same_as<void>;
     };
 
-template <typename Entry, typename Node, typename Label>
+template <typename Entry, typename Node, typename Label, typename NodeKey>
 concept IsEntry =
     requires(Entry const& entry, Node const node, path& p) {
       { entry.pred(node) } -> std::same_as<std::optional<Node>>;
+      { entry.way(node) } -> std::same_as<way_idx_t>;
       { entry.cost(node) } -> std::same_as<cost_t>;
       { entry.write(node, p) } -> std::same_as<void>;
-    } && requires(Entry entry,
-                  Node const node,
-                  Label const& label,
-                  cost_t const cost,
-                  path& p) {
-      { entry.update(label, node, cost, node) } -> std::same_as<bool>;
+    } &&
+    requires(Entry entry,
+             Node const node,
+             Label const& label,
+             cost_t const cost,
+             way_idx_t const way,
+             path& p) {
+      { entry.update(label, node, cost, node, way) } -> std::same_as<bool>;
+    } &&
+    requires(Entry entry,
+             NodeKey key,
+             std::function<void(Node node, cost_t cost)> fn) {
+      { entry.for_each(key, fn) } -> std::same_as<void>;
     };
 
 template <typename Hash, typename NodeKey>
@@ -74,7 +83,10 @@ concept Profile =
     IsParameters<typename P::parameters, P> &&
     IsNode<typename P::node, typename P::key> &&
     IsLabel<typename P::label, typename P::node> &&
-    IsEntry<typename P::entry, typename P::node, typename P::label> &&
+    IsEntry<typename P::entry,
+            typename P::node,
+            typename P::label,
+            typename P::key> &&
     IsHash<typename P::hash, typename P::key> &&
     requires(typename P::node const node,
              ways::routing const& r,
@@ -112,6 +124,8 @@ concept Profile =
              bitvec<node_idx_t> const* blocked,
              sharing_data const* sharing,
              elevation_storage const* elevation,
+             shortcut_storage<typename P::node> const* sc_stor,
+             node_idx_t min_order,
              std::function<void(typename P::node const,
                                 std::uint32_t const,
                                 distance_t,
@@ -119,10 +133,12 @@ concept Profile =
                                 std::uint16_t,
                                 std::uint16_t,
                                 elevation_storage::elevation,
-                                bool const)> f) {
+                                bool const,
+                                typename P::node const,
+                                cost_t)> f) {
       {
-        P::template adjacent<direction::kBackward, false>(params, r, n, blocked,
-                                                          sharing, elevation, f)
+        P::template adjacent<direction::kBackward, adj_conf::kNone>(
+            params, r, n, blocked, sharing, elevation, sc_stor, min_order, f)
       } -> std::same_as<void>;
     };
 

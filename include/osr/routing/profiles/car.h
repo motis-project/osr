@@ -7,6 +7,7 @@
 #include "utl/helpers/algorithm.h"
 
 #include "osr/elevation_storage.h"
+#include "osr/preprocessing/contraction_hierarchy/shortcut_storage.h"
 #include "osr/routing/mode.h"
 #include "osr/routing/path.h"
 #include "osr/ways.h"
@@ -73,7 +74,10 @@ struct car {
     static constexpr auto const kMaxWays = way_pos_t{16U};
     static constexpr auto const kN = kMaxWays * 2U /* FWD+BWD */;
 
-    entry() { utl::fill(cost_, kInfeasible); }
+    entry() {
+      utl::fill(cost_, kInfeasible);
+      utl::fill(way_, way_idx_t::invalid());
+    }
 
     constexpr std::optional<node> pred(node const n) const noexcept {
       auto const idx = get_index(n);
@@ -83,6 +87,10 @@ struct car {
                                       to_dir(pred_dir_[idx])}};
     }
 
+    constexpr way_idx_t way(node const n) const noexcept {
+      return way_[get_index(n)];
+    }
+
     constexpr cost_t cost(node const n) const noexcept {
       return cost_[get_index(n)];
     }
@@ -90,13 +98,14 @@ struct car {
     constexpr bool update(label const&,
                           node const n,
                           cost_t const c,
-                          node const pred) noexcept {
-      auto const idx = get_index(n);
-      if (c < cost_[idx]) {
+                          node const pred,
+                          way_idx_t const w = way_idx_t{0}) noexcept {
+      if (auto const idx = get_index(n); c < cost_[idx]) {
         cost_[idx] = c;
         pred_[idx] = pred.n_;
         pred_way_[idx] = pred.way_;
         pred_dir_[idx] = to_bool(pred.dir_);
+        way_[idx] = w;
         return true;
       }
       return false;
@@ -122,9 +131,17 @@ struct car {
       return d == direction::kForward ? false : true;
     }
 
+    template <typename Fn>
+    constexpr void for_each(key const k, Fn&& fn) const {
+      for (size_t i = 0; i < cost_.size(); ++i) {
+        fn(get_node(k, i), cost_[i]);
+      }
+    }
+
     std::array<node_idx_t, kN> pred_;
     std::array<way_pos_t, kN> pred_way_;
     std::bitset<kN> pred_dir_;
+    std::array<way_idx_t, kN> way_;
     std::array<cost_t, kN> cost_;
   };
 
@@ -164,14 +181,20 @@ struct car {
     }
   }
 
-  template <direction SearchDir, bool WithBlocked, typename Fn>
+  template <direction SearchDir, adj_conf Config, typename Fn>
   static void adjacent(parameters const& params,
                        ways::routing const& w,
                        node const n,
                        bitvec<node_idx_t> const* blocked,
                        sharing_data const*,
                        elevation_storage const*,
+                       shortcut_storage<node> const* const sc_stor,
+                       node_idx_t const min_order,
                        Fn&& fn) {
+    static_assert(
+        is_disabled(Config, adj_conf::kBlocked) ||
+            is_disabled(Config, adj_conf::kUseCH),
+        "Blocking nodes not supported when using contraction hierarchies");
     auto way_pos = way_pos_t{0U};
     for (auto const [way, i] :
          utl::zip_unchecked(w.node_ways_[n.n_], w.node_in_way_idx_[n.n_])) {
@@ -179,8 +202,14 @@ struct car {
                               std::uint16_t const to) {
         // NOLINTNEXTLINE(clang-analyzer-core.CallAndMessage)
         auto const target_node = w.way_nodes_[way][to];
-        if constexpr (WithBlocked) {
+        if constexpr (is_enabled(Config, adj_conf::kBlocked)) {
           if (blocked->test(target_node)) {
+            return;
+          }
+        }
+
+        if constexpr (is_enabled(Config, adj_conf::kUseCH)) {
+          if (sc_stor->order_.lower_than(target_node, min_order)) {
             return;
           }
         }
@@ -195,19 +224,23 @@ struct car {
           return;
         }
 
-        if (w.is_restricted<SearchDir>(n.n_, n.way_, way_pos)) {
+        auto const turning_cost =
+            car::turning_cost<SearchDir>(w, n, node{n.n_, way_pos, way_dir});
+        if (is_disabled(Config, adj_conf::kNoOmitRestricted) &&
+            turning_cost == kInfeasible) {
           return;
         }
 
-        auto const is_u_turn = way_pos == n.way_ && way_dir == opposite(n.dir_);
         auto const dist = w.way_node_dist_[way][std::min(from, to)];
         auto const target =
             node{target_node, w.get_way_pos(target_node, way, to), way_dir};
-        auto const cost = way_cost(params, target_way_prop, way_dir, dist) +
-                          node_cost(target_node_prop) +
-                          (is_u_turn ? kUturnPenalty : 0U);
+        auto const cost =
+            way_cost(params, target_way_prop, way_dir, dist) +
+            node_cost(target_node_prop) +
+            (is_disabled(Config, adj_conf::kNoOmitRestricted) ? turning_cost
+                                                              : 0U);
         fn(target, cost, dist, way, from, to, elevation_storage::elevation{},
-           false);
+           false, node{n.n_, way_pos, way_dir}, turning_cost);
       };
 
       if (i != 0U) {
@@ -218,6 +251,51 @@ struct car {
       }
 
       ++way_pos;
+    }
+
+    if constexpr (is_disabled(Config, adj_conf::kUseCH)) {
+      return;
+    }
+
+    auto const nb = SearchDir == direction::kForward
+                        ? sc_stor->neighbors_fwd_[n.n_]
+                        : sc_stor->neighbors_bwd_[n.n_];
+    if (nb.empty()) {
+      return;
+    }
+    for (auto const [nb_idx, sc_idx] : nb) {
+      if constexpr (is_enabled(Config, adj_conf::kUseCH)) {
+        if (sc_stor->order_.lower_than(nb_idx, min_order)) {
+          continue;
+        }
+      }
+
+      auto const target_node_prop = w.node_properties_[nb_idx];
+
+      auto const vrt_idx = sc_idx - w.way_nodes_.size();
+      auto const sc = sc_stor->shortcuts_[vrt_idx];
+      bool constexpr is_fwd = SearchDir == direction::kForward;
+
+      auto const pos_to = is_fwd ? sc.from_.way_ : sc.to_.way_;
+      auto const dir_to = is_fwd ? sc.from_.dir_ : sc.to_.dir_;
+
+      auto const turning_cost =
+          car::turning_cost<SearchDir>(w, n, node{n.n_, pos_to, dir_to});
+      if (is_disabled(Config, adj_conf::kNoOmitRestricted) &&
+          turning_cost == kInfeasible) {
+        continue;
+      }
+
+      auto const target = is_fwd ? node{nb_idx, sc.to_.way_, sc.to_.dir_}
+                                 : node{nb_idx, sc.from_.way_, sc.from_.dir_};
+      auto const w_cost = sc_stor->costs_[vrt_idx];
+      auto const cost =
+          w_cost + node_cost(target_node_prop) +
+          (is_disabled(Config, adj_conf::kNoOmitRestricted) ? turning_cost
+                                                            : 0U);
+      fn(target, cost, 0, sc_idx, !is_fwd, is_fwd,
+         elevation_storage::elevation{}, false, node{n.n_, pos_to, dir_to},
+         turning_cost);
     }
   }
 
@@ -261,6 +339,18 @@ struct car {
   }
   static constexpr node get_reverse(node const n) {
     return {n.n_, n.way_, opposite(n.dir_)};
+  }
+
+  template <direction SearchDir>
+  static constexpr cost_t turning_cost(ways::routing const& w,
+                                       node const from,
+                                       node const to) {
+    if (w.is_restricted<SearchDir>(from.n_, from.way_, to.way_)) {
+      return kInfeasible;
+    }
+    auto const is_u_turn =
+        to.way_ == from.way_ && to.dir_ == opposite(from.dir_);
+    return is_u_turn ? kUturnPenalty : 0;
   }
 };
 
