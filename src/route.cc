@@ -255,8 +255,8 @@ double add_path(typename P::parameters const& params,
     //              w.node_to_osm_[w.r_->way_nodes_[way][to_idx]]);
     std::ranges::reverse(segments);
     for (auto const& segment : segments) {
-      add_path<P>(w, r, sharing, from, to, segment.cost, path, segment.w,
-                  segment.distance, elevation,
+      add_path<P>(w, r, sharing, from, to, static_cast<cost_t>(segment.cost),
+                  path, segment.w, segment.distance, elevation,
                   w.r_->node_in_way_idx_[segment.from][w.r_->get_way_pos(
                       segment.from, segment.w)],
                   w.r_->node_in_way_idx_[segment.to][w.r_->get_way_pos(

@@ -14,7 +14,7 @@ struct node_order {
 
   void init(size_t const& n) {
     order_count_ = 0U;
-    for (node_idx_t idx{0U}; idx < n; ++idx) {
+    for (size_t idx{0U}; idx < n; ++idx) {
       order_to_store_.push_back(0U);
     }
   }
@@ -113,7 +113,7 @@ struct shortcut_storage {
     if (!is_shortcut(idx)) {
       return nullptr;
     }
-    return &shortcuts_.at(to_shortcut_idx(idx));
+    return &shortcuts_[to_shortcut_idx(idx)];
   }
 
   [[nodiscard]] size_t to_shortcut_idx(way_idx_t const idx) const {

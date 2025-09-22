@@ -147,7 +147,7 @@ void run(ways const& w,
         fmt::println(
             "{:10}: {:11} --> {:11} | {} | time: "
             "{}:{:0>3}:{:0>3} s",
-            name, from_node, to_node,
+            name, w.node_to_osm_[from_node], w.node_to_osm_[to_node],
             p ? fmt::format("cost: {:5} | dist: {:>10.2f}", p->cost_, p->dist_)
               : "no result",
             std::chrono::duration_cast<std::chrono::seconds>(t).count(),

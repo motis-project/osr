@@ -54,7 +54,8 @@ void contractor::calculate_neighbors(ways const& w) {
       }
     }
   }
-  for (node_idx_t node{0U}; node < outgoing_neighbors_.size(); ++node) {
+  for (node_idx_t node{0U};
+       node < static_cast<uint32_t>(outgoing_neighbors_.size()); ++node) {
     for (auto const outgoing_neighbours = outgoing_neighbors_[to_idx(node)];
          const auto& [neighbor_node_idx, neighbor_cost, neighbor_way,
                       neighbor_distance, neighbor_node] : outgoing_neighbours) {

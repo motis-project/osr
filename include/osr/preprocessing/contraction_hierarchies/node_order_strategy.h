@@ -28,7 +28,7 @@ struct node_importance_order_strategy final : public order_strategy {
   size_t max_importance_ = 0;
   size_t current_node_importance = 0;
   void compute_order(ways const& w) override {
-    size_t const n = w.n_nodes();
+    auto const n = static_cast<uint32_t>(w.n_nodes());
     for (node_idx_t idx{0U}; idx < n; ++idx) {
       auto const importance = w.r_->node_properties_[idx].importance_;
       if (importance > max_importance_) {
@@ -81,7 +81,7 @@ struct random_order_strategy final : public order_strategy {
   std::vector<node_idx_t> order_;
 
   void compute_order(ways const& w) override {
-    size_t const n = w.n_nodes();
+    auto const n = static_cast<uint32_t>(w.n_nodes());
     std::vector<node_idx_t> result;
     for (node_idx_t idx{0U}; idx < n; ++idx) {
       result.push_back(idx);

@@ -233,8 +233,8 @@ struct ways {
 
     template <direction SearchDir>
     bool is_restricted(node_idx_t const n,
-                       std::uint8_t const from,
-                       std::uint8_t const to) const {
+                       way_pos_t const from,
+                       way_pos_t const to) const {
       if (!node_is_restricted_[n]) {
         return false;
       }
@@ -246,8 +246,8 @@ struct ways {
     }
 
     bool is_restricted(node_idx_t const n,
-                       std::uint8_t const from,
-                       std::uint8_t const to,
+                       way_pos_t const from,
+                       way_pos_t const to,
                        direction const search_dir) const {
       return search_dir == direction::kForward
                  ? is_restricted<direction::kForward>(n, from, to)
