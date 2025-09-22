@@ -1,6 +1,5 @@
 #pragma once
 #include <stack>
-#include "node_order_strategy.h"
 #include "osr/types.h"
 #include "osr/ways.h"
 
@@ -9,10 +8,9 @@ namespace osr::ch {
 struct node_order {
   mm_vec_map<node_idx_t, uint64_t> order_to_store_;
   uint64_t order_count_{0U};
-  node_order(std::filesystem::path p, cista::mmap::protection const mode)
-      : order_to_store_(
-            cista::mmap{(p / "node_order.bin").generic_string().c_str(), mode}),
-        order_count_(0U) {}
+  node_order(std::filesystem::path const& p, cista::mmap::protection const mode)
+      : order_to_store_(cista::mmap{
+            (p / "node_order.bin").generic_string().c_str(), mode}) {}
 
   void init(size_t const& n) {
     order_count_ = 0U;
@@ -87,38 +85,42 @@ struct shortcut_storage {
     return shortcut_has_restricted_nodes[to_shortcut_idx(way)];
   }
 
-  way_pos_t get_way_pos_at_to_node(way_idx_t const way_idx) const {
+  [[nodiscard]] way_pos_t get_way_pos_at_to_node(
+      way_idx_t const way_idx) const {
     if (!is_shortcut(way_idx)) {
       throw std::invalid_argument("way index is no shortcut");
     }
     return shortcut_way_poses_at_to_node[to_shortcut_idx(way_idx)];
   }
 
-  way_pos_t get_way_pos_at_from_node(way_idx_t const way_idx) const {
+  [[nodiscard]] way_pos_t get_way_pos_at_from_node(
+      way_idx_t const way_idx) const {
     if (!is_shortcut(way_idx)) {
       throw std::invalid_argument("way index is no shortcut");
     }
     return shortcut_way_poses_at_from_node[to_shortcut_idx(way_idx)];
   }
 
-  uint64_t get_node_order(node_idx_t const n) const {
+  [[nodiscard]] uint64_t get_node_order(node_idx_t const n) const {
     return node_order_->get_order(n);
   }
 
-  bool is_shortcut(way_idx_t const idx) const { return idx > max_way_idx_; }
+  [[nodiscard]] bool is_shortcut(way_idx_t const idx) const {
+    return idx > max_way_idx_;
+  }
 
-  shortcut_data const* get_shortcut(way_idx_t const idx) const {
+  [[nodiscard]] shortcut_data const* get_shortcut(way_idx_t const idx) const {
     if (!is_shortcut(idx)) {
       return nullptr;
     }
     return &shortcuts_.at(to_shortcut_idx(idx));
   }
 
-  size_t to_shortcut_idx(way_idx_t const idx) const {
+  [[nodiscard]] size_t to_shortcut_idx(way_idx_t const idx) const {
     return cista::to_idx(idx) - cista::to_idx(max_way_idx_) - 1;
   }
 
-  bool shortcut_is_selfloop(way_idx_t const idx) const {
+  [[nodiscard]] bool shortcut_is_selfloop(way_idx_t const idx) const {
     if (!is_shortcut(idx)) {
       return false;
     }
@@ -130,23 +132,23 @@ struct shortcut_storage {
 
   void load(std::filesystem::path const& p);
 
-  way_idx_t resolve_first_way(way_idx_t const way) const {
+  [[nodiscard]] way_idx_t resolve_first_way(way_idx_t const way) const {
     if (!is_shortcut(way)) return way;
     return first_way_on_shortcut[to_shortcut_idx(way)].way;
   }
 
-  way_and_dir resolve_first_way_and_dir(way_idx_t const way,
-                                        direction const dir,
-                                        way_pos_t const way_pos = way_pos_t{
-                                            0U}) const {
+  [[nodiscard]] way_and_dir resolve_first_way_and_dir(
+      way_idx_t const way,
+      direction const dir,
+      way_pos_t const way_pos = way_pos_t{0U}) const {
     if (!is_shortcut(way)) return way_and_dir{way, dir, way_pos};
     return first_way_on_shortcut[to_shortcut_idx(way)];
   }
 
-  way_and_dir resolve_last_way_and_dir(way_idx_t const way,
-                                       direction const dir,
-                                       way_pos_t const way_pos = way_pos_t{
-                                           0U}) const {
+  [[nodiscard]] way_and_dir resolve_last_way_and_dir(
+      way_idx_t const way,
+      direction const dir,
+      way_pos_t const way_pos = way_pos_t{0U}) const {
     if (!is_shortcut(way)) return way_and_dir{way, dir, way_pos};
     return last_way_on_shortcut[to_shortcut_idx(way)];
   }
@@ -155,7 +157,7 @@ struct shortcut_storage {
     shortcut_data const* s;
     bool is_left_child;
   };
-  std::vector<ShortcutSegment> get_shortcut_segments(
+  [[nodiscard]] std::vector<ShortcutSegment> get_shortcut_segments(
       way_idx_t const way) const {
     if (way == way_idx_t::invalid() || !is_shortcut(way)) {
       return {};

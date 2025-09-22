@@ -14,18 +14,21 @@ struct order_strategy {
 };
 
 struct node_importance_order_strategy final : public order_strategy {
-  explicit node_importance_order_strategy(int const seed) : seed_(seed) {
+  explicit node_importance_order_strategy(int const seed) {
     if (seed == -1) {
-      seed_ = time(nullptr);
+      seed_ = static_cast<unsigned int>(time(nullptr));
+    } else {
+      seed_ = static_cast<unsigned int>(seed);
     }
+    srand(seed_);
     fmt::println("seeded node order with: {}", seed_);
   }
-  int seed_;
+  unsigned int seed_;
   std::vector<std::vector<node_idx_t>> order_;
   size_t max_importance_ = 0;
   size_t current_node_importance = 0;
   void compute_order(ways const& w) override {
-    int const n = w.n_nodes();
+    size_t const n = w.n_nodes();
     for (node_idx_t idx{0U}; idx < n; ++idx) {
       auto const importance = w.r_->node_properties_[idx].importance_;
       if (importance > max_importance_) {
@@ -53,9 +56,9 @@ struct node_importance_order_strategy final : public order_strategy {
     return node;
   }
 
-  node_idx_t rnd_vec_elem(std::vector<node_idx_t>& v) const {
+  static node_idx_t rnd_vec_elem(std::vector<node_idx_t>& v) {
     auto const n = v.size();
-    srand(seed_);
+
     auto const idx = rand() % n;
     node_idx_t const result = v[idx];
 
@@ -66,17 +69,19 @@ struct node_importance_order_strategy final : public order_strategy {
 };
 
 struct random_order_strategy final : public order_strategy {
-  explicit random_order_strategy(int const seed) : seed_(seed) {
+  explicit random_order_strategy(int const seed) {
     if (seed == -1) {
-      seed_ = time(nullptr);
+      seed_ = static_cast<unsigned int>(time(nullptr));
+    } else {
+      seed_ = static_cast<unsigned int>(seed);
     }
     fmt::println("seeded node order with: {}", seed_);
   }
-  int seed_;
+  unsigned int seed_;
   std::vector<node_idx_t> order_;
 
   void compute_order(ways const& w) override {
-    int const n = w.n_nodes();
+    size_t const n = w.n_nodes();
     std::vector<node_idx_t> result;
     for (node_idx_t idx{0U}; idx < n; ++idx) {
       result.push_back(idx);
