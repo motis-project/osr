@@ -51,11 +51,12 @@ void shortcut_storage::add_shortcut_to_graph(ways& w,
                                              shortcut_data const& shortcut,
                                              way_idx_t way_idx,
                                              bool const add_to_nodes) {
-  auto way_nodes = w.r_->way_nodes_.add_back_sized(0U);
+  auto way_nodes = w.r_->way_nodes_.add_back_sized(static_cast<uint16_t>(0U));
   way_nodes.push_back(shortcut.from);
   way_nodes.push_back(shortcut.to);
 
-  auto way_dists = w.r_->way_node_dist_.add_back_sized(0U);
+  auto way_dists =
+      w.r_->way_node_dist_.add_back_sized(static_cast<uint16_t>(0U));
   way_dists.push_back(shortcut.distance);
 
   w.r_->way_properties_.push_back(
@@ -65,11 +66,10 @@ void shortcut_storage::add_shortcut_to_graph(ways& w,
   // neue Way in node hinzufügen
   if (add_to_nodes) {
     w.r_->node_ways_[shortcut.from].push_back(way_idx);
-    w.r_->node_in_way_idx_[shortcut.from].push_back(0U);
+    w.r_->node_in_way_idx_[shortcut.from].push_back(static_cast<uint16_t>(0U));
     w.r_->node_ways_[shortcut.to].push_back(way_idx);
-    w.r_->node_in_way_idx_[shortcut.to].push_back(1U);
+    w.r_->node_in_way_idx_[shortcut.to].push_back(static_cast<uint16_t>(1U));
   }
-  // w.way_osm_idx_.push_back(osm_way_idx_t{0U});
 }
 
 void add_shortcut_restrictions(osr::ways& w,
