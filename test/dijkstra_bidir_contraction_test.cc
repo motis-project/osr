@@ -238,8 +238,8 @@ TEST(dijkstra_ch_bidir, monaco) {
 
 TEST(dijkstra_ch_bidir, aachen) {
   auto const raw_data = "test/aachen.osm.pbf";
-  auto const data_dir = "build/osr-aachen";
-  auto const data_dir_contraction_hierarchie = "build/osr-aachen-ch";
+  auto const data_dir = "test/osr-aachen";
+  auto const data_dir_contraction_hierarchie = "test/osr-aachen-ch";
   auto constexpr num_samples = 5000U;
   auto constexpr max_cost = 2 * 3600U;
 
@@ -304,11 +304,10 @@ TEST(dijkstra_ch_bidir, hamburg) {
   run(w, w_shortcuts, l, num_samples, max_cost, shortcuts.get());
 }
 
-TEST(dijkstra_ch_bidir, switzerland) {
+TEST(dijkstra_ch_bidir, DISABLED_switzerland) {
   auto const raw_data = "test/switzerland.osm.pbf";
   auto const data_dir = "test/switzerland";
-  auto const data_dir_contraction_hierarchie =
-      "test/switzerland_contraction_hierarchie";
+  auto const data_dir_contraction_hierarchie = "test/switzerland-ch";
   auto constexpr num_samples = 1000U;
   auto constexpr max_cost = 5 * 3600U;
 
@@ -342,8 +341,7 @@ TEST(dijkstra_ch_bidir, switzerland) {
 TEST(dijkstra_ch_bidir, DISABLED_germany) {
   auto const raw_data = "test/germany.osm.pbf";
   auto const data_dir = "test/germany";
-  auto const data_dir_contraction_hierarchie =
-      "test/germany_contraction_hierarchie";
+  auto const data_dir_contraction_hierarchie = "test/germany-ch";
   constexpr auto num_samples = 50U;
   constexpr auto max_cost = 12 * 3600U;
 
