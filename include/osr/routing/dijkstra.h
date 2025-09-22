@@ -8,6 +8,9 @@
 #include "osr/ways.h"
 
 namespace osr {
+namespace ch {
+struct shortcut_storage;
+}
 
 struct sharing_data;
 
@@ -57,7 +60,8 @@ struct dijkstra {
            cost_t const max,
            bitvec<node_idx_t> const* blocked,
            sharing_data const* sharing,
-           elevation_storage const* elevations) {
+           elevation_storage const* elevations,
+           ch::shortcut_storage const* shortcuts) {
     while (!pq_.empty()) {
       auto l = pq_.pop();
       if (get_cost(l.get_node()) < l.cost()) {
@@ -72,7 +76,7 @@ struct dijkstra {
 
       auto const curr = l.get_node();
       P::template adjacent<SearchDir, WithBlocked>(
-          params, r, curr, blocked, sharing, elevations,
+          params, r, curr, blocked, sharing, elevations, shortcuts,
           [&](node const neighbor, std::uint32_t const cost, distance_t,
               way_idx_t const way, std::uint16_t, std::uint16_t,
               elevation_storage::elevation, bool const track) {
@@ -113,19 +117,24 @@ struct dijkstra {
            bitvec<node_idx_t> const* blocked,
            sharing_data const* sharing,
            elevation_storage const* elevations,
-           direction const dir) {
+           direction const dir,
+           ch::shortcut_storage const* shortcuts) {
     if (blocked == nullptr) {
       return dir == direction::kForward
                  ? run<direction::kForward, false>(params, w, r, max, blocked,
-                                                   sharing, elevations)
+                                                   sharing, elevations,
+                                                   shortcuts)
                  : run<direction::kBackward, false>(params, w, r, max, blocked,
-                                                    sharing, elevations);
+                                                    sharing, elevations,
+                                                    shortcuts);
     } else {
       return dir == direction::kForward
                  ? run<direction::kForward, true>(params, w, r, max, blocked,
-                                                  sharing, elevations)
+                                                  sharing, elevations,
+                                                  shortcuts)
                  : run<direction::kBackward, true>(params, w, r, max, blocked,
-                                                   sharing, elevations);
+                                                   sharing, elevations,
+                                                   shortcuts);
     }
   }
 

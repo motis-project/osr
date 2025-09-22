@@ -47,7 +47,8 @@ struct car_sharing {
                      .is_sidewalk_separate_ = false,
                      .motor_vehicle_no_ = false,
                      .has_toll_ = false,
-                     .is_big_street_ = false};
+                     .is_big_street_ = false,
+                     .importance_ = 0};
 
   static constexpr auto const kAdditionalNodeProperties =
       node_properties{.from_level_ = 0,
@@ -58,7 +59,8 @@ struct car_sharing {
                       .is_entrance_ = false,
                       .is_multi_level_ = false,
                       .is_parking_ = false,
-                      .to_level_ = 0};
+                      .to_level_ = 0,
+                      .importance_ = 0};
 
   enum class node_type : std::uint8_t {
     kInitialFoot,
@@ -329,6 +331,7 @@ struct car_sharing {
                        bitvec<node_idx_t> const* blocked,
                        sharing_data const* sharing,
                        elevation_storage const* elevations,
+                       ch::shortcut_storage const*,
                        Fn&& fn) {
     assert(sharing != nullptr);
 
@@ -345,7 +348,7 @@ struct car_sharing {
                                        bool const include_additional_edges,
                                        cost_t const switch_penalty = 0) {
       footp::template adjacent<SearchDir, WithBlocked>(
-          params.foot_, w, to_foot(n), blocked, nullptr, elevations,
+          params.foot_, w, to_foot(n), blocked, nullptr, elevations, nullptr,
           [&](footp::node const neighbor, std::uint32_t const cost,
               distance_t const dist, way_idx_t const way,
               std::uint16_t const from, std::uint16_t const to,
@@ -373,7 +376,7 @@ struct car_sharing {
     auto const& continue_with_vehicle = [&](bool const include_additional_edges,
                                             cost_t const switch_penalty = 0) {
       car::adjacent<SearchDir, WithBlocked>(
-          params.car_, w, to_rental(n), blocked, nullptr, elevations,
+          params.car_, w, to_rental(n), blocked, nullptr, elevations, nullptr,
           [&](car::node const neighbor, std::uint32_t const cost,
               distance_t const dist, way_idx_t const way,
               std::uint16_t const from, std::uint16_t const to,
