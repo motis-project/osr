@@ -37,23 +37,29 @@ struct ShortcutSegment {
 };
 
 struct shortcut_data {
-  const node_idx_t from;
-  const node_idx_t to;
-  const uint32_t cost;
-  const distance_t distance;
-  const node_idx_t via_node;  // node that was contracted
-  const way_idx_t upward_way;  // from -> via
-  const direction upward_dir;  // direction of upward_way
-  const distance_t upward_distance;  // distance of upward_way
-  const uint32_t upward_cost;  // cost of upward_way
-  const direction downward_dir;  // direction of downward_way
-  const way_idx_t downward_way;  // via -> to
-  const distance_t downward_distance;  // distance of downward_way
-  const uint32_t downward_cost;  // cost of downward_way
-  const way_idx_t
-      selfloop_way_idx;  // special shortcut for selfloop (used to contract a 3
-                         // way pair where one is a self loop)
+  node_idx_t from{};
+  node_idx_t to{};
+  uint32_t cost{};
+  distance_t distance{};
+  node_idx_t via_node{};  // node that was contracted
+  way_idx_t upward_way{};  // from -> via
+  direction upward_dir{};  // direction of upward_way
+  distance_t upward_distance{};  // distance of upward_way
+  uint32_t upward_cost{};  // cost of upward_way
+  direction downward_dir{};  // direction of downward_way
+  way_idx_t downward_way{};  // via -> to
+  distance_t downward_distance{};  // distance of downward_way
+  uint32_t downward_cost{};  // cost of downward_way
+  way_idx_t
+      selfloop_way_idx{};  // special shortcut for selfloop (used to contract a
+                           // 3 way pair where one is a self loop)
   vec<ShortcutSegment> loop_segments{};
+
+  template <std::size_t NMaxTypes>
+  friend constexpr auto static_type_hash(
+      shortcut_data const*, cista::hash_data<NMaxTypes> h) noexcept {
+    return h.combine(cista::hash("shortcut_data v1"));
+  }
 };
 struct way_and_dir {
   way_idx_t way;

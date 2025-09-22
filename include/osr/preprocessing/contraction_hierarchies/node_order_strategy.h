@@ -59,7 +59,7 @@ struct node_importance_order_strategy final : public order_strategy {
   static node_idx_t rnd_vec_elem(std::vector<node_idx_t>& v) {
     auto const n = v.size();
 
-    auto const idx = rand() % n;
+    auto const idx = static_cast<size_t>(rand()) % n;
     node_idx_t const result = v[idx];
 
     std::swap(v[idx], v[n - 1]);
@@ -99,7 +99,7 @@ struct random_order_strategy final : public order_strategy {
   static node_idx_t rnd_vec_elem(std::vector<node_idx_t>& v) {
     auto const n = v.size();
 
-    auto const idx = rand() % n;
+    auto const idx = static_cast<size_t>(rand()) % n;
     node_idx_t const result = v[idx];
 
     std::swap(v[idx], v[n - 1]);
