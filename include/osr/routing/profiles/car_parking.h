@@ -268,7 +268,8 @@ struct car_parking {
               std::uint16_t const from, std::uint16_t const to,
               elevation_storage::elevation const elevation, bool) {
             fn(to_node(neighbor),
-               static_cast<cost_t>(cost + (n.is_foot_node() ? 0 : kSwitchPenalty)),
+               static_cast<cost_t>(cost +
+                                   (n.is_foot_node() ? 0 : kSwitchPenalty)),
                dist, way, from, to, elevation, false);
           });
     }
@@ -282,7 +283,8 @@ struct car_parking {
               elevation_storage::elevation const elevation, bool) {
             auto const way_prop = w.way_properties_[way];
             fn(to_node(neighbor, way_prop.from_level()),
-               static_cast<cost_t>(cost + (n.is_car_node() ? 0 : kSwitchPenalty)),
+               static_cast<cost_t>(cost +
+                                   (n.is_car_node() ? 0 : kSwitchPenalty)),
                dist, way, from, to, elevation, false);
           });
     }
