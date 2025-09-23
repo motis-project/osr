@@ -353,7 +353,8 @@ struct car_sharing {
               std::uint16_t const from, std::uint16_t const to,
               elevation_storage::elevation const elevation, bool) {
             if (is_allowed(sharing->through_allowed_, neighbor.n_)) {
-              fn(to_node(neighbor, nt), cost + switch_penalty, dist, way, from,
+              fn(to_node(neighbor, nt),
+                 static_cast<cost_t>(cost + switch_penalty), dist, way, from,
                  to, elevation, switch_penalty != 0);
             }
           });
@@ -381,8 +382,9 @@ struct car_sharing {
               std::uint16_t const from, std::uint16_t const to,
               elevation_storage::elevation const elevation, bool) {
             if (is_allowed(sharing->through_allowed_, neighbor.n_)) {
-              fn(to_node(neighbor, kNoLevel), cost + switch_penalty, dist, way,
-                 from, to, elevation, false);
+              fn(to_node(neighbor, kNoLevel),
+                 static_cast<cost_t>(cost + switch_penalty), dist, way, from,
+                 to, elevation, false);
             }
           });
       if (include_additional_edges) {
