@@ -116,12 +116,36 @@ struct http_server::impl {
                : to_algorithm(routing_it->value().as_string());
   }
 
+  static bool get_use_ch_from_request(boost::json::object const& q) {
+    auto const it = q.find("useCH");
+    if (it != q.end()) {
+      if (it->value().is_bool()) {
+        return it->value().as_bool();
+      }
+      if (it->value().is_string()) {
+        auto s = it->value().as_string();
+        return s == "1" || s == "true" || s == "True" || s == "yes";
+      }
+      if (it->value().is_int64()) {
+        return it->value().as_int64() != 0;
+      }
+      if (it->value().is_uint64()) {
+        return it->value().as_uint64() != 0;
+      }
+      if (it->value().is_double()) {
+        return it->value().as_double() != 0.0;
+      }
+    }
+    return false;
+  }
+
   void handle_route(web_server::http_req_t const& req,
                     web_server::http_res_cb_t const& cb) {
     auto const q = boost::json::parse(req.body()).as_object();
     auto const profile = get_search_profile_from_request(q);
     auto const direction_it = q.find("direction");
     auto const routing_algo = get_routing_algorithm_from_request(q);
+    auto const use_ch = get_use_ch_from_request(q);
     auto const dir = to_direction(direction_it == q.end() ||
                                           !direction_it->value().is_string()
                                       ? to_str(direction::kForward)
@@ -140,6 +164,7 @@ struct http_server::impl {
                                                       foot_speed_result.value()}
             : get_parameters(profile);
 
+    // Call overload with CH toggle
     auto const p = route(params, w_, l_, profile, from, to, max, dir, 100,
                          nullptr, nullptr, elevations_, routing_algo);
 
