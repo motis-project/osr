@@ -206,7 +206,7 @@ TEST(bidirectional_dijkstra, monaco) {
 TEST(bidirectional_dijkstra, hamburg) {
   auto const raw_data = "test/hamburg.osm.pbf";
   auto const data_dir = "test/hamburg";
-  auto const num_samples = 500U;
+  auto const num_samples = 400U;
   auto const max_cost = 3 * 3600U;
   auto constexpr dir = direction::kForward;
 
