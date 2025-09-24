@@ -16,6 +16,9 @@
 #include "osr/elevation_storage.h"
 #include "osr/lookup.h"
 #include "osr/platforms.h"
+#include "osr/preprocessing/contraction_hierarchy/shortcut_storage.h"
+#include "osr/routing/profile.h"
+#include "osr/routing/profiles/car.h"
 #include "osr/ways.h"
 
 namespace fs = std::filesystem;
@@ -78,6 +81,14 @@ int main(int argc, char const* argv[]) {
   }
 
   auto const w = ways{opt.data_dir_, cista::mmap::protection::READ};
+  if (auto const f_name =
+          shortcut_storage<car::node>::get_filename(search_profile::kCar);
+      fs::exists(fs::path{opt.data_dir_} / f_name)) {
+    get_shortcut_storage<car::node>() =
+        shortcut_storage<car::node>::read(opt.data_dir_, search_profile::kCar);
+  } else {
+    fmt::println("{} not found. Shortcuts won't be available", f_name);
+  }
 
   auto const platforms_check_path = opt.data_dir_ / "node_is_platform.bin";
   if (!fs::exists(platforms_check_path)) {

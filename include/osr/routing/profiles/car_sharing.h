@@ -10,6 +10,7 @@
 #include "utl/helpers/algorithm.h"
 
 #include "osr/elevation_storage.h"
+#include "osr/preprocessing/contraction_hierarchy/shortcut_storage.h"
 #include "osr/routing/additional_edge.h"
 #include "osr/routing/mode.h"
 #include "osr/routing/path.h"
@@ -47,7 +48,8 @@ struct car_sharing {
                      .is_sidewalk_separate_ = false,
                      .motor_vehicle_no_ = false,
                      .has_toll_ = false,
-                     .is_big_street_ = false};
+                     .is_big_street_ = false,
+                     .importance_ = 0};
 
   static constexpr auto const kAdditionalNodeProperties =
       node_properties{.from_level_ = 0,
@@ -58,7 +60,8 @@ struct car_sharing {
                       .is_entrance_ = false,
                       .is_multi_level_ = false,
                       .is_parking_ = false,
-                      .to_level_ = 0};
+                      .to_level_ = 0,
+                      .importance_ = 0};
 
   enum class node_type : std::uint8_t {
     kInitialFoot,
@@ -223,6 +226,10 @@ struct car_sharing {
                                       .way_ = pred_way_[idx]}};
     }
 
+    constexpr way_idx_t way(node) const noexcept {
+      return way_idx_t::invalid();
+    }
+
     constexpr cost_t cost(node const n) const noexcept {
       return cost_[get_index(n)];
     }
@@ -230,7 +237,8 @@ struct car_sharing {
     constexpr bool update(label const& l,
                           node const n,
                           cost_t const c,
-                          node const pred) noexcept {
+                          node const pred,
+                          way_idx_t) noexcept {
       auto const idx = get_index(n);
       if (c < cost_[idx]) {
         cost_[idx] = c;
@@ -265,6 +273,9 @@ struct car_sharing {
     void write(node const n, path& p) const {
       tracking_[get_index(n)].write(p);
     }
+
+    template <typename Fn>
+    constexpr void for_each(key, Fn&&) const {}
 
     std::array<node_idx_t, kN> pred_{};
     std::array<cost_t, kN> cost_{};
@@ -322,13 +333,15 @@ struct car_sharing {
     });
   }
 
-  template <direction SearchDir, bool WithBlocked, typename Fn>
+  template <direction SearchDir, adj_conf Config, typename Fn>
   static void adjacent(parameters const& params,
                        ways::routing const& w,
                        node const n,
                        bitvec<node_idx_t> const* blocked,
                        sharing_data const* sharing,
                        elevation_storage const* elevations,
+                       shortcut_storage<node> const*,
+                       node_idx_t,
                        Fn&& fn) {
     assert(sharing != nullptr);
 
@@ -338,21 +351,23 @@ struct car_sharing {
                   .type_ = nt,
                   .lvl_ = nt == node_type::kRental ? kNoLevel : n.lvl_},
              cost, ae.distance_, way_idx_t::invalid(), 0, 1,
-             elevation_storage::elevation{}, false);
+             elevation_storage::elevation{}, false, node::invalid(), 0);
         };
 
     auto const& continue_on_foot = [&](node_type const nt,
                                        bool const include_additional_edges,
                                        cost_t const switch_penalty = 0) {
-      footp::template adjacent<SearchDir, WithBlocked>(
-          params.foot_, w, to_foot(n), blocked, nullptr, elevations,
+      footp::template adjacent<SearchDir, Config>(
+          params.foot_, w, to_foot(n), blocked, nullptr, elevations, nullptr,
+          node_idx_t::invalid(),
           [&](footp::node const neighbor, std::uint32_t const cost,
               distance_t const dist, way_idx_t const way,
               std::uint16_t const from, std::uint16_t const to,
-              elevation_storage::elevation const elevation, bool) {
+              elevation_storage::elevation const elevation, bool, footp::node,
+              cost_t) {
             if (is_allowed(sharing->through_allowed_, neighbor.n_)) {
               fn(to_node(neighbor, nt), cost + switch_penalty, dist, way, from,
-                 to, elevation, switch_penalty != 0);
+                 to, elevation, switch_penalty != 0, node::invalid(), 0);
             }
           });
       if (include_additional_edges) {
@@ -372,15 +387,17 @@ struct car_sharing {
 
     auto const& continue_with_vehicle = [&](bool const include_additional_edges,
                                             cost_t const switch_penalty = 0) {
-      car::adjacent<SearchDir, WithBlocked>(
-          params.car_, w, to_rental(n), blocked, nullptr, elevations,
+      car::adjacent<SearchDir, Config>(
+          params.car_, w, to_rental(n), blocked, nullptr, elevations, nullptr,
+          node_idx_t::invalid(),
           [&](car::node const neighbor, std::uint32_t const cost,
               distance_t const dist, way_idx_t const way,
               std::uint16_t const from, std::uint16_t const to,
-              elevation_storage::elevation const elevation, bool) {
+              elevation_storage::elevation const elevation, bool, car::node,
+              cost_t) {
             if (is_allowed(sharing->through_allowed_, neighbor.n_)) {
               fn(to_node(neighbor, kNoLevel), cost + switch_penalty, dist, way,
-                 from, to, elevation, false);
+                 from, to, elevation, false, node::invalid(), 0);
             }
           });
       if (include_additional_edges) {
@@ -518,6 +535,13 @@ struct car_sharing {
             .lvl_ = n.lvl_,
             .dir_ = opposite(n.dir_),
             .way_ = n.way_};
+  }
+
+  template <direction>
+  static constexpr cost_t turning_cost(ways::routing const&,
+                                       node const,
+                                       node const) {
+    return 0;
   }
 };
 
