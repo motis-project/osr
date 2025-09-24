@@ -43,7 +43,7 @@ struct shortcut_storage final {
       (1U << 31U)>;
   using idx_t = cista::offset::vector<typename data_t::page_t>;
 
-  static constexpr std::string kFilenamePrefix = "shortcuts_";
+  static constexpr std::string_view kFilenamePrefix = "shortcuts_";
 
   cista::offset::vector_map<way_idx_t, shortcut> shortcuts_;
   cista::offset::vector_map<way_idx_t, shortcut_intern> shortcuts_intern_;
@@ -54,7 +54,8 @@ struct shortcut_storage final {
 
   static constexpr std::string get_filename(
       search_profile const profile) noexcept {
-    return (kFilenamePrefix + std::string(to_str(profile)) + ".bin");
+    return (std::string(kFilenamePrefix) + std::string(to_str(profile)) +
+            ".bin");
   }
 
   static cista::wrapped<shortcut_storage const> read(
@@ -74,6 +75,9 @@ struct path_label final {
   cost_t cost_;
   way_idx_t way_;
   bool operator==(path_label const&) const = default;
+  path_label() = default;
+  path_label(Node const n, cost_t const c, way_idx_t const w)
+      : node_{std::move(n)}, cost_{c}, way_{w} {}
 };
 
 template <typename Node>

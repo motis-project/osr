@@ -432,8 +432,8 @@ auto reconstruct_ch_partially(typename P::parameters const& params,
       auto const& s = sc_stor.shortcuts_[way_idx_t{vrt_idx}];
       auto const& si = sc_stor.shortcuts_intern_[way_idx_t{vrt_idx}];
       if (si.loop_cost_ > 0) {
-        path.insert_range(next_it,
-                          find_loop(si.via_in_, si.via_out_, si.loop_cost_));
+        auto res = find_loop(si.via_in_, si.via_out_, si.loop_cost_);
+        path.insert(next_it, begin(res), end(res));
         next_it = std::next(it);
       }
       if constexpr (flip<SearchDir>(PathDir) == direction::kForward) {
@@ -559,7 +559,9 @@ path reconstruct_ch(typename P::parameters const& params,
       P::node_cost(w.r_->node_properties_[d.tentative_mp_.second.get_node()]);
   std::ranges::reverse(dir == direction::kForward ? bwd_segments
                                                   : fwd_segments);
-  fwd_segments.append_range(bwd_segments);
+  // TODO replace with .append_range as soon as Apple Clang version is updated
+  fwd_segments.insert(end(fwd_segments), begin(bwd_segments),
+                      end(bwd_segments));
 
   auto path_elevation = elevation_storage::elevation{};
   for (auto const& segment : fwd_segments) {

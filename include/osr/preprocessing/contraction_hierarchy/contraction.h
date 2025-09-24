@@ -6,6 +6,7 @@
 #include <vector>
 
 #include "fmt/std.h"
+#include "utl/enumerate.h"
 
 #include "osr/preprocessing/contraction_hierarchy/node_order.h"
 #include "osr/preprocessing/contraction_hierarchy/shortcut_storage.h"
@@ -71,7 +72,8 @@ std::vector<incoming_sc_candidate<typename P::node>> find_incoming(
               return;
             }
           }
-          incoming.emplace_back(via_out, neighbor, way, way_cost);
+          incoming.push_back(incoming_sc_candidate<typename P::node>{
+              via_out, neighbor, way, way_cost});
         });
   });
   return incoming;
@@ -94,14 +96,16 @@ std::vector<outgoing_sc_candidate<typename P::node>> find_outgoing(
           way_idx_t const way, std::uint16_t, std::uint16_t,
           elevation_storage::elevation, bool, typename P::node const via_out,
           cost_t const turning_cost) {
-        uint32_t const out_cost =
-            cost - P::node_cost(r.node_properties_[neighbor.get_node()]);
-        outgoing.emplace_back(
+        cost_t const out_cost =
+            static_cast<cost_t>(cost) -
+            P::node_cost(r.node_properties_[neighbor.get_node()]);
+        outgoing.push_back(outgoing_sc_candidate<typename P::node>{
             neighbor, via_out, way,
-            cost - P::node_cost(r.node_properties_[neighbor.get_node()]),
-            out_cost, turning_cost);
+            static_cast<cost_t>(
+                cost - P::node_cost(r.node_properties_[neighbor.get_node()])),
+            out_cost, turning_cost});
         if (cost > max_cost) {
-          max_cost = cost;
+          max_cost = static_cast<cost_t>(cost);
         }
         max_turning_cost = std::max(max_turning_cost, turning_cost);
       });
@@ -364,7 +368,7 @@ void preprocess_ch(std::filesystem::path const& directory,
   auto const& r = *w.r_;
 
   auto const num_nodes = w.n_nodes();
-  size_t num_edges = 0;
+  auto num_edges = way_idx_t::value_t{0};
   auto const num_restricted = r.node_is_restricted_.count();
   for (auto way : r.way_nodes_) {
     if (way.empty()) continue;
@@ -390,17 +394,16 @@ void preprocess_ch(std::filesystem::path const& directory,
   fmt::println(" finished");
 
   fmt::println("contracting nodes...");
-  auto constexpr kOffset = 4;  // treat (kOffset*10) % as 0 %
+  auto constexpr kOffsetFactor = 4U;  // treat (kOffset*10) % as 0 %
   auto update_progress = [&](size_t const val) {
     pt->status(std::to_string(val) + "/" + std::to_string(num_nodes));
-    pt->update(
-        std::max(0L, static_cast<int64_t>(val) - kOffset * num_nodes / 10));
+    auto const offset = kOffsetFactor * num_nodes / 10;
+    pt->update(val > offset ? val - offset : 0);
   };
-  pt->in_high((10 - kOffset) * num_nodes / 10);
+  pt->in_high((10 - kOffsetFactor) * num_nodes / 10);
   update_progress(0);
   auto timer = std::chrono::steady_clock::now();
-  for (auto const [order, via_idx] :
-       std::views::enumerate(ordering.order2node_)) {
+  for (auto const [order, via_idx] : utl::enumerate(ordering.order2node_)) {
     contract_node<P>(params, w, r, sc_stor, via_idx, detour_limit);
     if (std::chrono::steady_clock::now() - timer >= kProgressUpdateInterval) {
       timer = std::chrono::steady_clock::now();
