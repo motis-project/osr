@@ -188,7 +188,7 @@ static void run_bidijkstra_consistency(ways const& w,
 TEST(bidirectional_dijkstra, monaco) {
   auto const raw_data = "test/monaco.osm.pbf";
   auto const data_dir = "test/monaco";
-  auto const num_samples = 900U;
+  auto const num_samples = 10000U;
   auto const max_cost = 2 * 3600U;
   auto constexpr dir = direction::kForward;
 
@@ -206,7 +206,7 @@ TEST(bidirectional_dijkstra, monaco) {
 TEST(bidirectional_dijkstra, hamburg) {
   auto const raw_data = "test/hamburg.osm.pbf";
   auto const data_dir = "test/hamburg";
-  auto const num_samples = 400U;
+  auto const num_samples = 800U;
   auto const max_cost = 3 * 3600U;
   auto constexpr dir = direction::kForward;
 
