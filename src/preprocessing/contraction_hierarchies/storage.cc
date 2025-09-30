@@ -102,9 +102,7 @@ void shortcut_storage::load_all_shortcuts_in_graph(osr::ways& w) {
   for (auto i = 0U; i < shortcuts_.size(); ++i) {
     auto const& shortcut = shortcuts_[i];
     auto const shortcut_way = way_idx_t{max_way_idx_ + i + 1U};
-    // add_shortcut_to_graph(w, shortcut, shortcut_way, true);
     construct_way_on_shortcut_arrays(w, shortcut_way, shortcut);
-    // add_shortcut_restrictions(w, shortcut, shortcut_way);
   }
 }
 }  // namespace osr::ch

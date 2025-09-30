@@ -162,10 +162,6 @@ struct bidi_dijkstra_ch {
           if (order > shortcuts->node_order_->get_order(neighbor.get_node())) {
             return;
           }
-          if (order > shortcuts->node_order_->get_order(neighbor.get_node()) &&
-              SearchDir == direction::kBackward) {
-            return;
-          }
 
           if constexpr (kDebug) {
             std::cout << "  NEIGHBOR ";
@@ -330,7 +326,7 @@ struct bidi_dijkstra_ch {
       clear_mp();
       return false;
     }
-    return true;
+    return !max_reached_1_ || !max_reached_2_;
   }
 
   bool run(ways const& w,

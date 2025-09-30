@@ -248,11 +248,7 @@ double add_path(typename P::parameters const& params,
       shortcuts->is_shortcut(way) && std::is_same_v<P, car>) {
     std::vector<ch::ShortcutSegment> segments =
         shortcuts->get_shortcut_segments(way);
-    // fmt::println("Using shortcut {} from {} ({}) to {} ({})", way,
-    //              w.r_->way_nodes_[way][from_idx],
-    //              w.node_to_osm_[w.r_->way_nodes_[way][from_idx]],
-    //              w.r_->way_nodes_[way][to_idx],
-    //              w.node_to_osm_[w.r_->way_nodes_[way][to_idx]]);
+
     std::ranges::reverse(segments);
     for (auto const& segment : segments) {
       add_path<P>(w, r, sharing, from, to, static_cast<cost_t>(segment.cost),
@@ -756,8 +752,7 @@ std::optional<path> route_bidi_dijkstra_ch_(
         }
         return std::nullopt;
       }
-      // fmt::println("Meetpoint is 1:{} 2:{}",
-      // b.meet_point_1_.get_node(),b.meet_point_2_.get_node());
+
       auto const cost = b.get_cost_to_mp(b.meet_point_1_, b.meet_point_2_);
       if (best_cost > cost) {
         best_end = end;

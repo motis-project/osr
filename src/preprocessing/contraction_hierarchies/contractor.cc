@@ -351,15 +351,7 @@ void contractor::contract_node(ways& w,
       if (blocked->test(to.node_idx)) {
         continue;
       }
-      /*auto const from_res =
-      shortcuts->resolve_first_way_and_dir(from.way,from.node.dir_); auto const
-      to_res = shortcuts->resolve_last_way_and_dir(to.way,to.node.dir_); if
-      (has_shortcut(from.node_idx, to.node_idx, from_res.way, to_res.way,
-      from_res.dir, to_res.dir, shortcuts)) {
-        //fmt::println("Skip because shortcut already exists from {} -{}-> to
-      -{}-> {}", from.node_idx, from_res.way, to_res.way, to.node_idx);
-        continue;
-      }*/
+
       auto const is_uturn =
           has_uturn(from.way, from.node.dir_, to.way, to.node.dir_, shortcuts);
 
@@ -422,9 +414,7 @@ void contractor::contract_node(ways& w,
           if (cista::to_idx(shortest_possible_selfloop) !=
               std::numeric_limits<std::uint32_t>::max()) {
             selfloop_way_idx = shortest_possible_selfloop;
-            // fmt::println("contraction of {} -> {} -> {} has found a selfloop
-            // at {} way {} with {} cost", from.node_idx, node, to.node_idx,
-            // node, selfloop_way_idx, shortest_possible_selfloop_cost);
+
           }
           direct_cost = from.cost + to.cost + shortest_possible_selfloop_cost;
         }
@@ -519,9 +509,6 @@ void contractor::contract_node(ways& w,
                              .selfloop_way_idx = selfloop_way_idx});
         if (from.node_idx == to.node_idx) {
           node_selfloops[from.node_idx].push_back(shortcut_way);
-          // fmt::println("contracting {} adding a recursive edge from {} to {}
-          // with cost {} and ways {} {}", node, from.node_idx, to.node_idx,
-          // direct_cost, from.way, to.way);
         }
         // ADD NEIGHBOUR
         outgoing_neighbors_[to_idx(from.node_idx)].push_back(neighbor_data{
