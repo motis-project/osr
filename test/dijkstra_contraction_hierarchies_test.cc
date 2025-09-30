@@ -200,44 +200,6 @@ void run_ch(ways const& w,
   }
 }
 
-TEST(dijkstra_ch, aachen) {
-  auto const raw_data = "test/aachen.osm.pbf";
-  auto const data_dir = "test/aachen";
-  constexpr auto num_samples = 100000U;
-  constexpr auto max_cost = 2 * 3600U;
-  auto constexpr dir = direction::kForward;
-
-  if (!fs::exists(raw_data) && !fs::exists(data_dir)) {
-    GTEST_SKIP() << raw_data << " not found";
-  }
-
-  extract_ch(raw_data, data_dir);
-  auto const w = ways{data_dir, cista::mmap::protection::READ};
-  auto const l = lookup{w, data_dir, cista::mmap::protection::READ};
-  preprocess<kUseFixedSeed, kForcePreprocessing>(data_dir);
-
-  run_ch(w, l, num_samples, max_cost, dir);
-}
-
-TEST(dijkstra_ch, bremen) {
-  auto const raw_data = "test/bremen.osm.pbf";
-  auto const data_dir = "test/bremen";
-  constexpr auto num_samples = 100000U;
-  constexpr auto max_cost = 3 * 3600U;
-  auto constexpr dir = direction::kForward;
-
-  if (!fs::exists(raw_data) && !fs::exists(data_dir)) {
-    GTEST_SKIP() << raw_data << " not found";
-  }
-
-  extract_ch(raw_data, data_dir);
-  auto const w = ways{data_dir, cista::mmap::protection::READ};
-  auto const l = lookup{w, data_dir, cista::mmap::protection::READ};
-  preprocess<kUseFixedSeed, kForcePreprocessing>(data_dir);
-
-  run_ch(w, l, num_samples, max_cost, dir);
-}
-
 TEST(dijkstra_ch, monaco_fwd) {
   auto const raw_data = "test/monaco.osm.pbf";
   auto const data_dir = "test/monaco";

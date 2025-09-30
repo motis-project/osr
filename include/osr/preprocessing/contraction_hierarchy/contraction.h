@@ -39,7 +39,7 @@ struct outgoing_sc_candidate {
 template <typename Node>
 struct found_shortcut {
   shortcut_storage<Node>::shortcut shortcut_;
-  shortcut_storage<Node>::shortcut_intern shortcut_intern_;
+  shortcut_storage<Node>::shortcut_reconstruct shortcut_reconstruct_;
   cost_t cost_;
 };
 
@@ -240,6 +240,10 @@ bool check_path(incoming_sc_candidate<typename P::node> const& in,
     }
     node = *pred;
   }
+  // because the first round of dijkstra was skipped,
+  // a path does not contain the first node
+  // we have to add a shortcut iff the found path only consists of the exact
+  // incoming and outgoing edge and a loop inbetween (optional)
   if (path.size() < 2 || path.back() != path_label<typename P::node>{
                                             in.via_, in.way_cost_, in.way_}) {
     return false;
@@ -336,14 +340,14 @@ void contract_node(typename P::parameters const& params,
   }
   for (auto& in : find_incoming<P>(params, r, sc_stor, via_idx)) {
     auto new_idx = way_idx_t{w.n_ways() + sc_stor.shortcuts_.size()};
-    for (auto const& [sc, sci, cost] : handle_incoming_edge<P>(
+    for (auto const& [sc, scr, cost] : handle_incoming_edge<P>(
              params, w, r, sc_stor, via_order, via_cost, in, detour_limit)) {
       auto const i = sc.from_.get_node();
       auto const o = sc.to_.get_node();
       sc_stor.neighbors_fwd_[i].push_back({o, new_idx});
       sc_stor.neighbors_bwd_[o].push_back({i, new_idx});
       sc_stor.shortcuts_.emplace_back(sc);
-      sc_stor.shortcuts_intern_.emplace_back(sci);
+      sc_stor.shortcuts_reconstruct_.emplace_back(scr);
       sc_stor.costs_.emplace_back(cost);
       ++new_idx;
     }
@@ -380,7 +384,7 @@ void preprocess_ch(std::filesystem::path const& directory,
       num_nodes, num_restricted, num_edges);
 
   sc_stor.shortcuts_.reserve(2 * num_edges);
-  sc_stor.shortcuts_intern_.reserve(2 * num_edges);
+  sc_stor.shortcuts_reconstruct_.reserve(2 * num_edges);
   sc_stor.costs_.reserve(2 * num_edges);
   sc_stor.neighbors_fwd_.resize(num_nodes);
   sc_stor.neighbors_bwd_.resize(num_nodes);
@@ -394,7 +398,8 @@ void preprocess_ch(std::filesystem::path const& directory,
   fmt::println(" finished");
 
   fmt::println("contracting nodes...");
-  auto constexpr kOffsetFactor = 4U;  // treat (kOffset*10) % as 0 %
+  // offset the progress because the first ~40 % are contracted almost instantly
+  auto constexpr kOffsetFactor = 4U;
   auto update_progress = [&](size_t const val) {
     pt->status(std::to_string(val) + "/" + std::to_string(num_nodes));
     auto const offset = kOffsetFactor * num_nodes / 10;

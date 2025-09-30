@@ -36,7 +36,7 @@ struct node_order final {
   }
 
   void by_real_world_importance(ways::routing const& r) {
-    std::ranges::sort(order2node_, {}, [&](auto const n) {
+    std::ranges::sort(order2node_, std::ranges::less{}, [&](auto const n) {
       return r.node_properties_[n].importance_;
     });
     update_node2order();

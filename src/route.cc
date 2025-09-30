@@ -429,43 +429,43 @@ auto reconstruct_ch_partially(typename P::parameters const& params,
         ++it;
         continue;
       }
-      auto const& s = sc_stor.shortcuts_[way_idx_t{vrt_idx}];
-      auto const& si = sc_stor.shortcuts_intern_[way_idx_t{vrt_idx}];
-      if (si.loop_cost_ > 0) {
-        auto res = find_loop(si.via_in_, si.via_out_, si.loop_cost_);
+      auto const& sc = sc_stor.shortcuts_[way_idx_t{vrt_idx}];
+      auto const& scr = sc_stor.shortcuts_reconstruct_[way_idx_t{vrt_idx}];
+      if (scr.loop_cost_ > 0) {
+        auto res = find_loop(scr.via_in_, scr.via_out_, scr.loop_cost_);
         path.insert(next_it, begin(res), end(res));
         next_it = std::next(it);
       }
       if constexpr (flip<SearchDir>(PathDir) == direction::kForward) {
         cost_t const via_cost =
             P::template turning_cost<flip<SearchDir>(PathDir)>(
-                *w.r_, (*it).node_, s.from_) +
-            si.from_way_cost_ +
-            P::node_cost(w.r_->node_properties_[si.via_in_.get_node()]);
+                *w.r_, (*it).node_, sc.from_) +
+            scr.from_way_cost_ +
+            P::node_cost(w.r_->node_properties_[scr.via_in_.get_node()]);
         cost_t const to_cost =
-            (si.loop_cost_ > 0
+            (scr.loop_cost_ > 0
                  ? 0
                  : P::template turning_cost<flip<SearchDir>(PathDir)>(
-                       *w.r_, si.via_in_, si.via_out_)) +
-            si.to_way_cost_ +
+                       *w.r_, scr.via_in_, scr.via_out_)) +
+            scr.to_way_cost_ +
             P::node_cost(w.r_->node_properties_[label.node_.get_node()]);
-        path.insert(next_it, {si.via_in_, via_cost, si.from_way_});
-        label = {s.to_, to_cost, si.to_way_};
+        path.insert(next_it, {scr.via_in_, via_cost, scr.from_way_});
+        label = {sc.to_, to_cost, scr.to_way_};
       } else {
         cost_t const via_cost =
             P::template turning_cost<flip<SearchDir>(PathDir)>(
-                *w.r_, (*it).node_, s.to_) +
-            si.to_way_cost_ +
-            P::node_cost(w.r_->node_properties_[si.via_out_.get_node()]);
+                *w.r_, (*it).node_, sc.to_) +
+            scr.to_way_cost_ +
+            P::node_cost(w.r_->node_properties_[scr.via_out_.get_node()]);
         cost_t const from_cost =
-            (si.loop_cost_ > 0
+            (scr.loop_cost_ > 0
                  ? 0
                  : P::template turning_cost<flip<SearchDir>(PathDir)>(
-                       *w.r_, si.via_out_, si.via_in_)) +
-            si.from_way_cost_ +
+                       *w.r_, scr.via_out_, scr.via_in_)) +
+            scr.from_way_cost_ +
             P::node_cost(w.r_->node_properties_[label.node_.get_node()]);
-        path.insert(next_it, {si.via_out_, via_cost, si.to_way_});
-        label = {s.from_, from_cost, si.from_way_};
+        path.insert(next_it, {scr.via_out_, via_cost, scr.to_way_});
+        label = {sc.from_, from_cost, scr.from_way_};
       }
     }
   };

@@ -16,7 +16,7 @@ struct shortcut_storage final {
     Node from_;
     Node to_;
   };
-  struct shortcut_intern final {
+  struct shortcut_reconstruct final {
     Node via_in_;
     Node via_out_;
     way_idx_t from_way_;
@@ -46,7 +46,8 @@ struct shortcut_storage final {
   static constexpr std::string_view kFilenamePrefix = "shortcuts_";
 
   cista::offset::vector_map<way_idx_t, shortcut> shortcuts_;
-  cista::offset::vector_map<way_idx_t, shortcut_intern> shortcuts_intern_;
+  cista::offset::vector_map<way_idx_t, shortcut_reconstruct>
+      shortcuts_reconstruct_;
   cista::offset::vector_map<way_idx_t, cost_t> costs_;
   cista::paged_vecvec<idx_t, data_t, node_idx_t> neighbors_fwd_;
   cista::paged_vecvec<idx_t, data_t, node_idx_t> neighbors_bwd_;
