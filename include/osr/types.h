@@ -95,7 +95,7 @@ using distance_t = std::uint16_t;
 using elevation_monotonic_t =
     cista::strong<std::uint16_t, struct elevation_monotonic_>;
 
-using way_pos_t = std::uint8_t;
+using way_pos_t = std::uint16_t;
 
 using cost_t = std::uint16_t;
 

@@ -8,6 +8,7 @@
 #include "osr/elevation_storage.h"
 #include "osr/location.h"
 #include "osr/lookup.h"
+#include "osr/preprocessing/contraction_hierarchies/ch_dijkstra.h"
 #include "osr/routing/algorithms.h"
 #include "osr/routing/mode.h"
 #include "osr/routing/parameters.h"
@@ -24,6 +25,9 @@ struct dijkstra;
 
 template <Profile>
 struct bidirectional;
+
+template <typename Profile>
+struct bidi_dijkstra_ch;
 
 struct sharing_data;
 
@@ -62,7 +66,9 @@ std::optional<path> route(profile_parameters const&,
                           bitvec<node_idx_t> const* blocked = nullptr,
                           sharing_data const* sharing = nullptr,
                           elevation_storage const* = nullptr,
-                          routing_algorithm = routing_algorithm::kDijkstra);
+                          routing_algorithm = routing_algorithm::kDijkstra,
+                          ch::shortcut_storage const* shortcuts = nullptr,
+                          ways const* shortcut_ways = nullptr);
 
 std::vector<std::optional<path>> route(
     profile_parameters const&,
@@ -95,6 +101,8 @@ std::optional<path> route(profile_parameters const&,
                           bitvec<node_idx_t> const* blocked = nullptr,
                           sharing_data const* sharing = nullptr,
                           elevation_storage const* = nullptr,
-                          routing_algorithm = routing_algorithm::kDijkstra);
+                          routing_algorithm = routing_algorithm::kDijkstra,
+                          ch::shortcut_storage const* shortcuts = nullptr,
+                          ways const* shortcut_ways = nullptr);
 
 }  // namespace osr
