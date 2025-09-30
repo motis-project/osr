@@ -414,7 +414,6 @@ void contractor::contract_node(ways& w,
           if (cista::to_idx(shortest_possible_selfloop) !=
               std::numeric_limits<std::uint32_t>::max()) {
             selfloop_way_idx = shortest_possible_selfloop;
-
           }
           direct_cost = from.cost + to.cost + shortest_possible_selfloop_cost;
         }
