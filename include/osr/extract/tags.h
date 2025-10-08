@@ -97,6 +97,7 @@ struct tags {
             case cista::hash("stop_position"): is_platform_ = true;
           }
           break;
+        case cista::hash("construction"): is_construction_ = true; break;
         case cista::hash("vehicle"):
           switch (cista::hash(std::string_view{t.value()})) {
             case cista::hash("private"):
@@ -142,6 +143,8 @@ struct tags {
       }
     }
   }
+
+  bool is_platform() const { return is_platform_ && !is_construction_; }
 
   // https://wiki.openstreetmap.org/wiki/Relation:route
   bool is_route_{false};
@@ -195,6 +198,9 @@ struct tags {
 
   // https://wiki.openstreetmap.org/wiki/Key:landuse
   bool landuse_{false};
+
+  // https://wiki.openstreetmap.org/wiki/Key:construction
+  bool is_construction_{false};
 
   // https://wiki.openstreetmap.org/wiki/Key:public%20transport
   bool is_platform_{false};

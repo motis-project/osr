@@ -141,7 +141,8 @@
     <option value="dijkstra" selected>dijkstra</option>
     <option value="bidirectional">bidirectional A*</option>
 </select>
-<input id="foot-speed" type="number" value="1.2" min="0.1" step="0.1" onchange="setSpeed(event)" />
+<input id="foot-speed" type="number" value="1.2" min="0.1" step="0.1"
+       onchange="setSpeed(event)"/>
 <div id="journey-info">
     Test
 </div>
@@ -263,12 +264,32 @@
             return r;
         } catch (e) {
             console.log(e);
-            return { "type": "FeatureCollection", "metadata": {}, "features": [] };
+            return {
+                "type": "FeatureCollection",
+                "metadata": {},
+                "features": []
+            };
         }
     };
 
     const getGraph = async (bounds) => {
         const response = await fetch(`${window.origin}/api/graph`, {
+            method: 'POST',
+            mode: 'cors',
+            headers: {
+                'Access-Control-Allow-Origin': '*',
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                level: currentLevel,
+                waypoints: bounds.toArray().flat()
+            })
+        });
+        return await response.json();
+    };
+
+    const getPlatforms = async (bounds) => {
+        const response = await fetch(`${window.origin}/api/platforms`, {
             method: 'POST',
             mode: 'cors',
             headers: {
@@ -404,6 +425,10 @@
                 type: 'geojson',
                 data: await getGraph(map.getBounds())
             });
+            map.addSource('platform', {
+                type: 'geojson',
+                data: await getPlatforms(map.getBounds())
+            })
             map.addLayer({
                 'id': 'graph-geometry',
                 'type': 'line',
@@ -467,6 +492,41 @@
                     'circle-radius': 6,
                 }
             });
+            map.addLayer({
+                'id': 'platform-node',
+                'type': 'circle',
+                'source': 'platform',
+                'filter': [
+                    'all',
+                    ['==', '$type', 'Point']
+                ],
+                'paint': {
+                    'circle-color': '#00d9c0',
+                    'circle-radius': 10,
+                }
+            });
+            map.addLayer({
+                'id': 'platform-edge',
+                'type': 'line',
+                'source': 'platform',
+                'filter': [
+                    'all',
+                    ['==', 'type', 'way'],
+                    [
+                        'any',
+                        ['!has', 'level'],
+                        ['==', 'level', currentLevel]
+                    ]
+                ],
+                'layout': {
+                    'line-join': 'round',
+                    'line-cap': 'round',
+                },
+                'paint': {
+                    'line-color': '#00d9c0',
+                    'line-width': 3
+                }
+            });
         }
     }
 
@@ -511,6 +571,7 @@
     map.on('moveend', async () => {
         if (graphActive) {
             map.getSource('graph').setData(await getGraph(map.getBounds()));
+            map.getSource('platform').setData(await getPlatforms(map.getBounds()));
         }
         updateLevels();
     });

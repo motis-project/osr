@@ -134,7 +134,7 @@ way_properties get_way_properties(tags const& t) {
   p.speed_limit_ = get_speed_limit(t);
   p.from_level_ = to_idx(from);
   p.to_level_ = to_idx(to);
-  p.is_platform_ = t.is_platform_;
+  p.is_platform_ = t.is_platform();
   p.is_ramp_ = t.is_ramp_;
   p.is_sidewalk_separate_ = t.sidewalk_separate_;
   p.motor_vehicle_no_ =
@@ -219,13 +219,13 @@ struct way_handler : public osm::handler::Handler {
 
     if (!t.is_elevator_ &&  // elevators tagged as building would be landuse
         !t.is_parking_ &&
-        ((it == end(rel_ways_) && t.highway_.empty() && !t.is_platform_) ||
-         (t.highway_.empty() && !t.is_platform_ && it != end(rel_ways_) &&
+        ((it == end(rel_ways_) && t.highway_.empty() && !t.is_platform()) ||
+         (t.highway_.empty() && !t.is_platform() && it != end(rel_ways_) &&
           t.landuse_))) {
       return;
     }
 
-    auto p = (t.is_platform_ || t.is_parking_ || !t.highway_.empty())
+    auto p = (t.is_platform() || t.is_parking_ || !t.highway_.empty())
                  ? get_way_properties(t)
                  : it->second.p_;
     if (!p.is_accessible()) {
@@ -262,7 +262,7 @@ struct way_handler : public osm::handler::Handler {
     auto const way_idx = way_idx_t{w_.way_osm_idx_.size()};
 
     if (platforms_ != nullptr &&
-        (t.is_platform_ || p.is_platform_ ||
+        (t.is_platform() || p.is_platform_ ||
          (it != end(rel_ways_) && it->second.p_.is_platform_))) {
       platforms_->way(way_idx, w);
     }
@@ -332,7 +332,7 @@ struct node_handler : public osm::handler::Handler {
       w_.r_->node_properties_[*node_idx] = p;
       w_.r_->node_positions_[*node_idx] = point::from_location(n.location());
 
-      if (platforms_ != nullptr && t.is_platform_) {
+      if (platforms_ != nullptr && t.is_platform()) {
         auto const l = std::lock_guard{platforms_mutex_};
         platforms_->node(*node_idx, n);
       }
@@ -448,11 +448,11 @@ struct mark_inaccessible_handler : public osm::handler::Handler {
         is_accessible<car_profile>(t, osm_obj_type::kNode) &&
         is_accessible<bike_profile>(t, osm_obj_type::kNode) &&
         is_accessible<foot_profile>(t, osm_obj_type::kNode);
-    if (!accessible || t.is_elevator_ || t.is_platform_) {
+    if (!accessible || t.is_elevator_ || t.is_platform()) {
       w_.node_way_counter_.increment(n.positive_id());
     }
 
-    if (track_platforms_ && t.is_platform_) {
+    if (track_platforms_ && t.is_platform()) {
       // Wnsure nodes are created even if they are not part of a routable way.
       w_.node_way_counter_.increment(n.positive_id());
     }
