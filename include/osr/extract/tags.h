@@ -94,8 +94,7 @@ struct tags {
         case cista::hash("public_transport"):
           switch (cista::hash(std::string_view{t.value()})) {
             case cista::hash("platform"):
-            case cista::hash("stop_position"):
-            case cista::hash("stop_area"): is_platform_ = true;
+            case cista::hash("stop_position"): is_platform_ = true;
           }
           break;
         case cista::hash("vehicle"):
