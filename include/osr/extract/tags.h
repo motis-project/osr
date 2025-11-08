@@ -47,7 +47,7 @@ struct tags {
           break;
         case cista::hash("oneway"): oneway_ |= t.value() == "yes"sv; break;
         case cista::hash("junction"):
-          oneway_ |= t.value() == "roundabout"sv;
+          oneway_ |= t.value() == "roundabout"sv || t.value() == "circular"sv;
           break;
         case cista::hash("oneway:bicycle"):
           not_oneway_bike_ = t.value() == "no"sv;
