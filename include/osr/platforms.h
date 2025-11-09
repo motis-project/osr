@@ -141,7 +141,7 @@ struct platforms {
             [&](node_idx_t x) {
               return w.r_->node_properties_[x].from_level();
             }},
-        to_ref(platform_ref_[i][0]));
+        to_ref(platform_ref_.at(i).at(0)));
   }
 
   template <typename Fn>
