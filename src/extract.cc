@@ -25,6 +25,8 @@
 #include "utl/parser/arg_parser.h"
 #include "utl/progress_tracker.h"
 
+#include "geo/area_db.h"
+
 #include "tiles/osm/hybrid_node_idx.h"
 #include "tiles/osm/tmp_file.h"
 
@@ -39,10 +41,13 @@ namespace osm = osmium;
 namespace osm_io = osmium::io;
 namespace osm_eb = osmium::osm_entity_bits;
 namespace osm_mem = osmium::memory;
+namespace osm_area = osmium::area;
 namespace fs = std::filesystem;
 using namespace std::string_view_literals;
 
 namespace osr {
+
+using area_idx_t = cista::strong<std::uint32_t, struct area_idx_>;
 
 struct osm_restriction {
   bool valid() const {
@@ -194,11 +199,13 @@ struct way_handler : public osm::handler::Handler {
   way_handler(ways& w,
               platforms* platforms,
               rel_ways_t const& rel_ways,
-              hash_map<osm_node_idx_t, level_bits_t>& elevator_nodes)
+              hash_map<osm_node_idx_t, level_bits_t>& elevator_nodes,
+              geo::area_db_storage<area_idx_t>& area_storage)
       : w_{w},
         platforms_{platforms},
         rel_ways_{rel_ways},
-        elevator_nodes_{elevator_nodes} {
+        elevator_nodes_{elevator_nodes},
+        area_storage_{area_storage} {
     strings_set_.hash_function().strings_ = &w_.strings_;
     strings_set_.key_eq().strings_ = &w_.strings_;
   }
@@ -293,6 +300,8 @@ struct way_handler : public osm::handler::Handler {
     }
   }
 
+  void area(osmium::Area const& a) { area_storage_.add_osmium_area(a); }
+
   using strings_set_t = hash_set<string_idx_t, strings_hash, strings_equals>;
   strings_set_t strings_set_;
 
@@ -303,6 +312,8 @@ struct way_handler : public osm::handler::Handler {
 
   std::mutex elevator_nodes_mutex_;
   hash_map<osm_node_idx_t, level_bits_t>& elevator_nodes_;
+
+  geo::area_db_storage<area_idx_t>& area_storage_;
 };
 
 struct node_handler : public osm::handler::Handler {
@@ -517,6 +528,14 @@ void extract(bool const with_platforms,
       tiles::tmp_file{(out / "dat.bin").generic_string()};
   auto node_idx =
       tiles::hybrid_node_idx{node_idx_file.fileno(), node_dat_file.fileno()};
+  auto mp_manager = osm_area::MultipolygonManager<osm_area::Assembler>{
+      osm_area::Assembler::config_type{},
+      osm::TagsFilter{}
+          .add_rule(true, "indoor", "room")
+          .add_rule(true, "indoor", "area")
+          .add_rule(true, "indoor", "corridor")
+          .add_rule(true, "public_transport", "platform")
+          .add_rule(true, "public_transport", "stop_position")};
 
   auto rel_ways = rel_ways_t{};
   auto w = ways{out, cista::mmap::protection::WRITE};
@@ -537,17 +556,21 @@ void extract(bool const with_platforms,
                                  osmium::io::read_meta::no};
     while (auto buffer = reader.read()) {
       pt->update(reader.offset());
-      osm::apply(buffer, node_idx_builder, inaccessible_handler, rel_ways_h);
+      osm::apply(buffer, node_idx_builder, inaccessible_handler, rel_ways_h,
+                 mp_manager);
     }
     reader.close();
     node_idx_builder.finish();
+    mp_manager.prepare_for_lookup();
   }
 
+  auto area_storage =
+      geo::area_db_storage<area_idx_t>{out, cista::mmap::protection::WRITE};
   auto elevator_nodes = hash_map<osm_node_idx_t, level_bits_t>{};
   {  // Extract streets, places, and areas.
     pt->status("Load OSM / Ways").in_high(file_size).out_bounds(15, 40);
 
-    auto h = way_handler{w, pl.get(), rel_ways, elevator_nodes};
+    auto h = way_handler{w, pl.get(), rel_ways, elevator_nodes, area_storage};
     auto reader =
         osm_io::Reader{input_file, osm_eb::way, osmium::io::read_meta::no};
 
@@ -571,7 +594,12 @@ void extract(bool const with_platforms,
                 }) &
             oneapi::tbb::make_filter<osm_mem::Buffer, void>(
                 oneapi::tbb::filter_mode::serial_in_order,
-                [&](osm_mem::Buffer&& buf) { osm::apply(buf, h); }));
+                [&](osm_mem::Buffer&& buf) {
+                  osm::apply(buf, h);
+                  osm::apply(buf, mp_manager.handler([&](auto&& area_buf) {
+                    osm::apply(area_buf, h);
+                  }));
+                }));
 
     pt->update(pt->in_high_);
     reader.close();
@@ -587,7 +615,7 @@ void extract(bool const with_platforms,
   {
     pt->status("Load OSM / Node Properties")
         .in_high(file_size)
-        .out_bounds(90, 95);
+        .out_bounds(90, 93);
     auto reader = osm_io::Reader{input_file, osm_eb::node | osm_eb::relation,
                                  osmium::io::read_meta::no};
     auto h = node_handler{w, pl.get(), r, elevator_nodes};
@@ -615,6 +643,25 @@ void extract(bool const with_platforms,
     if (provider.driver_count() > 0) {
       auto elevations = elevation_storage{out, cista::mmap::protection::WRITE};
       elevations.set_elevations(w, provider);
+    }
+  }
+
+  pt->status("Areas").in_high(w.n_nodes()).out_bounds(93, 95);
+  auto areas = geo::area_db_lookup<area_idx_t>::rtree_results_t{};
+  auto const area_lookup = geo::area_db_lookup{area_storage};
+  for (auto const [pos, p, osm_idx] : utl::zip(
+           w.r_->node_positions_, w.r_->node_properties_, w.node_to_osm_)) {
+    if (!p.is_elevator()) {
+      [[likely]] continue;
+    }
+
+    area_lookup.lookup(pos.as_latlng(), areas);
+    if (areas.empty()) {
+      [[likely]] continue;
+    }
+
+    for (auto const& a : areas) {
+      std::cout << "ELEVATOR " << osm_idx << " IN AREA " << a << "\n";
     }
   }
 
