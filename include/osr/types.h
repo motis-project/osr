@@ -80,6 +80,7 @@ using string_idx_t = cista::strong<std::uint32_t, struct string_idx_>;
 
 using osm_node_idx_t = cista::strong<std::uint64_t, struct osm_node_idx_>;
 using osm_way_idx_t = cista::strong<std::uint64_t, struct osm_way_idx_>;
+using osm_rel_idx_t = cista::strong<std::uint64_t, struct osm_rel_idx_>;
 
 using way_idx_t = cista::strong<std::uint32_t, struct way_idx_>;
 using node_idx_t = cista::strong<std::uint32_t, struct node_idx_>;

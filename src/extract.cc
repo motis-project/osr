@@ -1,3 +1,4 @@
+#include "utl/visit.h"
 #ifdef _WIN_32
 // Otherwise
 // winnt.h(169): fatal error C1189: #error:  "No Target Architecture"
@@ -200,12 +201,15 @@ struct way_handler : public osm::handler::Handler {
               platforms* platforms,
               rel_ways_t const& rel_ways,
               hash_map<osm_node_idx_t, level_bits_t>& elevator_nodes,
-              geo::area_db_storage<area_idx_t>& area_storage)
+              geo::area_db_storage<area_idx_t>& area_storage,
+              vec_map<area_idx_t, std::variant<osm_way_idx_t, osm_rel_idx_t>>&
+                  area_orig_ids)
       : w_{w},
         platforms_{platforms},
         rel_ways_{rel_ways},
         elevator_nodes_{elevator_nodes},
-        area_storage_{area_storage} {
+        area_storage_{area_storage},
+        area_orig_ids_{area_orig_ids} {
     strings_set_.hash_function().strings_ = &w_.strings_;
     strings_set_.key_eq().strings_ = &w_.strings_;
   }
@@ -300,7 +304,29 @@ struct way_handler : public osm::handler::Handler {
     }
   }
 
-  void area(osmium::Area const& a) { area_storage_.add_osmium_area(a); }
+  void relation(osmium::Relation const& r) {
+    auto const t = tags{r};
+    auto const accessible = is_accessible<foot_profile>(t, osm_obj_type::kWay);
+    if (accessible) {
+      for (auto const& m : r.members()) {
+        if (m.type() == osm::item_type::way) {
+          std::cout << "SAVE " << r.positive_id() << " -> WAY "
+                    << m.positive_ref() << "\n";
+        }
+      }
+    }
+  }
+
+  void area(osmium::Area const& a) {
+    std::cout << "STORING AREA [" << (a.from_way() ? "WAY" : "REL") << "] "
+              << a.orig_id() << "\n";
+    area_storage_.add_osmium_area(a);
+    if (a.from_way()) {
+      area_orig_ids_.emplace_back(osm_way_idx_t{a.orig_id()});
+    } else {
+      area_orig_ids_.emplace_back(osm_rel_idx_t{a.orig_id()});
+    }
+  }
 
   using strings_set_t = hash_set<string_idx_t, strings_hash, strings_equals>;
   strings_set_t strings_set_;
@@ -314,6 +340,8 @@ struct way_handler : public osm::handler::Handler {
   hash_map<osm_node_idx_t, level_bits_t>& elevator_nodes_;
 
   geo::area_db_storage<area_idx_t>& area_storage_;
+  vec_map<area_idx_t, std::variant<osm_way_idx_t, osm_rel_idx_t>>&
+      area_orig_ids_;
 };
 
 struct node_handler : public osm::handler::Handler {
@@ -552,7 +580,8 @@ void extract(bool const with_platforms,
 
     auto inaccessible_handler = mark_inaccessible_handler{pl != nullptr, w};
     auto rel_ways_h = rel_ways_handler{pl.get(), rel_ways};
-    auto reader = osm_io::Reader{input_file, osm_eb::node | osm_eb::relation,
+    auto reader = osm_io::Reader{input_file,
+                                 osm_eb::node | osm_eb::way | osm_eb::relation,
                                  osmium::io::read_meta::no};
     while (auto buffer = reader.read()) {
       pt->update(reader.offset());
@@ -566,13 +595,16 @@ void extract(bool const with_platforms,
 
   auto area_storage =
       geo::area_db_storage<area_idx_t>{out, cista::mmap::protection::WRITE};
+  auto area_orig_ids =
+      vec_map<area_idx_t, std::variant<osm_way_idx_t, osm_rel_idx_t>>{};
   auto elevator_nodes = hash_map<osm_node_idx_t, level_bits_t>{};
   {  // Extract streets, places, and areas.
     pt->status("Load OSM / Ways").in_high(file_size).out_bounds(15, 40);
 
-    auto h = way_handler{w, pl.get(), rel_ways, elevator_nodes, area_storage};
-    auto reader =
-        osm_io::Reader{input_file, osm_eb::way, osmium::io::read_meta::no};
+    auto h = way_handler{
+        w, pl.get(), rel_ways, elevator_nodes, area_storage, area_orig_ids};
+    auto reader = osm_io::Reader{input_file, osm_eb::way | osm_eb::relation,
+                                 osmium::io::read_meta::no};
 
     oneapi::tbb::parallel_pipeline(
         std::thread::hardware_concurrency() * 4U,
@@ -662,6 +694,12 @@ void extract(bool const with_platforms,
 
     for (auto const& a : areas) {
       std::cout << "ELEVATOR " << osm_idx << " IN AREA " << a << "\n";
+      utl::visit(
+          area_orig_ids[a],
+          [](osm_way_idx_t const way) { std::cout << "  WAY " << way << "\n"; },
+          [](osm_rel_idx_t const rel) {
+            std::cout << "  REL " << rel << "\n";
+          });
     }
   }
 
