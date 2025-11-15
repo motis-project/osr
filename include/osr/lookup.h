@@ -60,7 +60,7 @@ struct raw_node_candidate {
   bool valid() const { return node_ != node_idx_t::invalid(); }
 
   node_idx_t node_{node_idx_t::invalid()};
-  double dist_to_node_{0.0};
+  float dist_to_node_{0.0};
 };
 
 struct way_candidate {
@@ -79,7 +79,7 @@ struct raw_way_candidate {
     return a.dist_to_way_ < b.dist_to_way_;
   }
 
-  double dist_to_way_;
+  float dist_to_way_;
   way_idx_t way_{way_idx_t::invalid()};
   raw_node_candidate left_{}, right_{};
 };

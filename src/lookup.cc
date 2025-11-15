@@ -46,7 +46,8 @@ std::vector<raw_way_candidate> lookup::get_raw_way_candidates(
             std::tuple<double, geo::latlng, size_t>>(
             query.pos_, ways_.way_polylines_[way], approx_distance_lng_degrees);
     if (squared_dist < squared_max_dist) {
-      auto raw_wc = raw_way_candidate{std::sqrt(squared_dist), way};
+      auto raw_wc =
+          raw_way_candidate{static_cast<float>(std::sqrt(squared_dist)), way};
       raw_wc.left_ =
           find_raw_next_node(raw_wc, direction::kBackward,
                              approx_distance_lng_degrees, best, segment_idx);
@@ -91,7 +92,7 @@ raw_node_candidate lookup::find_raw_next_node(
                  auto const segment_dist =
                      std::sqrt(geo::approx_squared_distance(
                          last_path_pos, pos, approx_distance_lng_degrees));
-                 c.dist_to_node_ += segment_dist;
+                 c.dist_to_node_ += static_cast<float>(segment_dist);
                  last_path_pos = pos;
 
                  auto const way_node = ways_.find_node_idx(osm_node_idx);
