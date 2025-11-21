@@ -1,6 +1,7 @@
 #pragma once
 
 #include "osr/elevation_storage.h"
+#include "osr/preprocessing/contraction_hierarchy/shortcut_storage.h"
 #include "osr/routing/additional_edge.h"
 #include "osr/routing/dial.h"
 #include "osr/routing/profile.h"
@@ -34,8 +35,8 @@ struct dijkstra {
   }
 
   void add_start(ways const& w, label const l) {
-    if (cost_[l.get_node().get_key()].update(l, l.get_node(), l.cost(),
-                                             node::invalid())) {
+    if (cost_[l.get_node().get_key()].update(
+            l, l.get_node(), l.cost(), node::invalid(), way_idx_t::invalid())) {
       if constexpr (kDebug) {
         std::cout << "START ";
         l.get_node().print(std::cout, w);
@@ -50,14 +51,16 @@ struct dijkstra {
     return it != end(cost_) ? it->second.cost(n) : kInfeasible;
   }
 
-  template <direction SearchDir, bool WithBlocked>
+  template <direction SearchDir, adj_conf Config>
   bool run(P::parameters const& params,
            ways const& w,
            ways::routing const& r,
            cost_t const max,
            bitvec<node_idx_t> const* blocked,
            sharing_data const* sharing,
-           elevation_storage const* elevations) {
+           elevation_storage const* elevations,
+           shortcut_storage<node> const* const sc_stor,
+           node_idx_t const min_order) {
     while (!pq_.empty()) {
       auto l = pq_.pop();
       if (get_cost(l.get_node()) < l.cost()) {
@@ -71,11 +74,11 @@ struct dijkstra {
       }
 
       auto const curr = l.get_node();
-      P::template adjacent<SearchDir, WithBlocked>(
-          params, r, curr, blocked, sharing, elevations,
+      P::template adjacent<SearchDir, Config>(
+          params, r, curr, blocked, sharing, elevations, sc_stor, min_order,
           [&](node const neighbor, std::uint32_t const cost, distance_t,
               way_idx_t const way, std::uint16_t, std::uint16_t,
-              elevation_storage::elevation, bool const track) {
+              elevation_storage::elevation, bool const track, node, cost_t) {
             if constexpr (kDebug) {
               std::cout << "  NEIGHBOR ";
               neighbor.print(std::cout, w);
@@ -88,7 +91,7 @@ struct dijkstra {
             }
             if (total < max &&
                 cost_[neighbor.get_key()].update(
-                    l, neighbor, static_cast<cost_t>(total), curr)) {
+                    l, neighbor, static_cast<cost_t>(total), curr, way)) {
               auto next = label{neighbor, static_cast<cost_t>(total)};
               next.track(l, r, way, neighbor.get_node(), track);
               pq_.push(std::move(next));
@@ -116,16 +119,20 @@ struct dijkstra {
            direction const dir) {
     if (blocked == nullptr) {
       return dir == direction::kForward
-                 ? run<direction::kForward, false>(params, w, r, max, blocked,
-                                                   sharing, elevations)
-                 : run<direction::kBackward, false>(params, w, r, max, blocked,
-                                                    sharing, elevations);
+                 ? run<direction::kForward, adj_conf::kNone>(
+                       params, w, r, max, blocked, sharing, elevations, nullptr,
+                       node_idx_t::invalid())
+                 : run<direction::kBackward, adj_conf::kNone>(
+                       params, w, r, max, blocked, sharing, elevations, nullptr,
+                       node_idx_t::invalid());
     } else {
       return dir == direction::kForward
-                 ? run<direction::kForward, true>(params, w, r, max, blocked,
-                                                  sharing, elevations)
-                 : run<direction::kBackward, true>(params, w, r, max, blocked,
-                                                   sharing, elevations);
+                 ? run<direction::kForward, adj_conf::kBlocked>(
+                       params, w, r, max, blocked, sharing, elevations, nullptr,
+                       node_idx_t::invalid())
+                 : run<direction::kBackward, adj_conf::kBlocked>(
+                       params, w, r, max, blocked, sharing, elevations, nullptr,
+                       node_idx_t::invalid());
     }
   }
 

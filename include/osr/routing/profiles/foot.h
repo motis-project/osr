@@ -3,6 +3,7 @@
 #include "utl/for_each_bit_set.h"
 
 #include "osr/elevation_storage.h"
+#include "osr/preprocessing/contraction_hierarchy/shortcut_storage.h"
 #include "osr/routing/mode.h"
 #include "osr/routing/path.h"
 #include "osr/routing/tracking.h"
@@ -77,11 +78,15 @@ struct foot {
                  ? std::nullopt
                  : std::optional{node{pred_, pred_lvl_}};
     }
+    constexpr way_idx_t way(node) const noexcept {
+      return way_idx_t::invalid();
+    }
     constexpr cost_t cost(node) const noexcept { return cost_; }
     constexpr bool update(label const& l,
                           node,
                           cost_t const c,
-                          node const pred) noexcept {
+                          node const pred,
+                          way_idx_t) noexcept {
       if (c < cost_) {
         tracking_ = l.tracking_;
         cost_ = c;
@@ -93,6 +98,9 @@ struct foot {
     }
 
     void write(node, path& p) const { tracking_.write(p); }
+
+    template <typename Fn>
+    constexpr void for_each(key, Fn&&) const {}
 
     node_idx_t pred_{node_idx_t::invalid()};
     cost_t cost_{kInfeasible};
@@ -153,13 +161,15 @@ struct foot {
     }
   }
 
-  template <direction SearchDir, bool WithBlocked, typename Fn>
+  template <direction SearchDir, adj_conf Config, typename Fn>
   static void adjacent(parameters const& params,
                        ways::routing const& w,
                        node const n,
                        bitvec<node_idx_t> const* blocked,
                        sharing_data const*,
                        elevation_storage const*,
+                       shortcut_storage<node> const*,
+                       node_idx_t,
                        Fn&& fn) {
     for (auto const [way, i] :
          utl::zip_unchecked(w.node_ways_[n.n_], w.node_in_way_idx_[n.n_])) {
@@ -167,7 +177,7 @@ struct foot {
                               std::uint16_t const to) {
         // NOLINTNEXTLINE(clang-analyzer-core.CallAndMessage)
         auto const target_node = w.way_nodes_[way][to];
-        if constexpr (WithBlocked) {
+        if constexpr (is_enabled(Config, adj_conf::kBlocked)) {
           if (blocked->test(target_node)) {
             return;
           }
@@ -192,7 +202,7 @@ struct foot {
                     node_cost(target_node_prop);
                 fn(node{target_node, target_lvl},
                    static_cast<std::uint32_t>(cost), dist, way, from, to,
-                   elevation_storage::elevation{}, false);
+                   elevation_storage::elevation{}, false, node::invalid(), 0);
               });
         } else {
           auto const target_lvl = get_target_level(w, n.n_, n.lvl_, way);
@@ -204,7 +214,8 @@ struct foot {
           auto const cost = way_cost(params, target_way_prop, way_dir, dist) +
                             node_cost(target_node_prop);
           fn(node{target_node, *target_lvl}, static_cast<std::uint32_t>(cost),
-             dist, way, from, to, elevation_storage::elevation{}, false);
+             dist, way, from, to, elevation_storage::elevation{}, false,
+             node::invalid(), 0);
         }
       };
 
@@ -347,6 +358,13 @@ struct foot {
   }
 
   static constexpr node get_reverse(node const n) { return n; }
+
+  template <direction>
+  static constexpr cost_t turning_cost(ways::routing const&,
+                                       node const,
+                                       node const) {
+    return 0;
+  }
 };
 
 }  // namespace osr

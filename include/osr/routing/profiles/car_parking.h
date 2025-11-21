@@ -7,6 +7,7 @@
 #include "utl/helpers/algorithm.h"
 
 #include "osr/elevation_storage.h"
+#include "osr/preprocessing/contraction_hierarchy/shortcut_storage.h"
 #include "osr/routing/mode.h"
 #include "osr/routing/path.h"
 #include "osr/routing/profiles/car.h"
@@ -142,6 +143,10 @@ struct car_parking {
                                       .way_ = pred_way_[idx]}};
     }
 
+    constexpr way_idx_t way(node) const noexcept {
+      return way_idx_t::invalid();
+    }
+
     constexpr cost_t cost(node const n) const noexcept {
       return cost_[get_index(n)];
     }
@@ -149,7 +154,8 @@ struct car_parking {
     constexpr bool update(label const,
                           node const n,
                           cost_t const c,
-                          node const pred) noexcept {
+                          node const pred,
+                          way_idx_t) noexcept {
       auto const idx = get_index(n);
       if (c < cost_[idx]) {
         cost_[idx] = c;
@@ -187,6 +193,9 @@ struct car_parking {
     }
 
     void write(node, path&) const {}
+
+    template <typename Fn>
+    constexpr void for_each(key, Fn&&) const {}
 
     std::array<node_idx_t, kN> pred_;
     std::array<cost_t, kN> cost_;
@@ -243,13 +252,15 @@ struct car_parking {
     });
   }
 
-  template <direction SearchDir, bool WithBlocked, typename Fn>
+  template <direction SearchDir, adj_conf Config, typename Fn>
   static void adjacent(parameters const& params,
                        ways::routing const& w,
                        node const n,
                        bitvec<node_idx_t> const* blocked,
                        sharing_data const*,
                        elevation_storage const* elevations,
+                       shortcut_storage<node> const*,
+                       node_idx_t,
                        Fn&& fn) {
     static constexpr auto const kFwd = SearchDir == direction::kForward;
     static constexpr auto const kBwd = SearchDir == direction::kBackward;
@@ -261,29 +272,33 @@ struct car_parking {
         });
 
     if (n.is_foot_node() || (kFwd && n.is_car_node() && is_parking)) {
-      footp::template adjacent<SearchDir, WithBlocked>(
-          params.foot_, w, to_foot(n), blocked, nullptr, elevations,
+      footp::template adjacent<SearchDir, Config>(
+          params.foot_, w, to_foot(n), blocked, nullptr, elevations, nullptr,
+          node_idx_t::invalid(),
           [&](footp::node const neighbor, std::uint32_t const cost,
               distance_t const dist, way_idx_t const way,
               std::uint16_t const from, std::uint16_t const to,
-              elevation_storage::elevation const elevation, bool) {
+              elevation_storage::elevation const elevation, bool, footp::node,
+              cost_t) {
             fn(to_node(neighbor),
                cost + (n.is_foot_node() ? 0 : kSwitchPenalty), dist, way, from,
-               to, elevation, false);
+               to, elevation, false, node::invalid(), 0);
           });
     }
 
     if (n.is_car_node() || (kBwd && n.is_foot_node() && is_parking)) {
-      car::template adjacent<SearchDir, WithBlocked>(
-          params.car_, w, to_car(n), blocked, nullptr, elevations,
+      car::template adjacent<SearchDir, Config>(
+          params.car_, w, to_car(n), blocked, nullptr, elevations, nullptr,
+          node_idx_t::invalid(),
           [&](car::node const neighbor, std::uint32_t const cost,
               distance_t const dist, way_idx_t const way,
               std::uint16_t const from, std::uint16_t const to,
-              elevation_storage::elevation const elevation, bool) {
+              elevation_storage::elevation const elevation, bool, car::node,
+              cost_t) {
             auto const way_prop = w.way_properties_[way];
             fn(to_node(neighbor, way_prop.from_level()),
                cost + (n.is_car_node() ? 0 : kSwitchPenalty), dist, way, from,
-               to, elevation, false);
+               to, elevation, false, node::invalid(), 0);
           });
     }
   }
@@ -342,6 +357,13 @@ struct car_parking {
 
   static constexpr node get_reverse(node n) {
     return {n.n_, n.type_, n.lvl_, opposite(n.dir_), n.way_};
+  }
+
+  template <direction>
+  static constexpr cost_t turning_cost(ways::routing const&,
+                                       node const,
+                                       node const) {
+    return 0;
   }
 };
 

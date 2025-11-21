@@ -1,6 +1,7 @@
 #pragma once
 
 #include "osr/elevation_storage.h"
+#include "osr/preprocessing/contraction_hierarchy/shortcut_storage.h"
 #include "osr/routing/mode.h"
 #include "osr/routing/path.h"
 #include "osr/types.h"
@@ -94,6 +95,10 @@ struct bike {
                  : std::optional{node{pred_[idx], pred_dir_[idx]}};
     }
 
+    constexpr way_idx_t way(node) const noexcept {
+      return way_idx_t::invalid();
+    }
+
     constexpr cost_t cost(node const n) const noexcept {
       return cost_[get_index(n)];
     }
@@ -101,7 +106,8 @@ struct bike {
     constexpr bool update(label const&,
                           node const n,
                           cost_t const c,
-                          node const pred) noexcept {
+                          node const pred,
+                          way_idx_t) noexcept {
       auto const idx = get_index(n);
       if (c < cost_[idx]) {
         cost_[idx] = c;
@@ -122,6 +128,9 @@ struct bike {
     }
 
     void write(node, path&) const {}
+
+    template <typename Fn>
+    constexpr void for_each(key, Fn&&) const {}
 
     std::array<node_idx_t, 2U> pred_;
     std::array<direction, 2U> pred_dir_;
@@ -157,13 +166,15 @@ struct bike {
     return way_cost(params, w.way_properties_[way], way_dir, 0U) != kInfeasible;
   }
 
-  template <direction SearchDir, bool WithBlocked, typename Fn>
+  template <direction SearchDir, adj_conf Config, typename Fn>
   static void adjacent(parameters const& params,
                        ways::routing const& w,
                        node const n,
                        bitvec<node_idx_t> const* blocked,
                        sharing_data const*,
                        elevation_storage const* elevations,
+                       shortcut_storage<node> const*,
+                       node_idx_t,
                        Fn&& fn) {
     for (auto const [way, i] :
          utl::zip_unchecked(w.node_ways_[n.n_], w.node_in_way_idx_[n.n_])) {
@@ -171,7 +182,7 @@ struct bike {
                               std::uint16_t const to) {
         // NOLINTNEXTLINE(clang-analyzer-core.CallAndMessage)
         auto const target_node = w.way_nodes_[way][to];
-        if constexpr (WithBlocked) {
+        if constexpr (is_enabled(Config, adj_conf::kBlocked)) {
           if (blocked->test(target_node)) {
             return;
           }
@@ -207,7 +218,7 @@ struct bike {
         auto const cost = way_cost(params, target_way_prop, way_dir, dist) +
                           node_cost(target_node_prop) + elevation_cost;
         fn(node{target_node, way_dir}, static_cast<std::uint32_t>(cost), dist,
-           way, from, to, elevation, false);
+           way, from, to, elevation, false, node::invalid(), 0);
       };
 
       if (i != 0U) {
@@ -247,6 +258,13 @@ struct bike {
 
   static constexpr node get_reverse(node const n) {
     return {n, opposite(n.dir_)};
+  }
+
+  template <direction>
+  static constexpr cost_t turning_cost(ways::routing const&,
+                                       node const,
+                                       node const) {
+    return 0;
   }
 };
 

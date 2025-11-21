@@ -265,11 +265,11 @@ int main(int argc, char const* argv[]) {
 
             auto const ends = set_end<P>(params, b, w, end);
             auto const start_time = std::chrono::steady_clock::now();
-            d.template run<direction::kForward, false>(
+            d.template run<direction::kForward, adj_conf::kNone>(
                 params, w, *w.r_, opt.max_dist_, nullptr, nullptr,
-                elevations.get());
+                elevations.get(), nullptr, node_idx_t::invalid());
             auto const middle_time = std::chrono::steady_clock::now();
-            b.template run<direction::kForward, false>(
+            b.template run<direction::kForward, adj_conf::kNone>(
                 params, w, *w.r_, opt.max_dist_, nullptr, nullptr,
                 elevations.get());
             auto const end_time = std::chrono::steady_clock::now();
