@@ -140,6 +140,7 @@
 <select id="routing-algorithm" onchange="selectRoutingAlgorithm(event)">
     <option value="dijkstra" selected>dijkstra</option>
     <option value="bidirectional">bidirectional A*</option>
+    <option value="contraction_hierarchy">contraction hierarchy</option>
 </select>
 <input id="foot-speed" type="number" value="1.2" min="0.1" step="0.1"
        onchange="setSpeed(event)"/>
@@ -150,8 +151,8 @@
 <script type="module">
     import {style} from "./style.js";
 
-    const start = [8.65749737, 50.10416625]
-    const destination = [8.65750757, 50.10417645];
+    const start = [6.086480628922089, 50.778350307416844]
+    const destination = [6.0872857425049745, 50.778294932563625];
     const query = {
         start, destination,
         max: 14400,
