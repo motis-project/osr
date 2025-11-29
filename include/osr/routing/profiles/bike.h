@@ -206,8 +206,8 @@ struct bike {
                 : 0);
         auto const cost = way_cost(params, target_way_prop, way_dir, dist) +
                           node_cost(target_node_prop) + elevation_cost;
-        fn(node{target_node, way_dir}, static_cast<std::uint32_t>(cost), dist,
-           way, from, to, elevation, false);
+        fn(node{target_node, way_dir}, static_cast<cost_t>(cost), dist, way,
+           from, to, elevation, false);
       };
 
       if (i != 0U) {
