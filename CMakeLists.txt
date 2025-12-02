@@ -145,7 +145,7 @@ configure_file(
 )
 file(GLOB_RECURSE osr-test-files test/*cc)
 add_executable(osr-test ${osr-test-files})
-target_include_directories(osr-test PRIVATE ${CMAKE_CURRENT_BINARY_DIR}/generated)
+target_include_directories(osr-test PRIVATE ${CMAKE_CURRENT_BINARY_DIR}/generated test/include)
 target_link_libraries(osr-test gtest osr boost-json)
 
 # --- MIMALLOC ---
