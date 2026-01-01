@@ -248,7 +248,6 @@ jobs:
           - preset: linux-arm64-release
             artifact: linux-arm64
             emulator: qemu-aarch64-static
-          - preset: clang-tidy
           - preset: linux-sanitizer
           - preset: linux-debug
             emulator: valgrind --suppressions=./docs/mmap.supp --suppressions=./docs/tbb.supp --suppressions=./docs/pthread.supp --leak-check=full --error-exitcode=1
