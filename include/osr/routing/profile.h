@@ -4,6 +4,7 @@
 
 #include <concepts>
 #include <functional>
+#include <optional>
 #include <ostream>
 #include <string_view>
 
@@ -29,6 +30,7 @@ concept IsNode = requires {
   { node.get_key() } -> std::same_as<NodeKey>;
   { node.get_node() } -> std::same_as<node_idx_t>;
   { node.get_mode() } -> std::same_as<mode>;
+  { node.get_direction() } -> std::same_as<std::optional<direction>>;
   { node == node } -> std::same_as<bool>;
   { node.print(out, w) } -> std::same_as<decltype(out)>;
 };
@@ -76,6 +78,12 @@ concept Profile =
     IsLabel<typename P::label, typename P::node> &&
     IsEntry<typename P::entry, typename P::node, typename P::label> &&
     IsHash<typename P::hash, typename P::key> &&
+    requires(node_idx_t const n,
+             level_t const lvl,
+             way_pos_t const way,
+             direction const dir) {
+      { P::create_node(n, lvl, way, dir) } -> std::same_as<typename P::node>;
+    } &&
     requires(typename P::node const node,
              ways::routing const& r,
              way_idx_t const w,
@@ -143,10 +151,12 @@ enum class search_profile : std::uint8_t {
   kCarParkingWheelchair,
   kBikeSharing,
   kCarSharing,
+  kBus,
+  kRailway,
 };
 
 constexpr auto const kNumProfiles =
-    static_cast<std::underlying_type_t<search_profile>>(10U);
+    static_cast<std::underlying_type_t<search_profile>>(15U);
 
 search_profile to_profile(std::string_view);
 

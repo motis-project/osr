@@ -1,5 +1,7 @@
 #pragma once
 
+#include <optional>
+
 #include "utl/for_each_bit_set.h"
 
 #include "osr/elevation_storage.h"
@@ -37,6 +39,10 @@ struct foot {
 
     constexpr node get_key() const noexcept { return *this; }
 
+    constexpr std::optional<direction> get_direction() const noexcept {
+      return {};
+    }
+
     static constexpr mode get_mode() noexcept {
       return IsWheelchair ? mode::kWheelchair : mode::kFoot;
     }
@@ -68,7 +74,7 @@ struct foot {
     node_idx_t n_;
     cost_t cost_;
     level_t lvl_;
-    [[no_unique_address]] Tracking tracking_;
+    [[no_unique_address]] [[msvc::no_unique_address]] Tracking tracking_;
   };
 
   struct entry {
@@ -97,7 +103,7 @@ struct foot {
     node_idx_t pred_{node_idx_t::invalid()};
     cost_t cost_{kInfeasible};
     level_t pred_lvl_;
-    [[no_unique_address]] Tracking tracking_;
+    [[no_unique_address]] [[msvc::no_unique_address]] Tracking tracking_;
   };
 
   struct hash {
@@ -110,6 +116,13 @@ struct foot {
           wyhash::hash(static_cast<std::uint64_t>(to_idx(n.n_))));
     }
   };
+
+  static node create_node(node_idx_t const n,
+                          level_t const lvl,
+                          way_pos_t const,
+                          direction const) {
+    return node{n, lvl};
+  }
 
   template <typename Fn>
   static void resolve_start_node(ways::routing const& w,

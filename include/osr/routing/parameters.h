@@ -5,10 +5,12 @@
 #include "osr/routing/profile.h"
 #include "osr/routing/profiles/bike.h"
 #include "osr/routing/profiles/bike_sharing.h"
+#include "osr/routing/profiles/bus.h"
 #include "osr/routing/profiles/car.h"
 #include "osr/routing/profiles/car_parking.h"
 #include "osr/routing/profiles/car_sharing.h"
 #include "osr/routing/profiles/foot.h"
+#include "osr/routing/profiles/railway.h"
 
 namespace osr {
 
@@ -27,7 +29,9 @@ using profile_parameters =
                  car_parking<false, true>::parameters,
                  car_parking<true, true>::parameters,
                  bike_sharing::parameters,
-                 car_sharing<track_node_tracking>::parameters>;
+                 car_sharing<track_node_tracking>::parameters,
+                 bus::parameters,
+                 railway::parameters>;
 
 profile_parameters get_parameters(search_profile const p);
 

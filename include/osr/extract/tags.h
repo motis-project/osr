@@ -43,7 +43,8 @@ struct tags {
           break;
         case cista::hash("landuse"): landuse_ = true; break;
         case cista::hash("railway"):
-          landuse_ |= t.value() == "station_area"sv;
+          railway_ = t.value();
+          landuse_ |= railway_ == "station_area"sv;
           break;
         case cista::hash("oneway"): oneway_ |= t.value() == "yes"sv; break;
         case cista::hash("junction"):
@@ -51,6 +52,9 @@ struct tags {
           break;
         case cista::hash("oneway:bicycle"):
           not_oneway_bike_ = t.value() == "no"sv;
+          break;
+        case cista::hash("oneway:psv"):
+          not_oneway_psv_ = t.value() == "no"sv;
           break;
         case cista::hash("motor_vehicle:forward"):
         case cista::hash("motor_vehicle"):
@@ -111,13 +115,22 @@ struct tags {
             case cista::hash("yes"): vehicle_ = override::kWhitelist; break;
           }
           break;
+        case cista::hash("psv"):
+          if (bus_ == override::kNone) {
+            bus_ = t.value() == "no"sv ? override::kBlacklist
+                                       : override::kWhitelist;
+          }
+          break;
+        case cista::hash("bus"):  // more specific than psv
+          bus_ =
+              t.value() == "no"sv ? override::kBlacklist : override::kWhitelist;
+          break;
         case cista::hash("access"):
           switch (cista::hash(std::string_view{t.value()})) {
             case cista::hash("no"):
             case cista::hash("agricultural"):
             case cista::hash("forestry"):
             case cista::hash("emergency"):
-            case cista::hash("psv"):
             case cista::hash("private"): [[fallthrough]];
             case cista::hash("delivery"): access_ = override::kBlacklist; break;
 
@@ -126,6 +139,12 @@ struct tags {
             case cista::hash("customers"):
             case cista::hash("permissive"): [[fallthrough]];
             case cista::hash("yes"): access_ = override::kWhitelist; break;
+
+            case cista::hash("psv"):
+            case cista::hash("bus"):
+              access_ = override::kBlacklist;
+              bus_ = override::kWhitelist;
+              break;
           }
           break;
         case cista::hash("access:conditional"): {
@@ -156,6 +175,9 @@ struct tags {
   // https://wiki.openstreetmap.org/wiki/Key:oneway:bicycle
   bool not_oneway_bike_{false};
 
+  // https://wiki.openstreetmap.org/wiki/Key:oneway:psv
+  bool not_oneway_psv_{false};
+
   // https://wiki.openstreetmap.org/wiki/Key:barrier
   std::string_view barrier_;
 
@@ -173,6 +195,9 @@ struct tags {
 
   // https://wiki.openstreetmap.org/wiki/DE:Key:highway
   std::string_view highway_;
+
+  // https://wiki.openstreetmap.org/wiki/Key:railway
+  std::string_view railway_;
 
   // https://wiki.openstreetmap.org/wiki/Key:sidewalk
   bool sidewalk_separate_{false};
@@ -195,6 +220,10 @@ struct tags {
 
   // https://wiki.openstreetmap.org/wiki/Key:access
   override access_{override::kNone};
+
+  // https://wiki.openstreetmap.org/wiki/Key:psv
+  // https://wiki.openstreetmap.org/wiki/Key:bus
+  override bus_{override::kNone};
 
   // https://wiki.openstreetmap.org/wiki/Key:landuse
   bool landuse_{false};
@@ -427,6 +456,105 @@ struct car_profile {
         case cista::hash("living_street"):
         case cista::hash("unclassified"):
         case cista::hash("service"): return true;
+        default: return false;
+      }
+    } else {
+      return true;
+    }
+  }
+};
+
+struct bus_profile {
+  static override access_override(tags const& t) {
+    if (t.bus_ != override::kNone) {
+      return t.bus_;
+    } else if (t.access_ == override::kBlacklist) {
+      return override::kBlacklist;
+    }
+
+    if (!t.barrier_.empty()) {
+      switch (cista::hash(t.barrier_)) {
+        case cista::hash("cattle_grid"):
+        case cista::hash("border_control"):
+        case cista::hash("toll_booth"):
+        case cista::hash("sally_port"):
+        case cista::hash("gate"):
+        case cista::hash("lift_gate"):
+        case cista::hash("no"):
+        case cista::hash("entrance"):
+        case cista::hash("height_restrictor"): [[fallthrough]];
+        case cista::hash("arch"):
+        case cista::hash("bus_trap"): break;
+        default: return override::kBlacklist;
+      }
+    }
+
+    auto const get_override = [](std::string_view tag) {
+      switch (cista::hash(tag)) {
+        case cista::hash("private"):
+        case cista::hash("optional_sidepath"):
+        case cista::hash("agricultural"):
+        case cista::hash("forestry"):
+        case cista::hash("agricultural;forestry"):
+        case cista::hash("permit"):
+        case cista::hash("customers"):
+        case cista::hash("delivery"): [[fallthrough]];
+        case cista::hash("no"): return override::kBlacklist;
+
+        case cista::hash("designated"):
+        case cista::hash("permissive"): [[fallthrough]];
+        case cista::hash("yes"): return override::kWhitelist;
+        default: return override::kNone;
+      }
+    };
+
+    if (auto mv = get_override(t.motor_vehicle_); mv != override::kNone) {
+      return mv;
+    } else if (auto mc = get_override(t.motorcar_); mc != override::kNone) {
+      return mc;
+    }
+
+    return t.vehicle_;
+  }
+
+  static bool default_access(tags const& t, osm_obj_type const type) {
+    if (type == osm_obj_type::kWay) {
+      switch (cista::hash(t.highway_)) {
+        case cista::hash("motorway"):
+        case cista::hash("motorway_link"):
+        case cista::hash("trunk"):
+        case cista::hash("trunk_link"):
+        case cista::hash("primary"):
+        case cista::hash("primary_link"):
+        case cista::hash("secondary"):
+        case cista::hash("secondary_link"):
+        case cista::hash("tertiary"):
+        case cista::hash("tertiary_link"):
+        case cista::hash("residential"):
+        case cista::hash("living_street"):
+        case cista::hash("unclassified"):
+        case cista::hash("service"): return true;
+        default: return false;
+      }
+    } else {
+      return true;
+    }
+  }
+};
+
+struct railway_profile {
+  static override access_override(tags const& t) { return override::kNone; }
+
+  static bool default_access(tags const& t, osm_obj_type const type) {
+    if (type == osm_obj_type::kWay) {
+      switch (cista::hash(t.railway_)) {
+        case cista::hash("rail"):
+        case cista::hash("light_rail"):
+        case cista::hash("monorail"):
+        case cista::hash("narrow_gauge"):
+        case cista::hash("subway"):
+        case cista::hash("tram"):
+        case cista::hash("funicular"): return true;
         default: return false;
       }
     } else {

@@ -7,6 +7,8 @@
 #include "osr/types.h"
 #include "osr/ways.h"
 
+#include "utl/verify.h"
+
 namespace osr {
 
 struct sharing_data;
@@ -41,6 +43,9 @@ struct dijkstra {
         l.get_node().print(std::cout, w);
         std::cout << "\n";
       }
+      utl::verify(l.cost() < pq_.n_buckets(),
+                  "dijkstra::add_start: label cost exceeds max: {} >= {}",
+                  l.cost(), pq_.n_buckets());
       pq_.push(l);
     }
   }

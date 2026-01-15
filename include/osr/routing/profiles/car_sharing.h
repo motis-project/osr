@@ -2,6 +2,7 @@
 
 #include <cassert>
 #include <array>
+#include <optional>
 #include <string_view>
 #include <type_traits>
 
@@ -47,7 +48,11 @@ struct car_sharing {
                      .is_sidewalk_separate_ = false,
                      .motor_vehicle_no_ = false,
                      .has_toll_ = false,
-                     .is_big_street_ = false};
+                     .is_big_street_ = false,
+                     .is_bus_accessible_ = false,
+                     .in_route_ = false,
+                     .is_railway_accessible_ = false,
+                     .is_oneway_psv_ = false};
 
   static constexpr auto const kAdditionalNodeProperties =
       node_properties{.from_level_ = 0,
@@ -134,6 +139,10 @@ struct car_sharing {
     constexpr node_idx_t get_node() const noexcept { return n_; }
     constexpr key get_key() const noexcept { return {n_, lvl_}; }
 
+    constexpr std::optional<direction> get_direction() const noexcept {
+      return dir_;
+    }
+
     constexpr mode get_mode() const noexcept {
       return is_rental_node() ? mode::kCar : mode::kFoot;
     }
@@ -196,7 +205,7 @@ struct car_sharing {
     level_t lvl_;
     direction dir_;
     way_pos_t way_;
-    [[no_unique_address]] Tracking tracking_{};
+    [[no_unique_address]] [[msvc::no_unique_address]] Tracking tracking_{};
   };
 
   struct entry {
@@ -272,7 +281,8 @@ struct car_sharing {
     std::array<way_pos_t, kN> pred_way_{};
     std::bitset<kN> pred_dir_{};
     std::array<node_type, kN> pred_type_{};
-    [[no_unique_address]] std::array<Tracking, kN> tracking_;
+    [[no_unique_address]] [[msvc::no_unique_address]] std::array<Tracking, kN>
+        tracking_;
   };
 
   static footp::node to_foot(node const n) {
@@ -293,6 +303,13 @@ struct car_sharing {
             .lvl_ = lvl,
             .dir_ = n.dir_,
             .way_ = n.way_};
+  }
+
+  static node create_node(node_idx_t const n,
+                          level_t const lvl,
+                          way_pos_t const way,
+                          direction const dir) {
+    return node{n, node_type::kInvalid, lvl, dir, way};
   }
 
   template <typename Fn>

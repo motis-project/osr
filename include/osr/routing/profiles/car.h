@@ -1,6 +1,7 @@
 #pragma once
 
 #include <bitset>
+#include <optional>
 
 #include "boost/json/object.hpp"
 
@@ -41,6 +42,10 @@ struct car {
     constexpr node_idx_t get_key() const noexcept { return n_; }
 
     static constexpr mode get_mode() noexcept { return mode::kCar; }
+
+    constexpr std::optional<direction> get_direction() const noexcept {
+      return dir_;
+    }
 
     std::ostream& print(std::ostream& out, ways const& w) const {
       return out << "(node=" << w.node_to_osm_[n_] << ", dir=" << to_str(dir_)
@@ -135,6 +140,13 @@ struct car {
       return wyhash::hash(static_cast<std::uint64_t>(to_idx(n)));
     }
   };
+
+  static node create_node(node_idx_t const n,
+                          level_t const,
+                          way_pos_t const way,
+                          direction const dir) {
+    return node{n, way, dir};
+  }
 
   template <typename Fn>
   static void resolve_start_node(ways::routing const& w,

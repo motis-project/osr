@@ -64,8 +64,8 @@ public:
   }
 
   GetBucketFn get_bucket_;
-  dist_t current_bucket_;
-  std::size_t size_;
+  dist_t current_bucket_{};
+  std::size_t size_{};
   std::vector<std::vector<T>> buckets_;
 };
 

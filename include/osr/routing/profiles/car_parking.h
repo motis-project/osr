@@ -1,6 +1,7 @@
 #pragma once
 
 #include <bitset>
+#include <optional>
 
 #include "boost/json.hpp"
 
@@ -74,6 +75,10 @@ struct car_parking {
     static constexpr node invalid() noexcept { return node{}; }
     constexpr node_idx_t get_node() const noexcept { return n_; }
     constexpr node_idx_t get_key() const noexcept { return n_; }
+
+    constexpr std::optional<direction> get_direction() const noexcept {
+      return dir_;
+    }
 
     constexpr mode get_mode() const noexcept {
       return is_car_node() ? mode::kCar : mode::kFoot;
@@ -227,6 +232,13 @@ struct car_parking {
             .lvl_ = n.lvl_,
             .dir_ = direction::kForward,
             .way_ = 0};
+  }
+
+  static node create_node(node_idx_t const n,
+                          level_t const lvl,
+                          way_pos_t const way,
+                          direction const dir) {
+    return node{n, node_type::kInvalid, lvl, dir, way};
   }
 
   template <typename Fn>
