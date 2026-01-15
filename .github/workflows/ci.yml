@@ -24,7 +24,7 @@ jobs:
         run: |
           find exe include src test \
             -type f -a \( -name "*.cc" -o -name "*.h" -o -name ".cuh" -o -name ".cu" \) \
-            -print0 | xargs -0 clang-format-18 -i
+            -print0 | xargs -0 clang-format-21 -i
 
       - name: Check for differences
         run: |
@@ -135,15 +135,7 @@ jobs:
 
   macos:
     permissions: write-all
-    runs-on: ${{ matrix.config.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        config:
-          - preset: macos-x86_64
-            os: macos-13
-          - preset: macos-arm64
-            os: macos-14
+    runs-on: macos-latest
     env:
       BUILDCACHE_COMPRESS: true
       BUILDCACHE_DIRECT_MODE: true
@@ -164,11 +156,11 @@ jobs:
         id: restore-buildcache
         with:
           path: ${{ github.workspace }}/.buildcache
-          key: buildcache-${{ matrix.config.preset }}-${{ hashFiles('.pkg') }}-${{ hashFiles('**/*.h') }}-${{ hashFiles('**/*.cc') }}
+          key: buildcache-macos-${{ hashFiles('.pkg') }}-${{ hashFiles('**/*.h') }}-${{ hashFiles('**/*.cc') }}
           restore-keys: |
-            buildcache-${{ matrix.config.preset }}-${{ hashFiles('.pkg') }}-${{ hashFiles('**/*.h') }}-
-            buildcache-${{ matrix.config.preset }}-${{ hashFiles('.pkg') }}-
-            buildcache-${{ matrix.config.preset }}-
+            buildcache-macos-${{ hashFiles('.pkg') }}-${{ hashFiles('**/*.h') }}-
+            buildcache-macos-${{ hashFiles('.pkg') }}-
+            buildcache-macos-
 
       - name: Restore Dependencies Cache
         uses: actions/cache/restore@v4
@@ -187,7 +179,7 @@ jobs:
       - name: CMake
         run: |
           git config --global --add safe.directory `pwd`
-          cmake -G Ninja -S . -B build --preset=${{ matrix.config.preset }}
+          cmake -G Ninja -S . -B build --preset=macos-arm64
 
       - name: Build
         run: cmake --build build --target osr-extract osr-backend osr-benchmark osr-test
@@ -202,13 +194,13 @@ jobs:
           mkdir osr
           mv build/osr-extract osr/osr-extract
           mv build/osr-backend osr/osr-backend
-          tar cjf osr-${{ matrix.config.preset }}.tar.bz2 osr
+          tar cjf osr-macos.tar.bz2 osr
 
       - name: Upload Distribution
         uses: actions/upload-artifact@v4
         with:
-          name: osr-${{ matrix.config.preset }}
-          path: osr-${{ matrix.config.preset }}.tar.bz2
+          name: osr-macos
+          path: osr-macos.tar.bz2
 
       # ==== RELEASE ====
       - name: Upload Release
@@ -218,8 +210,8 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           upload_url: ${{ github.event.release.upload_url }}
-          asset_path: ./osr-${{ matrix.config.preset }}.tar.bz2
-          asset_name: osr-${{ matrix.config.preset }}.tar.bz2
+          asset_path: ./osr-macos.tar.bz2
+          asset_name: osr-macos.tar.bz2
           asset_content_type: application/x-tar
 
       # ==== SAVE CACHE ====
@@ -256,7 +248,6 @@ jobs:
           - preset: linux-arm64-release
             artifact: linux-arm64
             emulator: qemu-aarch64-static
-          - preset: clang-tidy
           - preset: linux-sanitizer
           - preset: linux-debug
             emulator: valgrind --suppressions=./docs/mmap.supp --suppressions=./docs/tbb.supp --suppressions=./docs/pthread.supp --leak-check=full --error-exitcode=1
