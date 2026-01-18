@@ -72,7 +72,7 @@ struct way_properties {
   template <std::size_t NMaxTypes>
   friend constexpr auto static_type_hash(
       way_properties const*, cista::hash_data<NMaxTypes> h) noexcept {
-    return h.combine(cista::hash("way_properties v1"));
+    return h.combine(cista::hash("way_properties v1.1"));
   }
 
   template <typename Ctx>
@@ -92,8 +92,8 @@ struct way_properties {
 
   std::uint8_t speed_limit_ : 3;
 
-  std::uint8_t from_level_ : 5;
-  std::uint8_t to_level_ : 5;
+  std::uint8_t from_level_ : 6;
+  std::uint8_t to_level_ : 6;
 
   std::uint8_t is_platform_ : 1;  // only used during extract
   bool is_parking_ : 1;
@@ -105,7 +105,7 @@ struct way_properties {
   bool is_big_street_ : 1;
 };
 
-static_assert(sizeof(way_properties) == 4);
+static_assert(sizeof(way_properties) == 5);
 
 struct node_properties {
   constexpr bool is_car_accessible() const { return is_car_accessible_; }
@@ -131,7 +131,7 @@ struct node_properties {
   template <typename Ctx>
   friend void deserialize(Ctx const&, node_properties*) {}
 
-  std::uint8_t from_level_ : 5;
+  std::uint8_t from_level_ : 6;
 
   bool is_foot_accessible_ : 1;
   bool is_bike_accessible_ : 1;

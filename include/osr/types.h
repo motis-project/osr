@@ -142,8 +142,8 @@ constexpr direction to_direction(std::string_view s) {
 }
 
 // level
-constexpr auto const kMinLevel = -4.0F;
-constexpr auto const kMaxLevel = 3.5F;
+constexpr auto const kMinLevel = -8.0F;
+constexpr auto const kMaxLevel = 7.5F;
 
 struct level_t {
   static constexpr auto kNoLevel = 0U;
@@ -177,7 +177,7 @@ constexpr auto const kNoLevel = level_t{std::uint8_t{0U}};
 constexpr auto const kLevelBits = cista::constexpr_trailing_zeros(
     cista::next_power_of_two(to_idx(level_t{kMaxLevel}) + 1U));
 
-using level_bits_t = std::uint32_t;
+using level_bits_t = std::uint64_t;
 
 constexpr std::tuple<level_t, level_t, bool> get_levels(
     bool const has_level, level_bits_t const levels) noexcept {
@@ -193,7 +193,7 @@ constexpr std::tuple<level_t, level_t, bool> get_levels(
   return {from, to == kNoLevel ? from : to, std::popcount(levels) > 2};
 }
 
-static_assert(kLevelBits == 5U);
+static_assert(kLevelBits == 6U);
 
 // speed
 enum speed_limit : std::uint8_t {
