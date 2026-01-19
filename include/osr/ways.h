@@ -89,32 +89,32 @@ struct way_properties {
   template <typename Ctx>
   friend void deserialize(Ctx const&, way_properties*) {}
 
-  bool is_foot_accessible_ : 1;
-  bool is_bike_accessible_ : 1;
-  bool is_car_accessible_ : 1;
-  bool is_destination_ : 1;
-  bool is_oneway_car_ : 1;
-  bool is_oneway_bike_ : 1;
-  bool is_elevator_ : 1;
-  bool is_steps_ : 1;
+  std::uint8_t is_foot_accessible_ : 1;
+  std::uint8_t is_bike_accessible_ : 1;
+  std::uint8_t is_car_accessible_ : 1;
+  std::uint8_t is_destination_ : 1;
+  std::uint8_t is_oneway_car_ : 1;
+  std::uint8_t is_oneway_bike_ : 1;
+  std::uint8_t is_elevator_ : 1;
+  std::uint8_t is_steps_ : 1;
 
   std::uint8_t speed_limit_ : 3;
+  std::uint8_t is_platform_ : 1;  // only used during extract
+  std::uint8_t is_parking_ : 1;
+  std::uint8_t is_ramp_ : 1;
+  std::uint8_t is_sidewalk_separate_ : 1;
+  std::uint8_t motor_vehicle_no_ : 1;
 
   std::uint8_t from_level_ : 6;
+  std::uint8_t has_toll_ : 1;
+  std::uint8_t is_big_street_ : 1;
+
   std::uint8_t to_level_ : 6;
+  std::uint8_t is_bus_accessible_ : 1;
+  std::uint8_t in_route_ : 1;
 
-  std::uint8_t is_platform_ : 1;  // only used during extract
-  bool is_parking_ : 1;
-
-  bool is_ramp_ : 1;
-  bool is_sidewalk_separate_ : 1;
-  bool motor_vehicle_no_ : 1;
-  bool has_toll_ : 1;
-  bool is_big_street_ : 1;
-  bool is_bus_accessible_ : 1;
-  bool in_route_ : 1;
-  bool is_railway_accessible_ : 1;
-  bool is_oneway_psv_ : 1;
+  std::uint8_t is_railway_accessible_ : 1;
+  std::uint8_t is_oneway_psv_ : 1;
 };
 
 static_assert(sizeof(way_properties) == 5);
@@ -145,17 +145,17 @@ struct node_properties {
   friend void deserialize(Ctx const&, node_properties*) {}
 
   std::uint8_t from_level_ : 6;
+  std::uint8_t is_foot_accessible_ : 1;
+  std::uint8_t is_bike_accessible_ : 1;
 
-  bool is_foot_accessible_ : 1;
-  bool is_bike_accessible_ : 1;
-  bool is_car_accessible_ : 1;
-  bool is_bus_accessible_ : 1;
-  bool is_elevator_ : 1;
-  bool is_entrance_ : 1;
-  bool is_multi_level_ : 1;
-  bool is_parking_ : 1;
+  std::uint8_t is_car_accessible_ : 1;
+  std::uint8_t is_bus_accessible_ : 1;
+  std::uint8_t is_elevator_ : 1;
+  std::uint8_t is_entrance_ : 1;
+  std::uint8_t is_multi_level_ : 1;
+  std::uint8_t is_parking_ : 1;
 
-  std::uint8_t to_level_ : 5;
+  std::uint8_t to_level_ : 6;
 };
 
 static_assert(sizeof(node_properties) == 3);
