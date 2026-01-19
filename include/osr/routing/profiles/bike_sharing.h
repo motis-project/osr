@@ -10,6 +10,7 @@
 #include "utl/helpers/algorithm.h"
 
 #include "osr/elevation_storage.h"
+#include "osr/preprocessing/contraction_hierarchy/shortcut_storage.h"
 #include "osr/routing/additional_edge.h"
 #include "osr/routing/mode.h"
 #include "osr/routing/path.h"
@@ -47,7 +48,8 @@ struct bike_sharing {
                      .is_sidewalk_separate_ = false,
                      .motor_vehicle_no_ = false,
                      .has_toll_ = false,
-                     .is_big_street_ = false};
+                     .is_big_street_ = false,
+                     .importance_ = 0};
 
   static constexpr auto const kAdditionalNodeProperties =
       node_properties{.from_level_ = 0,
@@ -58,7 +60,8 @@ struct bike_sharing {
                       .is_entrance_ = false,
                       .is_multi_level_ = false,
                       .is_parking_ = false,
-                      .to_level_ = 0};
+                      .to_level_ = 0,
+                      .importance_ = 0};
 
   enum class node_type : std::uint8_t {
     kInitialFoot,
@@ -196,6 +199,10 @@ struct bike_sharing {
                                       .lvl_ = pred_lvl_[idx]}};
     }
 
+    constexpr way_idx_t way(node) const noexcept {
+      return way_idx_t::invalid();
+    }
+
     constexpr cost_t cost(node const n) const noexcept {
       return cost_[get_index(n)];
     }
@@ -203,7 +210,8 @@ struct bike_sharing {
     constexpr bool update(label const,
                           node const n,
                           cost_t const c,
-                          node const pred) noexcept {
+                          node const pred,
+                          way_idx_t) noexcept {
       auto const idx = get_index(n);
       if (c < cost_[idx]) {
         cost_[idx] = c;
@@ -220,6 +228,9 @@ struct bike_sharing {
     }
 
     void write(node, path&) const {}
+
+    template <typename Fn>
+    constexpr void for_each(key, Fn&&) const {}
 
     std::array<node_idx_t, kN> pred_{};
     std::array<cost_t, kN> cost_{};
@@ -270,13 +281,15 @@ struct bike_sharing {
     });
   }
 
-  template <direction SearchDir, bool WithBlocked, typename Fn>
+  template <direction SearchDir, adj_conf Config, typename Fn>
   static void adjacent(parameters const& params,
                        ways::routing const& w,
                        node const n,
                        bitvec<node_idx_t> const* blocked,
                        sharing_data const* sharing,
                        elevation_storage const* elevations,
+                       shortcut_storage<node> const*,
+                       node_idx_t,
                        Fn&& fn) {
     assert(sharing != nullptr);
 
@@ -286,21 +299,23 @@ struct bike_sharing {
                   .type_ = nt,
                   .lvl_ = nt == node_type::kBike ? kNoLevel : n.lvl_},
              cost, ae.distance_, way_idx_t::invalid(), 0, 1,
-             elevation_storage::elevation{}, false);
+             elevation_storage::elevation{}, false, node::invalid(), 0);
         };
 
     auto const& continue_on_foot = [&](node_type const nt,
                                        bool const include_additional_edges,
                                        cost_t const switch_penalty = 0) {
-      footp::template adjacent<SearchDir, WithBlocked>(
-          params.foot_, w, to_foot(n), blocked, nullptr, elevations,
+      footp::template adjacent<SearchDir, Config>(
+          params.foot_, w, to_foot(n), blocked, nullptr, elevations, nullptr,
+          node_idx_t::invalid(),
           [&](footp::node const neighbor, std::uint32_t const cost,
               distance_t const dist, way_idx_t const way,
               std::uint16_t const from, std::uint16_t const to,
-              elevation_storage::elevation const elevation, bool) {
+              elevation_storage::elevation const elevation, bool, footp::node,
+              cost_t) {
             if (is_allowed(sharing->through_allowed_, neighbor.n_)) {
               fn(to_node(neighbor, nt), cost + switch_penalty, dist, way, from,
-                 to, elevation, false);
+                 to, elevation, false, node::invalid(), 0);
             }
           });
       if (include_additional_edges) {
@@ -320,15 +335,17 @@ struct bike_sharing {
 
     auto const& continue_on_bike = [&](bool const include_additional_edges,
                                        cost_t const switch_penalty = 0) {
-      bikep::adjacent<SearchDir, WithBlocked>(
-          params.bike_, w, to_bike(n), blocked, nullptr, elevations,
+      bikep::adjacent<SearchDir, Config>(
+          params.bike_, w, to_bike(n), blocked, nullptr, elevations, nullptr,
+          node_idx_t::invalid(),
           [&](bikep::node const neighbor, std::uint32_t const cost,
               distance_t const dist, way_idx_t const way,
               std::uint16_t const from, std::uint16_t const to,
-              elevation_storage::elevation const elevation, bool) {
+              elevation_storage::elevation const elevation, bool, bikep::node,
+              cost_t) {
             if (is_allowed(sharing->through_allowed_, neighbor.n_)) {
               fn(to_node(neighbor, kNoLevel), cost + switch_penalty, dist, way,
-                 from, to, elevation, false);
+                 from, to, elevation, false, node::invalid(), 0);
             }
           });
       if (include_additional_edges) {
@@ -452,6 +469,13 @@ struct bike_sharing {
   }
 
   static constexpr node get_reverse(node const n) { return n; }
+
+  template <direction>
+  static constexpr cost_t turning_cost(ways::routing const&,
+                                       node const,
+                                       node const) {
+    return 0;
+  }
 };
 
 }  // namespace osr

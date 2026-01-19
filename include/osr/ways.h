@@ -103,6 +103,7 @@ struct way_properties {
   bool motor_vehicle_no_ : 1;
   bool has_toll_ : 1;
   bool is_big_street_ : 1;
+  std::uint8_t importance_ : 3;  // only used during extract
 };
 
 static_assert(sizeof(way_properties) == 5);
@@ -115,6 +116,7 @@ struct node_properties {
   constexpr bool is_multi_level() const { return is_multi_level_; }
   constexpr bool is_entrance() const { return is_entrance_; }
   constexpr bool is_parking() const { return is_parking_; }
+  constexpr std::uint8_t importance() const { return importance_; }
 
   constexpr level_t from_level() const { return level_t{from_level_}; }
   constexpr level_t to_level() const { return level_t{to_level_}; }
@@ -142,6 +144,7 @@ struct node_properties {
   bool is_parking_ : 1;
 
   std::uint8_t to_level_ : 5;
+  std::uint8_t importance_ : 3;
 };
 
 static_assert(sizeof(node_properties) == 3);
@@ -152,7 +155,7 @@ struct ways {
   void add_restriction(std::vector<resolved_restriction>&);
   void compute_big_street_neighbors();
   void connect_ways();
-  void build_components();
+  void build_components_and_importance();
 
   std::optional<way_idx_t> find_way(osm_way_idx_t const i) {
     auto const it = std::lower_bound(begin(way_osm_idx_), end(way_osm_idx_), i);
