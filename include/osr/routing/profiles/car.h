@@ -7,11 +7,20 @@
 #include "utl/helpers/algorithm.h"
 
 #include "osr/elevation_storage.h"
+#include "osr/preprocessing/contraction_hierarchies/storage.h"
 #include "osr/routing/mode.h"
 #include "osr/routing/path.h"
 #include "osr/ways.h"
 
 namespace osr {
+struct path;
+
+namespace ch {
+
+struct shortcut_data;
+struct shortcut_storage;
+
+}  // namespace ch
 
 struct sharing_data;
 
@@ -73,10 +82,18 @@ struct car {
     static constexpr auto const kMaxWays = way_pos_t{16U};
     static constexpr auto const kN = kMaxWays * 2U /* FWD+BWD */;
 
-    entry() { utl::fill(cost_, kInfeasible); }
+    entry() {
+      cost_.resize(kN, kInfeasible);
+      pred_.resize(kN, node_idx_t::invalid());
+      pred_dir_.resize(kN);
+      pred_way_.resize(kN);
+    }
 
     constexpr std::optional<node> pred(node const n) const noexcept {
       auto const idx = get_index(n);
+      if (idx >= cost_.size()) {
+        return std::nullopt;
+      }
       return pred_[idx] == node_idx_t::invalid()
                  ? std::nullopt
                  : std::optional{node{pred_[idx], pred_way_[idx],
@@ -84,7 +101,8 @@ struct car {
     }
 
     constexpr cost_t cost(node const n) const noexcept {
-      return cost_[get_index(n)];
+      auto const idx = get_index(n);
+      return idx >= cost_.size() ? kInfeasible : cost_[idx];
     }
 
     constexpr bool update(label const&,
@@ -92,6 +110,13 @@ struct car {
                           cost_t const c,
                           node const pred) noexcept {
       auto const idx = get_index(n);
+      if (idx >= cost_.size()) {
+        auto const new_size = (idx + 1) * 2;
+        cost_.resize(new_size, kInfeasible);
+        pred_way_.resize(new_size);
+        pred_.resize(new_size, node_idx_t::invalid());
+        pred_dir_.resize(new_size);
+      }
       if (c < cost_[idx]) {
         cost_[idx] = c;
         pred_[idx] = pred.n_;
@@ -106,12 +131,12 @@ struct car {
 
     static constexpr node get_node(node_idx_t const n,
                                    std::size_t const index) {
-      return node{n, static_cast<way_pos_t>(index % kMaxWays),
-                  to_dir((index / kMaxWays) != 0U)};
+      return node{n, static_cast<way_pos_t>((index - (index % 2) / 2)),
+                  to_dir((index % 2) != 0U)};
     }
 
     static constexpr std::size_t get_index(node const n) {
-      return (n.dir_ == direction::kForward ? 0U : 1U) * kMaxWays + n.way_;
+      return (n.dir_ == direction::kForward ? 0U : 1U) + 2 * n.way_;
     }
 
     static constexpr direction to_dir(bool const b) {
@@ -122,10 +147,10 @@ struct car {
       return d == direction::kForward ? false : true;
     }
 
-    std::array<node_idx_t, kN> pred_;
-    std::array<way_pos_t, kN> pred_way_;
-    std::bitset<kN> pred_dir_;
-    std::array<cost_t, kN> cost_;
+    std::vector<node_idx_t> pred_;
+    std::vector<way_pos_t> pred_way_;
+    std::vector<bool> pred_dir_;
+    std::vector<cost_t> cost_;
   };
 
   struct hash {
@@ -171,12 +196,44 @@ struct car {
                        bitvec<node_idx_t> const* blocked,
                        sharing_data const*,
                        elevation_storage const*,
+                       ch::shortcut_storage const* shortcuts,
                        Fn&& fn) {
     auto way_pos = way_pos_t{0U};
+    auto const WITH_SHORTCUT = shortcuts != nullptr;
+
+    [[maybe_unused]] auto node_resolved_way = w.node_ways_[n.n_][n.way_];
+    [[maybe_unused]] auto node_resolved_dir = n.dir_;
+
+    if (WITH_SHORTCUT) {
+      if (auto const n_way = w.node_ways_[n.n_][n.way_];
+          shortcuts->is_shortcut(n_way)) {
+        auto const resolved =
+            SearchDir == direction::kForward
+                ? shortcuts->resolve_last_way_and_dir(n_way, n.dir_)
+                : shortcuts->resolve_first_way_and_dir(n_way, n.dir_);
+        node_resolved_way = resolved.way;
+        node_resolved_dir = resolved.dir;
+      }
+    }
     for (auto const [way, i] :
          utl::zip_unchecked(w.node_ways_[n.n_], w.node_in_way_idx_[n.n_])) {
+      auto const way_is_shortcut =
+          WITH_SHORTCUT ? shortcuts->is_shortcut(way) : false;
+
       auto const expand = [&](direction const way_dir, std::uint16_t const from,
                               std::uint16_t const to) {
+        auto resolved_way = way;
+        auto resolved_dir = way_dir;
+
+        if (way_is_shortcut) {
+          auto const resolved =
+              SearchDir == direction::kForward
+                  ? shortcuts->resolve_first_way_and_dir(way, way_dir)
+                  : shortcuts->resolve_last_way_and_dir(way, way_dir);
+          resolved_way = resolved.way;
+          resolved_dir = resolved.dir;
+        }
+
         // NOLINTNEXTLINE(clang-analyzer-core.CallAndMessage)
         auto const target_node = w.way_nodes_[way][to];
         if constexpr (WithBlocked) {
@@ -191,7 +248,8 @@ struct car {
         }
 
         auto const target_way_prop = w.way_properties_[way];
-        if (way_cost(params, target_way_prop, way_dir, 0U) == kInfeasible) {
+        if (!way_is_shortcut &&
+            way_cost(params, target_way_prop, way_dir, 0U) == kInfeasible) {
           return;
         }
 
@@ -199,13 +257,20 @@ struct car {
           return;
         }
 
-        auto const is_u_turn = way_pos == n.way_ && way_dir == opposite(n.dir_);
+        // auto const is_u_turn = way_pos == n.way_ && way_dir ==
+        // opposite(n.dir_);
+        auto const is_u_turn = resolved_way == node_resolved_way &&
+                               resolved_dir == opposite(node_resolved_dir);
         auto const dist = w.way_node_dist_[way][std::min(from, to)];
+
         auto const target =
             node{target_node, w.get_way_pos(target_node, way, to), way_dir};
-        auto const cost = way_cost(params, target_way_prop, way_dir, dist) +
-                          node_cost(target_node_prop) +
-                          (is_u_turn ? kUturnPenalty : 0U);
+        auto const cost =
+            (way_is_shortcut
+                 ? way_cost_s(target_way_prop, way_dir, dist,
+                              shortcuts->get_shortcut(way))
+                 : way_cost(params, target_way_prop, way_dir, dist)) +
+            node_cost(target_node_prop) + (is_u_turn ? kUturnPenalty : 0U);
         fn(target, cost, dist, way, from, to, elevation_storage::elevation{},
            false);
       };
@@ -220,7 +285,24 @@ struct car {
       ++way_pos;
     }
   }
-
+  static constexpr cost_t way_cost_s(way_properties const& e,
+                                     direction const dir,
+                                     std::uint16_t const dist,
+                                     ch::shortcut_data const* shortcut) {
+    if (e.is_car_accessible() &&
+        (dir == direction::kForward || !e.is_oneway_car())) {
+      cost_t cost = 0;
+      if (shortcut != nullptr) {
+        cost = static_cast<cost_t>(shortcut->cost);
+      } else {
+        cost = dist / e.max_speed_m_per_s();
+      }
+      return (cost) * (e.is_destination() ? 5U : 1U) +
+             (e.is_destination() ? 120U : 0U);
+    } else {
+      return kInfeasible;
+    }
+  }
   static bool is_dest_reachable(parameters const& params,
                                 ways::routing const& w,
                                 node const n,

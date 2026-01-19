@@ -250,6 +250,7 @@ struct car_parking {
                        bitvec<node_idx_t> const* blocked,
                        sharing_data const*,
                        elevation_storage const* elevations,
+                       ch::shortcut_storage const*,
                        Fn&& fn) {
     static constexpr auto const kFwd = SearchDir == direction::kForward;
     static constexpr auto const kBwd = SearchDir == direction::kBackward;
@@ -262,7 +263,7 @@ struct car_parking {
 
     if (n.is_foot_node() || (kFwd && n.is_car_node() && is_parking)) {
       footp::template adjacent<SearchDir, WithBlocked>(
-          params.foot_, w, to_foot(n), blocked, nullptr, elevations,
+          params.foot_, w, to_foot(n), blocked, nullptr, elevations, nullptr,
           [&](footp::node const neighbor, std::uint32_t const cost,
               distance_t const dist, way_idx_t const way,
               std::uint16_t const from, std::uint16_t const to,
@@ -275,7 +276,7 @@ struct car_parking {
 
     if (n.is_car_node() || (kBwd && n.is_foot_node() && is_parking)) {
       car::template adjacent<SearchDir, WithBlocked>(
-          params.car_, w, to_car(n), blocked, nullptr, elevations,
+          params.car_, w, to_car(n), blocked, nullptr, elevations, nullptr,
           [&](car::node const neighbor, std::uint32_t const cost,
               distance_t const dist, way_idx_t const way,
               std::uint16_t const from, std::uint16_t const to,

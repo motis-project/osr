@@ -15,6 +15,9 @@
 #include "osr/ways.h"
 
 namespace osr {
+namespace ch {
+struct shortcut_storage;
+}
 
 template <typename Parameters, typename Profile>
 concept IsParameters =
@@ -112,6 +115,7 @@ concept Profile =
              bitvec<node_idx_t> const* blocked,
              sharing_data const* sharing,
              elevation_storage const* elevation,
+             ch::shortcut_storage const* shortcuts,
              std::function<void(typename P::node const,
                                 std::uint32_t const,
                                 distance_t,
@@ -121,8 +125,8 @@ concept Profile =
                                 elevation_storage::elevation,
                                 bool const)> f) {
       {
-        P::template adjacent<direction::kBackward, false>(params, r, n, blocked,
-                                                          sharing, elevation, f)
+        P::template adjacent<direction::kBackward, false>(
+            params, r, n, blocked, sharing, elevation, shortcuts, f)
       } -> std::same_as<void>;
     };
 

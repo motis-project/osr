@@ -133,6 +133,9 @@ target_link_libraries(osr
 add_executable(osr-extract exe/extract.cc)
 target_link_libraries(osr-extract osr)
 
+add_executable(osr-preprocessing exe/osr-preprocessing/main.cc)
+target_link_libraries(osr-preprocessing osr)
+
 add_executable(osr-benchmark exe/benchmark.cc)
 target_link_libraries(osr-benchmark osr)
 
