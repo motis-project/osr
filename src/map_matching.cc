@@ -95,14 +95,16 @@ std::vector<matched_way<P>> match_input_point(
 }
 
 template <Profile P>
-matched_route map_match(ways const& w,
-                        lookup const& l,
-                        typename P::parameters const& params,
-                        std::vector<location> const& points,
-                        cost_t const max_segment_cost,
-                        bitvec<node_idx_t> const* blocked,
-                        elevation_storage const* elevations,
-                        std::optional<std::filesystem::path> debug_path) {
+matched_route map_match(
+    ways const& w,
+    lookup const& l,
+    typename P::parameters const& params,
+    std::vector<location> const& points,
+    cost_t const max_segment_cost,
+    bitvec<node_idx_t> const* blocked,
+    elevation_storage const* elevations,
+    std::move_only_function<std::optional<std::filesystem::path>(
+        matched_route const&)> debug_path_fn) {
   utl::verify(points.size() >= 2, "map_match requires at least 2 points");
 
   auto const n_route_segments = points.size() - 1U;
@@ -542,27 +544,31 @@ matched_route map_match(ways const& w,
   }
   result.segment_offsets_.emplace_back(offset);
 
-  if (debug_path && result.n_beelined_ > 0U) {
-    write_map_match_debug<P>(w, l, params, points, pds, segments, result,
-                             get_node_pos, *debug_path);
+  if (debug_path_fn) {
+    if (auto const debug_path = debug_path_fn(result); debug_path.has_value()) {
+      write_map_match_debug<P>(w, l, params, points, pds, segments, result,
+                               get_node_pos, *debug_path);
+    }
   }
 
   return result;
 }
 
-matched_route map_match(ways const& w,
-                        lookup const& l,
-                        search_profile profile,
-                        profile_parameters const& params,
-                        std::vector<location> const& points,
-                        cost_t const max_segment_cost,
-                        bitvec<node_idx_t> const* blocked,
-                        elevation_storage const* elevations,
-                        std::optional<std::filesystem::path> debug_path) {
+matched_route map_match(
+    ways const& w,
+    lookup const& l,
+    search_profile profile,
+    profile_parameters const& params,
+    std::vector<location> const& points,
+    cost_t const max_segment_cost,
+    bitvec<node_idx_t> const* blocked,
+    elevation_storage const* elevations,
+    std::move_only_function<std::optional<std::filesystem::path>(
+        matched_route const&)> debug_path_fn) {
   return with_profile(profile, [&]<Profile P>(P&&) {
     return map_match<P>(w, l, std::get<typename P::parameters>(params), points,
                         max_segment_cost, blocked, elevations,
-                        std::move(debug_path));
+                        std::move(debug_path_fn));
   });
 }
 
