@@ -20,7 +20,7 @@ struct tags {
         auto l = 0.0F;
         utl::parse_arg(s, l);
         auto const lvl = level_t{std::clamp(l, kMinLevel, kMaxLevel)};
-        level_bits |= (1U << to_idx(lvl));
+        level_bits |= (static_cast<level_bits_t>(1) << to_idx(lvl));
         if (s) {
           ++s;
         }
