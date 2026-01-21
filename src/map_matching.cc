@@ -447,6 +447,7 @@ matched_route map_match(
       utl::verify(selected_dest.has_value(),
                   "[map_match] [case 1] no selected dest");
       ++result.n_routed_;
+      auto const segments_before = result.path_.segments_.size();
       auto const& d = seg.d_;
       auto const to_mw =
           to_pd.matched_ways_.at(selected_dest->matched_way_idx_);
@@ -460,7 +461,6 @@ matched_route map_match(
         auto const cost = entry.cost(*n);
 
         if (pred) {
-          auto const segments_before = result.path_.segments_.size();
           auto const expected_cost =
               static_cast<cost_t>(cost - d.get_cost(*pred));
 
@@ -508,8 +508,6 @@ matched_route map_match(
                         elevations, *pred, *n, expected_cost,
                         result.path_.segments_, direction::kForward);
           }
-
-          seg.path_segments_ = result.path_.segments_.size() - segments_before;
         } else {
           for (auto const [i, from_mw] :
                utl::enumerate(from_pd.matched_ways_)) {
@@ -525,6 +523,7 @@ matched_route map_match(
 
         n = pred;
       }
+      seg.path_segments_ = result.path_.segments_.size() - segments_before;
       utl::verify(
           seg.path_segments_ > 0U,
           "[map_match] [case 1] no path segments reconstructed for seg_idx={}",
