@@ -141,7 +141,7 @@ struct node_properties {
   bool is_multi_level_ : 1;
   bool is_parking_ : 1;
 
-  std::uint8_t to_level_ : 5;
+  std::uint8_t to_level_ : 6;
 };
 
 static_assert(sizeof(node_properties) == 3);
