@@ -140,6 +140,10 @@ struct tags {
         } break;
         case cista::hash("maxspeed"): max_speed_ = t.value(); break;
         case cista::hash("toll"): toll_ = t.value() == "yes"sv; break;
+        case cista::hash("incline"): {
+          auto const value = std::string_view{t.value()};
+          is_incline_down_ = t.value() == "down"sv || value.starts_with("-"sv);
+        } break;
       }
     }
   }
@@ -220,6 +224,9 @@ struct tags {
   // https://wiki.openstreetmap.org/wiki/Key:level
   bool has_level_{false};
   level_bits_t level_bits_{0U};
+
+  // https://wiki.openstreetmap.org/wiki/Key:incline
+  bool is_incline_down_{false};
 
   // https://wiki.openstreetmap.org/wiki/Key:toll
   bool toll_{false};

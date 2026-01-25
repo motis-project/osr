@@ -134,6 +134,7 @@ way_properties get_way_properties(tags const& t) {
   p.speed_limit_ = get_speed_limit(t);
   p.from_level_ = to_idx(from);
   p.to_level_ = to_idx(to);
+  p.is_incline_down_ = t.is_incline_down_;
   p.is_platform_ = t.is_platform();
   p.is_ramp_ = t.is_ramp_;
   p.is_sidewalk_separate_ = t.sidewalk_separate_;
@@ -272,11 +273,18 @@ struct way_handler : public osm::handler::Handler {
     }
 
     w_.way_osm_idx_.push_back(osm_way_idx_t{w.positive_id()});
-    w_.way_polylines_.emplace_back(w.nodes() |
-                                   std::views::transform(get_point));
-    w_.way_osm_nodes_.emplace_back(w.nodes() |
-                                   std::views::transform(get_node_id));
     w_.r_->way_properties_.emplace_back(p);
+
+    auto const polyline = w.nodes() | std::views::transform(get_point);
+    auto const nodes = w.nodes() | std::views::transform(get_node_id);
+
+    if (p.is_incline_down_) {
+      w_.way_polylines_.emplace_back(polyline | std::views::reverse);
+      w_.way_osm_nodes_.emplace_back(nodes | std::views::reverse);
+    } else {
+      w_.way_polylines_.emplace_back(polyline);
+      w_.way_osm_nodes_.emplace_back(nodes);
+    }
 
     auto const name = t.name_.empty() ? t.ref_ : t.name_;
     if (!name.empty()) {

@@ -41,6 +41,7 @@ struct car_sharing {
                      .speed_limit_ = speed_limit::kmh_10,
                      .from_level_ = 0,
                      .to_level_ = 0,
+                     .is_incline_down_ = false,
                      .is_platform_ = 0,
                      .is_parking_ = false,
                      .is_ramp_ = false,

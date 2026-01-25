@@ -41,6 +41,7 @@ struct bike_sharing {
                      .speed_limit_ = 0,
                      .from_level_ = 0,
                      .to_level_ = 0,
+                     .is_incline_down_ = false,
                      .is_platform_ = 0,
                      .is_parking_ = false,
                      .is_ramp_ = false,
