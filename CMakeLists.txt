@@ -155,6 +155,7 @@ target_link_libraries(osr-test gtest osr boost-json)
 if (OSR_MIMALLOC)
     target_link_libraries(osr-extract ${osr-mimalloc-lib})
     target_link_libraries(osr-backend ${osr-mimalloc-lib})
+    target_link_libraries(osr-test ${osr-mimalloc-lib})
     if (WIN32)
         add_custom_command(
                 TARGET osr-extract POST_BUILD

@@ -1,3 +1,5 @@
+#include <filesystem>
+
 #include "gtest/gtest.h"
 #include "osr/geojson.h"
 
@@ -12,7 +14,7 @@ namespace fs = std::filesystem;
 std::string extract_and_route(std::string_view path,
                               osr::location const& from,
                               osr::location const& to) {
-  auto const dir = fmt::format("/tmp/{}", path);
+  auto const dir = fs::temp_directory_path() / path;
   auto ec = std::error_code{};
   fs::remove_all(dir, ec);
   fs::create_directories(dir, ec);
