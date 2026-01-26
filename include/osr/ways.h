@@ -94,6 +94,7 @@ struct way_properties {
 
   std::uint8_t from_level_ : 6;
   std::uint8_t to_level_ : 6;
+  bool is_incline_down_ : 1;
 
   std::uint8_t is_platform_ : 1;  // only used during extract
   bool is_parking_ : 1;
