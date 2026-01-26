@@ -206,7 +206,11 @@ struct car_sharing {
     level_t lvl_;
     direction dir_;
     way_pos_t way_;
+#ifdef _MSC_VER
     [[no_unique_address]] [[msvc::no_unique_address]] Tracking tracking_{};
+#else
+    [[no_unique_address]] Tracking tracking_{};
+#endif
   };
 
   struct entry {
@@ -282,8 +286,12 @@ struct car_sharing {
     std::array<way_pos_t, kN> pred_way_{};
     std::bitset<kN> pred_dir_{};
     std::array<node_type, kN> pred_type_{};
+#ifdef _MSC_VER
     [[no_unique_address]] [[msvc::no_unique_address]] std::array<Tracking, kN>
         tracking_;
+#else
+    [[no_unique_address]] std::array<Tracking, kN> tracking_;
+#endif
   };
 
   static footp::node to_foot(node const n) {

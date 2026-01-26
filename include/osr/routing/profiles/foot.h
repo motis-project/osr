@@ -74,7 +74,11 @@ struct foot {
     node_idx_t n_;
     cost_t cost_;
     level_t lvl_;
+#ifdef _MSC_VER
     [[no_unique_address]] [[msvc::no_unique_address]] Tracking tracking_;
+#else
+    [[no_unique_address]] Tracking tracking_;
+#endif
   };
 
   struct entry {
@@ -103,7 +107,11 @@ struct foot {
     node_idx_t pred_{node_idx_t::invalid()};
     cost_t cost_{kInfeasible};
     level_t pred_lvl_;
+#ifdef _MSC_VER
     [[no_unique_address]] [[msvc::no_unique_address]] Tracking tracking_;
+#else
+    [[no_unique_address]] Tracking tracking_;
+#endif
   };
 
   struct hash {
