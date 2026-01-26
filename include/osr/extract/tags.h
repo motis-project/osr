@@ -408,6 +408,7 @@ struct car_profile {
         case cista::hash("lift_gate"):
         case cista::hash("no"):
         case cista::hash("entrance"):
+        case cista::hash("coupure"):
         case cista::hash("height_restrictor"): [[fallthrough]];
         case cista::hash("arch"): break;
         default: return override::kBlacklist;
@@ -489,6 +490,7 @@ struct bus_profile {
         case cista::hash("lift_gate"):
         case cista::hash("no"):
         case cista::hash("entrance"):
+        case cista::hash("coupure"):
         case cista::hash("height_restrictor"): [[fallthrough]];
         case cista::hash("arch"):
         case cista::hash("bus_trap"): break;
