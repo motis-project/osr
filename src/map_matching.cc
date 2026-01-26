@@ -255,8 +255,8 @@ matched_route map_match(
                 geo::distance(from_mw.projected_point_, to_mw.projected_point_);
             auto const bee_cost =
                 static_cast<cost_t>(P::heuristic(params, bee_dist));
-            auto const cost =
-                std::min(from_mw.fwd_cost_, from_mw.bwd_cost_) + bee_cost;
+            auto const cost = static_cast<cost_t>(
+                std::min(from_mw.fwd_cost_, from_mw.bwd_cost_) + bee_cost);
             if (cost < to_mw.fwd_cost_) {
               to_mw.fwd_cost_ = cost;
               to_mw.bwd_cost_ = cost;
@@ -281,8 +281,8 @@ matched_route map_match(
                 geo::distance(from_mw.projected_point_, to_pd.loc_.pos_);
             auto const bee_cost =
                 static_cast<cost_t>(P::heuristic(params, bee_dist));
-            auto const cost =
-                std::min(from_mw.fwd_cost_, from_mw.bwd_cost_) + bee_cost;
+            auto const cost = static_cast<cost_t>(
+                std::min(from_mw.fwd_cost_, from_mw.bwd_cost_) + bee_cost);
             if (cost < seg.min_cost_) {
               seg.min_cost_ = cost;
               seg.max_cost_ = cost;
@@ -346,9 +346,9 @@ matched_route map_match(
 
   for (auto seg_idx = static_cast<int>(segments.size()) - 1; seg_idx >= 0;
        --seg_idx) {
-    auto& seg = segments[seg_idx];
-    auto const& from_pd = pds[seg_idx];
-    auto const& to_pd = pds[seg_idx + 1U];
+    auto& seg = segments[static_cast<std::size_t>(seg_idx)];
+    auto const& from_pd = pds[static_cast<std::size_t>(seg_idx)];
+    auto const& to_pd = pds[static_cast<std::size_t>(seg_idx) + 1U];
     auto selected_dest = next_dest;
 
     if (!selected_dest && !to_pd.matched_ways_.empty()) {
