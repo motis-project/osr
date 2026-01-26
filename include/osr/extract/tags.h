@@ -12,6 +12,18 @@ enum class osm_obj_type : std::uint8_t { kWay, kNode };
 
 enum class override : std::uint8_t { kNone, kWhitelist, kBlacklist };
 
+enum class indoor : std::uint8_t {
+  kNone,
+  kRoom,
+  kArea,
+  kWall,
+  kCorridor,
+  kDoor,
+  kLevel,
+  kYes,
+  kOther
+};
+
 struct tags {
   explicit tags(osmium::OSMObject const& o) {
     auto const add_levels = [](auto&& t, level_bits_t& level_bits) {
@@ -44,6 +56,7 @@ struct tags {
         case cista::hash("landuse"): landuse_ = true; break;
         case cista::hash("railway"):
           landuse_ |= t.value() == "station_area"sv;
+          is_platform_ |= t.value() == "platform"sv;
           break;
         case cista::hash("oneway"): oneway_ |= t.value() == "yes"sv; break;
         case cista::hash("junction"):
@@ -61,10 +74,10 @@ struct tags {
         case cista::hash("bicycle"): bicycle_ = t.value(); break;
         case cista::hash("highway"):
           highway_ = t.value();
-          if (highway_ == "elevator") {
+          if (highway_ == "elevator"sv) {
             is_elevator_ = true;
           }
-          if (highway_ == "bus_stop") {
+          if (highway_ == "bus_stop"sv || highway_ == "platform"sv) {
             is_platform_ = true;
           }
           break;
@@ -87,7 +100,7 @@ struct tags {
         case cista::hash("cycleway"): cycleway_ = t.value(); break;
         case cista::hash("motorcar"):
           motorcar_ = t.value();
-          is_destination_ |= motorcar_ == "destination";
+          is_destination_ |= motorcar_ == "destination"sv;
           break;
         case cista::hash("barrier"): barrier_ = t.value(); break;
         case cista::hash("platform_edge"): is_platform_ = true; break;
@@ -140,6 +153,23 @@ struct tags {
         } break;
         case cista::hash("maxspeed"): max_speed_ = t.value(); break;
         case cista::hash("toll"): toll_ = t.value() == "yes"sv; break;
+        case cista::hash("indoor"):
+          switch (cista::hash(std::string_view{t.value()})) {
+            case cista::hash("room"): indoor_ = indoor::kRoom; break;
+            case cista::hash("area"): indoor_ = indoor::kArea; break;
+            case cista::hash("wall"): indoor_ = indoor::kWall; break;
+            case cista::hash("corridor"): indoor_ = indoor::kCorridor; break;
+            case cista::hash("door"): indoor_ = indoor::kDoor; break;
+            case cista::hash("level"): indoor_ = indoor::kLevel; break;
+            case cista::hash("yes"): indoor_ = indoor::kYes; break;
+            default: indoor_ = indoor::kOther;
+          }
+          break;
+        case cista::hash("room"):
+          switch (cista::hash(std::string_view{t.value()})) {
+            case cista::hash("stairs"): is_stairs_room_ = true; break;
+          }
+          break;
       }
     }
   }
@@ -226,6 +256,12 @@ struct tags {
 
   // https://wiki.openstreetmap.org/wiki/Conditional_restrictions
   std::string_view access_conditional_no_;
+
+  // https://wiki.openstreetmap.org/wiki/Tag:indoor=corridor
+  indoor indoor_{indoor::kNone};
+
+  // https://wiki.openstreetmap.org/wiki/Key:room
+  bool is_stairs_room_{false};
 };
 
 template <typename T>
@@ -257,7 +293,8 @@ struct foot_profile {
       case cista::hash("designated"): return override::kWhitelist;
     }
 
-    if (t.is_platform_ || t.is_parking_) {
+    if (t.is_platform_ || t.is_parking_ || t.indoor_ == indoor::kCorridor ||
+        (t.indoor_ == indoor::kRoom && t.is_stairs_room_)) {
       return override::kWhitelist;
     }
 

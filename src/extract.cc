@@ -1,3 +1,4 @@
+#include "utl/visit.h"
 #ifdef _WIN_32
 // Otherwise
 // winnt.h(169): fatal error C1189: #error:  "No Target Architecture"
@@ -25,6 +26,8 @@
 #include "utl/parser/arg_parser.h"
 #include "utl/progress_tracker.h"
 
+#include "geo/area_db.h"
+
 #include "tiles/osm/hybrid_node_idx.h"
 #include "tiles/osm/tmp_file.h"
 
@@ -39,10 +42,14 @@ namespace osm = osmium;
 namespace osm_io = osmium::io;
 namespace osm_eb = osmium::osm_entity_bits;
 namespace osm_mem = osmium::memory;
+namespace osm_area = osmium::area;
 namespace fs = std::filesystem;
+namespace v = std::views;
 using namespace std::string_view_literals;
 
 namespace osr {
+
+using area_idx_t = cista::strong<std::uint32_t, struct area_idx_>;
 
 struct osm_restriction {
   bool valid() const {
@@ -160,6 +167,29 @@ std::pair<node_properties, level_bits_t> get_node_properties(tags const& t) {
   return {p, t.level_bits_};
 }
 
+struct area_way_lookup {
+  using rel_idx_t = cista::strong<std::uint32_t, struct rel_idx_>;
+
+  template <typename T>
+  void add(osm_rel_idx_t const i, T&& t) {
+    assert(rel_osm_idx_.empty() || i > rel_osm_idx_.back());
+    rel_osm_idx_.push_back(i);
+    rel_ways_.emplace_back(std::forward<T>(t));
+  }
+
+  auto get(osm_rel_idx_t const i) const {
+    auto const it = std::lower_bound(begin(rel_osm_idx_), end(rel_osm_idx_), i);
+    return it == end(rel_osm_idx_) || *it != i
+               ? std::nullopt
+               : std::optional{*(begin(rel_ways_) +
+                                 std::distance(begin(rel_osm_idx_), it))};
+  }
+
+  vec_map<rel_idx_t, osm_rel_idx_t> rel_osm_idx_;
+  vec_map<rel_idx_t, way_properties> rel_properties_;
+  vecvec<rel_idx_t, osm_way_idx_t> rel_ways_;
+};
+
 struct way_handler : public osm::handler::Handler {
   using is_transparent = void;
 
@@ -194,11 +224,18 @@ struct way_handler : public osm::handler::Handler {
   way_handler(ways& w,
               platforms* platforms,
               rel_ways_t const& rel_ways,
-              hash_map<osm_node_idx_t, level_bits_t>& elevator_nodes)
+              hash_map<osm_node_idx_t, level_bits_t>& elevator_nodes,
+              geo::area_db_storage<area_idx_t>& area_storage,
+              vec_map<area_idx_t, std::variant<osm_way_idx_t, osm_rel_idx_t>>&
+                  area_orig_ids,
+              area_way_lookup& area_ways)
       : w_{w},
         platforms_{platforms},
         rel_ways_{rel_ways},
-        elevator_nodes_{elevator_nodes} {
+        elevator_nodes_{elevator_nodes},
+        area_storage_{area_storage},
+        area_orig_ids_{area_orig_ids},
+        area_ways_{area_ways} {
     strings_set_.hash_function().strings_ = &w_.strings_;
     strings_set_.key_eq().strings_ = &w_.strings_;
   }
@@ -293,6 +330,30 @@ struct way_handler : public osm::handler::Handler {
     }
   }
 
+  void area(osmium::Area const& a) {
+    area_storage_.add_osmium_area(a);
+    if (a.from_way()) {
+      area_orig_ids_.emplace_back(osm_way_idx_t{a.orig_id()});
+    } else {
+      area_orig_ids_.emplace_back(osm_rel_idx_t{a.orig_id()});
+    }
+  }
+
+  void relation(osmium::Relation const& r) {
+    auto const t = tags{r};
+    auto const accessible = is_accessible<foot_profile>(t, osm_obj_type::kWay);
+    if (accessible) {
+      area_ways_.add(osm_rel_idx_t{r.positive_id()},
+                     r.members()  //
+                         | v::filter([](osm::RelationMember const& m) {
+                             return m.type() == osm::item_type::way;
+                           })  //
+                         | v::transform([](osm::RelationMember const& m) {
+                             return osm_way_idx_t{m.positive_ref()};
+                           }));
+    }
+  }
+
   using strings_set_t = hash_set<string_idx_t, strings_hash, strings_equals>;
   strings_set_t strings_set_;
 
@@ -303,6 +364,11 @@ struct way_handler : public osm::handler::Handler {
 
   std::mutex elevator_nodes_mutex_;
   hash_map<osm_node_idx_t, level_bits_t>& elevator_nodes_;
+
+  geo::area_db_storage<area_idx_t>& area_storage_;
+  vec_map<area_idx_t, std::variant<osm_way_idx_t, osm_rel_idx_t>>&
+      area_orig_ids_;
+  area_way_lookup& area_ways_;
 };
 
 struct node_handler : public osm::handler::Handler {
@@ -453,7 +519,7 @@ struct mark_inaccessible_handler : public osm::handler::Handler {
     }
 
     if (track_platforms_ && t.is_platform()) {
-      // Wnsure nodes are created even if they are not part of a routable way.
+      // Ensure nodes are created even if they are not part of a routable way.
       w_.node_way_counter_.increment(n.positive_id());
     }
   }
@@ -517,6 +583,17 @@ void extract(bool const with_platforms,
       tiles::tmp_file{(out / "dat.bin").generic_string()};
   auto node_idx =
       tiles::hybrid_node_idx{node_idx_file.fileno(), node_dat_file.fileno()};
+  auto mp_manager = osm_area::MultipolygonManager<osm_area::Assembler>{
+      osm_area::Assembler::config_type{},
+      osm::TagsFilter{}
+          .add_rule(true, "indoor", "room")
+          .add_rule(true, "indoor", "area")
+          .add_rule(true, "indoor", "corridor")
+          .add_rule(true, "public_transport", "platform")
+          .add_rule(true, "public_transport", "stop_position")
+          .add_rule(true, "railway", "platform")
+          .add_rule(true, "highway", "platform")
+          .add_rule(true, "highway", "bus_stop")};
 
   auto rel_ways = rel_ways_t{};
   auto w = ways{out, cista::mmap::protection::WRITE};
@@ -533,23 +610,37 @@ void extract(bool const with_platforms,
 
     auto inaccessible_handler = mark_inaccessible_handler{pl != nullptr, w};
     auto rel_ways_h = rel_ways_handler{pl.get(), rel_ways};
-    auto reader = osm_io::Reader{input_file, osm_eb::node | osm_eb::relation,
+    auto reader = osm_io::Reader{input_file,
+                                 osm_eb::node | osm_eb::way | osm_eb::relation,
                                  osmium::io::read_meta::no};
     while (auto buffer = reader.read()) {
       pt->update(reader.offset());
-      osm::apply(buffer, node_idx_builder, inaccessible_handler, rel_ways_h);
+      osm::apply(buffer, node_idx_builder, inaccessible_handler, rel_ways_h,
+                 mp_manager);
     }
     reader.close();
     node_idx_builder.finish();
+    mp_manager.prepare_for_lookup();
   }
 
+  auto area_ways = area_way_lookup{};
+  auto area_storage =
+      geo::area_db_storage<area_idx_t>{out, cista::mmap::protection::WRITE};
+  auto area_orig_ids =
+      vec_map<area_idx_t, std::variant<osm_way_idx_t, osm_rel_idx_t>>{};
   auto elevator_nodes = hash_map<osm_node_idx_t, level_bits_t>{};
   {  // Extract streets, places, and areas.
     pt->status("Load OSM / Ways").in_high(file_size).out_bounds(15, 40);
 
-    auto h = way_handler{w, pl.get(), rel_ways, elevator_nodes};
-    auto reader =
-        osm_io::Reader{input_file, osm_eb::way, osmium::io::read_meta::no};
+    auto h = way_handler{w,
+                         pl.get(),
+                         rel_ways,
+                         elevator_nodes,
+                         area_storage,
+                         area_orig_ids,
+                         area_ways};
+    auto reader = osm_io::Reader{input_file, osm_eb::way | osm_eb::relation,
+                                 osmium::io::read_meta::no};
 
     oneapi::tbb::parallel_pipeline(
         std::thread::hardware_concurrency() * 4U,
@@ -571,7 +662,12 @@ void extract(bool const with_platforms,
                 }) &
             oneapi::tbb::make_filter<osm_mem::Buffer, void>(
                 oneapi::tbb::filter_mode::serial_in_order,
-                [&](osm_mem::Buffer&& buf) { osm::apply(buf, h); }));
+                [&](osm_mem::Buffer&& buf) {
+                  osm::apply(buf, h);
+                  osm::apply(buf, mp_manager.handler([&](auto&& area_buf) {
+                    osm::apply(area_buf, h);
+                  }));
+                }));
 
     pt->update(pt->in_high_);
     reader.close();
@@ -587,7 +683,7 @@ void extract(bool const with_platforms,
   {
     pt->status("Load OSM / Node Properties")
         .in_high(file_size)
-        .out_bounds(90, 95);
+        .out_bounds(90, 93);
     auto reader = osm_io::Reader{input_file, osm_eb::node | osm_eb::relation,
                                  osmium::io::read_meta::no};
     auto h = node_handler{w, pl.get(), r, elevator_nodes};
@@ -615,6 +711,54 @@ void extract(bool const with_platforms,
     if (provider.driver_count() > 0) {
       auto elevations = elevation_storage{out, cista::mmap::protection::WRITE};
       elevations.set_elevations(w, provider);
+    }
+  }
+
+  pt->status("Areas").in_high(w.n_nodes()).out_bounds(93, 95);
+  auto areas = geo::area_db_lookup<area_idx_t>::rtree_results_t{};
+  auto const area_lookup = geo::area_db_lookup{area_storage};
+  for (auto const [pos, p, osm_idx] : utl::zip(
+           w.r_->node_positions_, w.r_->node_properties_, w.node_to_osm_)) {
+    if (!p.is_elevator()) {
+      [[likely]] continue;
+    }
+
+    area_lookup.lookup(pos.as_latlng(), areas);
+    if (areas.empty()) {
+      [[likely]] continue;
+    }
+
+    std::cout << "ELEVATOR " << osm_idx << "\n";
+    for (auto const& a : areas) {
+      utl::visit(
+          area_orig_ids[a],
+          [&](osm_way_idx_t const way) {
+            std::cout << "  AREA WAY " << way << "\n";
+            if (auto const x = w.find_way(way); x.has_value()) {
+              std::cout << "    LEVELS="
+                        << w.r_->way_properties_[*x].from_level() << ", "
+                        << w.r_->way_properties_[*x].to_level() << "\n";
+            } else {
+              std::cout << "    WAY NOT FOUND\n";
+            }
+          },
+          [&](osm_rel_idx_t const rel) {
+            std::cout << "  AREA REL " << rel << "\n";
+            if (auto const ways = area_ways.get(rel); ways.has_value()) {
+              for (auto const way : *ways) {
+                if (auto const x = w.find_way(way); x.has_value()) {
+                  std::cout
+                      << "      WAY=" << way
+                      << " LEVELS=" << w.r_->way_properties_[*x].from_level()
+                      << ", " << w.r_->way_properties_[*x].to_level() << "\n";
+                } else {
+                  std::cout << "      WAY " << way << " NOT FOUND\n";
+                }
+              }
+            } else {
+              fmt::println("    NOT FOUND\n");
+            }
+          });
     }
   }
 
