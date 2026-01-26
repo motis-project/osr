@@ -351,9 +351,6 @@ matched_route map_match(
     auto const& to_pd = pds[seg_idx + 1U];
     auto selected_dest = next_dest;
 
-    segment_data<P> const* prev_seg =
-        seg_idx != 0U ? &segments[seg_idx - 1U] : nullptr;
-
     if (!selected_dest && !to_pd.matched_ways_.empty()) {
       // select cheapest destination
       auto best_cost = std::numeric_limits<cost_t>::max();

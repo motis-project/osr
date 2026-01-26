@@ -552,7 +552,7 @@ struct bus_profile {
 };
 
 struct railway_profile {
-  static override access_override(tags const& t) { return override::kNone; }
+  static override access_override(tags const&) { return override::kNone; }
 
   static bool default_access(tags const& t, osm_obj_type const type) {
     if (type == osm_obj_type::kWay) {
