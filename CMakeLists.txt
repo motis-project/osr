@@ -92,6 +92,7 @@ if ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "Clang")
             -Wno-nrvo
             -Wno-thread-safety-negative
             -Wno-unused-private-field
+            -Wno-unknown-attributes
             -Werror)
 elseif ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "AppleClang")
     set(osr-compile-options -Wall -Wextra -Werror -Wno-unknown-pragmas)
