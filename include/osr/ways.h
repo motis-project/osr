@@ -115,6 +115,7 @@ struct way_properties {
 
   std::uint8_t is_railway_accessible_ : 1;
   std::uint8_t is_oneway_psv_ : 1;
+  std::uint8_t is_incline_down_ : 1;
 };
 
 static_assert(sizeof(way_properties) == 5);
