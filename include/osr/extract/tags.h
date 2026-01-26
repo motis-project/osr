@@ -27,6 +27,8 @@ struct tags {
       }
     };
 
+    auto circular = false;
+    auto oneway_defined = false;
     for (auto const& t : o.tags()) {
       switch (cista::hash(std::string_view{t.key()})) {
         using namespace std::string_view_literals;
@@ -45,9 +47,13 @@ struct tags {
         case cista::hash("railway"):
           landuse_ |= t.value() == "station_area"sv;
           break;
-        case cista::hash("oneway"): oneway_ |= t.value() == "yes"sv; break;
+        case cista::hash("oneway"):
+          oneway_defined = true;
+          oneway_ |= t.value() == "yes"sv;
+          break;
         case cista::hash("junction"):
-          oneway_ |= t.value() == "roundabout"sv || t.value() == "circular"sv;
+          oneway_ |= t.value() == "roundabout"sv;
+          circular |= t.value() == "circular"sv;
           break;
         case cista::hash("oneway:bicycle"):
           not_oneway_bike_ = t.value() == "no"sv;
@@ -141,6 +147,9 @@ struct tags {
         case cista::hash("maxspeed"): max_speed_ = t.value(); break;
         case cista::hash("toll"): toll_ = t.value() == "yes"sv; break;
       }
+    }
+    if (circular && !oneway_defined) {
+      oneway_ = true;
     }
   }
 
