@@ -506,10 +506,10 @@ struct rel_ways_handler : public osm::handler::Handler {
 
     for (auto const& m : r.members()) {
       if (m.type() == osm::item_type::way) {
-        auto r = rel_ways_.emplace(osm_way_idx_t{m.positive_ref()},
-                                   rel_way{p, platform});
-        if (!r.second) {
-          r.first->second.p_.in_route_ |= p.in_route_;
+        auto rw = rel_ways_.emplace(osm_way_idx_t{m.positive_ref()},
+                                    rel_way{p, platform});
+        if (!rw.second) {
+          rw.first->second.p_.in_route_ |= p.in_route_;
         }
       }
     }
