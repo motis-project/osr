@@ -31,7 +31,7 @@ matched_route map_match(
     cost_t max_segment_cost,
     bitvec<node_idx_t> const* blocked = nullptr,
     elevation_storage const* = nullptr,
-    std::move_only_function<std::optional<std::filesystem::path>(
-        matched_route const&)> debug_path_fn = nullptr);
+    std::function<std::optional<std::filesystem::path>(matched_route const&)>
+        debug_path_fn = nullptr);
 
 }  // namespace osr

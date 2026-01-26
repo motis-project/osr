@@ -103,8 +103,8 @@ matched_route map_match(
     cost_t const max_segment_cost,
     bitvec<node_idx_t> const* blocked,
     elevation_storage const* elevations,
-    std::move_only_function<std::optional<std::filesystem::path>(
-        matched_route const&)> debug_path_fn) {
+    std::function<std::optional<std::filesystem::path>(matched_route const&)>
+        debug_path_fn) {
   utl::verify(points.size() >= 2, "map_match requires at least 2 points");
 
   auto const n_route_segments = points.size() - 1U;
@@ -555,8 +555,8 @@ matched_route map_match(
     cost_t const max_segment_cost,
     bitvec<node_idx_t> const* blocked,
     elevation_storage const* elevations,
-    std::move_only_function<std::optional<std::filesystem::path>(
-        matched_route const&)> debug_path_fn) {
+    std::function<std::optional<std::filesystem::path>(matched_route const&)>
+        debug_path_fn) {
   return with_profile(profile, [&]<Profile P>(P&&) {
     return map_match<P>(w, l, std::get<typename P::parameters>(params), points,
                         max_segment_cost, blocked, elevations,
