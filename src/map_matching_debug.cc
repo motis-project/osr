@@ -193,11 +193,6 @@ void write_map_match_debug(
         way_obj["toNodeId"] =
             static_cast<std::int64_t>(to_idx(way_nodes.back()));
       }
-      auto node_indices = boost::json::array{};
-      for (auto const& n : way_nodes) {
-        node_indices.emplace_back(boost::json::value{});  // placeholder
-      }
-      way_obj["nodeIndices"] = std::move(node_indices);
 
       // Node distances
       auto dists = boost::json::array{};

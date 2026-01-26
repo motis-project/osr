@@ -353,8 +353,6 @@ matched_route map_match(
 
     segment_data<P> const* prev_seg =
         seg_idx != 0U ? &segments[seg_idx - 1U] : nullptr;
-    auto const prev_seg_routed =
-        prev_seg != nullptr && !from_pd.matched_ways_.empty();
 
     if (!selected_dest && !to_pd.matched_ways_.empty()) {
       // select cheapest destination
@@ -395,8 +393,6 @@ matched_route map_match(
                  to_pd.matched_ways_.empty()) {
         // case 4
         auto const from_mw = from_pd.matched_ways_[seg.beeline_from_];
-        auto const from_pos = from_mw.projected_point_;
-        auto const to_pos = to_pd.loc_.pos_;
         add_beeline(from_mw.projected_point_, to_pd.loc_.pos_,
                     seg.beeline_dist_, seg.min_cost_);
         next_dest = node_ref{.matched_way_idx_ = seg.beeline_from_,

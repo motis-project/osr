@@ -60,6 +60,7 @@ struct car_sharing {
                       .is_foot_accessible_ = true,
                       .is_bike_accessible_ = true,
                       .is_car_accessible_ = true,
+                      .is_bus_accessible_ = true,
                       .is_elevator_ = false,
                       .is_entrance_ = false,
                       .is_multi_level_ = false,

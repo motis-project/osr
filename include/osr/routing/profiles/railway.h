@@ -313,10 +313,10 @@ struct railway {
 
   static bool is_dest_reachable(parameters const& params,
                                 ways::routing const& w,
-                                node const n,
+                                node const,
                                 way_idx_t const way,
                                 direction const way_dir,
-                                direction const search_dir) {
+                                direction const) {
     auto const target_way_prop = w.way_properties_[way];
     if (way_cost(params, target_way_prop, way_dir, 0U) == kInfeasible) {
       return false;
@@ -337,7 +337,7 @@ struct railway {
     }
   }
 
-  static constexpr cost_t node_cost(node_properties const& n) { return 0U; }
+  static constexpr cost_t node_cost(node_properties const&) { return 0U; }
 
   static constexpr double heuristic(parameters const&, double const dist) {
     return dist / 3;
