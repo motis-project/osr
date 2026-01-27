@@ -251,12 +251,19 @@ matched_route map_match(
         if (prev_seg_routed) {
           for (auto const [i, from_mw] :
                utl::enumerate(from_pd.matched_ways_)) {
+            auto const min_from_cost =
+                std::min(from_mw.fwd_cost_, from_mw.bwd_cost_);
+            if (min_from_cost == kInfeasible) {
+              continue;
+            }
+
             auto const bee_dist =
                 geo::distance(from_mw.projected_point_, to_mw.projected_point_);
             auto const bee_cost =
                 static_cast<cost_t>(P::heuristic(params, bee_dist));
             auto const cost = static_cast<cost_t>(
-                std::min(from_mw.fwd_cost_, from_mw.bwd_cost_) + bee_cost);
+                std::min(static_cast<std::uint32_t>(kInfeasible) - 1U,
+                         static_cast<std::uint32_t>(min_from_cost) + bee_cost));
             if (cost < to_mw.fwd_cost_) {
               to_mw.fwd_cost_ = cost;
               to_mw.bwd_cost_ = cost;
@@ -277,12 +284,19 @@ matched_route map_match(
         if (prev_seg_routed) {
           for (auto const [i, from_mw] :
                utl::enumerate(from_pd.matched_ways_)) {
+            auto const min_from_cost =
+                std::min(from_mw.fwd_cost_, from_mw.bwd_cost_);
+            if (min_from_cost == kInfeasible) {
+              continue;
+            }
+
             auto const bee_dist =
                 geo::distance(from_mw.projected_point_, to_pd.loc_.pos_);
             auto const bee_cost =
                 static_cast<cost_t>(P::heuristic(params, bee_dist));
             auto const cost = static_cast<cost_t>(
-                std::min(from_mw.fwd_cost_, from_mw.bwd_cost_) + bee_cost);
+                std::min(static_cast<std::uint32_t>(kInfeasible) - 1U,
+                         static_cast<std::uint32_t>(min_from_cost) + bee_cost));
             if (cost < seg.min_cost_) {
               seg.min_cost_ = cost;
               seg.max_cost_ = cost;
