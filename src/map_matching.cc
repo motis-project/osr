@@ -35,7 +35,7 @@ std::vector<matched_way<P>> match_input_point(
   auto matched_ways = std::vector<matched_way<P>>{};
   auto const approx_distance_lng_degrees =
       geo::approx_distance_lng_degrees(loc.pos_);
-  auto max_match_distance = 25.0;
+  auto max_match_distance = 75.0;
   auto i = 0U;
 
   auto const find_matches = [&]() {
@@ -182,7 +182,7 @@ matched_route map_match(
         static_cast<cost_t>(
             P::heuristic(params,
                          geo::distance(from_pd.loc_.pos_, to_pd.loc_.pos_)) *
-                5 +
+                3 +
             120));
     if (prev_seg != nullptr) {
       dijkstra_max_cost += prev_seg->max_cost_ - prev_seg->min_cost_;
