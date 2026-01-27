@@ -1214,13 +1214,13 @@ export function Map() {
                 if (nodeLabels && nodeLabels.length > 0) {
                     html += "<h4>Labels</h4>";
                     html += "<table class='label-table'>";
-                    html += "<tr><th>Label</th><th>Cost</th><th>Pred</th></tr>";
+                    html += "<tr><th class='pr-2 text-left'>Label</th><th class='pr-2 text-left'>Cost</th><th class='text-left'>Pred</th></tr>";
                     for (const label of nodeLabels) {
                         const predIdx = label.predNodeIdx;
                         const predAttr = predIdx !== null ? `data-pred-idx="${predIdx}"` : '';
                         html += `<tr class="label-row" ${predAttr} style="cursor: ${predIdx !== null ? 'pointer' : 'default'};">`;
                         html += `<td style="font-family: monospace; font-size: 11px;">${label.label}</td>`;
-                        html += `<td>${label.cost}</td>`;
+                        html += `<td class="pr-2">${label.cost}</td>`;
                         html += `<td>${predIdx !== null ? predIdx : "-"}</td></tr>`;
                     }
                     html += "</table>";
