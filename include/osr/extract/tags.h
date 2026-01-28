@@ -130,9 +130,13 @@ struct tags {
             case cista::hash("no"):
             case cista::hash("agricultural"):
             case cista::hash("forestry"):
-            case cista::hash("emergency"):
-            case cista::hash("private"): [[fallthrough]];
+            case cista::hash("emergency"): [[fallthrough]];
             case cista::hash("delivery"): access_ = override::kBlacklist; break;
+
+            case cista::hash("private"):
+              access_ = override::kBlacklist;
+              private_access_ = true;
+              break;
 
             case cista::hash("designated"):
             case cista::hash("dismount"):
@@ -224,6 +228,7 @@ struct tags {
 
   // https://wiki.openstreetmap.org/wiki/Key:access
   override access_{override::kNone};
+  bool private_access_{false};
 
   // https://wiki.openstreetmap.org/wiki/Key:psv
   // https://wiki.openstreetmap.org/wiki/Key:bus
@@ -269,6 +274,11 @@ bool is_accessible(tags const& o, osm_obj_type const type) {
   auto const override = T::access_override(o);
   return override == override::kWhitelist ||
          (T::default_access(o, type) && override != override::kBlacklist);
+}
+
+template <typename T>
+bool is_accessible_with_penalty(tags const& o, osm_obj_type const type) {
+  return T::access_with_penalty(o, type);
 }
 
 struct foot_profile {
@@ -335,6 +345,10 @@ struct foot_profile {
       return true;
     }
   }
+
+  static bool access_with_penalty(tags const&, osm_obj_type const) {
+    return false;
+  }
 };
 
 struct bike_profile {
@@ -389,6 +403,10 @@ struct bike_profile {
     } else {
       return true;
     }
+  }
+
+  static bool access_with_penalty(tags const&, osm_obj_type const) {
+    return false;
   }
 };
 
@@ -470,6 +488,9 @@ struct car_profile {
       return true;
     }
   }
+  static bool access_with_penalty(tags const&, osm_obj_type const) {
+    return false;
+  }
 };
 
 struct bus_profile {
@@ -549,6 +570,14 @@ struct bus_profile {
       return true;
     }
   }
+
+  static bool access_with_penalty(tags const& t, osm_obj_type const type) {
+    if (type == osm_obj_type::kNode) {
+      return t.private_access_ && t.barrier_ == "gate";
+    } else {
+      return t.private_access_;
+    }
+  }
 };
 
 struct railway_profile {
@@ -569,6 +598,10 @@ struct railway_profile {
     } else {
       return true;
     }
+  }
+
+  static bool access_with_penalty(tags const&, osm_obj_type const) {
+    return false;
   }
 };
 

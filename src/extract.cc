@@ -155,6 +155,8 @@ way_properties get_way_properties(tags const& t) {
   p.has_toll_ = t.toll_;
   p.is_big_street_ = is_big_street(t);
   p.in_route_ = t.is_route_;
+  p.is_bus_accessible_with_penalty_ =
+      is_accessible_with_penalty<bus_profile>(t, osm_obj_type::kWay);
   return p;
 }
 
@@ -172,6 +174,8 @@ std::pair<node_properties, level_bits_t> get_node_properties(tags const& t) {
   p.is_multi_level_ = is_multi;
   p.is_parking_ = t.is_parking_;
   p.to_level_ = to_idx(to);
+  p.is_bus_accessible_with_penalty_ =
+      is_accessible_with_penalty<bus_profile>(t, osm_obj_type::kNode);
   return {p, t.level_bits_};
 }
 
