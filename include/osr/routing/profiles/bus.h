@@ -19,6 +19,7 @@ struct sharing_data;
 struct bus {
   static constexpr auto const kMaxMatchDistance = 200U;
   static constexpr auto const kUturnPenalty = cost_t{60U};
+  static constexpr auto const kPrivateGatePenalty = cost_t{60U};
 
   using key = node_idx_t;
 
@@ -332,12 +333,17 @@ struct bus {
                                    way_properties const& e,
                                    direction const dir,
                                    std::uint16_t const dist) {
-    if (e.is_bus_accessible() &&
+    auto const accessible = e.is_bus_accessible();
+    auto const accessible_with_penalty = e.is_bus_accessible_with_penalty();
+    if ((accessible || accessible_with_penalty) &&
         (dir == direction::kForward || !e.is_oneway_psv())) {
       auto cost = static_cast<cost_t>((dist / e.max_speed_m_per_s()) *
-                                      (e.in_route() ? /*0.8*/ 1.0 : 1.0));
+                                      (e.in_route() ? 1.0 : 1.2));
       if (e.is_parking()) {
         cost *= 2U;
+      }
+      if (accessible_with_penalty) {
+        cost *= e.in_route() ? 2U : 4U;
       }
       return cost;
     } else {
@@ -346,11 +352,14 @@ struct bus {
   }
 
   static constexpr cost_t node_cost(node_properties const& n) {
-    return n.is_bus_accessible() ? 0U : kInfeasible;
+    return n.is_bus_accessible()
+               ? 0U
+               : (n.is_bus_accessible_with_penalty() ? kPrivateGatePenalty
+                                                     : kInfeasible);
   }
 
   static constexpr double heuristic(parameters const&, double const dist) {
-    return dist / (50U / 3.6);
+    return dist / (15U / 3.6);
   }
 
   static constexpr node get_reverse(node const n) {
