@@ -1,5 +1,7 @@
 #pragma once
 
+#include <optional>
+
 #include "utl/for_each_bit_set.h"
 
 #include "osr/elevation_storage.h"
@@ -30,12 +32,20 @@ struct foot {
              (a.lvl_ == b.lvl_ || (is_zero(a.lvl_) && is_zero(b.lvl_)));
     }
 
+    friend constexpr bool operator<(node const& a, node const& b) noexcept {
+      return std::tie(a.n_, a.lvl_) < std::tie(b.n_, b.lvl_);
+    }
+
     static constexpr node invalid() noexcept {
       return {.n_ = node_idx_t::invalid(), .lvl_{kNoLevel}};
     }
     constexpr node_idx_t get_node() const noexcept { return n_; }
 
     constexpr node get_key() const noexcept { return *this; }
+
+    constexpr std::optional<direction> get_direction() const noexcept {
+      return {};
+    }
 
     static constexpr mode get_mode() noexcept {
       return IsWheelchair ? mode::kWheelchair : mode::kFoot;
@@ -68,7 +78,11 @@ struct foot {
     node_idx_t n_;
     cost_t cost_;
     level_t lvl_;
+#ifdef _MSC_VER
+    [[no_unique_address]] [[msvc::no_unique_address]] Tracking tracking_;
+#else
     [[no_unique_address]] Tracking tracking_;
+#endif
   };
 
   struct entry {
@@ -97,7 +111,11 @@ struct foot {
     node_idx_t pred_{node_idx_t::invalid()};
     cost_t cost_{kInfeasible};
     level_t pred_lvl_;
+#ifdef _MSC_VER
+    [[no_unique_address]] [[msvc::no_unique_address]] Tracking tracking_;
+#else
     [[no_unique_address]] Tracking tracking_;
+#endif
   };
 
   struct hash {
@@ -110,6 +128,13 @@ struct foot {
           wyhash::hash(static_cast<std::uint64_t>(to_idx(n.n_))));
     }
   };
+
+  static node create_node(node_idx_t const n,
+                          level_t const lvl,
+                          way_pos_t const,
+                          direction const) {
+    return node{n, lvl};
+  }
 
   template <typename Fn>
   static void resolve_start_node(ways::routing const& w,

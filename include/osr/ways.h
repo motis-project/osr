@@ -45,21 +45,32 @@ struct restriction {
 
 struct way_properties {
   constexpr bool is_accessible() const {
-    return is_car_accessible() || is_bike_accessible() || is_foot_accessible();
+    return is_car_accessible() || is_bike_accessible() ||
+           is_foot_accessible() || is_bus_accessible() ||
+           is_bus_accessible_with_penalty() || is_railway_accessible();
   }
   constexpr bool is_car_accessible() const { return is_car_accessible_; }
   constexpr bool is_bike_accessible() const { return is_bike_accessible_; }
   constexpr bool is_foot_accessible() const { return is_foot_accessible_; }
+  constexpr bool is_bus_accessible() const { return is_bus_accessible_; }
+  constexpr bool is_bus_accessible_with_penalty() const {
+    return is_bus_accessible_with_penalty_;
+  }
+  constexpr bool is_railway_accessible() const {
+    return is_railway_accessible_;
+  }
   constexpr bool is_big_street() const { return is_big_street_; }
   constexpr bool is_destination() const { return is_destination_; }
   constexpr bool is_oneway_car() const { return is_oneway_car_; }
   constexpr bool is_oneway_bike() const { return is_oneway_bike_; }
+  constexpr bool is_oneway_psv() const { return is_oneway_psv_; }
   constexpr bool is_elevator() const { return is_elevator_; }
   constexpr bool is_steps() const { return is_steps_; }
   constexpr bool is_ramp() const { return is_ramp_; }
   constexpr bool is_parking() const { return is_parking_; }
   constexpr bool has_toll() const { return has_toll_; }
   constexpr bool is_sidewalk_separate() const { return is_sidewalk_separate_; }
+  constexpr bool in_route() const { return in_route_; }
   constexpr std::uint16_t max_speed_m_per_s() const {
     return to_meters_per_second(static_cast<speed_limit>(speed_limit_));
   }
@@ -81,29 +92,34 @@ struct way_properties {
   template <typename Ctx>
   friend void deserialize(Ctx const&, way_properties*) {}
 
-  bool is_foot_accessible_ : 1;
-  bool is_bike_accessible_ : 1;
-  bool is_car_accessible_ : 1;
-  bool is_destination_ : 1;
-  bool is_oneway_car_ : 1;
-  bool is_oneway_bike_ : 1;
-  bool is_elevator_ : 1;
-  bool is_steps_ : 1;
+  std::uint8_t is_foot_accessible_ : 1;
+  std::uint8_t is_bike_accessible_ : 1;
+  std::uint8_t is_car_accessible_ : 1;
+  std::uint8_t is_destination_ : 1;
+  std::uint8_t is_oneway_car_ : 1;
+  std::uint8_t is_oneway_bike_ : 1;
+  std::uint8_t is_elevator_ : 1;
+  std::uint8_t is_steps_ : 1;
 
   std::uint8_t speed_limit_ : 3;
+  std::uint8_t is_platform_ : 1;  // only used during extract
+  std::uint8_t is_parking_ : 1;
+  std::uint8_t is_ramp_ : 1;
+  std::uint8_t is_sidewalk_separate_ : 1;
+  std::uint8_t motor_vehicle_no_ : 1;
 
   std::uint8_t from_level_ : 6;
+  std::uint8_t has_toll_ : 1;
+  std::uint8_t is_big_street_ : 1;
+
   std::uint8_t to_level_ : 6;
-  bool is_incline_down_ : 1;
+  std::uint8_t is_bus_accessible_ : 1;
+  std::uint8_t in_route_ : 1;
 
-  std::uint8_t is_platform_ : 1;  // only used during extract
-  bool is_parking_ : 1;
-
-  bool is_ramp_ : 1;
-  bool is_sidewalk_separate_ : 1;
-  bool motor_vehicle_no_ : 1;
-  bool has_toll_ : 1;
-  bool is_big_street_ : 1;
+  std::uint8_t is_railway_accessible_ : 1;
+  std::uint8_t is_oneway_psv_ : 1;
+  std::uint8_t is_incline_down_ : 1;
+  std::uint8_t is_bus_accessible_with_penalty_ : 1;
 };
 
 static_assert(sizeof(way_properties) == 5);
@@ -112,6 +128,10 @@ struct node_properties {
   constexpr bool is_car_accessible() const { return is_car_accessible_; }
   constexpr bool is_bike_accessible() const { return is_bike_accessible_; }
   constexpr bool is_walk_accessible() const { return is_foot_accessible_; }
+  constexpr bool is_bus_accessible() const { return is_bus_accessible_; }
+  constexpr bool is_bus_accessible_with_penalty() const {
+    return is_bus_accessible_with_penalty_;
+  }
   constexpr bool is_elevator() const { return is_elevator_; }
   constexpr bool is_multi_level() const { return is_multi_level_; }
   constexpr bool is_entrance() const { return is_entrance_; }
@@ -133,16 +153,18 @@ struct node_properties {
   friend void deserialize(Ctx const&, node_properties*) {}
 
   std::uint8_t from_level_ : 6;
+  std::uint8_t is_foot_accessible_ : 1;
+  std::uint8_t is_bike_accessible_ : 1;
 
-  bool is_foot_accessible_ : 1;
-  bool is_bike_accessible_ : 1;
-  bool is_car_accessible_ : 1;
-  bool is_elevator_ : 1;
-  bool is_entrance_ : 1;
-  bool is_multi_level_ : 1;
-  bool is_parking_ : 1;
+  std::uint8_t is_car_accessible_ : 1;
+  std::uint8_t is_bus_accessible_ : 1;
+  std::uint8_t is_elevator_ : 1;
+  std::uint8_t is_entrance_ : 1;
+  std::uint8_t is_multi_level_ : 1;
+  std::uint8_t is_parking_ : 1;
 
   std::uint8_t to_level_ : 6;
+  std::uint8_t is_bus_accessible_with_penalty_ : 1;
 };
 
 static_assert(sizeof(node_properties) == 3);

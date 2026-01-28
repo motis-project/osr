@@ -1,5 +1,7 @@
 #pragma once
 
+#include <optional>
+
 #include "osr/elevation_storage.h"
 #include "osr/routing/mode.h"
 #include "osr/routing/path.h"
@@ -42,12 +44,20 @@ struct bike {
   struct node {
     friend bool operator==(node, node) = default;
 
+    friend constexpr bool operator<(node const& a, node const& b) noexcept {
+      return std::tie(a.n_, a.dir_) < std::tie(b.n_, b.dir_);
+    }
+
     static constexpr node invalid() noexcept {
       return {.n_ = node_idx_t::invalid(), .dir_ = direction::kForward};
     }
 
     constexpr node_idx_t get_node() const noexcept { return n_; }
     constexpr node_idx_t get_key() const noexcept { return n_; }
+
+    constexpr std::optional<direction> get_direction() const noexcept {
+      return dir_;
+    }
 
     static constexpr mode get_mode() noexcept { return mode::kBike; }
 
@@ -127,6 +137,13 @@ struct bike {
     std::array<direction, 2U> pred_dir_;
     std::array<cost_t, 2U> cost_;
   };
+
+  static node create_node(node_idx_t const n,
+                          level_t const,
+                          way_pos_t const,
+                          direction const dir) {
+    return node{n, dir};
+  }
 
   template <typename Fn>
   static void resolve_start_node(ways::routing const&,

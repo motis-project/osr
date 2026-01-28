@@ -3,10 +3,12 @@
 #include "osr/routing/profile.h"
 #include "osr/routing/profiles/bike.h"
 #include "osr/routing/profiles/bike_sharing.h"
+#include "osr/routing/profiles/bus.h"
 #include "osr/routing/profiles/car.h"
 #include "osr/routing/profiles/car_parking.h"
 #include "osr/routing/profiles/car_sharing.h"
 #include "osr/routing/profiles/foot.h"
+#include "osr/routing/profiles/railway.h"
 
 namespace osr {
 
@@ -34,6 +36,8 @@ auto with_profile(search_profile const p, Fn&& fn) {
     case search_profile::kBikeSharing: return fn(bike_sharing{});
     case search_profile::kCarSharing:
       return fn(car_sharing<track_node_tracking>{});
+    case search_profile::kBus: return fn(bus{});
+    case search_profile::kRailway: return fn(railway{});
   }
   throw utl::fail("with_profile not implemented for {}", to_str(p));
 }
