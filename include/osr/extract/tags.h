@@ -575,7 +575,7 @@ struct bus_profile {
     if (type == osm_obj_type::kNode) {
       return t.private_access_ && t.barrier_ == "gate";
     } else {
-      return t.private_access_;
+      return t.private_access_ && default_access(t, type);
     }
   }
 };
