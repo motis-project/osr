@@ -21,7 +21,7 @@ export function RoutePanel() {
                     <div className="flex justify-between items-center">
                         <span className="text-sm text-muted-foreground">Total Cost</span>
                         <span className="text-lg font-semibold">
-                            {data.finalRoute.totalCost}s
+                            {data.finalRoute.totalCost}
                         </span>
                     </div>
 
@@ -49,7 +49,7 @@ export function RoutePanel() {
 
                     <div className="flex justify-between items-center">
                         <span className="text-sm text-muted-foreground">Max Segment Cost</span>
-                        <span className="font-medium">{data.metadata.maxSegmentCost}s</span>
+                        <span className="font-medium">{data.metadata.maxSegmentCost}</span>
                     </div>
                 </div>
             </Card>
@@ -91,7 +91,7 @@ export function RoutePanel() {
                                     }}
                                 />
                             </div>
-                            <span className="w-12 text-right">{seg.minCost}s</span>
+                            <span className="w-12 text-right">{seg.minCost}</span>
                         </div>
                     ))}
                 </div>

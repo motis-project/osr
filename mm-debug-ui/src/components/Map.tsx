@@ -8,10 +8,25 @@ import {
     DropdownMenuItem,
     DropdownMenuTrigger,
 } from "./ui/dropdown-menu";
-import { ChevronDownIcon } from "lucide-react";
+import { ChevronDownIcon, Ruler, Trash2, X } from "lucide-react";
 import { useDebug } from "../store";
 import { calculatePointBounds, calculateSegmentBounds } from "../lib/bounds";
 import type { DebugWay, DebugNode, DebugNodeLabel, DebugStartLabel } from "../types";
+
+function haversineDistance(pt1: [number, number], pt2: [number, number]): number {
+    const R = 6371000; // Earth radius in meters
+    const lat1 = (pt1[1] * Math.PI) / 180;
+    const lat2 = (pt2[1] * Math.PI) / 180;
+    const dLat = ((pt2[1] - pt1[1]) * Math.PI) / 180;
+    const dLng = ((pt2[0] - pt1[0]) * Math.PI) / 180;
+
+    const a =
+        Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+        Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLng / 2) * Math.sin(dLng / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+
+    return R * c;
+}
 
 interface PopupInfo {
     type: "way" | "node" | "point" | "combined";
@@ -31,6 +46,8 @@ export function Map() {
     const prevHighlightedMatchRef = useRef<number | null>(null);
     const [popupInfo, setPopupInfo] = useState<PopupInfo | null>(null);
     const [highlightedPredIdx, setHighlightedPredIdx] = useState<number | null>(null);
+    const [isMeasuring, setIsMeasuring] = useState(false);
+    const [measurePoints, setMeasurePoints] = useState<[number, number][]>([]);
     const {
         data,
         viewMode,
@@ -1023,6 +1040,11 @@ export function Map() {
             const map = mapRef.current;
             if (!map || !data) return;
 
+            if (isMeasuring) {
+                setMeasurePoints((prev) => [...prev, [e.lngLat.lng, e.lngLat.lat]]);
+                return;
+            }
+
             const interactiveLayers = LAYER_IDS.filter((id) => map.getLayer(id));
             const features = map.queryRenderedFeatures(e.point, {
                 layers: interactiveLayers,
@@ -1149,7 +1171,7 @@ export function Map() {
                 startLabel,
             });
         },
-        [data, getWay, getNode, selectedSegmentIdx]
+        [data, getWay, getNode, selectedSegmentIdx, isMeasuring]
     );
 
     // Setup map event handlers
@@ -1326,6 +1348,70 @@ export function Map() {
         popupRef.current = popup;
     }, [popupInfo, getWay, getNode]);
 
+    // Update measurement layers
+    useEffect(() => {
+        const map = mapRef.current;
+        if (!map || !map.isStyleLoaded()) return;
+
+        const lineId = "measure-line";
+        const pointsId = "measure-points";
+
+        if (map.getLayer(lineId)) map.removeLayer(lineId);
+        if (map.getSource(lineId)) map.removeSource(lineId);
+        if (map.getLayer(pointsId)) map.removeLayer(pointsId);
+        if (map.getSource(pointsId)) map.removeSource(pointsId);
+
+        if (measurePoints.length === 0) return;
+
+        // Add points
+        map.addSource(pointsId, {
+            type: "geojson",
+            data: {
+                type: "FeatureCollection",
+                features: measurePoints.map((pt, i) => ({
+                    type: "Feature",
+                    properties: { index: i },
+                    geometry: { type: "Point", coordinates: pt },
+                })),
+            },
+        });
+        map.addLayer({
+            id: pointsId,
+            type: "circle",
+            source: pointsId,
+            paint: {
+                "circle-radius": 5,
+                "circle-color": "#c800de",
+                "circle-stroke-width": 2,
+                "circle-stroke-color": "#ffffff",
+            },
+        });
+
+        // Add line
+        if (measurePoints.length > 1) {
+            map.addSource(lineId, {
+                type: "geojson",
+                data: {
+                    type: "Feature",
+                    properties: {},
+                    geometry: {
+                        type: "LineString",
+                        coordinates: measurePoints,
+                    },
+                },
+            });
+            map.addLayer({
+                id: lineId,
+                type: "line",
+                source: lineId,
+                paint: {
+                    "line-color": "#c800de",
+                    "line-width": 3,
+                },
+            }, pointsId); // Draw below points
+        }
+    }, [measurePoints]);
+
     // Main effect for layer updates
     useEffect(() => {
         const map = mapRef.current;
@@ -1383,12 +1469,17 @@ export function Map() {
         window.open(url, "_blank");
     }, []);
 
+    const totalDistance = measurePoints.reduce((acc, pt, i) => {
+        if (i === 0) return 0;
+        return acc + haversineDistance(measurePoints[i - 1], pt);
+    }, 0);
+
     return (
         <div className="relative w-full h-full">
             <div ref={containerRef} className="w-full h-full" />
-            <div className="absolute top-4 left-4 z-10">
+            <div className="absolute top-4 left-4 z-10 flex flex-col gap-2">
                 <DropdownMenu>
-                    <DropdownMenuTrigger render={<Button variant="outline" size="sm" className="gap-1" />}>
+                    <DropdownMenuTrigger render={<Button variant="outline" size="sm" className="gap-1 bg-white/90 backdrop-blur-sm" />}>
                         Open in...
                         <ChevronDownIcon className="h-4 w-4" />
                     </DropdownMenuTrigger>
@@ -1404,6 +1495,53 @@ export function Map() {
                         </DropdownMenuItem>
                     </DropdownMenuContent>
                 </DropdownMenu>
+
+                <div className="flex items-center gap-1">
+                    <Button
+                        variant={isMeasuring ? "default" : "outline"}
+                        size="sm"
+                        className={`gap-1 bg-white/90 backdrop-blur-sm ${isMeasuring ? 'bg-blue-600 text-white hover:bg-blue-700' : ''}`}
+                        onClick={() => {
+                            setIsMeasuring(!isMeasuring);
+                        }}
+                        title="Measure distance"
+                    >
+                        <Ruler className="h-4 w-4" />
+                        {isMeasuring && <span>Measuring</span>}
+                    </Button>
+
+                    {isMeasuring && (
+                        <>
+                            <Button
+                                variant="outline"
+                                size="sm"
+                                className="bg-white/90 backdrop-blur-sm p-2"
+                                onClick={() => setMeasurePoints([])}
+                                title="Clear measurement"
+                            >
+                                <Trash2 className="h-4 w-4" />
+                            </Button>
+                            <Button
+                                variant="outline"
+                                size="sm"
+                                className="bg-white/90 backdrop-blur-sm p-2"
+                                onClick={() => {
+                                    setIsMeasuring(false);
+                                    setMeasurePoints([]);
+                                }}
+                                title="Exit measurement mode"
+                            >
+                                <X className="h-4 w-4" />
+                            </Button>
+                        </>
+                    )}
+                </div>
+
+                {isMeasuring && measurePoints.length > 0 && (
+                    <div className="bg-white/10 backdrop-blur-sm px-3 py-1.5 rounded-md border shadow-sm text-sm font-medium">
+                        Distance: {totalDistance < 1000 ? `${totalDistance.toFixed(1)} m` : `${(totalDistance / 1000).toFixed(2)} km`}
+                    </div>
+                )}
             </div>
         </div>
     );

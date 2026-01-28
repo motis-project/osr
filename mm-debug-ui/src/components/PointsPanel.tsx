@@ -76,20 +76,20 @@ export function PointsPanel() {
                                             )}
                                             {m.startLabel && (
                                                 <div className="text-muted-foreground mt-1">
-                                                    Penalty: {m.startLabel.matchPenalty}s,
-                                                    Total: {m.startLabel.totalStartCost}s
+                                                    Penalty: {m.startLabel.matchPenalty},
+                                                    Total: {m.startLabel.totalStartCost}
                                                 </div>
                                             )}
                                             {(m.fwdResult || m.bwdResult) && (
                                                 <div className="flex gap-2 mt-1">
                                                     {m.fwdResult && (
                                                         <Badge variant={m.fwdResult.reached ? "default" : "secondary"} className="text-[10px]">
-                                                            fwd: {m.fwdResult.reached ? `${m.fwdResult.cost}s` : "✗"}
+                                                            fwd: {m.fwdResult.reached ? `${m.fwdResult.cost}` : "✗"}
                                                         </Badge>
                                                     )}
                                                     {m.bwdResult && (
                                                         <Badge variant={m.bwdResult.reached ? "default" : "secondary"} className="text-[10px]">
-                                                            bwd: {m.bwdResult.reached ? `${m.bwdResult.cost}s` : "✗"}
+                                                            bwd: {m.bwdResult.reached ? `${m.bwdResult.cost}` : "✗"}
                                                         </Badge>
                                                     )}
                                                 </div>

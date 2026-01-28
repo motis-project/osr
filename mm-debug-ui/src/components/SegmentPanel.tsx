@@ -58,7 +58,7 @@ export function SegmentPanel() {
                                 {validDests} dests
                             </Badge>
                             <span className="text-muted-foreground ml-auto">
-                                {seg.minCost}s – {seg.maxCost}s
+                                {seg.minCost} – {seg.maxCost}
                             </span>
                         </div>
                     </Card>
@@ -74,15 +74,15 @@ export function SegmentPanel() {
                         <div className="grid grid-cols-2 gap-2">
                             <div className="bg-secondary/50 rounded p-2">
                                 <div className="text-muted-foreground">Min Cost</div>
-                                <div className="font-medium">{selectedSeg.minCost}s</div>
+                                <div className="font-medium">{selectedSeg.minCost}</div>
                             </div>
                             <div className="bg-secondary/50 rounded p-2">
                                 <div className="text-muted-foreground">Max Cost</div>
-                                <div className="font-medium">{selectedSeg.maxCost}s</div>
+                                <div className="font-medium">{selectedSeg.maxCost}</div>
                             </div>
                             <div className="bg-secondary/50 rounded p-2">
-                                <div className="text-muted-foreground">Dijkstra Max Cost</div>
-                                <div className="font-medium">{selectedSeg.dijkstraCostLimit}s</div>
+                                <div className="text-muted-foreground">Dijkstra Cost Limit</div>
+                                <div className="font-medium">{selectedSeg.dijkstraCostLimit}</div>
                             </div>
                             <div className={cn("bg-secondary/50 rounded p-2", selectedSeg.maxReachedInDijkstra && "bg-warning/20")}>
                                 <div className="text-muted-foreground">Max Reached</div>
@@ -96,7 +96,7 @@ export function SegmentPanel() {
                                 <div className="text-muted-foreground">
                                     Reason: {selectedSeg.beeline.reason}<br />
                                     Distance: {selectedSeg.beeline.distance}m<br />
-                                    Cost: {selectedSeg.beeline.cost}s
+                                    Cost: {selectedSeg.beeline.cost}
                                 </div>
                             </div>
                         )}
@@ -162,12 +162,12 @@ export function SegmentPanel() {
                                         <div className="flex gap-2 mt-1">
                                             {m.fwdResult && (
                                                 <Badge variant={m.fwdResult.reached ? "default" : "outline"} className="text-[10px]">
-                                                    fwd: {m.fwdResult.reached ? `${m.fwdResult.cost}s` : "✗"}
+                                                    fwd: {m.fwdResult.reached ? `${m.fwdResult.cost}` : "✗"}
                                                 </Badge>
                                             )}
                                             {m.bwdResult && (
                                                 <Badge variant={m.bwdResult.reached ? "default" : "outline"} className="text-[10px]">
-                                                    bwd: {m.bwdResult.reached ? `${m.bwdResult.cost}s` : "✗"}
+                                                    bwd: {m.bwdResult.reached ? `${m.bwdResult.cost}` : "✗"}
                                                 </Badge>
                                             )}
                                         </div>
