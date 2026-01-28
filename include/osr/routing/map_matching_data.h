@@ -42,6 +42,7 @@ struct matched_way {
   cost_t bwd_cost_{kInfeasible};
   std::size_t beeline_from_{0U};
   distance_t beeline_dist_{};
+  cost_t match_penalty_{};
 };
 
 template <Profile P>

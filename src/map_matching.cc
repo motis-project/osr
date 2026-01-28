@@ -79,6 +79,10 @@ std::vector<matched_way<P>> match_input_point(
             !mw.bwd_out_.valid() && !mw.bwd_in_.valid()) {
           return;
         }
+        // TODO: match penalty is often too small / equal for points that
+        //   are close to each other
+        mw.match_penalty_ =
+            static_cast<cost_t>(P::heuristic(params, mw.dist_to_way_));
         matched_ways.push_back(std::move(mw));
       }
     });
@@ -178,9 +182,19 @@ matched_route map_match(
       add_additional_edge(mw, mw.bwd_in_, true, false);
     }
 
+    auto const max_match_penalty_it = std::max_element(
+        begin(from_pd.matched_ways_), end(from_pd.matched_ways_),
+        [](auto const& a, auto const& b) {
+          return a.match_penalty_ < b.match_penalty_;
+        });
+    auto const max_match_penalty =
+        max_match_penalty_it != end(from_pd.matched_ways_)
+            ? max_match_penalty_it->match_penalty_
+            : cost_t{0U};
     auto dijkstra_max_cost = std::min(
         max_segment_cost,
         static_cast<cost_t>(
+            max_match_penalty +
             P::heuristic(params,
                          geo::distance(from_pd.loc_.pos_, to_pd.loc_.pos_)) *
                 3 +
@@ -195,15 +209,11 @@ matched_route map_match(
         prev_seg != nullptr ? prev_seg->min_cost_ : cost_t{0U};
 
     for (auto const& from_mw : from_pd.matched_ways_) {
-      // TODO: match penalty is often too small / equal for points that
-      //   are close to each other
-      auto const match_penalty =
-          static_cast<cost_t>(P::heuristic(params, from_mw.dist_to_way_));
       auto const add_start = [&](typename P::node node, cost_t node_cost) {
         if (node == P::node::invalid()) {
           return;
         }
-        auto cost = match_penalty;
+        auto cost = from_mw.match_penalty_;
         if (prev_seg != nullptr) {
           if (node_cost == kInfeasible) {
             return;
