@@ -20,6 +20,8 @@ struct matched_route {
   std::vector<std::size_t> segment_offsets_{};
   unsigned n_routed_{};
   unsigned n_beelined_{};
+  unsigned n_dijkstra_early_terminations_{};
+  unsigned n_dijkstra_full_runs_{};
 };
 
 matched_route map_match(

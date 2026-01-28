@@ -114,6 +114,7 @@ matched_route map_match(
   auto const additional_node_offset = w.n_nodes();
   auto next_additional_node = node_idx_t{additional_node_offset};
   auto additional_node_coordinates = std::vector<geo::latlng>{};
+  auto result = matched_route{};
 
   auto const get_node_pos = [&](node_idx_t const n) -> geo::latlng {
     if (n == node_idx_t::invalid()) {
@@ -216,6 +217,15 @@ matched_route map_match(
       add_start(from_mw.bwd_node_, from_mw.bwd_cost_);
     }
 
+    for (auto& to_mw : to_pd.matched_ways_) {
+      if (to_mw.fwd_node_ != P::node::invalid()) {
+        seg.d_.add_destination(to_mw.fwd_node_);
+      }
+      if (to_mw.bwd_node_ != P::node::invalid()) {
+        seg.d_.add_destination(to_mw.bwd_node_);
+      }
+    }
+
     seg.sharing_ = std::make_unique<sharing_data>(sharing_data{
         .additional_node_offset_ = additional_node_offset,
         .additional_node_coordinates_ = additional_node_coordinates,
@@ -223,6 +233,12 @@ matched_route map_match(
 
     seg.d_.run(params, w, *w.r_, dijkstra_max_cost, blocked, seg.sharing_.get(),
                elevations, direction::kForward);
+
+    if (seg.d_.remaining_destinations_ == 0U) {
+      ++result.n_dijkstra_early_terminations_;
+    } else {
+      ++result.n_dijkstra_full_runs_;
+    }
 
     auto reached = 0U;
     for (auto& to_mw : to_pd.matched_ways_) {
@@ -327,7 +343,6 @@ matched_route map_match(
     }
   }
 
-  auto result = matched_route{};
   result.path_.cost_ = 0;
   /*
    Reconstruction starts with the last segment and goes backwards.

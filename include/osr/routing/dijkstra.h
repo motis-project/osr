@@ -1,5 +1,9 @@
 #pragma once
 
+#include <cstdint>
+#include <algorithm>
+#include <vector>
+
 #include "osr/elevation_storage.h"
 #include "osr/routing/additional_edge.h"
 #include "osr/routing/dial.h"
@@ -15,7 +19,7 @@ struct sharing_data;
 
 constexpr auto const kDebug = false;
 
-template <Profile P>
+template <Profile P, bool EarlyTermination = false>
 struct dijkstra {
   using profile_t = P;
   using key = typename P::key;
@@ -33,6 +37,11 @@ struct dijkstra {
     pq_.n_buckets(max + 1U);
     cost_.clear();
     max_reached_ = false;
+    if constexpr (EarlyTermination) {
+      destinations_.clear();
+      remaining_destinations_ = 0U;
+      early_termination_max_cost_ = kInfeasible;
+    }
   }
 
   void add_start(ways const& w, label const l) {
@@ -47,6 +56,16 @@ struct dijkstra {
                   "dijkstra::add_start: label cost exceeds max: {} >= {}",
                   l.cost(), pq_.n_buckets());
       pq_.push(l);
+    }
+  }
+
+  void add_destination(node const n) {
+    if constexpr (EarlyTermination) {
+      auto it = std::lower_bound(begin(destinations_), end(destinations_), n);
+      if (it == end(destinations_) || *it != n) {
+        destinations_.insert(it, n);
+      }
+      ++remaining_destinations_;
     }
   }
 
@@ -65,6 +84,25 @@ struct dijkstra {
            elevation_storage const* elevations) {
     while (!pq_.empty()) {
       auto l = pq_.pop();
+
+      if constexpr (EarlyTermination) {
+        if (std::find(begin(destinations_), end(destinations_), l.get_node()) !=
+            end(destinations_)) {
+          --remaining_destinations_;
+          early_termination_max_cost_ = std::min(
+              early_termination_max_cost_,
+              static_cast<cost_t>(std::min(
+                  static_cast<std::uint64_t>(get_cost(l.get_node())) * 2,
+                  static_cast<std::uint64_t>(kInfeasible - 1U))));
+          if (remaining_destinations_ == 0U) {
+            break;
+          }
+        }
+        if (l.cost() > early_termination_max_cost_) {
+          break;
+        }
+      }
+
       if (get_cost(l.get_node()) < l.cost()) {
         continue;
       }
@@ -136,7 +174,12 @@ struct dijkstra {
 
   dial<label, get_bucket> pq_{get_bucket{}};
   ankerl::unordered_dense::map<key, entry, hash> cost_;
-  bool max_reached_;
+  bool max_reached_{};
+
+  // for early termination
+  std::vector<node> destinations_;
+  std::size_t remaining_destinations_{0U};
+  cost_t early_termination_max_cost_{kInfeasible};
 };
 
 }  // namespace osr

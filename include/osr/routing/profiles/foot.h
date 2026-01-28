@@ -32,6 +32,10 @@ struct foot {
              (a.lvl_ == b.lvl_ || (is_zero(a.lvl_) && is_zero(b.lvl_)));
     }
 
+    friend constexpr bool operator<(node const& a, node const& b) noexcept {
+      return std::tie(a.n_, a.lvl_) < std::tie(b.n_, b.lvl_);
+    }
+
     static constexpr node invalid() noexcept {
       return {.n_ = node_idx_t::invalid(), .lvl_{kNoLevel}};
     }

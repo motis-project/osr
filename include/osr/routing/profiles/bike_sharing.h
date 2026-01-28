@@ -114,6 +114,10 @@ struct bike_sharing {
              (a.lvl_ == b.lvl_ || (is_zero(a.lvl_) && is_zero(b.lvl_)));
     }
 
+    friend constexpr bool operator<(node const& a, node const& b) noexcept {
+      return std::tie(a.n_, a.type_, a.lvl_) < std::tie(b.n_, b.type_, b.lvl_);
+    }
+
     boost::json::object geojson_properties(ways const& w) const {
       auto properties =
           boost::json::object{{"osm_node_id", to_idx(w.node_to_osm_[n_])},

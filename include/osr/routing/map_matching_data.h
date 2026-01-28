@@ -52,7 +52,7 @@ struct point_data {
 
 template <Profile P>
 struct segment_data {
-  dijkstra<P> d_{};
+  dijkstra<P, true> d_{};
   std::unique_ptr<sharing_data> sharing_{};
   cost_t min_cost_{std::numeric_limits<cost_t>::max()};
   cost_t max_cost_{std::numeric_limits<cost_t>::min()};

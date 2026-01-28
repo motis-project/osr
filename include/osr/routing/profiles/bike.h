@@ -44,6 +44,10 @@ struct bike {
   struct node {
     friend bool operator==(node, node) = default;
 
+    friend constexpr bool operator<(node const& a, node const& b) noexcept {
+      return std::tie(a.n_, a.dir_) < std::tie(b.n_, b.dir_);
+    }
+
     static constexpr node invalid() noexcept {
       return {.n_ = node_idx_t::invalid(), .dir_ = direction::kForward};
     }

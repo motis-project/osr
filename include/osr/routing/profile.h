@@ -32,6 +32,7 @@ concept IsNode = requires {
   { node.get_mode() } -> std::same_as<mode>;
   { node.get_direction() } -> std::same_as<std::optional<direction>>;
   { node == node } -> std::same_as<bool>;
+  { node < node } -> std::same_as<bool>;
   { node.print(out, w) } -> std::same_as<decltype(out)>;
 };
 

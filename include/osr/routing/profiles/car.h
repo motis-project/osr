@@ -29,6 +29,10 @@ struct car {
   struct node {
     friend bool operator==(node, node) = default;
 
+    friend constexpr bool operator<(node const& a, node const& b) noexcept {
+      return std::tie(a.n_, a.way_, a.dir_) < std::tie(b.n_, b.way_, b.dir_);
+    }
+
     static constexpr node invalid() noexcept {
       return node{
           .n_ = node_idx_t::invalid(), .way_ = 0U, .dir_ = direction::kForward};
