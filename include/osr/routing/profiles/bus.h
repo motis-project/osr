@@ -364,6 +364,10 @@ struct bus {
   }
 
   static constexpr double heuristic(parameters const&, double const dist) {
+    return dist / (130U / 3.6);
+  }
+
+  static constexpr double slow_heuristic(parameters const&, double const dist) {
     return dist / (15U / 3.6);
   }
 

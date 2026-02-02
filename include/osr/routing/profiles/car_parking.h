@@ -357,6 +357,11 @@ struct car_parking {
     return car::heuristic(params.car_, dist);
   }
 
+  static constexpr double slow_heuristic(parameters const& params,
+                                         double dist) {
+    return car::slow_heuristic(params.car_, dist);
+  }
+
   static constexpr node get_reverse(node n) {
     return {n.n_, n.type_, n.lvl_, opposite(n.dir_), n.way_};
   }

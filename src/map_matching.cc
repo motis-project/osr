@@ -81,7 +81,7 @@ std::vector<matched_way<P>> match_input_point(
         }
         // TODO: match penalty is often too small / equal for points that
         //   are close to each other
-        auto const match_heuristic = P::heuristic(params, mw.dist_to_way_);
+        auto const match_heuristic = P::slow_heuristic(params, mw.dist_to_way_);
         mw.match_penalty_ =
             static_cast<cost_t>(match_heuristic * match_heuristic);
         matched_ways.push_back(std::move(mw));
@@ -192,10 +192,11 @@ matched_route map_match(
         max_match_penalty_it != end(from_pd.matched_ways_)
             ? max_match_penalty_it->match_penalty_
             : cost_t{0U};
-    auto dijkstra_max = P::heuristic(params, geo::distance(from_pd.loc_.pos_,
-                                                           to_pd.loc_.pos_)) *
-                            3.0 +
-                        max_match_penalty + 120.0;
+    auto dijkstra_max =
+        P::slow_heuristic(params,
+                          geo::distance(from_pd.loc_.pos_, to_pd.loc_.pos_)) *
+            3.0 +
+        max_match_penalty + 120.0;
     if (prev_seg != nullptr) {
       dijkstra_max += prev_seg->max_cost_ - prev_seg->min_cost_;
     }

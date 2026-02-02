@@ -346,6 +346,12 @@ struct railway {
   static constexpr double heuristic(parameters const&, double const dist) {
     return dist / 3;
   }
+
+  static constexpr double slow_heuristic(parameters const& params,
+                                         double const dist) {
+    return heuristic(params, dist);
+  }
+
   static constexpr node get_reverse(node const n) {
     return {n.n_, n.way_, opposite(n.dir_)};
   }

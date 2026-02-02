@@ -262,6 +262,11 @@ struct bike {
     return dist / (params.speed_meters_per_second_ + 0.5);
   }
 
+  static constexpr double slow_heuristic(parameters const& params,
+                                         double const dist) {
+    return dist / (params.speed_meters_per_second_ - 0.7);
+  }
+
   static constexpr node get_reverse(node const n) {
     return {n, opposite(n.dir_)};
   }

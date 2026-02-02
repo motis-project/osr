@@ -275,6 +275,11 @@ struct car {
   static constexpr double heuristic(parameters const&, double const dist) {
     return dist / (130U / 3.6);
   }
+
+  static constexpr double slow_heuristic(parameters const&, double const dist) {
+    return dist / (15U / 3.6);
+  }
+
   static constexpr node get_reverse(node const n) {
     return {n.n_, n.way_, opposite(n.dir_)};
   }

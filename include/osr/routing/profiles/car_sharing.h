@@ -53,7 +53,8 @@ struct car_sharing {
                      .in_route_ = false,
                      .is_railway_accessible_ = false,
                      .is_oneway_psv_ = false,
-                     .is_incline_down_ = false};
+                     .is_incline_down_ = false,
+                     .is_bus_accessible_with_penalty_ = false};
 
   static constexpr auto const kAdditionalNodeProperties =
       node_properties{.from_level_ = 0,
@@ -65,7 +66,8 @@ struct car_sharing {
                       .is_entrance_ = false,
                       .is_multi_level_ = false,
                       .is_parking_ = false,
-                      .to_level_ = 0};
+                      .to_level_ = 0,
+                      .is_bus_accessible_with_penalty_ = false};
 
   enum class node_type : std::uint8_t {
     kInitialFoot,
@@ -542,6 +544,11 @@ struct car_sharing {
   static constexpr double heuristic(parameters const& params,
                                     double const dist) {
     return car::heuristic(params.car_, dist);
+  }
+
+  static constexpr double slow_heuristic(parameters const& params,
+                                         double dist) {
+    return car::slow_heuristic(params.car_, dist);
   }
 
   static constexpr node get_reverse(node const n) {
