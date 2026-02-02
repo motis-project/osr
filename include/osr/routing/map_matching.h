@@ -30,7 +30,6 @@ matched_route map_match(
     search_profile,
     profile_parameters const&,
     std::vector<location> const&,
-    cost_t max_segment_cost,
     bitvec<node_idx_t> const* blocked = nullptr,
     elevation_storage const* = nullptr,
     std::function<std::optional<std::filesystem::path>(matched_route const&)>

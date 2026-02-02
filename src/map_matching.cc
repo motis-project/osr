@@ -81,8 +81,9 @@ std::vector<matched_way<P>> match_input_point(
         }
         // TODO: match penalty is often too small / equal for points that
         //   are close to each other
+        auto const match_heuristic = P::heuristic(params, mw.dist_to_way_);
         mw.match_penalty_ =
-            static_cast<cost_t>(P::heuristic(params, mw.dist_to_way_));
+            static_cast<cost_t>(match_heuristic * match_heuristic);
         matched_ways.push_back(std::move(mw));
       }
     });
@@ -90,8 +91,8 @@ std::vector<matched_way<P>> match_input_point(
 
   find_matches();
 
-  while (matched_ways.empty() && i++ < 4U) {
-    max_match_distance *= 2.0;
+  if (matched_ways.empty()) {
+    max_match_distance = 300.0;
     find_matches();
   }
 
@@ -104,7 +105,6 @@ matched_route map_match(
     lookup const& l,
     typename P::parameters const& params,
     std::vector<location> const& points,
-    cost_t const max_segment_cost,
     bitvec<node_idx_t> const* blocked,
     elevation_storage const* elevations,
     std::function<std::optional<std::filesystem::path>(matched_route const&)>
@@ -191,17 +191,16 @@ matched_route map_match(
         max_match_penalty_it != end(from_pd.matched_ways_)
             ? max_match_penalty_it->match_penalty_
             : cost_t{0U};
-    auto dijkstra_max_cost = std::min(
-        max_segment_cost,
-        static_cast<cost_t>(
-            max_match_penalty +
-            P::heuristic(params,
-                         geo::distance(from_pd.loc_.pos_, to_pd.loc_.pos_)) *
-                3 +
-            120));
+    auto dijkstra_max = P::heuristic(params, geo::distance(from_pd.loc_.pos_,
+                                                           to_pd.loc_.pos_)) *
+                            3.0 +
+                        max_match_penalty + 120.0;
     if (prev_seg != nullptr) {
-      dijkstra_max_cost += prev_seg->max_cost_ - prev_seg->min_cost_;
+      dijkstra_max += prev_seg->max_cost_ - prev_seg->min_cost_;
     }
+    auto const dijkstra_max_cost = static_cast<cost_t>(
+        std::min(static_cast<double>(std::numeric_limits<cost_t>::max() - 1U),
+                 dijkstra_max));
 
     seg.d_.reset(dijkstra_max_cost);
 
@@ -591,15 +590,13 @@ matched_route map_match(
     search_profile profile,
     profile_parameters const& params,
     std::vector<location> const& points,
-    cost_t const max_segment_cost,
     bitvec<node_idx_t> const* blocked,
     elevation_storage const* elevations,
     std::function<std::optional<std::filesystem::path>(matched_route const&)>
         debug_path_fn) {
   return with_profile(profile, [&]<Profile P>(P&&) {
     return map_match<P>(w, l, std::get<typename P::parameters>(params), points,
-                        max_segment_cost, blocked, elevations,
-                        std::move(debug_path_fn));
+                        blocked, elevations, std::move(debug_path_fn));
   });
 }
 
