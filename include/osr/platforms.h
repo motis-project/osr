@@ -135,13 +135,14 @@ struct platforms {
     if (i == platform_idx_t::invalid()) {
       return level_t{0.0F};
     }
+    auto const& plref = platform_ref_.at(i);
     return std::visit(
         utl::overloaded{
             [&](way_idx_t x) { return w.r_->way_properties_[x].from_level(); },
             [&](node_idx_t x) {
               return w.r_->node_properties_[x].from_level();
             }},
-        to_ref(platform_ref_[i][0]));
+        to_ref(plref.at(0)));
   }
 
   template <typename Fn>
