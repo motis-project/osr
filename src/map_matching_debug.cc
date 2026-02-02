@@ -294,6 +294,8 @@ void write_map_match_debug(
 
   auto const n_route_segments = points.size() - 1U;
 
+  auto max_segment_cost = cost_t{0};
+
   // Collect debug data for each segment
   for (auto seg_idx = 0U; seg_idx < n_route_segments; ++seg_idx) {
     auto const& from_pd = pds[seg_idx];
@@ -312,6 +314,14 @@ void write_map_match_debug(
     dbg_seg.dijkstra_cost_limit_ = static_cast<cost_t>(
         seg.d_.pq_.n_buckets() > 0 ? seg.d_.pq_.n_buckets() - 1 : 0);
     dbg_seg.max_reached_in_dijkstra_ = seg.d_.max_reached_;
+    dbg_seg.dijkstra_early_termination_max_cost_ =
+        seg.d_.early_termination_max_cost_;
+    dbg_seg.dijkstra_terminated_early_max_cost_ =
+        seg.d_.terminated_early_max_cost_;
+    dbg_seg.dijkstra_remaining_destinations_ = seg.d_.remaining_destinations_;
+    dbg_seg.d_dijkstra_ = seg.d_dijkstra_;
+
+    max_segment_cost = std::max(max_segment_cost, seg.min_cost_);
 
     auto const to_debug_mps =
         [&](node_candidate const& nc) -> debug_match_point_segment {
@@ -731,7 +741,13 @@ void write_map_match_debug(
         {"maxCost", static_cast<std::int64_t>(seg.max_cost_)},
         {"dijkstraCostLimit",
          static_cast<std::int64_t>(seg.dijkstra_cost_limit_)},
-        {"maxReachedInDijkstra", seg.max_reached_in_dijkstra_}};
+        {"dijkstraEarlyTerminationMaxCost",
+         static_cast<std::int64_t>(seg.dijkstra_early_termination_max_cost_)},
+        {"maxReachedInDijkstra", seg.max_reached_in_dijkstra_},
+        {"dijkstraTerminatedEarlyMaxCost",
+         seg.dijkstra_terminated_early_max_cost_},
+        {"dijkstraRemainingDestinations", seg.dijkstra_remaining_destinations_},
+        {"dijkstraDurationUs", seg.d_dijkstra_.count()}};
 
     auto start_matches = boost::json::array{};
     for (auto const& dm : seg.start_matches_) {
@@ -832,8 +848,7 @@ void write_map_match_debug(
            {"nRouteSegments", static_cast<std::int64_t>(n_route_segments)},
            {"nRouted", static_cast<std::int64_t>(result.n_routed_)},
            {"nBeelined", static_cast<std::int64_t>(result.n_beelined_)},
-           {"maxSegmentCost",
-            static_cast<std::int64_t>(0)},  // Not available here
+           {"maxSegmentCost", static_cast<std::int64_t>(max_segment_cost)},
            {"boundingBox",
             boost::json::array{boost::json::array{min_lng, min_lat},
                                boost::json::array{max_lng, max_lat}}}}},
@@ -841,7 +856,8 @@ void write_map_match_debug(
       {"ways", std::move(json_ways)},
       {"nodes", std::move(json_nodes)},
       {"routeSegments", std::move(json_route_segments)},
-      {"finalRoute", std::move(json_final_route)}};
+      {"finalRoute", std::move(json_final_route)},
+      {"totalDurationMs", result.d_total_.count()}};
 
   auto out_path = debug_path;
   out_path += ".json";
