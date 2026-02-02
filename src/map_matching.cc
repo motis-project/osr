@@ -110,6 +110,7 @@ matched_route map_match(
     std::function<std::optional<std::filesystem::path>(matched_route const&)>
         debug_path_fn) {
   utl::verify(points.size() >= 2, "map_match requires at least 2 points");
+  auto const start_time = std::chrono::steady_clock::now();
 
   auto const n_route_segments = points.size() - 1U;
   auto segments = std::vector<segment_data<P>>{};
@@ -240,8 +241,13 @@ matched_route map_match(
         .additional_node_coordinates_ = additional_node_coordinates,
         .additional_edges_ = seg.additional_edges_});
 
-    seg.d_.run(params, w, *w.r_, dijkstra_max_cost, blocked, seg.sharing_.get(),
-               elevations, direction::kForward);
+    if (!to_pd.matched_ways_.empty()) {
+      auto const dijkstra_start = std::chrono::steady_clock::now();
+      seg.d_.run(params, w, *w.r_, dijkstra_max_cost, blocked,
+                 seg.sharing_.get(), elevations, direction::kForward);
+      seg.d_dijkstra_ = std::chrono::duration_cast<std::chrono::microseconds>(
+          std::chrono::steady_clock::now() - dijkstra_start);
+    }
 
     if (seg.d_.remaining_destinations_ == 0U) {
       ++result.n_dijkstra_early_terminations_;
@@ -573,6 +579,10 @@ matched_route map_match(
     offset += seg.path_segments_;
   }
   result.segment_offsets_.emplace_back(offset);
+
+  auto const end_time = std::chrono::steady_clock::now();
+  result.d_total_ = std::chrono::duration_cast<std::chrono::milliseconds>(
+      end_time - start_time);
 
   if (debug_path_fn) {
     if (auto const debug_path = debug_path_fn(result); debug_path.has_value()) {

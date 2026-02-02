@@ -1,5 +1,4 @@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
 import { useDebug, type ViewMode } from "../store";
 import { PointsPanel } from "./PointsPanel";
@@ -55,19 +54,17 @@ export function Sidebar() {
                     <TabsTrigger value="route">Route</TabsTrigger>
                 </TabsList>
 
-                <ScrollArea className="flex-1 overflow-hidden">
-                    <div className="h-full">
-                        <TabsContent value="points" className="p-4 mt-0">
-                            <PointsPanel />
-                        </TabsContent>
-                        <TabsContent value="segment" className="p-4 mt-0">
-                            <SegmentPanel />
-                        </TabsContent>
-                        <TabsContent value="route" className="p-4 mt-0">
-                            <RoutePanel />
-                        </TabsContent>
-                    </div>
-                </ScrollArea>
+                <div className="flex-1 min-h-0 overflow-hidden">
+                    <TabsContent value="points" className="h-full p-4 mt-0 overflow-y-auto">
+                        <PointsPanel />
+                    </TabsContent>
+                    <TabsContent value="segment" className="h-full mt-0 flex flex-col overflow-hidden">
+                        <SegmentPanel />
+                    </TabsContent>
+                    <TabsContent value="route" className="h-full p-4 mt-0 overflow-y-auto">
+                        <RoutePanel />
+                    </TabsContent>
+                </div>
             </Tabs>
         </div>
     );

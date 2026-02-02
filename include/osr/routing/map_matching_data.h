@@ -1,5 +1,6 @@
 #pragma once
 
+#include <chrono>
 #include <memory>
 #include <vector>
 
@@ -63,6 +64,8 @@ struct segment_data {
 
   hash_map<node_idx_t, std::vector<additional_edge>> additional_edges_;
   std::size_t path_segments_{};
+
+  std::chrono::microseconds d_dijkstra_{};
 };
 
 struct node_ref {

@@ -41,6 +41,7 @@ struct dijkstra {
       destinations_.clear();
       remaining_destinations_ = 0U;
       early_termination_max_cost_ = kInfeasible;
+      terminated_early_max_cost_ = false;
     }
   }
 
@@ -99,6 +100,7 @@ struct dijkstra {
           }
         }
         if (l.cost() > early_termination_max_cost_) {
+          terminated_early_max_cost_ = true;
           break;
         }
       }
@@ -180,6 +182,7 @@ struct dijkstra {
   std::vector<node> destinations_;
   std::size_t remaining_destinations_{0U};
   cost_t early_termination_max_cost_{kInfeasible};
+  bool terminated_early_max_cost_{false};
 };
 
 }  // namespace osr

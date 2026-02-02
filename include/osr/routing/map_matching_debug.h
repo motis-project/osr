@@ -1,5 +1,6 @@
 #pragma once
 
+#include <chrono>
 #include <cstdint>
 #include <filesystem>
 #include <functional>
@@ -97,12 +98,16 @@ struct debug_route_segment {
   cost_t min_cost_{};
   cost_t max_cost_{};
   cost_t dijkstra_cost_limit_{};
+  cost_t dijkstra_early_termination_max_cost_{};
   bool max_reached_in_dijkstra_{false};
+  bool dijkstra_terminated_early_max_cost_{false};
   std::vector<debug_match> start_matches_{};
   std::vector<debug_match> dest_matches_{};
   std::optional<debug_beeline> beeline_{};
   hash_map<std::size_t, std::vector<debug_node_label>> node_labels_{};
   std::vector<std::size_t> additional_edge_ways_{};
+  std::size_t dijkstra_remaining_destinations_{};
+  std::chrono::microseconds d_dijkstra_{};
 };
 
 template <Profile P>

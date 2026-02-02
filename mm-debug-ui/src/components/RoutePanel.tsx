@@ -51,6 +51,11 @@ export function RoutePanel() {
                         <span className="text-sm text-muted-foreground">Max Segment Cost</span>
                         <span className="font-medium">{data.metadata.maxSegmentCost}</span>
                     </div>
+
+                    <div className="flex justify-between items-center">
+                        <span className="text-sm text-muted-foreground">Total Duration</span>
+                        <span className="font-medium">{(data.totalDurationMs ?? 0).toLocaleString("en-US")} ms</span>
+                    </div>
                 </div>
             </Card>
 
@@ -60,15 +65,15 @@ export function RoutePanel() {
                 <div className="space-y-2 text-sm">
                     <div className="flex justify-between">
                         <span className="text-muted-foreground">Route Points</span>
-                        <span>{data.finalRoute.geometry.length}</span>
+                        <span>{data.finalRoute.geometry.length.toLocaleString("en-US")}</span>
                     </div>
                     <div className="flex justify-between">
                         <span className="text-muted-foreground">Ways in Debug</span>
-                        <span>{data.ways.length}</span>
+                        <span>{data.ways.length.toLocaleString("en-US")}</span>
                     </div>
                     <div className="flex justify-between">
                         <span className="text-muted-foreground">Nodes in Debug</span>
-                        <span>{data.nodes.length}</span>
+                        <span>{data.nodes.length.toLocaleString("en-US")}</span>
                     </div>
                 </div>
             </Card>

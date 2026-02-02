@@ -158,12 +158,16 @@ export interface DebugRouteSegment {
     minCost: number;
     maxCost: number;
     dijkstraCostLimit: number;
+    dijkstraEarlyTerminationMaxCost: number;
     maxReachedInDijkstra: boolean;
+    dijkstraTerminatedEarlyMaxCost: boolean;
+    dijkstraRemainingDestinations: number;
     startMatches: DebugMatch[];
     destMatches: DebugMatch[];
     beeline?: DebugBeeline;
     nodeLabels?: Record<string, DebugNodeLabel[]>; // keyed by node array index
     additionalEdgeWays?: number[];
+    dijkstraDurationUs: number;
 }
 
 export interface DebugFinalRoute {
@@ -178,4 +182,5 @@ export interface MapMatchDebugData {
     nodes: DebugNode[];
     routeSegments: DebugRouteSegment[];
     finalRoute: DebugFinalRoute;
+    totalDurationMs: number;
 }
