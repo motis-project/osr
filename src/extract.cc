@@ -205,6 +205,10 @@ struct way_handler : public osm::handler::Handler {
 
   void way(osm::Way const& w) {
     auto const osm_way_idx = osm_way_idx_t{w.positive_id()};
+    //Track highest Way ID to avoid conflicts when adding vis-graph ways later.
+    if (uint64_t{w.positive_id()} > w_.max_osm_way_idx_) {
+      w_.max_osm_way_idx_ = uint64_t{w.positive_id()};
+    }
     auto const it = rel_ways_.find(osm_way_idx);
     auto t = tags{w};
 
@@ -245,7 +249,7 @@ struct way_handler : public osm::handler::Handler {
       w_.node_way_counter_.increment(n.positive_ref());
       return osm_node_idx_t{n.positive_ref()};
     };
-
+    
     auto const register_string = [&](std::string_view s) {
       auto str_idx = string_idx_t::invalid();
       if (auto const string_it = strings_set_.find(s);
@@ -291,6 +295,11 @@ struct way_handler : public osm::handler::Handler {
       w_.way_conditional_access_no_.emplace_back(
           way_idx, register_string(t.access_conditional_no_));
     }
+
+    if (w.tags().has_tag("area", "yes")) {
+      w_.build_area_ways_mapping(w);
+    }
+
   }
 
   using strings_set_t = hash_set<string_idx_t, strings_hash, strings_equals>;
