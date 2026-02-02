@@ -235,6 +235,7 @@ matched_route map_match(
           cost += node_cost - cost_offset;
         }
         if (cost >= dijkstra_max_cost) {
+        }
         seg.d_.add_start(params, w, seg.sharing_.get(),
                          typename P::label{node, cost});
       };
