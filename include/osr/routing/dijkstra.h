@@ -17,8 +17,6 @@ namespace osr {
 
 struct sharing_data;
 
-constexpr auto const kDebug = false;
-
 template <Profile P, bool EarlyTermination = false>
 struct dijkstra {
   using profile_t = P;
@@ -27,6 +25,8 @@ struct dijkstra {
   using node = typename P::node;
   using entry = typename P::entry;
   using hash = typename P::hash;
+
+  static constexpr auto const kDebug = false;
 
   struct get_bucket {
     cost_t operator()(label const& l) { return l.cost(); }
@@ -65,8 +65,8 @@ struct dijkstra {
       auto it = std::lower_bound(begin(destinations_), end(destinations_), n);
       if (it == end(destinations_) || *it != n) {
         destinations_.insert(it, n);
+        ++remaining_destinations_;
       }
-      ++remaining_destinations_;
     }
   }
 
@@ -86,6 +86,10 @@ struct dijkstra {
     while (!pq_.empty()) {
       auto l = pq_.pop();
 
+      if (get_cost(l.get_node()) < l.cost()) {
+        continue;
+      }
+
       if constexpr (EarlyTermination) {
         if (std::find(begin(destinations_), end(destinations_), l.get_node()) !=
             end(destinations_)) {
@@ -103,10 +107,6 @@ struct dijkstra {
           terminated_early_max_cost_ = true;
           break;
         }
-      }
-
-      if (get_cost(l.get_node()) < l.cost()) {
-        continue;
       }
 
       if constexpr (kDebug) {

@@ -14,7 +14,7 @@
 #include "utl/to_vec.h"
 #include "utl/verify.h"
 
-#include "osr/routing/dijkstra.h"
+#include "osr/routing/astar.h"
 #include "osr/routing/map_matching_data.h"
 #include "osr/routing/map_matching_debug.h"
 #include "osr/routing/path_reconstruction.h"
@@ -204,10 +204,23 @@ matched_route map_match(
         std::min(static_cast<double>(std::numeric_limits<cost_t>::max() - 1U),
                  dijkstra_max));
 
-    seg.d_.reset(dijkstra_max_cost);
+    seg.d_.reset(dijkstra_max_cost, from_pd.loc_, to_pd.loc_);
 
     auto const cost_offset =
         prev_seg != nullptr ? prev_seg->min_cost_ : cost_t{0U};
+    seg.sharing_ = std::make_unique<sharing_data>(sharing_data{
+        .additional_node_offset_ = additional_node_offset,
+        .additional_node_coordinates_ = additional_node_coordinates,
+        .additional_edges_ = seg.additional_edges_});
+
+    for (auto& to_mw : to_pd.matched_ways_) {
+      if (to_mw.fwd_node_ != P::node::invalid()) {
+        seg.d_.add_destination(params, w, seg.sharing_.get(), to_mw.fwd_node_);
+      }
+      if (to_mw.bwd_node_ != P::node::invalid()) {
+        seg.d_.add_destination(params, w, seg.sharing_.get(), to_mw.bwd_node_);
+      }
+    }
 
     for (auto const& from_mw : from_pd.matched_ways_) {
       auto const add_start = [&](typename P::node node, cost_t node_cost) {
@@ -221,26 +234,14 @@ matched_route map_match(
           }
           cost += node_cost - cost_offset;
         }
-        seg.d_.add_start(w, typename P::label{node, cost});
+        if (cost >= dijkstra_max_cost) {
+        seg.d_.add_start(params, w, seg.sharing_.get(),
+                         typename P::label{node, cost});
       };
 
       add_start(from_mw.fwd_node_, from_mw.fwd_cost_);
       add_start(from_mw.bwd_node_, from_mw.bwd_cost_);
     }
-
-    for (auto& to_mw : to_pd.matched_ways_) {
-      if (to_mw.fwd_node_ != P::node::invalid()) {
-        seg.d_.add_destination(to_mw.fwd_node_);
-      }
-      if (to_mw.bwd_node_ != P::node::invalid()) {
-        seg.d_.add_destination(to_mw.bwd_node_);
-      }
-    }
-
-    seg.sharing_ = std::make_unique<sharing_data>(sharing_data{
-        .additional_node_offset_ = additional_node_offset,
-        .additional_node_coordinates_ = additional_node_coordinates,
-        .additional_edges_ = seg.additional_edges_});
 
     if (!to_pd.matched_ways_.empty()) {
       auto const dijkstra_start = std::chrono::steady_clock::now();
