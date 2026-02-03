@@ -370,7 +370,7 @@ struct foot {
                                     double const dist) {
     return dist / (params.speed_meters_per_second_ + 0.1);
   }
- static constexpr double slow_heuristic(parameters const& params,
+  static constexpr double slow_heuristic(parameters const& params,
                                          double const dist) {
     return dist / (params.speed_meters_per_second_ - 0.2);
   }

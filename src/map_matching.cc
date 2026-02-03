@@ -36,7 +36,6 @@ std::vector<matched_way<P>> match_input_point(
   auto const approx_distance_lng_degrees =
       geo::approx_distance_lng_degrees(loc.pos_);
   auto max_match_distance = 100.0;
-  auto i = 0U;
 
   auto const find_matches = [&]() {
     auto const squared_max_dist = std::pow(max_match_distance, 2);
