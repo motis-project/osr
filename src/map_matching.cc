@@ -99,6 +99,16 @@ std::vector<matched_way<P>> match_input_point(
 }
 
 template <Profile P>
+double get_dijkstra_limit(typename P::parameters const& params,
+                          double const distance) {
+  if (distance < 2000) {
+    return P::slow_heuristic(params, distance) * 5.0 + 500.0;
+  } else {
+    return P::slow_heuristic(params, distance) * 3.0 + 500.0;
+  }
+}
+
+template <Profile P>
 matched_route map_match(
     ways const& w,
     lookup const& l,
@@ -192,10 +202,9 @@ matched_route map_match(
             ? max_match_penalty_it->match_penalty_
             : cost_t{0U};
     auto dijkstra_max =
-        P::slow_heuristic(params,
-                          geo::distance(from_pd.loc_.pos_, to_pd.loc_.pos_)) *
-            3.0 +
-        max_match_penalty + 120.0;
+        get_dijkstra_limit<P>(
+            params, geo::distance(from_pd.loc_.pos_, to_pd.loc_.pos_)) +
+        max_match_penalty;
     if (prev_seg != nullptr) {
       dijkstra_max += prev_seg->max_cost_ - prev_seg->min_cost_;
     }
@@ -246,12 +255,12 @@ matched_route map_match(
                  seg.sharing_.get(), elevations, direction::kForward);
       seg.d_dijkstra_ = std::chrono::duration_cast<std::chrono::microseconds>(
           std::chrono::steady_clock::now() - dijkstra_start);
-    }
 
-    if (seg.d_.remaining_destinations_ == 0U) {
-      ++result.n_dijkstra_early_terminations_;
-    } else {
-      ++result.n_dijkstra_full_runs_;
+      if (seg.d_.remaining_destinations_ == 0U) {
+        ++result.n_dijkstra_early_terminations_;
+      } else {
+        ++result.n_dijkstra_full_runs_;
+      }
     }
 
     auto reached = 0U;
