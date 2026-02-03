@@ -236,6 +236,10 @@ matched_route map_match(
           if (node == P::node::invalid()) {
             return;
           }
+          if (prev_seg != nullptr && !prev_seg->all_beelined_ &&
+              node_cost == kInfeasible) {
+            return;
+          }
           auto const cost = static_cast<cost_t>(
               std::clamp(static_cast<int>(from_mw.match_penalty_) +
                              (prev_seg != nullptr && node_cost != kInfeasible
@@ -408,7 +412,7 @@ matched_route map_match(
       auto best_cost = std::numeric_limits<cost_t>::max();
       for (auto const [mw_idx, to_mw] : utl::enumerate(to_pd.matched_ways_)) {
         auto const to_cost = std::min(to_mw.fwd_cost_, to_mw.bwd_cost_);
-        if (to_cost < best_cost) {
+        if (to_cost != kInfeasible && to_cost < best_cost) {
           best_cost = to_cost;
           selected_dest = node_ref{.matched_way_idx_ = mw_idx,
                                    .dir_ = to_mw.fwd_cost_ <= to_mw.bwd_cost_
