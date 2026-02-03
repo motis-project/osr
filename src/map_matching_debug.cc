@@ -5,6 +5,10 @@
 #include <limits>
 #include <sstream>
 
+#include "boost/iostreams/device/file.hpp"
+#include "boost/iostreams/filter/gzip.hpp"
+#include "boost/iostreams/filtering_stream.hpp"
+
 #include "utl/enumerate.h"
 
 #include "osr/lookup.h"
@@ -859,9 +863,11 @@ void write_map_match_debug(
       {"finalRoute", std::move(json_final_route)},
       {"totalDurationMs", result.d_total_.count()}};
 
-  auto out_path = debug_path;
-  out_path += ".json";
-  auto ofs = std::ofstream{out_path};
+  auto const out_path = debug_path + ".json.gz";
+  auto ofs = boost::iostreams::filtering_ostream{};
+  ofs.push(boost::iostreams::gzip_compressor(
+      boost::iostreams::gzip_params(boost::iostreams::gzip::best_compression)));
+  ofs.push(boost::iostreams::file_sink(out_path.string(), std::ios::binary));
   ofs << boost::json::serialize(debug_json);
 }
 

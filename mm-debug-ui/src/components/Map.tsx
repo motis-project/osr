@@ -113,7 +113,7 @@ export function Map() {
 
         const bounds = getBoundingBox();
         if (bounds) {
-            map.fitBounds(bounds, { padding: 50 });
+            map.fitBounds(bounds, { padding: 50, duration: 300 });
         }
     }, [data, getBoundingBox]);
 
@@ -131,7 +131,7 @@ export function Map() {
         }
 
         if (bounds) {
-            map.fitBounds(bounds, { padding: 50, animate: true });
+            map.fitBounds(bounds, { padding: 50, animate: true, duration: 300 });
         }
     }, [data, viewMode, selectedPointIdx, selectedSegmentIdx]);
 

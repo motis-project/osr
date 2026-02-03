@@ -18,13 +18,23 @@ function DropZone() {
             const file = e.dataTransfer.files[0];
             if (!file) return;
 
-            if (!file.name.endsWith(".json")) {
-                setError("Please drop a JSON file");
+            const isGzip = file.name.endsWith(".json.gz");
+            if (!file.name.endsWith(".json") && !isGzip) {
+                setError("Please drop a JSON or .json.gz file");
                 return;
             }
 
             try {
-                const text = await file.text();
+                let text: string;
+                if (isGzip) {
+                    const decompressedStream = file.stream().pipeThrough(
+                        new DecompressionStream("gzip")
+                    );
+                    text = await new Response(decompressedStream).text();
+                } else {
+                    text = await file.text();
+                }
+
                 const json = JSON.parse(text) as MapMatchDebugData;
 
                 // Basic validation
@@ -35,7 +45,7 @@ function DropZone() {
 
                 loadData(json);
             } catch (err) {
-                setError(`Failed to parse JSON: ${err}`);
+                setError(`Failed to read or parse file: ${err}`);
             }
         },
         [loadData]
@@ -66,7 +76,7 @@ function DropZone() {
                 {isDragging && (
                     <div className="absolute inset-0 bg-primary/20 backdrop-blur-sm flex items-center justify-center z-50 pointer-events-none">
                         <div className="bg-card border-2 border-dashed border-primary rounded-lg p-8 text-center">
-                            <p className="text-lg font-medium">Drop JSON file here</p>
+                            <p className="text-lg font-medium">Drop JSON or .json.gz file here</p>
                         </div>
                     </div>
                 )}
@@ -92,7 +102,7 @@ function DropZone() {
                             </div>
                             <h2 className="text-xl font-semibold mb-2">Map Match Debug Viewer</h2>
                             <p className="text-muted-foreground mb-4">
-                                Drag and drop a debug JSON file to get started
+                                Drag and drop a debug JSON or .json.gz file to get started
                             </p>
                             {error && (
                                 <p className="text-destructive text-sm">{error}</p>
