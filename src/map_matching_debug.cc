@@ -863,7 +863,8 @@ void write_map_match_debug(
       {"finalRoute", std::move(json_final_route)},
       {"totalDurationMs", result.d_total_.count()}};
 
-  auto const out_path = debug_path + ".json.gz";
+  auto out_path = debug_path;
+  out_path += ".json.gz";
   auto ofs = boost::iostreams::filtering_ostream{};
   ofs.push(boost::iostreams::gzip_compressor(
       boost::iostreams::gzip_params(boost::iostreams::gzip::best_compression)));
