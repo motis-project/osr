@@ -221,29 +221,26 @@ matched_route map_match(
       }
     }
 
-    for (auto const& from_mw : from_pd.matched_ways_) {
-      auto const add_start = [&](typename P::node node, cost_t node_cost) {
-        if (node == P::node::invalid()) {
-          return;
-        }
-        auto cost = from_mw.match_penalty_;
-        if (prev_seg != nullptr) {
-          if (node_cost == kInfeasible) {
+    if (!to_pd.matched_ways_.empty()) {
+      for (auto const& from_mw : from_pd.matched_ways_) {
+        auto const add_start = [&](typename P::node node, cost_t node_cost) {
+          if (node == P::node::invalid()) {
             return;
           }
-          cost += node_cost - cost_offset;
-        }
-        if (cost >= dijkstra_max_cost) {
-        }
-        seg.d_.add_start(params, w, seg.sharing_.get(),
-                         typename P::label{node, cost});
-      };
+          auto const cost = static_cast<cost_t>(
+              std::clamp(static_cast<int>(from_mw.match_penalty_) +
+                             (prev_seg != nullptr && node_cost != kInfeasible
+                                  ? node_cost - cost_offset
+                                  : 0),
+                         0, static_cast<int>(kInfeasible - 1U)));
+          seg.d_.add_start(params, w, seg.sharing_.get(),
+                           typename P::label{node, cost});
+        };
 
-      add_start(from_mw.fwd_node_, from_mw.fwd_cost_);
-      add_start(from_mw.bwd_node_, from_mw.bwd_cost_);
-    }
+        add_start(from_mw.fwd_node_, from_mw.fwd_cost_);
+        add_start(from_mw.bwd_node_, from_mw.bwd_cost_);
+      }
 
-    if (!to_pd.matched_ways_.empty()) {
       auto const dijkstra_start = std::chrono::steady_clock::now();
       seg.d_.run(params, w, *w.r_, dijkstra_max_cost, blocked,
                  seg.sharing_.get(), elevations, direction::kForward);
