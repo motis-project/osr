@@ -54,7 +54,8 @@ struct car_sharing {
                      .is_railway_accessible_ = false,
                      .is_oneway_psv_ = false,
                      .is_incline_down_ = false,
-                     .is_bus_accessible_with_penalty_ = false};
+                     .is_bus_accessible_with_penalty_ = false,
+                     .is_ferry_accessible_ = false};
 
   static constexpr auto const kAdditionalNodeProperties =
       node_properties{.from_level_ = 0,
