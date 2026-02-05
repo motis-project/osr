@@ -226,15 +226,6 @@ struct railway {
             }
           }
 
-          if (!is_additional_node(additional, n.n_)) {
-            if (w.is_restricted<SearchDir>(
-                    n.n_, n.way_,
-                    w.get_way_pos(n.n_, ae.underlying_way_ /*,
-                                  ae.node_in_way_idx_from_*/))) {
-              continue;
-            }
-          }
-
           auto const prev_way = n.get_way(w, additional);
 
           auto const is_u_turn =
@@ -286,10 +277,6 @@ struct railway {
 
         auto const target_way_prop = w.way_properties_[way];
         if (way_cost(params, target_way_prop, way_dir, 0U) == kInfeasible) {
-          return;
-        }
-
-        if (w.is_restricted<SearchDir>(n.n_, n.way_, way_pos)) {
           return;
         }
 

@@ -20,7 +20,6 @@ struct sharing_data;
 struct ferry {
   static constexpr auto const kName = "ferry";
   static constexpr auto const kMaxMatchDistance = 200U;
-  static constexpr auto const kUturnPenalty = cost_t{60U};
 
   using key = node_idx_t;
 
@@ -32,12 +31,11 @@ struct ferry {
     friend bool operator==(node, node) = default;
 
     friend constexpr bool operator<(node const& a, node const& b) noexcept {
-      return std::tie(a.n_, a.way_, a.dir_) < std::tie(b.n_, b.way_, b.dir_);
+      return a.n_ == b.n_;
     }
 
     static constexpr node invalid() noexcept {
-      return node{
-          .n_ = node_idx_t::invalid(), .way_ = 0U, .dir_ = direction::kForward};
+      return node{.n_ = node_idx_t::invalid()};
     }
 
     boost::json::object geojson_properties(ways const&) const {
@@ -48,81 +46,50 @@ struct ferry {
     constexpr node_idx_t get_key() const noexcept { return n_; }
 
     constexpr std::optional<direction> get_direction() const noexcept {
-      return dir_;
+      return {};
     }
 
     static constexpr mode get_mode() noexcept { return mode::kFerry; }
 
-    way_idx_t get_way(ways::routing const& w,
-                      sharing_data const* additional) const {
-      if (additional != nullptr && additional->is_additional_node(n_)) {
-        auto const& edges = additional->additional_edges_.at(n_);
-        auto const& edge = edges.at(cista::to_idx(way_));
-        return edge.underlying_way_;
-      }
-      return w.node_ways_[n_][way_];
-    }
-
     std::ostream& print(std::ostream& out, ways const& w) const {
       if (n_ >= w.n_nodes()) {
-        return out << "(node=" << osm_node_idx_t{to_idx(n_)}
-                   << "*, dir=" << to_str(dir_) << ")";
+        return out << "(node=" << osm_node_idx_t{to_idx(n_)} << "*)";
       } else {
-        return out << "(node=" << w.node_to_osm_[n_] << ", dir=" << to_str(dir_)
-                   << ", way=" << w.way_osm_idx_[w.r_->node_ways_[n_][way_]]
-                   << ")";
+        return out << "(node=" << w.node_to_osm_[n_] << ")";
       }
     }
 
     node_idx_t n_;
-    way_pos_t way_;
-    direction dir_;
   };
 
   struct label {
-    label(node const n, cost_t const c)
-        : n_{n.n_}, way_{n.way_}, dir_{n.dir_}, cost_{c} {}
+    label(node const n, cost_t const c) : n_{n.n_}, cost_{c} {}
 
-    constexpr node get_node() const noexcept { return {n_, way_, dir_}; }
+    constexpr node get_node() const noexcept { return {n_}; }
     constexpr cost_t cost() const noexcept { return cost_; }
 
     void track(
         label const&, ways::routing const&, way_idx_t, node_idx_t, bool) {}
 
     node_idx_t n_;
-    way_pos_t way_;
-    direction dir_;
     cost_t cost_;
   };
 
   struct entry {
-    static constexpr auto const kMaxWays = way_pos_t{16U};
-    static constexpr auto const kN = kMaxWays * 2U /* FWD+BWD */;
-
-    entry() { utl::fill(cost_, kInfeasible); }
-
     constexpr std::optional<node> pred(node const n) const noexcept {
-      auto const idx = get_index(n);
-      return pred_[idx] == node_idx_t::invalid()
-                 ? std::nullopt
-                 : std::optional{node{pred_[idx], pred_way_[idx],
-                                      to_dir(pred_dir_[idx])}};
+      return pred_ == node_idx_t::invalid() ? std::nullopt
+                                            : std::optional{node{pred_}};
     }
 
-    constexpr cost_t cost(node const n) const noexcept {
-      return cost_[get_index(n)];
-    }
+    constexpr cost_t cost(node const n) const noexcept { return cost_; }
 
     constexpr bool update(label const&,
                           node const n,
                           cost_t const c,
                           node const pred) noexcept {
-      auto const idx = get_index(n);
-      if (c < cost_[idx]) {
-        cost_[idx] = c;
-        pred_[idx] = pred.n_;
-        pred_way_[idx] = pred.way_;
-        pred_dir_[idx] = to_bool(pred.dir_);
+      if (c < cost_) {
+        cost_ = c;
+        pred_ = pred.n_;
         return true;
       }
       return false;
@@ -130,28 +97,8 @@ struct ferry {
 
     void write(node, path&) const {}
 
-    static constexpr node get_node(node_idx_t const n,
-                                   std::size_t const index) {
-      return node{n, static_cast<way_pos_t>(index % kMaxWays),
-                  to_dir((index / kMaxWays) != 0U)};
-    }
-
-    static constexpr std::size_t get_index(node const n) {
-      return (n.dir_ == direction::kForward ? 0U : 1U) * kMaxWays + n.way_;
-    }
-
-    static constexpr direction to_dir(bool const b) {
-      return b == false ? direction::kForward : direction::kBackward;
-    }
-
-    static constexpr bool to_bool(direction const d) {
-      return d == direction::kForward ? false : true;
-    }
-
-    std::array<node_idx_t, kN> pred_;
-    std::array<way_pos_t, kN> pred_way_;
-    std::bitset<kN> pred_dir_;
-    std::array<cost_t, kN> cost_;
+    node_idx_t pred_{node_idx_t::invalid()};
+    cost_t cost_{kInfeasible};
   };
 
   struct hash {
@@ -164,37 +111,27 @@ struct ferry {
 
   static node create_node(node_idx_t const n,
                           level_t const,
-                          way_pos_t const way,
-                          direction const dir) {
-    return node{n, way, dir};
+                          way_pos_t const,
+                          direction const) {
+    return node{n};
   }
 
   template <typename Fn>
-  static void resolve_start_node(ways::routing const& w,
-                                 way_idx_t const way,
+  static void resolve_start_node(ways::routing const&,
+                                 way_idx_t const,
                                  node_idx_t const n,
                                  level_t,
                                  direction,
                                  Fn&& f) {
-    auto const ways = w.node_ways_[n];
-    for (auto i = way_pos_t{0U}; i != ways.size(); ++i) {
-      if (ways[i] == way) {
-        f(node{n, i, direction::kForward});
-        f(node{n, i, direction::kBackward});
-      }
-    }
+    f(node{n});
   }
 
   template <typename Fn>
-  static void resolve_all(ways::routing const& w,
+  static void resolve_all(ways::routing const&,
                           node_idx_t const n,
                           level_t,
                           Fn&& f) {
-    auto const ways = w.node_ways_[n];
-    for (auto i = way_pos_t{0U}; i != ways.size(); ++i) {
-      f(node{n, i, direction::kForward});
-      f(node{n, i, direction::kBackward});
-    }
+    f(node{n});
   }
 
   template <direction SearchDir, bool WithBlocked, typename Fn>
@@ -227,31 +164,10 @@ struct ferry {
             }
           }
 
-          if (!is_additional_node(additional, n.n_)) {
-            if (w.is_restricted<SearchDir>(
-                    n.n_, n.way_,
-                    w.get_way_pos(n.n_, ae.underlying_way_ /*,
-                                  ae.node_in_way_idx_from_*/))) {
-              continue;
-            }
-          }
-
-          auto const prev_way = n.get_way(w, additional);
-
-          auto const is_u_turn =
-              prev_way == ae.underlying_way_ && n.dir_ != edge_dir;
-
-          auto const target =
-              node{ae.node_,
-                   additional->get_way_pos(w, ae.node_,
-                   ae.underlying_way_/*,
-                                           target_node_in_way_idx*/),
-                   edge_dir};
+          auto const target = node{
+              ae.node_,
+          };
           auto cost = edge_cost;
-
-          if (is_u_turn) {
-            cost += kUturnPenalty;
-          }
 
           if (!is_additional_node(additional, ae.node_)) {
             cost += node_cost(w.node_properties_[ae.node_]);
@@ -290,17 +206,10 @@ struct ferry {
           return;
         }
 
-        if (w.is_restricted<SearchDir>(n.n_, n.way_, way_pos)) {
-          return;
-        }
-
-        auto const is_u_turn = way_pos == n.way_ && way_dir == opposite(n.dir_);
         auto const dist = w.way_node_dist_[way][std::min(from, to)];
-        auto const target =
-            node{target_node, w.get_way_pos(target_node, way, to), way_dir};
+        auto const target = node{target_node};
         auto const cost = way_cost(params, target_way_prop, way_dir, dist) +
-                          node_cost(target_node_prop) +
-                          (is_u_turn ? kUturnPenalty : 0U);
+                          node_cost(target_node_prop);
         fn(target, cost, dist, way, from, to, elevation_storage::elevation{},
            false);
       };
@@ -352,9 +261,7 @@ struct ferry {
     return heuristic(params, dist);
   }
 
-  static constexpr node get_reverse(node const n) {
-    return {n.n_, n.way_, opposite(n.dir_)};
-  }
+  static constexpr node get_reverse(node const n) { return n; }
 
   static bool is_additional_node(sharing_data const* additional,
                                  node_idx_t const n) {
