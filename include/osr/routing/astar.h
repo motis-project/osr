@@ -139,11 +139,13 @@ struct astar {
         if (std::find(begin(destinations_), end(destinations_), curr_node) !=
             end(destinations_)) {
           --remaining_destinations_;
-          early_termination_max_cost_ =
-              std::min(early_termination_max_cost_,
-                       static_cast<cost_t>(std::min(
-                           static_cast<std::uint64_t>(curr_cost) * 2,
-                           static_cast<std::uint64_t>(kInfeasible - 1U))));
+          early_termination_max_cost_ = std::min(
+              early_termination_max_cost_,
+              static_cast<cost_t>(
+                  std::min({static_cast<std::uint64_t>(curr_cost) * 2,
+                            static_cast<std::uint64_t>(
+                                curr_cost + P::slow_heuristic(params, 10000U)),
+                            static_cast<std::uint64_t>(kInfeasible - 1U)})));
           if (remaining_destinations_ == 0U) {
             break;
           }
