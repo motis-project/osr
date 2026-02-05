@@ -246,7 +246,8 @@ matched_route map_match(
                              (prev_seg != nullptr && node_cost != kInfeasible
                                   ? node_cost - cost_offset
                                   : 0)),
-                         0LL, static_cast<std::int64_t>(kInfeasible - 1U)));
+                         static_cast<std::int64_t>(0LL),
+                         static_cast<std::int64_t>(kInfeasible - 1U)));
           seg.d_.add_start(params, w, seg.sharing_.get(),
                            typename P::label{node, cost});
         };
