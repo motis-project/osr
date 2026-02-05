@@ -183,7 +183,6 @@ struct ferry {
       }
     }
 
-    auto way_pos = way_pos_t{0U};
     for (auto const [way, i] :
          utl::zip_unchecked(w.node_ways_[n.n_], w.node_in_way_idx_[n.n_])) {
       auto const expand = [&](direction const way_dir, std::uint16_t const from,
@@ -220,8 +219,6 @@ struct ferry {
       if (i != w.way_nodes_[way].size() - 1U) {
         expand(flip<SearchDir>(direction::kForward), i, i + 1);
       }
-
-      ++way_pos;
     }
   }
 
