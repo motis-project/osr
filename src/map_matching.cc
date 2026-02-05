@@ -241,11 +241,11 @@ matched_route map_match(
             return;
           }
           auto const cost = static_cast<cost_t>(
-              std::clamp(static_cast<int>(from_mw.match_penalty_) +
+              std::clamp(static_cast<std::int64_t>(from_mw.match_penalty_) +
                              (prev_seg != nullptr && node_cost != kInfeasible
                                   ? node_cost - cost_offset
                                   : 0),
-                         0, static_cast<int>(kInfeasible - 1U)));
+                         0LL, static_cast<std::int64_t>(kInfeasible - 1U)));
           seg.d_.add_start(params, w, seg.sharing_.get(),
                            typename P::label{node, cost});
         };
