@@ -157,6 +157,7 @@ way_properties get_way_properties(tags const& t) {
   p.in_route_ = t.is_route_;
   p.is_bus_accessible_with_penalty_ =
       is_accessible_with_penalty<bus_profile>(t, osm_obj_type::kWay);
+  p.is_ferry_accessible_ = t.is_ferry_route_;
   return p;
 }
 
@@ -246,7 +247,7 @@ struct way_handler : public osm::handler::Handler {
     }
 
     auto p = (t.is_platform() || t.is_parking_ || !t.highway_.empty() ||
-              !t.railway_.empty())
+              !t.railway_.empty() || t.is_ferry_route_)
                  ? get_way_properties(t)
                  : it->second.p_;
     if (!p.is_accessible()) {

@@ -9,6 +9,7 @@
 #include "osr/routing/profiles/car.h"
 #include "osr/routing/profiles/car_parking.h"
 #include "osr/routing/profiles/car_sharing.h"
+#include "osr/routing/profiles/ferry.h"
 #include "osr/routing/profiles/foot.h"
 #include "osr/routing/profiles/railway.h"
 
@@ -31,7 +32,8 @@ using profile_parameters =
                  bike_sharing::parameters,
                  car_sharing<track_node_tracking>::parameters,
                  bus::parameters,
-                 railway::parameters>;
+                 railway::parameters,
+                 ferry::parameters>;
 
 profile_parameters get_parameters(search_profile const p);
 

@@ -173,6 +173,9 @@ struct tags {
           auto const value = std::string_view{t.value()};
           is_incline_down_ = t.value() == "down"sv || value.starts_with("-"sv);
         } break;
+        case cista::hash("route"):
+          is_ferry_route_ |= t.value() == "ferry"sv;
+          break;
       }
     }
     if (circular && !oneway_defined) {
@@ -184,6 +187,9 @@ struct tags {
 
   // https://wiki.openstreetmap.org/wiki/Relation:route
   bool is_route_{false};
+
+  // https://wiki.openstreetmap.org/wiki/Tag:route%3Dferry
+  bool is_ferry_route_{false};
 
   // https://wiki.openstreetmap.org/wiki/Key:oneway
   // https://wiki.openstreetmap.org/wiki/Tag:junction=roundabout
@@ -604,6 +610,22 @@ struct railway_profile {
         case cista::hash("funicular"): return true;
         default: return false;
       }
+    } else {
+      return true;
+    }
+  }
+
+  static bool access_with_penalty(tags const&, osm_obj_type const) {
+    return false;
+  }
+};
+
+struct ferry_profile {
+  static override access_override(tags const&) { return override::kNone; }
+
+  static bool default_access(tags const& t, osm_obj_type const type) {
+    if (type == osm_obj_type::kWay) {
+      return t.is_ferry_route_;
     } else {
       return true;
     }

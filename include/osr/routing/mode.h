@@ -11,6 +11,7 @@ enum class mode : std::uint8_t {
   kBike,
   kCar,
   kRailway,
+  kFerry,
 };
 
 std::string_view to_str(mode);

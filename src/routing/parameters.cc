@@ -30,6 +30,7 @@ profile_parameters get_parameters(search_profile const p) {
       return car_sharing<track_node_tracking>::parameters{};
     case search_profile::kBus: return bus::parameters{};
     case search_profile::kRailway: return railway::parameters{};
+    case search_profile::kFerry: return ferry::parameters{};
   }
   throw utl::fail("with_profile not implemented for {}", to_str(p));
 }

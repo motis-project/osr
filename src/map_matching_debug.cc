@@ -18,6 +18,7 @@
 #include "osr/routing/profiles/car.h"
 #include "osr/routing/profiles/car_parking.h"
 #include "osr/routing/profiles/car_sharing.h"
+#include "osr/routing/profiles/ferry.h"
 #include "osr/routing/profiles/foot.h"
 #include "osr/routing/profiles/railway.h"
 
@@ -1043,6 +1044,17 @@ template void write_map_match_debug<railway>(
     std::vector<location> const&,
     std::vector<point_data<railway>> const&,
     std::vector<segment_data<railway>> const&,
+    matched_route const&,
+    std::function<geo::latlng(node_idx_t)> const&,
+    std::filesystem::path const&);
+
+template void write_map_match_debug<ferry>(
+    ways const&,
+    lookup const&,
+    ferry::parameters const&,
+    std::vector<location> const&,
+    std::vector<point_data<ferry>> const&,
+    std::vector<segment_data<ferry>> const&,
     matched_route const&,
     std::function<geo::latlng(node_idx_t)> const&,
     std::filesystem::path const&);

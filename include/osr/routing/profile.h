@@ -155,6 +155,7 @@ enum class search_profile : std::uint8_t {
   kCarSharing,
   kBus,
   kRailway,
+  kFerry,
 };
 
 constexpr auto const kNumProfiles =

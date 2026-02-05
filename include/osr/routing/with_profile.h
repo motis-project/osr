@@ -7,6 +7,7 @@
 #include "osr/routing/profiles/car.h"
 #include "osr/routing/profiles/car_parking.h"
 #include "osr/routing/profiles/car_sharing.h"
+#include "osr/routing/profiles/ferry.h"
 #include "osr/routing/profiles/foot.h"
 #include "osr/routing/profiles/railway.h"
 
@@ -38,6 +39,7 @@ auto with_profile(search_profile const p, Fn&& fn) {
       return fn(car_sharing<track_node_tracking>{});
     case search_profile::kBus: return fn(bus{});
     case search_profile::kRailway: return fn(railway{});
+    case search_profile::kFerry: return fn(ferry{});
   }
   throw utl::fail("with_profile not implemented for {}", to_str(p));
 }

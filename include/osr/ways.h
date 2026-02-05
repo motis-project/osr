@@ -47,7 +47,8 @@ struct way_properties {
   constexpr bool is_accessible() const {
     return is_car_accessible() || is_bike_accessible() ||
            is_foot_accessible() || is_bus_accessible() ||
-           is_bus_accessible_with_penalty() || is_railway_accessible();
+           is_bus_accessible_with_penalty() || is_railway_accessible() ||
+           is_ferry_accessible();
   }
   constexpr bool is_car_accessible() const { return is_car_accessible_; }
   constexpr bool is_bike_accessible() const { return is_bike_accessible_; }
@@ -59,6 +60,7 @@ struct way_properties {
   constexpr bool is_railway_accessible() const {
     return is_railway_accessible_;
   }
+  constexpr bool is_ferry_accessible() const { return is_ferry_accessible_; }
   constexpr bool is_big_street() const { return is_big_street_; }
   constexpr bool is_destination() const { return is_destination_; }
   constexpr bool is_oneway_car() const { return is_oneway_car_; }
@@ -120,6 +122,7 @@ struct way_properties {
   std::uint8_t is_oneway_psv_ : 1;
   std::uint8_t is_incline_down_ : 1;
   std::uint8_t is_bus_accessible_with_penalty_ : 1;
+  std::uint8_t is_ferry_accessible_ : 1;
 };
 
 static_assert(sizeof(way_properties) == 5);

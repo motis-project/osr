@@ -27,6 +27,7 @@ search_profile to_profile(std::string_view s) {
     case cista::hash("car_sharing"): return search_profile::kCarSharing;
     case cista::hash("bus"): return search_profile::kBus;
     case cista::hash("railway"): return search_profile::kRailway;
+    case cista::hash("ferry"): return search_profile::kFerry;
   }
   throw utl::fail("{} is not a valid profile", s);
 }
@@ -48,6 +49,7 @@ std::string_view to_str(search_profile const p) {
     case search_profile::kCarSharing: return "car_sharing";
     case search_profile::kBus: return "bus";
     case search_profile::kRailway: return "railway";
+    case search_profile::kFerry: return "ferry";
   }
   throw utl::fail("{} is not a valid profile", static_cast<std::uint8_t>(p));
 }
