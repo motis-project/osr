@@ -76,15 +76,15 @@ struct ferry {
   };
 
   struct entry {
-    constexpr std::optional<node> pred(node const n) const noexcept {
+    constexpr std::optional<node> pred(node const) const noexcept {
       return pred_ == node_idx_t::invalid() ? std::nullopt
                                             : std::optional{node{pred_}};
     }
 
-    constexpr cost_t cost(node const n) const noexcept { return cost_; }
+    constexpr cost_t cost(node const) const noexcept { return cost_; }
 
     constexpr bool update(label const&,
-                          node const n,
+                          node const,
                           cost_t const c,
                           node const pred) noexcept {
       if (c < cost_) {
@@ -241,7 +241,7 @@ struct ferry {
 
   static constexpr cost_t way_cost(parameters const&,
                                    way_properties const& e,
-                                   direction const dir,
+                                   direction const,
                                    std::uint16_t const dist) {
     if (e.is_ferry_accessible()) {
       return static_cast<cost_t>((dist / 3));
