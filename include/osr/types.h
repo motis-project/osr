@@ -97,7 +97,7 @@ using elevation_monotonic_t =
 
 using way_pos_t = std::uint8_t;
 
-using cost_t = std::uint16_t;
+using cost_t = std::uint32_t;
 
 constexpr auto const kInfeasible = std::numeric_limits<cost_t>::max();
 
