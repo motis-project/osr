@@ -159,7 +159,7 @@ enum class search_profile : std::uint8_t {
 };
 
 constexpr auto const kNumProfiles =
-    static_cast<std::underlying_type_t<search_profile>>(15U);
+    static_cast<std::underlying_type_t<search_profile>>(16U);
 
 search_profile to_profile(std::string_view);
 
