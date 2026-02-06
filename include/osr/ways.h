@@ -286,7 +286,7 @@ struct ways {
                                      std::uint16_t const node) const {
       auto const v = way_node_dist_[way][node];
       if (v != std::numeric_limits<std::uint16_t>::max()) {
-        return distance_t{v};
+        [[likely]] return distance_t{v};
       } else {
         auto const it = std::lower_bound(begin(long_way_node_dist_),
                                          end(long_way_node_dist_),
