@@ -29,7 +29,7 @@ struct connecting_way {
   std::uint16_t from_{};
   std::uint16_t to_{};
   bool is_loop_{};
-  std::uint16_t distance_{};
+  distance_t distance_{};
   elevation_storage::elevation elevation_{};
 };
 
