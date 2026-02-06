@@ -239,7 +239,7 @@ struct bike {
   static constexpr cost_t way_cost(parameters const& params,
                                    way_properties const e,
                                    direction const dir,
-                                   std::uint16_t const dist) {
+                                   distance_t const dist) {
     if (e.is_bike_accessible() &&
         (dir == direction::kForward || !e.is_oneway_bike())) {
       return static_cast<cost_t>(

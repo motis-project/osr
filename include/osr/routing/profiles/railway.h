@@ -319,7 +319,7 @@ struct railway {
   static constexpr cost_t way_cost(parameters const&,
                                    way_properties const& e,
                                    direction const dir,
-                                   std::uint16_t const dist) {
+                                   distance_t const dist) {
     if (e.is_railway_accessible() &&
         (dir == direction::kForward || !e.is_oneway_psv())) {
       return static_cast<cost_t>((dist / 3));

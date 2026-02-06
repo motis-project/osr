@@ -91,7 +91,7 @@ using platform_idx_t = cista::strong<std::uint32_t, struct platform_idx_>;
 using multi_level_elevator_idx_t =
     cista::strong<std::uint32_t, struct multi_level_elevator_idx_>;
 
-using distance_t = std::uint16_t;
+using distance_t = std::uint32_t;
 using elevation_monotonic_t =
     cista::strong<std::uint16_t, struct elevation_monotonic_>;
 

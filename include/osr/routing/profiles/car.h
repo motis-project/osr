@@ -258,7 +258,7 @@ struct car {
   static constexpr cost_t way_cost(parameters const&,
                                    way_properties const& e,
                                    direction const dir,
-                                   std::uint16_t const dist) {
+                                   distance_t const dist) {
     if (e.is_car_accessible() &&
         (dir == direction::kForward || !e.is_oneway_car())) {
       return (dist / e.max_speed_m_per_s()) * (e.is_destination() ? 5U : 1U) +

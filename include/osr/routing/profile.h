@@ -109,7 +109,7 @@ concept Profile =
         P::is_dest_reachable(params, r, node, w, dir, dir)
       } -> std::same_as<bool>;
       {
-        P::way_cost(params, w_props, dir, std::declval<std::uint16_t>())
+        P::way_cost(params, w_props, dir, std::declval<distance_t>())
       } -> std::same_as<cost_t>;
       { P::node_cost(n_props) } -> std::same_as<cost_t>;
       { P::heuristic(params, dist) } -> std::same_as<double>;

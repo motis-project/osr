@@ -345,7 +345,7 @@ struct car_parking {
   static constexpr cost_t way_cost(parameters const& params,
                                    way_properties const& e,
                                    direction const dir,
-                                   std::uint16_t const dist) {
+                                   distance_t const dist) {
     return footp::way_cost(params.foot_, e, dir, dist);
   }
 

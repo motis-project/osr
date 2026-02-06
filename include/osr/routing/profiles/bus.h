@@ -337,7 +337,7 @@ struct bus {
   static constexpr cost_t way_cost(parameters const&,
                                    way_properties const& e,
                                    direction const dir,
-                                   std::uint16_t const dist) {
+                                   distance_t const dist) {
     auto const accessible = e.is_bus_accessible();
     auto const accessible_with_penalty = e.is_bus_accessible_with_penalty();
     if ((accessible || accessible_with_penalty) &&

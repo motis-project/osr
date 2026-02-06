@@ -239,7 +239,7 @@ struct ferry {
   static constexpr cost_t way_cost(parameters const&,
                                    way_properties const& e,
                                    direction const,
-                                   std::uint16_t const dist) {
+                                   distance_t const dist) {
     if (e.is_ferry_accessible()) {
       return static_cast<cost_t>((dist / 3));
     } else {
