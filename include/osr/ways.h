@@ -17,6 +17,7 @@
 #include "osmium/osm/way.hpp"
 
 #include "cista/memory_holder.h"
+#include "cista/reflection/comparable.h"
 
 #include "utl/enumerate.h"
 #include "utl/equal_ranges_linear.h"
@@ -281,14 +282,41 @@ struct ways {
       return way_nodes_[w].back() == way_nodes_[w].front();
     }
 
+    distance_t get_way_node_distance(way_idx_t const way,
+                                     std::uint16_t const node) const {
+      auto const v = way_node_dist_[way][node];
+      if (v != std::numeric_limits<std::uint16_t>::max()) {
+        return distance_t{v};
+      } else {
+        auto const it = std::lower_bound(begin(long_way_node_dist_),
+                                         end(long_way_node_dist_),
+                                         long_distance{way, node, 0U});
+        if (it != end(long_way_node_dist_) && it->way_ == way &&
+            it->node_ == node) {
+          return it->distance_;
+        }
+        throw utl::fail("long distance not found for way {} node {}",
+                        to_idx(way), node);
+      }
+    }
+
     static cista::wrapped<routing> read(std::filesystem::path const&);
     void write(std::filesystem::path const&) const;
+
+    struct long_distance {
+      CISTA_COMPARABLE()
+
+      way_idx_t way_{};
+      std::uint16_t node_{};
+      distance_t distance_{};
+    };
 
     vec_map<node_idx_t, node_properties> node_properties_;
     vec_map<way_idx_t, way_properties> way_properties_;
 
     vecvec<way_idx_t, node_idx_t> way_nodes_;
-    vecvec<way_idx_t, distance_t> way_node_dist_;
+    vecvec<way_idx_t, std::uint16_t> way_node_dist_;
+    vec<long_distance> long_way_node_dist_;
 
     vecvec<node_idx_t, way_idx_t> node_ways_;
     vecvec<node_idx_t, std::uint16_t> node_in_way_idx_;

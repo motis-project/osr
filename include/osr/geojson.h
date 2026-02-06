@@ -99,9 +99,10 @@ struct geojson_writer {
     auto way_nodes_it = std::begin(way_nodes);
     auto dist_it = std::begin(dists);
     auto const p = w_.r_->way_properties_[i];
+    auto n = 0U;
     for (; dist_it != end(dists); ++way_nodes_it, ++dist_it) {
       auto const& [from, to] = *way_nodes_it;
-      auto const dist = *dist_it;
+      auto const dist = w_.r_->get_way_node_distance(i, n);
       features_.emplace_back(boost::json::value{
           {"type", "Feature"},
           {"properties",
@@ -166,6 +167,7 @@ struct geojson_writer {
         {"geometry", to_line_string(w_.way_polylines_[i])}});
 
     nodes_.insert(begin(nodes), end(nodes));
+    ++n;
   }
 
   template <typename Dijkstra>

@@ -211,7 +211,8 @@ struct foot {
         if (can_use_elevator(w, target_node, n.lvl_)) {
           for_each_elevator_level(
               w, target_node, [&](level_t const target_lvl) {
-                auto const dist = w.way_node_dist_[way][std::min(from, to)];
+                auto const dist =
+                    w.get_way_node_distance(way, std::min(from, to));
                 auto const cost =
                     way_cost(params, target_way_prop, way_dir, dist) +
                     node_cost(target_node_prop);
@@ -225,7 +226,7 @@ struct foot {
             return;
           }
 
-          auto const dist = w.way_node_dist_[way][std::min(from, to)];
+          auto const dist = w.get_way_node_distance(way, std::min(from, to));
           auto const cost = way_cost(params, target_way_prop, way_dir, dist) +
                             node_cost(target_node_prop);
           fn(node{target_node, *target_lvl}, static_cast<std::uint32_t>(cost),

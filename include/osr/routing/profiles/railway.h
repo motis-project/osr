@@ -281,7 +281,7 @@ struct railway {
         }
 
         auto const is_u_turn = way_pos == n.way_ && way_dir == opposite(n.dir_);
-        auto const dist = w.way_node_dist_[way][std::min(from, to)];
+        auto const dist = w.get_way_node_distance(way, std::min(from, to));
         auto const target =
             node{target_node, w.get_way_pos(target_node, way, to), way_dir};
         auto const cost = way_cost(params, target_way_prop, way_dir, dist) +

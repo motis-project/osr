@@ -203,7 +203,7 @@ struct bike {
           return;
         }
 
-        auto const dist = w.way_node_dist_[way][std::min(from, to)];
+        auto const dist = w.get_way_node_distance(way, std::min(from, to));
         auto const elevation = [&]() {
           auto const e = (from < to) ? get_elevations(elevations, way, from)
                                      : get_elevations(elevations, way, to);

@@ -201,8 +201,10 @@ void write_map_match_debug(
 
       // Node distances
       auto dists = boost::json::array{};
-      for (auto const& d : w.r_->way_node_dist_[way_idx]) {
-        dists.emplace_back(static_cast<std::int64_t>(d));
+      for (auto i = 0U; i < w.r_->way_node_dist_[way_idx].size(); ++i) {
+        dists.emplace_back(
+            static_cast<std::int64_t>(w.r_->get_way_node_distance(
+                way_idx, static_cast<std::uint16_t>(i))));
       }
       way_obj["nodeDistances"] = std::move(dists);
 

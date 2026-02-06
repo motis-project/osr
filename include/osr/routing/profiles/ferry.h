@@ -205,7 +205,7 @@ struct ferry {
           return;
         }
 
-        auto const dist = w.way_node_dist_[way][std::min(from, to)];
+        auto const dist = w.get_way_node_distance(way, std::min(from, to));
         auto const target = node{target_node};
         auto const cost = way_cost(params, target_way_prop, way_dir, dist) +
                           node_cost(target_node_prop);
