@@ -203,7 +203,7 @@ struct bidirectional {
           auto const total =
               clamp_cost(static_cast<std::uint64_t>(curr_cost) + cost);
           auto const heur =
-              clamp_cost(static_cast<std::uint64_t>(total) +
+              clamp_cost(static_cast<std::int64_t>(total) +
                          static_cast<std::int64_t>(heuristic(
                              params, w, neighbor.n_, PathDir, sharing)));
           if (total >= adjusted_max) {
