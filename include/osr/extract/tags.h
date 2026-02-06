@@ -298,7 +298,7 @@ bool is_accessible_with_penalty(tags const& o, osm_obj_type const type) {
 
 struct foot_profile {
   static override access_override(tags const& t) {
-    if (t.is_route_ || t.sidewalk_separate_) {
+    if (t.is_route_ || t.sidewalk_separate_ || t.is_ferry_route_) {
       return override::kBlacklist;
     }
 
@@ -368,7 +368,7 @@ struct foot_profile {
 
 struct bike_profile {
   static override access_override(tags const& t) {
-    if (t.is_route_) {
+    if (t.is_route_ || t.is_ferry_route_) {
       return override::kBlacklist;
     }
 
@@ -427,7 +427,7 @@ struct bike_profile {
 
 struct car_profile {
   static override access_override(tags const& t) {
-    if (t.access_ == override::kBlacklist || t.is_route_) {
+    if (t.access_ == override::kBlacklist || t.is_route_ || t.is_ferry_route_) {
       return override::kBlacklist;
     }
 
@@ -512,7 +512,7 @@ struct bus_profile {
   static override access_override(tags const& t) {
     if (t.bus_ != override::kNone) {
       return t.bus_;
-    } else if (t.access_ == override::kBlacklist) {
+    } else if (t.access_ == override::kBlacklist || t.is_ferry_route_) {
       return override::kBlacklist;
     }
 
