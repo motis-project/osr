@@ -174,7 +174,8 @@ struct astar {
 
             auto const total = static_cast<std::uint64_t>(curr_cost) + cost;
             auto const heur =
-                total + heuristic(params, w, sharing, neighbor.get_node());
+                static_cast<double>(total) +
+                heuristic(params, w, sharing, neighbor.get_node());
             if (total >= max) {
               max_reached_ = true;
               return;

@@ -102,7 +102,8 @@ struct geojson_writer {
     auto n = 0U;
     for (; dist_it != end(dists); ++way_nodes_it, ++dist_it) {
       auto const& [from, to] = *way_nodes_it;
-      auto const dist = w_.r_->get_way_node_distance(i, n);
+      auto const dist =
+          w_.r_->get_way_node_distance(i, static_cast<std::uint16_t>(n));
       features_.emplace_back(boost::json::value{
           {"type", "Feature"},
           {"properties",
