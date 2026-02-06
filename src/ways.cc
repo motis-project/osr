@@ -205,7 +205,9 @@ void ways::connect_ways() {
               dists.push_back(static_cast<std::uint16_t>(dist));
             } else {
               r_->long_way_node_dist_.push_back(routing::long_distance{
-                  .way_ = way_idx, .node_ = i, .distance_ = dist});
+                  .way_ = way_idx,
+                  .node_ = static_cast<std::uint16_t>(i - 1U),
+                  .distance_ = dist});
               dists.push_back(std::numeric_limits<std::uint16_t>::max());
             }
           }
