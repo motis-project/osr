@@ -129,13 +129,12 @@ struct dijkstra {
               neighbor.print(std::cout, w);
             }
 
-            auto const total = l.cost() + cost;
+            auto const total = static_cast<std::uint64_t>(l.cost()) + cost;
             if (total >= max) {
               max_reached_ = true;
               return;
             }
-            if (total < max &&
-                cost_[neighbor.get_key()].update(
+            if (cost_[neighbor.get_key()].update(
                     l, neighbor, static_cast<cost_t>(total), curr)) {
               auto next = label{neighbor, static_cast<cost_t>(total)};
               next.track(l, r, way, neighbor.get_node(), track);
