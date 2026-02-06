@@ -19,7 +19,7 @@ namespace osr {
 
 struct ways;
 
-template <Profile>
+template <Profile, bool EarlyTermination>
 struct dijkstra;
 
 template <Profile>
@@ -31,7 +31,7 @@ template <Profile P>
 bidirectional<P>& get_bidirectional();
 
 template <Profile P>
-dijkstra<P>& get_dijkstra();
+dijkstra<P, false>& get_dijkstra();
 
 std::vector<std::optional<path>> route(
     profile_parameters const&,

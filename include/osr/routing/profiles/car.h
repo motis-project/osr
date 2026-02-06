@@ -1,6 +1,7 @@
 #pragma once
 
 #include <bitset>
+#include <optional>
 
 #include "boost/json/object.hpp"
 
@@ -28,6 +29,10 @@ struct car {
   struct node {
     friend bool operator==(node, node) = default;
 
+    friend constexpr bool operator<(node const& a, node const& b) noexcept {
+      return std::tie(a.n_, a.way_, a.dir_) < std::tie(b.n_, b.way_, b.dir_);
+    }
+
     static constexpr node invalid() noexcept {
       return node{
           .n_ = node_idx_t::invalid(), .way_ = 0U, .dir_ = direction::kForward};
@@ -41,6 +46,10 @@ struct car {
     constexpr node_idx_t get_key() const noexcept { return n_; }
 
     static constexpr mode get_mode() noexcept { return mode::kCar; }
+
+    constexpr std::optional<direction> get_direction() const noexcept {
+      return dir_;
+    }
 
     std::ostream& print(std::ostream& out, ways const& w) const {
       return out << "(node=" << w.node_to_osm_[n_] << ", dir=" << to_str(dir_)
@@ -136,6 +145,13 @@ struct car {
     }
   };
 
+  static node create_node(node_idx_t const n,
+                          level_t const,
+                          way_pos_t const way,
+                          direction const dir) {
+    return node{n, way, dir};
+  }
+
   template <typename Fn>
   static void resolve_start_node(ways::routing const& w,
                                  way_idx_t const way,
@@ -186,7 +202,8 @@ struct car {
         }
 
         auto const target_node_prop = w.node_properties_[target_node];
-        if (node_cost(target_node_prop) == kInfeasible) {
+        auto const nc = node_cost(target_node_prop);
+        if (nc == kInfeasible) {
           return;
         }
 
@@ -200,12 +217,11 @@ struct car {
         }
 
         auto const is_u_turn = way_pos == n.way_ && way_dir == opposite(n.dir_);
-        auto const dist = w.way_node_dist_[way][std::min(from, to)];
+        auto const dist = w.get_way_node_distance(way, std::min(from, to));
         auto const target =
             node{target_node, w.get_way_pos(target_node, way, to), way_dir};
         auto const cost = way_cost(params, target_way_prop, way_dir, dist) +
-                          node_cost(target_node_prop) +
-                          (is_u_turn ? kUturnPenalty : 0U);
+                          nc + (is_u_turn ? kUturnPenalty : 0U);
         fn(target, cost, dist, way, from, to, elevation_storage::elevation{},
            false);
       };
@@ -242,7 +258,7 @@ struct car {
   static constexpr cost_t way_cost(parameters const&,
                                    way_properties const& e,
                                    direction const dir,
-                                   std::uint16_t const dist) {
+                                   distance_t const dist) {
     if (e.is_car_accessible() &&
         (dir == direction::kForward || !e.is_oneway_car())) {
       return (dist / e.max_speed_m_per_s()) * (e.is_destination() ? 5U : 1U) +
@@ -259,6 +275,11 @@ struct car {
   static constexpr double heuristic(parameters const&, double const dist) {
     return dist / (130U / 3.6);
   }
+
+  static constexpr double slow_heuristic(parameters const&, double const dist) {
+    return dist / (15U / 3.6);
+  }
+
   static constexpr node get_reverse(node const n) {
     return {n.n_, n.way_, opposite(n.dir_)};
   }

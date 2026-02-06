@@ -71,6 +71,8 @@ struct way_candidate {
   double dist_to_way_;
   way_idx_t way_{way_idx_t::invalid()};
   node_candidate left_{}, right_{};
+  geo::latlng closest_point_on_way_{};
+  unsigned segment_idx_{};
 };
 
 struct raw_way_candidate {
@@ -242,7 +244,11 @@ private:
               query.pos_, ways_.way_polylines_[way],
               approx_distance_lng_degrees);
       if (squared_dist < squared_max_dist) {
-        auto wc = way_candidate{std::sqrt(squared_dist), way};
+        auto wc =
+            way_candidate{.dist_to_way_ = std::sqrt(squared_dist),
+                          .way_ = way,
+                          .closest_point_on_way_ = best,
+                          .segment_idx_ = static_cast<unsigned>(segment_idx)};
         wc.left_ =
             find_next_node<P>(params, wc, query, direction::kBackward,
                               query.lvl_, reverse, search_dir, blocked,
@@ -277,6 +283,7 @@ private:
     return found;
   }
 
+public:
   template <Profile P>
   node_candidate find_next_node(P::parameters const& params,
                                 way_candidate const& wc,
@@ -336,6 +343,7 @@ private:
     return c;
   }
 
+private:
   std::vector<raw_way_candidate> get_raw_way_candidates(
       location const& query, double const max_match_distance) const;
 

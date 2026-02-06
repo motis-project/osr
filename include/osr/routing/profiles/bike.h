@@ -1,5 +1,7 @@
 #pragma once
 
+#include <optional>
+
 #include "osr/elevation_storage.h"
 #include "osr/routing/mode.h"
 #include "osr/routing/path.h"
@@ -42,12 +44,20 @@ struct bike {
   struct node {
     friend bool operator==(node, node) = default;
 
+    friend constexpr bool operator<(node const& a, node const& b) noexcept {
+      return std::tie(a.n_, a.dir_) < std::tie(b.n_, b.dir_);
+    }
+
     static constexpr node invalid() noexcept {
       return {.n_ = node_idx_t::invalid(), .dir_ = direction::kForward};
     }
 
     constexpr node_idx_t get_node() const noexcept { return n_; }
     constexpr node_idx_t get_key() const noexcept { return n_; }
+
+    constexpr std::optional<direction> get_direction() const noexcept {
+      return dir_;
+    }
 
     static constexpr mode get_mode() noexcept { return mode::kBike; }
 
@@ -128,6 +138,13 @@ struct bike {
     std::array<cost_t, 2U> cost_;
   };
 
+  static node create_node(node_idx_t const n,
+                          level_t const,
+                          way_pos_t const,
+                          direction const dir) {
+    return node{n, dir};
+  }
+
   template <typename Fn>
   static void resolve_start_node(ways::routing const&,
                                  way_idx_t,
@@ -186,7 +203,7 @@ struct bike {
           return;
         }
 
-        auto const dist = w.way_node_dist_[way][std::min(from, to)];
+        auto const dist = w.get_way_node_distance(way, std::min(from, to));
         auto const elevation = [&]() {
           auto const e = (from < to) ? get_elevations(elevations, way, from)
                                      : get_elevations(elevations, way, to);
@@ -222,7 +239,7 @@ struct bike {
   static constexpr cost_t way_cost(parameters const& params,
                                    way_properties const e,
                                    direction const dir,
-                                   std::uint16_t const dist) {
+                                   distance_t const dist) {
     if (e.is_bike_accessible() &&
         (dir == direction::kForward || !e.is_oneway_bike())) {
       return static_cast<cost_t>(
@@ -243,6 +260,11 @@ struct bike {
   static constexpr double heuristic(parameters const& params,
                                     double const dist) {
     return dist / (params.speed_meters_per_second_ + 0.5);
+  }
+
+  static constexpr double slow_heuristic(parameters const& params,
+                                         double const dist) {
+    return dist / (params.speed_meters_per_second_ - 0.7);
   }
 
   static constexpr node get_reverse(node const n) {

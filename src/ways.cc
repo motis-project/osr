@@ -1,5 +1,7 @@
 #include "osr/ways.h"
 
+#include <algorithm>
+
 #include "utl/parallel_for.h"
 
 #include "cista/io.h"
@@ -198,7 +200,16 @@ void ways::connect_ways() {
           nodes.push_back(to);
 
           if (from != node_idx_t::invalid()) {
-            dists.push_back(static_cast<std::uint16_t>(std::round(distance)));
+            auto const dist = static_cast<distance_t>(std::round(distance));
+            if (dist < std::numeric_limits<std::uint16_t>::max()) {
+              dists.push_back(static_cast<std::uint16_t>(dist));
+            } else {
+              r_->long_way_node_dist_.push_back(routing::long_distance{
+                  .way_ = way_idx,
+                  .node_ = static_cast<std::uint16_t>(i - 1U),
+                  .distance_ = dist});
+              dists.push_back(std::numeric_limits<std::uint16_t>::max());
+            }
           }
 
           distance = 0.0;
@@ -215,6 +226,8 @@ void ways::connect_ways() {
       }
       pt->increment();
     }
+
+    std::sort(begin(r_->long_way_node_dist_), end(r_->long_way_node_dist_));
 
     for (auto const x : node_ways) {
       r_->node_ways_.emplace_back(x);
