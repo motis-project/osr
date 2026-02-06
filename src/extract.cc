@@ -157,7 +157,7 @@ way_properties get_way_properties(tags const& t) {
   p.in_route_ = t.is_route_;
   p.is_bus_accessible_with_penalty_ =
       is_accessible_with_penalty<bus_profile>(t, osm_obj_type::kWay);
-  p.is_ferry_accessible_ = t.is_ferry_route_;
+  p.is_ferry_accessible_ = is_accessible<ferry_profile>(t, osm_obj_type::kWay);
   return p;
 }
 
@@ -240,7 +240,7 @@ struct way_handler : public osm::handler::Handler {
     if (!t.is_elevator_ &&  // elevators tagged as building would be landuse
         !t.is_parking_ &&
         ((it == end(rel_ways_) && t.highway_.empty() && t.railway_.empty() &&
-          !t.is_platform()) ||
+          !t.is_ferry_route_ && !t.is_platform()) ||
          (t.highway_.empty() && !t.is_platform() && it != end(rel_ways_) &&
           t.landuse_))) {
       return;

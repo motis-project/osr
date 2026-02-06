@@ -174,7 +174,7 @@ struct tags {
           is_incline_down_ = t.value() == "down"sv || value.starts_with("-"sv);
         } break;
         case cista::hash("route"):
-          is_ferry_route_ |= t.value() == "ferry"sv;
+          is_ferry_route_ = t.value() == "ferry"sv;
           break;
       }
     }
