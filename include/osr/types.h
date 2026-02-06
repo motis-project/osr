@@ -101,6 +101,11 @@ using cost_t = std::uint32_t;
 
 constexpr auto const kInfeasible = std::numeric_limits<cost_t>::max();
 
+static constexpr cost_t clamp_cost(std::uint64_t const c) {
+  return static_cast<cost_t>(
+      std::min(c, static_cast<std::uint64_t>(kInfeasible)));
+}
+
 // direction
 enum class direction : std::uint8_t {
   kForward,

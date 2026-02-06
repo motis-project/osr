@@ -153,11 +153,6 @@ struct bidirectional {
            (dir == direction::kForward ? 1 : -1);
   }
 
-  static constexpr cost_t clamp_cost(std::uint64_t const c) {
-    return static_cast<cost_t>(
-        std::min(c, static_cast<std::uint64_t>(kInfeasible - 1U)));
-  }
-
   cost_t get_cost_to_mp(node const n1, node const n2) const {
     auto const f_cost = get_cost<direction::kForward>(n1);
     auto const b_cost = get_cost<direction::kBackward>(n2);
@@ -184,7 +179,10 @@ struct bidirectional {
     auto const l = pq.pop();
     auto const curr = l.get_node();
     auto const curr_cost = get_cost<PathDir>(curr);
-    if (curr_cost < l.cost() - heuristic(params, w, l.n_, PathDir, sharing)) {
+    if (static_cast<std::int64_t>(curr_cost) <
+        static_cast<std::int64_t>(l.cost()) -
+            static_cast<std::int64_t>(
+                heuristic(params, w, l.n_, PathDir, sharing))) {
       return true;
     }
     if constexpr (kDebug) {
@@ -205,7 +203,9 @@ struct bidirectional {
           auto const total =
               clamp_cost(static_cast<std::uint64_t>(curr_cost) + cost);
           auto const heur =
-              total + heuristic(params, w, neighbor.n_, PathDir, sharing);
+              clamp_cost(static_cast<std::uint64_t>(total) +
+                         static_cast<std::int64_t>(heuristic(
+                             params, w, neighbor.n_, PathDir, sharing)));
           if (total >= adjusted_max) {
             if (is_fwd) {
               max_reached_1_ = true;
@@ -238,12 +238,13 @@ struct bidirectional {
         std::cout << "  potential MEETPOINT found by start ";
         meetpoint1.print(std::cout, w);
       }
-      auto const tentative = clamp_cost(cost + other_cost);
+      auto const tentative = static_cast<std::uint64_t>(cost) +
+                             static_cast<std::uint64_t>(other_cost);
       if (tentative < best_cost_) {
         meet_point_1_ = meetpoint1;
         meet_point_2_ = meetpoint2;
         assert(tentative == get_cost_to_mp(meet_point_1_, meet_point_2_));
-        best_cost_ = static_cast<cost_t>(tentative);
+        best_cost_ = clamp_cost(tentative);
 
         if constexpr (kDebug) {
           std::cout << " with cost " << best_cost_ << " -> ACCEPTED\n";
@@ -323,7 +324,8 @@ struct bidirectional {
           pq2_.empty() ? get_cost<direction::kBackward>(meet_point_2_)
                        : pq2_.buckets_[pq2_.get_next_bucket()].back().cost();
       if (static_cast<std::uint64_t>(top_f) + top_r >=
-          static_cast<std::uint64_t>(best_cost_) + radius_) {
+          static_cast<std::uint64_t>(best_cost_) +
+              static_cast<std::uint64_t>(radius_)) {
         if (kDebug) {
           std::cout << "stopping criterion met " << top_f << " " << top_r << " "
                     << best_cost_ << " " << radius_ << std::endl;

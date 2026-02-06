@@ -202,7 +202,8 @@ struct car {
         }
 
         auto const target_node_prop = w.node_properties_[target_node];
-        if (node_cost(target_node_prop) == kInfeasible) {
+        auto const nc = node_cost(target_node_prop);
+        if (nc == kInfeasible) {
           return;
         }
 
@@ -220,8 +221,7 @@ struct car {
         auto const target =
             node{target_node, w.get_way_pos(target_node, way, to), way_dir};
         auto const cost = way_cost(params, target_way_prop, way_dir, dist) +
-                          node_cost(target_node_prop) +
-                          (is_u_turn ? kUturnPenalty : 0U);
+                          nc + (is_u_turn ? kUturnPenalty : 0U);
         fn(target, cost, dist, way, from, to, elevation_storage::elevation{},
            false);
       };
