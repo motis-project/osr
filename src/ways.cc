@@ -198,7 +198,7 @@ void ways::connect_ways() {
           nodes.push_back(to);
 
           if (from != node_idx_t::invalid()) {
-            dists.push_back(static_cast<std::uint16_t>(std::round(distance)));
+            dists.push_back(static_cast<std::uint32_t>(std::round(distance)));
           }
 
           distance = 0.0;

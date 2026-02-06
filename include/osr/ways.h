@@ -288,7 +288,7 @@ struct ways {
     vec_map<way_idx_t, way_properties> way_properties_;
 
     vecvec<way_idx_t, node_idx_t> way_nodes_;
-    vecvec<way_idx_t, std::uint16_t> way_node_dist_;
+    vecvec<way_idx_t, std::uint32_t> way_node_dist_;
 
     vecvec<node_idx_t, way_idx_t> node_ways_;
     vecvec<node_idx_t, std::uint16_t> node_in_way_idx_;
