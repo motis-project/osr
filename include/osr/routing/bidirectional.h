@@ -82,7 +82,7 @@ struct bidirectional {
            dial<label, get_bucket>& d,
            sharing_data const* sharing) {
     auto const heur = heuristic(params, w, l.n_, dir, sharing);
-    if (l.cost() + heur < d.n_buckets() - 1 &&
+    if (l.cost() + heur < d.n_buckets() - 1U &&
         cost_map[l.get_node().get_key()].update(l, l.get_node(), l.cost(),
                                                 node::invalid())) {
       auto const total = static_cast<cost_t>(l.cost() + heur);
@@ -153,13 +153,18 @@ struct bidirectional {
            (dir == direction::kForward ? 1 : -1);
   }
 
+  static constexpr cost_t clamp_cost(std::uint64_t const c) {
+    return static_cast<cost_t>(
+        std::min(c, static_cast<std::uint64_t>(kInfeasible - 1U)));
+  }
+
   cost_t get_cost_to_mp(node const n1, node const n2) const {
     auto const f_cost = get_cost<direction::kForward>(n1);
     auto const b_cost = get_cost<direction::kBackward>(n2);
     if (f_cost == kInfeasible || b_cost == kInfeasible) {
       return kInfeasible;
     }
-    return f_cost + b_cost;
+    return clamp_cost(static_cast<std::uint64_t>(f_cost) + b_cost);
   }
 
   template <direction SearchDir, bool WithBlocked, direction PathDir>
@@ -172,7 +177,8 @@ struct bidirectional {
                   elevation_storage const* elevations,
                   dial<label, get_bucket>& pq,
                   cost_map& costs) {
-    auto const adjusted_max = (max + radius_) / 2U;
+    auto const adjusted_max =
+        clamp_cost((static_cast<std::uint64_t>(max) + radius_) / 2U);
     auto const is_fwd = PathDir == direction::kForward;
 
     auto const l = pq.pop();
@@ -196,7 +202,8 @@ struct bidirectional {
             std::cout << "  NEIGHBOR ";
             neighbor.print(std::cout, w);
           }
-          auto const total = curr_cost + cost;
+          auto const total =
+              clamp_cost(static_cast<std::uint64_t>(curr_cost) + cost);
           auto const heur =
               total + heuristic(params, w, neighbor.n_, PathDir, sharing);
           if (total >= adjusted_max) {
@@ -231,7 +238,7 @@ struct bidirectional {
         std::cout << "  potential MEETPOINT found by start ";
         meetpoint1.print(std::cout, w);
       }
-      auto const tentative = cost + other_cost;
+      auto const tentative = clamp_cost(cost + other_cost);
       if (tentative < best_cost_) {
         meet_point_1_ = meetpoint1;
         meet_point_2_ = meetpoint2;
@@ -292,8 +299,9 @@ struct bidirectional {
                                          is_fwd ? meet_1 : meet_2,
                                          is_fwd ? meet_2 : meet_1);
                     };
-                if (pred_cost + opposite_pred_cost >
-                    curr_cost + opposite_curr_cost) {
+                if (static_cast<std::uint64_t>(pred_cost) + opposite_pred_cost >
+                    static_cast<std::uint64_t>(curr_cost) +
+                        opposite_curr_cost) {
                   evaluate_meetpoint_with_potential_u_turn_cost(
                       pred_cost, opposite_pred_cost, *pred, neighbor);
                 } else {
@@ -314,7 +322,8 @@ struct bidirectional {
       auto const top_r =
           pq2_.empty() ? get_cost<direction::kBackward>(meet_point_2_)
                        : pq2_.buckets_[pq2_.get_next_bucket()].back().cost();
-      if (top_f + top_r >= best_cost_ + radius_) {
+      if (static_cast<std::uint64_t>(top_f) + top_r >=
+          static_cast<std::uint64_t>(best_cost_) + radius_) {
         if (kDebug) {
           std::cout << "stopping criterion met " << top_f << " " << top_r << " "
                     << best_cost_ << " " << radius_ << std::endl;
