@@ -241,7 +241,7 @@ struct ferry {
                                    direction const,
                                    distance_t const dist) {
     if (e.is_ferry_accessible()) {
-      return static_cast<cost_t>((dist / 3));
+      return static_cast<cost_t>((dist / 10));
     } else {
       return kInfeasible;
     }
@@ -250,7 +250,7 @@ struct ferry {
   static constexpr cost_t node_cost(node_properties const&) { return 0U; }
 
   static constexpr double heuristic(parameters const&, double const dist) {
-    return dist / 3;
+    return dist / 10;
   }
 
   static constexpr double slow_heuristic(parameters const& params,
