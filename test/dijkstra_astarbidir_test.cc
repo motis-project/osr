@@ -34,14 +34,12 @@ constexpr auto const kMaxMatchDistance = 100;
 constexpr auto const kMaxAllowedPathDifferenceRatio = 0.5;
 
 void load(std::string_view raw_data, std::string_view data_dir) {
-  if (!fs::exists(data_dir)) {
-    if (fs::exists(raw_data)) {
-      auto const p = fs::path{data_dir};
-      auto ec = std::error_code{};
-      fs::remove_all(p, ec);
-      fs::create_directories(p, ec);
-      osr::extract(false, raw_data, data_dir, fs::path{});
-    }
+  if (fs::exists(raw_data)) {
+    auto const p = fs::path{data_dir};
+    auto ec = std::error_code{};
+    fs::remove_all(p, ec);
+    fs::create_directories(p, ec);
+    osr::extract(false, raw_data, data_dir, fs::path{});
   }
 }
 
