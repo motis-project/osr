@@ -246,10 +246,11 @@ struct way_handler : public osm::handler::Handler {
       return;
     }
 
-    auto p = (t.is_platform() || t.is_parking_ || !t.highway_.empty() ||
-              !t.railway_.empty() || t.is_ferry_route_)
-                 ? get_way_properties(t)
-                 : it->second.p_;
+    auto p =
+        (t.is_platform() || t.is_parking_ || !t.highway_.empty() ||
+         (!t.railway_.empty() && it == end(rel_ways_)) || t.is_ferry_route_)
+            ? get_way_properties(t)
+            : it->second.p_;
     if (!p.is_accessible()) {
       return;
     }
