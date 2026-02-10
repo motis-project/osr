@@ -138,7 +138,7 @@ template <Profile P>
 void write_map_match_debug(
     ways const& w,
     lookup const& l,
-    typename P::parameters const& params,
+    typename P::parameters const&,
     std::vector<location> const& points,
     std::vector<point_data<P>> const& pds,
     std::vector<segment_data<P>> const& segments,
