@@ -428,7 +428,7 @@ struct bike_profile {
 struct car_profile {
   static override access_override(tags const& t, osm_obj_type const type) {
     if (t.access_ == override::kBlacklist || t.is_route_ || t.is_ferry_route_ ||
-        (type == osm_obj_type::kWay && !t.highway_.empty())) {
+        (type == osm_obj_type::kWay && t.highway_.empty())) {
       return override::kBlacklist;
     }
 
