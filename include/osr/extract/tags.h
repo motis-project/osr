@@ -529,7 +529,15 @@ struct bus_profile {
 
   static bool access_with_penalty(tags const& t, osm_obj_type const type) {
     if (type == osm_obj_type::kNode) {
-      return t.private_access_ && t.barrier_ == "gate";
+      if (t.private_access_) {
+        switch (cista::hash(t.barrier_)) {
+          case cista::hash("gate"):
+          case cista::hash("lift_gate"):
+          case cista::hash("swing_gate"): return true;
+          default: return false;
+        }
+      }
+      return false;
     } else {
       return t.private_access_ && default_access(t, type);
     }
