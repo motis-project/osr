@@ -111,9 +111,9 @@ concept Profile =
       {
         P::way_cost(params, w_props, dir, std::declval<distance_t>())
       } -> std::same_as<cost_t>;
-      { P::node_cost(n_props) } -> std::same_as<cost_t>;
-      { P::heuristic(params, dist) } -> std::same_as<double>;
-      { P::slow_heuristic(params, dist) } -> std::same_as<double>;
+      { P::node_cost(params, n_props) } -> std::same_as<cost_t>;
+      { P::lower_bound_heuristic(params, dist) } -> std::same_as<double>;
+      { P::upper_bound_heuristic(params, dist) } -> std::same_as<double>;
       { P::get_reverse(node) } -> std::same_as<typename P::node>;
     } &&
     requires(typename P::parameters const& params,

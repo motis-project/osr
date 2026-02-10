@@ -159,7 +159,7 @@ struct ferry {
 
           if (!is_additional_node(additional, ae.node_)) {
             auto const target_node_prop = w.node_properties_[ae.node_];
-            if (node_cost(target_node_prop) == kInfeasible) {
+            if (node_cost(params, target_node_prop) == kInfeasible) {
               continue;
             }
           }
@@ -170,7 +170,7 @@ struct ferry {
           auto cost = edge_cost;
 
           if (!is_additional_node(additional, ae.node_)) {
-            cost += node_cost(w.node_properties_[ae.node_]);
+            cost += node_cost(params, w.node_properties_[ae.node_]);
           }
 
           fn(target, cost, ae.distance_, ae.underlying_way_, 0, 0,
@@ -196,7 +196,7 @@ struct ferry {
         }
 
         auto const target_node_prop = w.node_properties_[target_node];
-        if (node_cost(target_node_prop) == kInfeasible) {
+        if (node_cost(params, target_node_prop) == kInfeasible) {
           return;
         }
 
@@ -208,7 +208,7 @@ struct ferry {
         auto const dist = w.get_way_node_distance(way, std::min(from, to));
         auto const target = node{target_node};
         auto const cost = way_cost(params, target_way_prop, way_dir, dist) +
-                          node_cost(target_node_prop);
+                          node_cost(params, target_node_prop);
         fn(target, cost, dist, way, from, to, elevation_storage::elevation{},
            false);
       };
@@ -247,15 +247,18 @@ struct ferry {
     }
   }
 
-  static constexpr cost_t node_cost(node_properties const&) { return 0U; }
+  static constexpr cost_t node_cost(parameters const&, node_properties const&) {
+    return 0U;
+  }
 
-  static constexpr double heuristic(parameters const&, double const dist) {
+  static constexpr double lower_bound_heuristic(parameters const&,
+                                                double const dist) {
     return dist / 10;
   }
 
-  static constexpr double slow_heuristic(parameters const& params,
-                                         double const dist) {
-    return heuristic(params, dist);
+  static constexpr double upper_bound_heuristic(parameters const& params,
+                                                double const dist) {
+    return lower_bound_heuristic(params, dist);
   }
 
   static constexpr node get_reverse(node const n) { return n; }

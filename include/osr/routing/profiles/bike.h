@@ -194,7 +194,7 @@ struct bike {
           }
         }
         auto const target_node_prop = w.node_properties_[target_node];
-        if (node_cost(target_node_prop) == kInfeasible) {
+        if (node_cost(params, target_node_prop) == kInfeasible) {
           return;
         }
 
@@ -222,7 +222,7 @@ struct bike {
                        : ElevationUpCost * to_idx(elevation.up_) / dist)
                 : 0);
         auto const cost = way_cost(params, target_way_prop, way_dir, dist) +
-                          node_cost(target_node_prop) + elevation_cost;
+                          node_cost(params, target_node_prop) + elevation_cost;
         fn(node{target_node, way_dir}, static_cast<std::uint32_t>(cost), dist,
            way, from, to, elevation, false);
       };
@@ -253,17 +253,18 @@ struct bike {
     }
   }
 
-  static constexpr cost_t node_cost(node_properties const n) {
+  static constexpr cost_t node_cost(parameters const&,
+                                    node_properties const n) {
     return n.is_bike_accessible() ? 0U : kInfeasible;
   }
 
-  static constexpr double heuristic(parameters const& params,
-                                    double const dist) {
+  static constexpr double lower_bound_heuristic(parameters const& params,
+                                                double const dist) {
     return dist / (params.speed_meters_per_second_ + 0.5);
   }
 
-  static constexpr double slow_heuristic(parameters const& params,
-                                         double const dist) {
+  static constexpr double upper_bound_heuristic(parameters const& params,
+                                                double const dist) {
     return dist / (params.speed_meters_per_second_ - 0.7);
   }
 

@@ -141,11 +141,11 @@ struct astar {
           --remaining_destinations_;
           early_termination_max_cost_ = std::min(
               early_termination_max_cost_,
-              static_cast<cost_t>(
-                  std::min({static_cast<std::uint64_t>(curr_cost) * 2,
-                            static_cast<std::uint64_t>(
-                                curr_cost + P::slow_heuristic(params, 10000U)),
-                            static_cast<std::uint64_t>(kInfeasible - 1U)})));
+              static_cast<cost_t>(std::min(
+                  {static_cast<std::uint64_t>(curr_cost) * 2,
+                   static_cast<std::uint64_t>(
+                       curr_cost + P::upper_bound_heuristic(params, 10000U)),
+                   static_cast<std::uint64_t>(kInfeasible - 1U)})));
           if (remaining_destinations_ == 0U) {
             break;
           }
@@ -250,7 +250,7 @@ struct astar {
                    node_idx_t const n) const {
     auto const node_pos = get_node_pos(w, sharing, n);
     auto const dist = distapprox(node_pos, dest_centroid_) - dest_radius_;
-    return dist > 0.0 ? P::heuristic(params, dist) : 0.0;
+    return dist > 0.0 ? P::lower_bound_heuristic(params, dist) : 0.0;
   }
 
   dial<label, get_bucket> pq_{get_bucket{}};

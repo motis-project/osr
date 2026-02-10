@@ -80,7 +80,8 @@ std::vector<matched_way<P>> match_input_point(
         }
         // TODO: match penalty is often too small / equal for points that
         //   are close to each other
-        auto const match_heuristic = P::slow_heuristic(params, mw.dist_to_way_);
+        auto const match_heuristic =
+            P::upper_bound_heuristic(params, mw.dist_to_way_);
         mw.match_penalty_ =
             static_cast<cost_t>(match_heuristic * match_heuristic);
         matched_ways.push_back(std::move(mw));
@@ -102,9 +103,9 @@ template <Profile P>
 double get_dijkstra_limit(typename P::parameters const& params,
                           double const distance) {
   if (distance < 2000) {
-    return P::slow_heuristic(params, distance) * 5.0 + 500.0;
+    return P::upper_bound_heuristic(params, distance) * 5.0 + 500.0;
   } else {
-    return P::slow_heuristic(params, distance) * 3.0 + 500.0;
+    return P::upper_bound_heuristic(params, distance) * 3.0 + 500.0;
   }
 }
 
@@ -305,7 +306,7 @@ matched_route map_match(
             auto const bee_dist =
                 geo::distance(from_mw.projected_point_, to_mw.projected_point_);
             auto const bee_cost =
-                static_cast<cost_t>(P::heuristic(params, bee_dist));
+                static_cast<cost_t>(P::lower_bound_heuristic(params, bee_dist));
             auto const cost = static_cast<cost_t>(
                 std::min(static_cast<std::uint32_t>(kInfeasible) - 1U,
                          static_cast<std::uint32_t>(min_from_cost) + bee_cost));
@@ -319,7 +320,8 @@ matched_route map_match(
         } else {
           auto const bee_dist =
               geo::distance(from_pd.loc_.pos_, to_mw.projected_point_);
-          auto const cost = static_cast<cost_t>(P::heuristic(params, bee_dist));
+          auto const cost =
+              static_cast<cost_t>(P::lower_bound_heuristic(params, bee_dist));
           to_mw.fwd_cost_ = cost;
           to_mw.bwd_cost_ = cost;
           to_mw.beeline_dist_ = static_cast<distance_t>(bee_dist);
@@ -338,7 +340,7 @@ matched_route map_match(
             auto const bee_dist =
                 geo::distance(from_mw.projected_point_, to_pd.loc_.pos_);
             auto const bee_cost =
-                static_cast<cost_t>(P::heuristic(params, bee_dist));
+                static_cast<cost_t>(P::lower_bound_heuristic(params, bee_dist));
             auto const cost = static_cast<cost_t>(
                 std::min(static_cast<std::uint32_t>(kInfeasible) - 1U,
                          static_cast<std::uint32_t>(min_from_cost) + bee_cost));
@@ -352,7 +354,8 @@ matched_route map_match(
         } else {
           auto const bee_dist =
               geo::distance(from_pd.loc_.pos_, to_pd.loc_.pos_);
-          auto const cost = static_cast<cost_t>(P::heuristic(params, bee_dist));
+          auto const cost =
+              static_cast<cost_t>(P::lower_bound_heuristic(params, bee_dist));
           seg.min_cost_ = cost;
           seg.max_cost_ = cost;
           seg.beeline_dist_ = static_cast<distance_t>(bee_dist);

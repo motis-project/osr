@@ -467,18 +467,19 @@ struct bike_sharing {
     return footp::way_cost(params.foot_, e, dir, dist);
   }
 
-  static constexpr cost_t node_cost(node_properties const n) {
-    return footp::node_cost(n);
+  static constexpr cost_t node_cost(parameters const& params,
+                                    node_properties const n) {
+    return footp::node_cost(params.foot_, n);
   }
 
-  static constexpr double heuristic(parameters const& params,
-                                    double const dist) {
-    return bikep::heuristic(params.bike_, dist);
+  static constexpr double lower_bound_heuristic(parameters const& params,
+                                                double const dist) {
+    return bikep::lower_bound_heuristic(params.bike_, dist);
   }
 
-  static constexpr double slow_heuristic(parameters const& params,
-                                         double dist) {
-    return bikep::slow_heuristic(params.bike_, dist);
+  static constexpr double upper_bound_heuristic(parameters const& params,
+                                                double dist) {
+    return bikep::upper_bound_heuristic(params.bike_, dist);
   }
 
   static constexpr node get_reverse(node const n) { return n; }

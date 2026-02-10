@@ -349,17 +349,19 @@ struct car_parking {
     return footp::way_cost(params.foot_, e, dir, dist);
   }
 
-  static constexpr cost_t node_cost(node_properties const n) {
-    return footp::node_cost(n);
+  static constexpr cost_t node_cost(parameters const& params,
+                                    node_properties const n) {
+    return footp::node_cost(params.foot_, n);
   }
 
-  static constexpr double heuristic(parameters const& params, double dist) {
-    return car::heuristic(params.car_, dist);
+  static constexpr double lower_bound_heuristic(parameters const& params,
+                                                double dist) {
+    return car::lower_bound_heuristic(params.car_, dist);
   }
 
-  static constexpr double slow_heuristic(parameters const& params,
-                                         double dist) {
-    return car::slow_heuristic(params.car_, dist);
+  static constexpr double upper_bound_heuristic(parameters const& params,
+                                                double dist) {
+    return car::upper_bound_heuristic(params.car_, dist);
   }
 
   static constexpr node get_reverse(node n) {

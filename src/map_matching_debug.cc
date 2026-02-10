@@ -14,7 +14,6 @@
 #include "osr/lookup.h"
 #include "osr/routing/profiles/bike.h"
 #include "osr/routing/profiles/bike_sharing.h"
-#include "osr/routing/profiles/bus.h"
 #include "osr/routing/profiles/car.h"
 #include "osr/routing/profiles/car_parking.h"
 #include "osr/routing/profiles/car_sharing.h"
@@ -374,8 +373,7 @@ void write_map_match_debug(
       dm.bwd_in_ = to_debug_mps(mw.bwd_in_);
 
       // Start label costs
-      auto const match_penalty =
-          static_cast<cost_t>(P::heuristic(params, mw.dist_to_way_));
+      auto const match_penalty = mw.match_penalty_;
       auto const prev_seg_cost = prev_seg != nullptr
                                      ? std::min(mw.fwd_cost_, mw.bwd_cost_)
                                      : cost_t{0U};

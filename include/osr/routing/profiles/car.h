@@ -2,6 +2,7 @@
 
 #include <bitset>
 #include <optional>
+#include <tuple>
 
 #include "boost/json/object.hpp"
 
@@ -16,14 +17,17 @@ namespace osr {
 
 struct sharing_data;
 
-struct car {
+template <bool IsBus>
+struct generic_car {
+  static constexpr auto const kName = "car";
   static constexpr auto const kMaxMatchDistance = 200U;
-  static constexpr auto const kUturnPenalty = cost_t{120U};
 
   using key = node_idx_t;
 
   struct parameters {
-    using profile_t = car;
+    using profile_t = generic_car;
+    cost_t uturn_penalty_{120U};
+    cost_t private_gate_penalty_{60U};
   };
 
   struct node {
@@ -39,7 +43,8 @@ struct car {
     }
 
     boost::json::object geojson_properties(ways const&) const {
-      return boost::json::object{{"node_id", n_.v_}, {"type", "car"}};
+      return boost::json::object{{"node_id", n_.v_},
+                                 {"type", IsBus ? "bus" : "car"}};
     }
 
     constexpr node_idx_t get_node() const noexcept { return n_; }
@@ -51,10 +56,25 @@ struct car {
       return dir_;
     }
 
+    way_idx_t get_way(ways::routing const& w,
+                      sharing_data const* additional) const {
+      if (additional != nullptr && additional->is_additional_node(n_)) {
+        auto const& edges = additional->additional_edges_.at(n_);
+        auto const& edge = edges.at(cista::to_idx(way_));
+        return edge.underlying_way_;
+      }
+      return w.node_ways_[n_][way_];
+    }
+
     std::ostream& print(std::ostream& out, ways const& w) const {
-      return out << "(node=" << w.node_to_osm_[n_] << ", dir=" << to_str(dir_)
-                 << ", way=" << w.way_osm_idx_[w.r_->node_ways_[n_][way_]]
-                 << ")";
+      if (n_ >= w.n_nodes()) {
+        return out << "(node=" << osm_node_idx_t{to_idx(n_)}
+                   << "*, dir=" << to_str(dir_) << ")";
+      } else {
+        return out << "(node=" << w.node_to_osm_[n_] << ", dir=" << to_str(dir_)
+                   << ", way=" << w.way_osm_idx_[w.r_->node_ways_[n_][way_]]
+                   << ")";
+      }
     }
 
     node_idx_t n_;
@@ -185,9 +205,71 @@ struct car {
                        ways::routing const& w,
                        node const n,
                        bitvec<node_idx_t> const* blocked,
-                       sharing_data const*,
+                       sharing_data const* additional,
                        elevation_storage const*,
                        Fn&& fn) {
+    if (additional != nullptr) {
+      if (auto const it = additional->additional_edges_.find(n.n_);
+          it != end(additional->additional_edges_)) {
+        for (auto const& ae : it->second) {
+          auto const edge_dir =
+              ae.reverse_ ? direction::kBackward : direction::kForward;
+          assert(ae.underlying_way_ != way_idx_t::invalid());
+          auto const way_props = w.way_properties_[ae.underlying_way_];
+
+          auto const edge_cost =
+              way_cost(params, way_props, edge_dir, ae.distance_);
+          if (edge_cost == kInfeasible) {
+            continue;
+          }
+
+          if (!is_additional_node(additional, ae.node_)) {
+            auto const target_node_prop = w.node_properties_[ae.node_];
+            if (node_cost(params, target_node_prop) == kInfeasible) {
+              continue;
+            }
+          }
+
+          if (!is_additional_node(additional, n.n_)) {
+            if (w.is_restricted<SearchDir>(
+                    n.n_, n.way_,
+                    w.get_way_pos(n.n_, ae.underlying_way_ /*,
+                                  ae.node_in_way_idx_from_*/))) {
+              continue;
+            }
+          }
+
+          auto const prev_way = n.get_way(w, additional);
+
+          auto const is_u_turn =
+              prev_way == ae.underlying_way_ && n.dir_ != edge_dir;
+
+          auto const target =
+              node{ae.node_,
+                   additional->get_way_pos(w, ae.node_,
+                   ae.underlying_way_/*,
+                                           target_node_in_way_idx*/),
+                   edge_dir};
+          auto cost = edge_cost;
+
+          if (is_u_turn) {
+            cost += params.uturn_penalty_;
+          }
+
+          if (!is_additional_node(additional, ae.node_)) {
+            cost += node_cost(params, w.node_properties_[ae.node_]);
+          }
+
+          fn(target, cost, ae.distance_, ae.underlying_way_, 0, 0,
+             elevation_storage::elevation{}, false);
+        }
+      }
+
+      if (is_additional_node(additional, n)) {
+        return;
+      }
+    }
+
     auto way_pos = way_pos_t{0U};
     for (auto const [way, i] :
          utl::zip_unchecked(w.node_ways_[n.n_], w.node_in_way_idx_[n.n_])) {
@@ -202,7 +284,7 @@ struct car {
         }
 
         auto const target_node_prop = w.node_properties_[target_node];
-        auto const nc = node_cost(target_node_prop);
+        auto const nc = node_cost(params, target_node_prop);
         if (nc == kInfeasible) {
           return;
         }
@@ -221,7 +303,7 @@ struct car {
         auto const target =
             node{target_node, w.get_way_pos(target_node, way, to), way_dir};
         auto const cost = way_cost(params, target_way_prop, way_dir, dist) +
-                          nc + (is_u_turn ? kUturnPenalty : 0U);
+                          nc + (is_u_turn ? params.uturn_penalty_ : 0U);
         fn(target, cost, dist, way, from, to, elevation_storage::elevation{},
            false);
       };
@@ -259,30 +341,72 @@ struct car {
                                    way_properties const& e,
                                    direction const dir,
                                    distance_t const dist) {
-    if (e.is_car_accessible() &&
-        (dir == direction::kForward || !e.is_oneway_car())) {
-      return (dist / e.max_speed_m_per_s()) * (e.is_destination() ? 5U : 1U) +
-             (e.is_destination() ? 120U : 0U);
+    if constexpr (IsBus) {
+      auto const accessible = e.is_bus_accessible();
+      auto const accessible_with_penalty = e.is_bus_accessible_with_penalty();
+      if ((accessible || accessible_with_penalty) &&
+          (dir == direction::kForward || !e.is_oneway_psv())) {
+        auto cost = static_cast<cost_t>((dist / e.max_speed_m_per_s()) *
+                                        (e.in_route() ? 1.0 : 1.2));
+        if (e.is_parking()) {
+          cost *= 2U;
+        }
+        if (accessible_with_penalty) {
+          cost *= e.in_route() ? 2U : 4U;
+        }
+        return cost;
+      } else {
+        return kInfeasible;
+      }
     } else {
-      return kInfeasible;
+      if (e.is_car_accessible() &&
+          (dir == direction::kForward || !e.is_oneway_car())) {
+        return (dist / e.max_speed_m_per_s()) * (e.is_destination() ? 5U : 1U) +
+               (e.is_destination() ? 120U : 0U);
+      } else {
+        return kInfeasible;
+      }
     }
   }
 
-  static constexpr cost_t node_cost(node_properties const& n) {
-    return n.is_car_accessible() ? 0U : kInfeasible;
+  static constexpr cost_t node_cost(parameters const& params,
+                                    node_properties const& n) {
+    if constexpr (IsBus) {
+      return n.is_bus_accessible() ? 0U
+                                   : (n.is_bus_accessible_with_penalty()
+                                          ? params.private_gate_penalty_
+                                          : kInfeasible);
+    } else {
+      return n.is_car_accessible() ? 0U : kInfeasible;
+    }
   }
 
-  static constexpr double heuristic(parameters const&, double const dist) {
+  static constexpr double lower_bound_heuristic(parameters const&,
+                                                double const dist) {
     return dist / (130U / 3.6);
   }
 
-  static constexpr double slow_heuristic(parameters const&, double const dist) {
+  static constexpr double upper_bound_heuristic(parameters const&,
+                                                double const dist) {
     return dist / (15U / 3.6);
   }
 
   static constexpr node get_reverse(node const n) {
     return {n.n_, n.way_, opposite(n.dir_)};
   }
+
+  static bool is_additional_node(sharing_data const* additional,
+                                 node_idx_t const n) {
+    return additional != nullptr && additional->is_additional_node(n);
+  }
+
+  static bool is_additional_node(sharing_data const* additional,
+                                 node const& n) {
+    return is_additional_node(additional, n.n_);
+  }
 };
+
+using car = generic_car<false>;
+using bus = generic_car<true>;
 
 }  // namespace osr

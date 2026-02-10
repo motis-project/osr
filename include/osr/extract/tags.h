@@ -427,7 +427,7 @@ struct bike_profile {
 
 struct car_profile {
   static override access_override(tags const& t) {
-    if (t.access_ == override::kBlacklist || t.is_route_ || t.is_ferry_route_) {
+    if (t.access_ == override::kBlacklist || t.is_ferry_route_) {
       return override::kBlacklist;
     }
 
@@ -514,76 +514,15 @@ struct bus_profile {
       return t.bus_;
     } else if (t.access_ == override::kBlacklist || t.is_ferry_route_) {
       return override::kBlacklist;
+    } else if (t.barrier_ == "bus_trap") {
+      return override::kWhitelist;
     }
 
-    if (!t.barrier_.empty()) {
-      switch (cista::hash(t.barrier_)) {
-        case cista::hash("cattle_grid"):
-        case cista::hash("border_control"):
-        case cista::hash("toll_booth"):
-        case cista::hash("sally_port"):
-        case cista::hash("gate"):
-        case cista::hash("lift_gate"):
-        case cista::hash("no"):
-        case cista::hash("entrance"):
-        case cista::hash("coupure"):
-        case cista::hash("height_restrictor"): [[fallthrough]];
-        case cista::hash("arch"):
-        case cista::hash("bus_trap"): break;
-        default: return override::kBlacklist;
-      }
-    }
-
-    auto const get_override = [](std::string_view tag) {
-      switch (cista::hash(tag)) {
-        case cista::hash("private"):
-        case cista::hash("optional_sidepath"):
-        case cista::hash("agricultural"):
-        case cista::hash("forestry"):
-        case cista::hash("agricultural;forestry"):
-        case cista::hash("permit"):
-        case cista::hash("customers"):
-        case cista::hash("delivery"): [[fallthrough]];
-        case cista::hash("no"): return override::kBlacklist;
-
-        case cista::hash("designated"):
-        case cista::hash("permissive"): [[fallthrough]];
-        case cista::hash("yes"): return override::kWhitelist;
-        default: return override::kNone;
-      }
-    };
-
-    if (auto mv = get_override(t.motor_vehicle_); mv != override::kNone) {
-      return mv;
-    } else if (auto mc = get_override(t.motorcar_); mc != override::kNone) {
-      return mc;
-    }
-
-    return t.vehicle_;
+    return car_profile::access_override(t);
   }
 
   static bool default_access(tags const& t, osm_obj_type const type) {
-    if (type == osm_obj_type::kWay) {
-      switch (cista::hash(t.highway_)) {
-        case cista::hash("motorway"):
-        case cista::hash("motorway_link"):
-        case cista::hash("trunk"):
-        case cista::hash("trunk_link"):
-        case cista::hash("primary"):
-        case cista::hash("primary_link"):
-        case cista::hash("secondary"):
-        case cista::hash("secondary_link"):
-        case cista::hash("tertiary"):
-        case cista::hash("tertiary_link"):
-        case cista::hash("residential"):
-        case cista::hash("living_street"):
-        case cista::hash("unclassified"):
-        case cista::hash("service"): return true;
-        default: return false;
-      }
-    } else {
-      return true;
-    }
+    return car_profile::default_access(t, type);
   }
 
   static bool access_with_penalty(tags const& t, osm_obj_type const type) {

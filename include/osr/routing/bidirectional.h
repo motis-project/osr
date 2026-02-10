@@ -62,8 +62,8 @@ struct bidirectional {
         std::abs(start_loc_.pos_.lat()) > std::abs(end_loc_.pos_.lat())
             ? start_loc_.pos_
             : end_loc_.pos_);
-    auto const diameter =
-        P::heuristic(params, distapprox(start_loc_.pos_, end_loc_.pos_));
+    auto const diameter = P::lower_bound_heuristic(
+        params, distapprox(start_loc_.pos_, end_loc_.pos_));
     radius_ =
         diameter < max && max + std::max(diameter, kLongestNodeDistance * 2.0) <
                               std::numeric_limits<cost_t>::max()
@@ -149,7 +149,8 @@ struct bidirectional {
     auto const dist = distapprox(p, end_loc_.pos_);
     auto const other_dist = distapprox(p, start_loc_.pos_);
     return 0.5 *
-           (P::heuristic(params, dist) - P::heuristic(params, other_dist)) *
+           (P::lower_bound_heuristic(params, dist) -
+            P::lower_bound_heuristic(params, other_dist)) *
            (dir == direction::kForward ? 1 : -1);
   }
 

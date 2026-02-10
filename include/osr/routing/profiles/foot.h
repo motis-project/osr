@@ -199,7 +199,7 @@ struct foot {
         }
 
         auto const target_node_prop = w.node_properties_[target_node];
-        if (node_cost(target_node_prop) == kInfeasible) {
+        if (node_cost(params, target_node_prop) == kInfeasible) {
           return;
         }
 
@@ -215,7 +215,7 @@ struct foot {
                     w.get_way_node_distance(way, std::min(from, to));
                 auto const cost =
                     way_cost(params, target_way_prop, way_dir, dist) +
-                    node_cost(target_node_prop);
+                    node_cost(params, target_node_prop);
                 fn(node{target_node, target_lvl},
                    static_cast<std::uint32_t>(cost), dist, way, from, to,
                    elevation_storage::elevation{}, false);
@@ -228,7 +228,7 @@ struct foot {
 
           auto const dist = w.get_way_node_distance(way, std::min(from, to));
           auto const cost = way_cost(params, target_way_prop, way_dir, dist) +
-                            node_cost(target_node_prop);
+                            node_cost(params, target_node_prop);
           fn(node{target_node, *target_lvl}, static_cast<std::uint32_t>(cost),
              dist, way, from, to, elevation_storage::elevation{}, false);
         }
@@ -363,16 +363,17 @@ struct foot {
     }
   }
 
-  static constexpr cost_t node_cost(node_properties const n) {
+  static constexpr cost_t node_cost(parameters const&,
+                                    node_properties const n) {
     return n.is_walk_accessible() ? (n.is_elevator() ? 90U : 0U) : kInfeasible;
   }
 
-  static constexpr double heuristic(parameters const& params,
-                                    double const dist) {
+  static constexpr double lower_bound_heuristic(parameters const& params,
+                                                double const dist) {
     return dist / (params.speed_meters_per_second_ + 0.1);
   }
-  static constexpr double slow_heuristic(parameters const& params,
-                                         double const dist) {
+  static constexpr double upper_bound_heuristic(parameters const& params,
+                                                double const dist) {
     return dist / (params.speed_meters_per_second_ - 0.2);
   }
 
