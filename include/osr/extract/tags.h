@@ -286,7 +286,7 @@ struct tags {
 
 template <typename T>
 bool is_accessible(tags const& o, osm_obj_type const type) {
-  auto const override = T::access_override(o);
+  auto const override = T::access_override(o, type);
   return override == override::kWhitelist ||
          (T::default_access(o, type) && override != override::kBlacklist);
 }
@@ -297,7 +297,7 @@ bool is_accessible_with_penalty(tags const& o, osm_obj_type const type) {
 }
 
 struct foot_profile {
-  static override access_override(tags const& t) {
+  static override access_override(tags const& t, osm_obj_type) {
     if (t.is_route_ || t.sidewalk_separate_ || t.is_ferry_route_) {
       return override::kBlacklist;
     }
@@ -367,7 +367,7 @@ struct foot_profile {
 };
 
 struct bike_profile {
-  static override access_override(tags const& t) {
+  static override access_override(tags const& t, osm_obj_type) {
     if (t.is_route_ || t.is_ferry_route_) {
       return override::kBlacklist;
     }
@@ -426,8 +426,9 @@ struct bike_profile {
 };
 
 struct car_profile {
-  static override access_override(tags const& t) {
-    if (t.access_ == override::kBlacklist || t.is_ferry_route_) {
+  static override access_override(tags const& t, osm_obj_type const type) {
+    if (t.access_ == override::kBlacklist || t.is_route_ || t.is_ferry_route_ ||
+        (type == osm_obj_type::kWay && !t.highway_.empty())) {
       return override::kBlacklist;
     }
 
@@ -509,16 +510,17 @@ struct car_profile {
 };
 
 struct bus_profile {
-  static override access_override(tags const& t) {
+  static override access_override(tags const& t, osm_obj_type const type) {
     if (t.bus_ != override::kNone) {
       return t.bus_;
-    } else if (t.access_ == override::kBlacklist || t.is_ferry_route_) {
+    } else if (t.access_ == override::kBlacklist || t.is_route_ ||
+               t.is_ferry_route_) {
       return override::kBlacklist;
     } else if (t.barrier_ == "bus_trap") {
       return override::kWhitelist;
     }
 
-    return car_profile::access_override(t);
+    return car_profile::access_override(t, type);
   }
 
   static bool default_access(tags const& t, osm_obj_type const type) {
@@ -535,7 +537,9 @@ struct bus_profile {
 };
 
 struct railway_profile {
-  static override access_override(tags const&) { return override::kNone; }
+  static override access_override(tags const&, osm_obj_type) {
+    return override::kNone;
+  }
 
   static bool default_access(tags const& t, osm_obj_type const type) {
     if (type == osm_obj_type::kWay) {
@@ -560,7 +564,9 @@ struct railway_profile {
 };
 
 struct ferry_profile {
-  static override access_override(tags const&) { return override::kNone; }
+  static override access_override(tags const&, osm_obj_type) {
+    return override::kNone;
+  }
 
   static bool default_access(tags const& t, osm_obj_type const type) {
     if (type == osm_obj_type::kWay) {
