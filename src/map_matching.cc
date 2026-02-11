@@ -175,7 +175,7 @@ matched_route map_match(
         auto const to_node = outgoing ? nc.node_ : mw.additional_node_idx_;
         auto const& path = nc.path_;
         seg.additional_edges_[from_node].push_back(additional_edge{
-            .node_ = to_node,
+            .to_ = to_node,
             .distance_ =
                 static_cast<distance_t>(nc.dist_to_node_ + mw.dist_to_way_ * 2),
             .underlying_way_ = mw.way_,
@@ -213,7 +213,7 @@ matched_route map_match(
         std::min(static_cast<double>(std::numeric_limits<cost_t>::max() - 1U),
                  dijkstra_max));
 
-    seg.d_.reset(dijkstra_max_cost, from_pd.loc_, to_pd.loc_);
+    seg.astar_.reset(dijkstra_max_cost, from_pd.loc_, to_pd.loc_);
 
     auto const cost_offset =
         prev_seg != nullptr ? prev_seg->min_cost_ : cost_t{0U};
@@ -224,10 +224,12 @@ matched_route map_match(
 
     for (auto& to_mw : to_pd.matched_ways_) {
       if (to_mw.fwd_node_ != P::node::invalid()) {
-        seg.d_.add_destination(params, w, seg.sharing_.get(), to_mw.fwd_node_);
+        seg.astar_.add_destination(params, w, seg.sharing_.get(),
+                                   to_mw.fwd_node_);
       }
       if (to_mw.bwd_node_ != P::node::invalid()) {
-        seg.d_.add_destination(params, w, seg.sharing_.get(), to_mw.bwd_node_);
+        seg.astar_.add_destination(params, w, seg.sharing_.get(),
+                                   to_mw.bwd_node_);
       }
     }
 
@@ -249,8 +251,8 @@ matched_route map_match(
                                   : 0)),
                          static_cast<std::int64_t>(0LL),
                          static_cast<std::int64_t>(kInfeasible - 1U)));
-          seg.d_.add_start(params, w, seg.sharing_.get(),
-                           typename P::label{node, cost});
+          seg.astar_.add_start(params, w, seg.sharing_.get(),
+                               typename P::label{node, cost});
         };
 
         add_start(from_mw.fwd_node_, from_mw.fwd_cost_);
@@ -258,12 +260,13 @@ matched_route map_match(
       }
 
       auto const dijkstra_start = std::chrono::steady_clock::now();
-      seg.d_.run(params, w, *w.r_, dijkstra_max_cost, blocked,
-                 seg.sharing_.get(), elevations, direction::kForward);
-      seg.d_dijkstra_ = std::chrono::duration_cast<std::chrono::microseconds>(
-          std::chrono::steady_clock::now() - dijkstra_start);
+      seg.astar_.run(params, w, *w.r_, dijkstra_max_cost, blocked,
+                     seg.sharing_.get(), elevations, direction::kForward);
+      seg.astar_duration_ =
+          std::chrono::duration_cast<std::chrono::microseconds>(
+              std::chrono::steady_clock::now() - dijkstra_start);
 
-      if (seg.d_.remaining_destinations_ == 0U) {
+      if (seg.astar_.remaining_destinations_ == 0U) {
         ++result.n_dijkstra_early_terminations_;
       } else {
         ++result.n_dijkstra_full_runs_;
@@ -273,14 +276,14 @@ matched_route map_match(
     auto reached = 0U;
     for (auto& to_mw : to_pd.matched_ways_) {
       if (to_mw.fwd_node_ != P::node::invalid()) {
-        auto const cost = seg.d_.get_cost(to_mw.fwd_node_);
+        auto const cost = seg.astar_.get_cost(to_mw.fwd_node_);
         if (cost != kInfeasible) {
           ++reached;
           to_mw.fwd_cost_ = cost;
         }
       }
       if (to_mw.bwd_node_ != P::node::invalid()) {
-        auto const cost = seg.d_.get_cost(to_mw.bwd_node_);
+        auto const cost = seg.astar_.get_cost(to_mw.bwd_node_);
         if (cost != kInfeasible) {
           ++reached;
           to_mw.bwd_cost_ = cost;
@@ -502,7 +505,7 @@ matched_route map_match(
                   "[map_match] [case 1] no selected dest");
       ++result.n_routed_;
       auto const segments_before = result.path_.segments_.size();
-      auto const& d = seg.d_;
+      auto const& d = seg.astar_;
       auto const to_mw =
           to_pd.matched_ways_.at(selected_dest->matched_way_idx_);
       auto n = std::optional{to_mw.get_node(selected_dest->dir_)};
@@ -533,7 +536,7 @@ matched_route map_match(
             auto const edges_it = seg.additional_edges_.find(pred_node_idx);
             if (edges_it != seg.additional_edges_.end()) {
               for (auto const& ae : edges_it->second) {
-                if (ae.node_ == curr_node_idx) {
+                if (ae.to_ == curr_node_idx) {
                   polyline = ae.polyline_;
                   edge_dist = ae.distance_;
                   edge_way = ae.underlying_way_;
@@ -598,8 +601,9 @@ matched_route map_match(
   result.segment_offsets_.emplace_back(offset);
 
   auto const end_time = std::chrono::steady_clock::now();
-  result.d_total_ = std::chrono::duration_cast<std::chrono::milliseconds>(
-      end_time - start_time);
+  result.total_duration_ =
+      std::chrono::duration_cast<std::chrono::milliseconds>(end_time -
+                                                            start_time);
 
   if (debug_path_fn) {
     if (auto const debug_path = debug_path_fn(result); debug_path.has_value()) {

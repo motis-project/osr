@@ -11,7 +11,7 @@ namespace osr {
 struct additional_edge {
   friend bool operator==(additional_edge, additional_edge) = default;
 
-  node_idx_t node_{};  // to
+  node_idx_t to_{};
   distance_t distance_{};
 
   way_idx_t underlying_way_{way_idx_t::invalid()};

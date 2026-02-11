@@ -369,7 +369,7 @@ struct car_sharing {
 
     auto const& handle_additional_edge =
         [&](additional_edge const& ae, node_type const nt, cost_t const cost) {
-          fn(node{.n_ = ae.node_,
+          fn(node{.n_ = ae.to_,
                   .type_ = nt,
                   .lvl_ = nt == node_type::kRental ? kNoLevel : n.lvl_},
              cost, ae.distance_, way_idx_t::invalid(), 0, 1,

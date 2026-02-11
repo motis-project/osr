@@ -318,14 +318,15 @@ void write_map_match_debug(
     dbg_seg.min_cost_ = seg.min_cost_;
     dbg_seg.max_cost_ = seg.max_cost_;
     dbg_seg.dijkstra_cost_limit_ = static_cast<cost_t>(
-        seg.d_.pq_.n_buckets() > 0 ? seg.d_.pq_.n_buckets() - 1 : 0);
-    dbg_seg.max_reached_in_dijkstra_ = seg.d_.max_reached_;
+        seg.astar_.pq_.n_buckets() > 0 ? seg.astar_.pq_.n_buckets() - 1 : 0);
+    dbg_seg.max_reached_in_dijkstra_ = seg.astar_.max_reached_;
     dbg_seg.dijkstra_early_termination_max_cost_ =
-        seg.d_.early_termination_max_cost_;
+        seg.astar_.early_termination_max_cost_;
     dbg_seg.dijkstra_terminated_early_max_cost_ =
-        seg.d_.terminated_early_max_cost_;
-    dbg_seg.dijkstra_remaining_destinations_ = seg.d_.remaining_destinations_;
-    dbg_seg.d_dijkstra_ = seg.d_dijkstra_;
+        seg.astar_.terminated_early_max_cost_;
+    dbg_seg.dijkstra_remaining_destinations_ =
+        seg.astar_.remaining_destinations_;
+    dbg_seg.d_dijkstra_ = seg.astar_duration_;
 
     max_segment_cost = std::max(max_segment_cost, seg.min_cost_);
 
@@ -430,16 +431,16 @@ void write_map_match_debug(
           return {.reached_ = false, .cost_ = kInfeasible};
         }
         // Check if destination is actually in the cost map
-        auto const dest_it = seg.d_.cost_.find(dest_node.get_key());
-        if (dest_it == seg.d_.cost_.end()) {
+        auto const dest_it = seg.astar_.cost_.find(dest_node.get_key());
+        if (dest_it == seg.astar_.cost_.end()) {
           return {.reached_ = false, .cost_ = kInfeasible};
         }
         auto dbg_result =
             debug_route_result{.reached_ = true, .cost_ = dest_cost};
         auto n = std::optional{dest_node};
         while (n) {
-          auto const it = seg.d_.cost_.find(n->get_key());
-          if (it == seg.d_.cost_.end()) {
+          auto const it = seg.astar_.cost_.find(n->get_key());
+          if (it == seg.astar_.cost_.end()) {
             break;  // Node not in cost map, stop reconstruction
           }
           auto const& entry = it->second;
@@ -534,7 +535,7 @@ void write_map_match_debug(
         }
         way_obj["isAdditionalEdge"] = true;
         way_obj["fromNodeId"] = static_cast<std::int64_t>(to_idx(node_idx));
-        way_obj["toNodeId"] = static_cast<std::int64_t>(to_idx(edge.node_));
+        way_obj["toNodeId"] = static_cast<std::int64_t>(to_idx(edge.to_));
         way_obj["reverse"] = edge.reverse_;
 
         auto geom = boost::json::array{};
@@ -582,7 +583,7 @@ void write_map_match_debug(
       auto const arr_idx = register_node(node_idx, false);
 
       P::resolve_all(*w.r_, node_idx, kNoLevel, [&](auto const& n) {
-        auto const cost = seg.d_.get_cost(n);
+        auto const cost = seg.astar_.get_cost(n);
         if (cost != kInfeasible) {
           auto label = debug_node_label{};
           label.cost_ = cost;
@@ -593,8 +594,8 @@ void write_map_match_debug(
           label.label_str_ = ss.str();
 
           // Get predecessor
-          auto const& entry_it = seg.d_.cost_.find(n.get_key());
-          if (entry_it != seg.d_.cost_.end()) {
+          auto const& entry_it = seg.astar_.cost_.find(n.get_key());
+          if (entry_it != seg.astar_.cost_.end()) {
             auto const pred = entry_it->second.pred(n);
             if (pred.has_value()) {
               auto const pred_node_idx = pred->get_node();
@@ -626,7 +627,7 @@ void write_map_match_debug(
         if (n == P::node::invalid()) {
           return;
         }
-        auto const cost = seg.d_.get_cost(n);
+        auto const cost = seg.astar_.get_cost(n);
         if (cost == kInfeasible) {
           return;
         }
@@ -640,8 +641,8 @@ void write_map_match_debug(
         label.label_str_ = ss.str();
 
         // Get predecessor
-        auto const& entry_it = seg.d_.cost_.find(n.get_key());
-        if (entry_it != seg.d_.cost_.end()) {
+        auto const& entry_it = seg.astar_.cost_.find(n.get_key());
+        if (entry_it != seg.astar_.cost_.end()) {
           auto const pred = entry_it->second.pred(n);
           if (pred.has_value()) {
             auto const pred_node_idx = pred->get_node();
@@ -677,7 +678,7 @@ void write_map_match_debug(
         if (n == P::node::invalid()) {
           return;
         }
-        auto const cost = seg.d_.get_cost(n);
+        auto const cost = seg.astar_.get_cost(n);
         if (cost == kInfeasible) {
           return;
         }
@@ -691,8 +692,8 @@ void write_map_match_debug(
         label.label_str_ = ss.str();
 
         // Get predecessor
-        auto const& entry_it = seg.d_.cost_.find(n.get_key());
-        if (entry_it != seg.d_.cost_.end()) {
+        auto const& entry_it = seg.astar_.cost_.find(n.get_key());
+        if (entry_it != seg.astar_.cost_.end()) {
           auto const pred = entry_it->second.pred(n);
           if (pred.has_value()) {
             auto const pred_node_idx = pred->get_node();
@@ -862,7 +863,7 @@ void write_map_match_debug(
       {"nodes", std::move(json_nodes)},
       {"routeSegments", std::move(json_route_segments)},
       {"finalRoute", std::move(json_final_route)},
-      {"totalDurationMs", result.d_total_.count()}};
+      {"totalDurationMs", result.total_duration_.count()}};
 
   auto out_path = debug_path;
   out_path += ".json.gz";

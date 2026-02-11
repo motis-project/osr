@@ -54,7 +54,7 @@ struct point_data {
 
 template <Profile P>
 struct segment_data {
-  astar<P, true> d_{};
+  astar<P, true> astar_{};
   std::unique_ptr<sharing_data> sharing_{};
   cost_t min_cost_{std::numeric_limits<cost_t>::max()};
   cost_t max_cost_{std::numeric_limits<cost_t>::min()};
@@ -65,7 +65,7 @@ struct segment_data {
   hash_map<node_idx_t, std::vector<additional_edge>> additional_edges_;
   std::size_t path_segments_{};
 
-  std::chrono::microseconds d_dijkstra_{};
+  std::chrono::microseconds astar_duration_{};
 };
 
 struct node_ref {

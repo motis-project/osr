@@ -23,7 +23,7 @@ struct matched_route {
   unsigned n_beelined_{};
   unsigned n_dijkstra_early_terminations_{};
   unsigned n_dijkstra_full_runs_{};
-  std::chrono::milliseconds d_total_{0};
+  std::chrono::milliseconds total_duration_{0};
 };
 
 matched_route map_match(

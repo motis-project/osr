@@ -157,20 +157,20 @@ struct ferry {
             continue;
           }
 
-          if (!is_additional_node(additional, ae.node_)) {
-            auto const target_node_prop = w.node_properties_[ae.node_];
+          if (!is_additional_node(additional, ae.to_)) {
+            auto const target_node_prop = w.node_properties_[ae.to_];
             if (node_cost(params, target_node_prop) == kInfeasible) {
               continue;
             }
           }
 
           auto const target = node{
-              ae.node_,
+              ae.to_,
           };
           auto cost = edge_cost;
 
-          if (!is_additional_node(additional, ae.node_)) {
-            cost += node_cost(params, w.node_properties_[ae.node_]);
+          if (!is_additional_node(additional, ae.to_)) {
+            cost += node_cost(params, w.node_properties_[ae.to_]);
           }
 
           fn(target, cost, ae.distance_, ae.underlying_way_, 0, 0,

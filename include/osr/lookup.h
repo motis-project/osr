@@ -225,7 +225,6 @@ struct lookup {
 
   void insert(way_idx_t);
 
-private:
   template <Profile P>
   match_t get_way_candidates(P::parameters const& params,
                              location const& query,
@@ -284,7 +283,6 @@ private:
     return found;
   }
 
-public:
   template <Profile P>
   node_candidate find_next_node(P::parameters const& params,
                                 way_candidate const& wc,
