@@ -210,10 +210,9 @@ struct railway {
           params, w, n, additional,
           [&](additional_edge const& ae, cost_t const edge_cost,
               direction const edge_dir) {
-            auto const [target, cost] =
-                get_adjacent_additional_node_with_way<railway>(
-                    params, w, n, additional, ae, edge_dir, edge_cost,
-                    kUturnPenalty);
+            auto const [target, cost] = get_adjacent_additional_node<railway>(
+                params, w, n, additional, ae, edge_dir, edge_cost,
+                kUturnPenalty);
 
             fn(target, cost, ae.distance_, ae.underlying_way_, 0, 0,
                elevation_storage::elevation{}, false);
@@ -224,52 +223,8 @@ struct railway {
       }
     }
 
-    auto way_pos = way_pos_t{0U};
-    for (auto const [way, i] :
-         utl::zip_unchecked(w.node_ways_[n.n_], w.node_in_way_idx_[n.n_])) {
-      auto const expand = [&](direction const way_dir, std::uint16_t const from,
-                              std::uint16_t const to) {
-        // NOLINTNEXTLINE(clang-analyzer-core.CallAndMessage)
-        auto const target_node = w.way_nodes_[way][to];
-        if constexpr (WithBlocked) {
-          if (blocked->test(target_node)) {
-            return;
-          }
-        }
-
-        auto const target_node_prop = w.node_properties_[target_node];
-        if (node_cost(params, target_node_prop) == kInfeasible) {
-          return;
-        }
-
-        auto const target_way_prop = w.way_properties_[way];
-        if (way_cost(params, target_way_prop, way_dir, 0U) == kInfeasible) {
-          return;
-        }
-
-        auto const is_u_turn = way_pos == n.way_ && way_dir == opposite(n.dir_);
-        auto const dist = w.get_way_node_distance(way, std::min(from, to));
-        auto const target =
-            node{target_node, w.get_way_pos(target_node, way, to), way_dir};
-        auto const wc = way_cost(params, target_way_prop, way_dir, dist);
-        auto const cost = wc == kInfeasible
-                              ? kInfeasible
-                              : clamp_cost(static_cast<std::uint64_t>(wc) +
-                                           node_cost(params, target_node_prop) +
-                                           (is_u_turn ? kUturnPenalty : 0U));
-        fn(target, cost, dist, way, from, to, elevation_storage::elevation{},
-           false);
-      };
-
-      if (i != 0U) {
-        expand(flip<SearchDir>(direction::kBackward), i, i - 1);
-      }
-      if (i != w.way_nodes_[way].size() - 1U) {
-        expand(flip<SearchDir>(direction::kForward), i, i + 1);
-      }
-
-      ++way_pos;
-    }
+    for_each_adjacent_node<railway, SearchDir, WithBlocked, false>(
+        params, w, n, blocked, kUturnPenalty, fn);
   }
 
   static bool is_dest_reachable(parameters const& params,

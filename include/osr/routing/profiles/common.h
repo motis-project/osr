@@ -43,11 +43,8 @@ void for_each_additional_edge(typename P::parameters const& params,
   }
 }
 
-// the following function requires a profile where node has the structure
-// node{node_idx_t n_, way_pos_t way_, direction dir_} and get_way function
-
-template <Profile P>
-std::pair<typename P::node, cost_t> get_adjacent_additional_node_with_way(
+template <WayAwareProfile P>
+std::pair<typename P::node, cost_t> get_adjacent_additional_node(
     typename P::parameters const& params,
     ways::routing const& w,
     typename P::node const n,
@@ -74,6 +71,71 @@ std::pair<typename P::node, cost_t> get_adjacent_additional_node_with_way(
   }
 
   return {target, cost};
+}
+
+template <WayAwareProfile P,
+          direction SearchDir,
+          bool WithBlocked,
+          bool WithRestrictions,
+          typename Fn>
+void for_each_adjacent_node(typename P::parameters const& params,
+                            ways::routing const& w,
+                            typename P::node const n,
+                            bitvec<node_idx_t> const* blocked,
+                            cost_t const uturn_penalty,
+                            Fn&& fn) {
+  auto way_pos = way_pos_t{0U};
+  for (auto const [way, i] :
+       utl::zip_unchecked(w.node_ways_[n.n_], w.node_in_way_idx_[n.n_])) {
+    auto const expand = [&](direction const way_dir, std::uint16_t const from,
+                            std::uint16_t const to) {
+      // NOLINTNEXTLINE(clang-analyzer-core.CallAndMessage)
+      auto const target_node = w.way_nodes_[way][to];
+      if constexpr (WithBlocked) {
+        if (blocked->test(target_node)) {
+          return;
+        }
+      }
+
+      auto const target_node_prop = w.node_properties_[target_node];
+      auto const nc = P::node_cost(params, target_node_prop);
+      if (nc == kInfeasible) {
+        return;
+      }
+
+      auto const target_way_prop = w.way_properties_[way];
+      if (P::way_cost(params, target_way_prop, way_dir, 0U) == kInfeasible) {
+        return;
+      }
+
+      if constexpr (WithRestrictions) {
+        if (w.is_restricted<SearchDir>(n.n_, n.way_, way_pos)) {
+          return;
+        }
+      }
+
+      auto const is_u_turn = way_pos == n.way_ && way_dir == opposite(n.dir_);
+      auto const dist = w.get_way_node_distance(way, std::min(from, to));
+      auto const target = typename P::node{
+          target_node, w.get_way_pos(target_node, way, to), way_dir};
+      auto const wc = P::way_cost(params, target_way_prop, way_dir, dist);
+      auto const cost = wc == kInfeasible
+                            ? kInfeasible
+                            : clamp_cost(static_cast<std::uint64_t>(wc) + nc +
+                                         (is_u_turn ? uturn_penalty : 0U));
+      fn(target, cost, dist, way, from, to, elevation_storage::elevation{},
+         false);
+    };
+
+    if (i != 0U) {
+      expand(flip<SearchDir>(direction::kBackward), i, i - 1);
+    }
+    if (i != w.way_nodes_[way].size() - 1U) {
+      expand(flip<SearchDir>(direction::kForward), i, i + 1);
+    }
+
+    ++way_pos;
+  }
 }
 
 }  // namespace osr

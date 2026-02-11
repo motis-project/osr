@@ -222,7 +222,7 @@ struct generic_car {
             }
 
             auto const [target, cost] =
-                get_adjacent_additional_node_with_way<generic_car>(
+                get_adjacent_additional_node<generic_car>(
                     params, w, n, additional, ae, edge_dir, edge_cost,
                     params.uturn_penalty_);
 
@@ -235,53 +235,8 @@ struct generic_car {
       }
     }
 
-    auto way_pos = way_pos_t{0U};
-    for (auto const [way, i] :
-         utl::zip_unchecked(w.node_ways_[n.n_], w.node_in_way_idx_[n.n_])) {
-      auto const expand = [&](direction const way_dir, std::uint16_t const from,
-                              std::uint16_t const to) {
-        // NOLINTNEXTLINE(clang-analyzer-core.CallAndMessage)
-        auto const target_node = w.way_nodes_[way][to];
-        if constexpr (WithBlocked) {
-          if (blocked->test(target_node)) {
-            return;
-          }
-        }
-
-        auto const target_node_prop = w.node_properties_[target_node];
-        auto const nc = node_cost(params, target_node_prop);
-        if (nc == kInfeasible) {
-          return;
-        }
-
-        auto const target_way_prop = w.way_properties_[way];
-        if (way_cost(params, target_way_prop, way_dir, 0U) == kInfeasible) {
-          return;
-        }
-
-        if (w.is_restricted<SearchDir>(n.n_, n.way_, way_pos)) {
-          return;
-        }
-
-        auto const is_u_turn = way_pos == n.way_ && way_dir == opposite(n.dir_);
-        auto const dist = w.get_way_node_distance(way, std::min(from, to));
-        auto const target =
-            node{target_node, w.get_way_pos(target_node, way, to), way_dir};
-        auto const cost = way_cost(params, target_way_prop, way_dir, dist) +
-                          nc + (is_u_turn ? params.uturn_penalty_ : 0U);
-        fn(target, cost, dist, way, from, to, elevation_storage::elevation{},
-           false);
-      };
-
-      if (i != 0U) {
-        expand(flip<SearchDir>(direction::kBackward), i, i - 1);
-      }
-      if (i != w.way_nodes_[way].size() - 1U) {
-        expand(flip<SearchDir>(direction::kForward), i, i + 1);
-      }
-
-      ++way_pos;
-    }
+    for_each_adjacent_node<generic_car, SearchDir, WithBlocked, true>(
+        params, w, n, blocked, params.uturn_penalty_, fn);
   }
 
   static bool is_dest_reachable(parameters const& params,

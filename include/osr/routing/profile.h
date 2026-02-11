@@ -7,6 +7,7 @@
 #include <optional>
 #include <ostream>
 #include <string_view>
+#include <type_traits>
 
 #include "osr/elevation_storage.h"
 #include "osr/routing/mode.h"
@@ -135,6 +136,20 @@ concept Profile =
                                                           sharing, elevation, f)
       } -> std::same_as<void>;
     };
+
+template <typename P>
+concept WayAwareProfile = Profile<P> &&
+                          std::is_constructible_v<typename P::node,
+                                                  node_idx_t,
+                                                  way_pos_t,
+                                                  direction> &&
+                          requires(typename P::node const node,
+                                   ways::routing const& routing,
+                                   sharing_data const* sharing) {
+                            {
+                              node.get_way(routing, sharing)
+                            } -> std::same_as<way_idx_t>;
+                          };
 
 template <typename Parameters>
 concept ProfileParameters = Profile<typename Parameters::profile_t>;
