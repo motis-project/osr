@@ -11,6 +11,7 @@
 #include "osr/elevation_storage.h"
 #include "osr/routing/mode.h"
 #include "osr/routing/path.h"
+#include "osr/routing/profiles/common.h"
 #include "osr/ways.h"
 
 namespace osr {
@@ -209,63 +210,27 @@ struct generic_car {
                        elevation_storage const*,
                        Fn&& fn) {
     if (additional != nullptr) {
-      if (auto const it = additional->additional_edges_.find(n.n_);
-          it != end(additional->additional_edges_)) {
-        for (auto const& ae : it->second) {
-          auto const edge_dir =
-              ae.reverse_ ? direction::kBackward : direction::kForward;
-          assert(ae.underlying_way_ != way_idx_t::invalid());
-          auto const way_props = w.way_properties_[ae.underlying_way_];
-
-          auto const edge_cost =
-              way_cost(params, way_props, edge_dir, ae.distance_);
-          if (edge_cost == kInfeasible) {
-            continue;
-          }
-
-          if (!is_additional_node(additional, ae.to_)) {
-            auto const target_node_prop = w.node_properties_[ae.to_];
-            if (node_cost(params, target_node_prop) == kInfeasible) {
-              continue;
+      for_each_additional_edge<generic_car>(
+          params, w, n, additional,
+          [&](additional_edge const& ae, cost_t const edge_cost,
+              direction const edge_dir) {
+            if (!additional->is_additional_node(n.n_)) {
+              if (w.is_restricted<SearchDir>(
+                      n.n_, n.way_, w.get_way_pos(n.n_, ae.underlying_way_))) {
+                return;
+              }
             }
-          }
 
-          if (!is_additional_node(additional, n.n_)) {
-            if (w.is_restricted<SearchDir>(
-                    n.n_, n.way_,
-                    w.get_way_pos(n.n_, ae.underlying_way_ /*,
-                                  ae.node_in_way_idx_from_*/))) {
-              continue;
-            }
-          }
+            auto const [target, cost] =
+                get_adjacent_additional_node_with_way<generic_car>(
+                    params, w, n, additional, ae, edge_dir, edge_cost,
+                    params.uturn_penalty_);
 
-          auto const prev_way = n.get_way(w, additional);
+            fn(target, cost, ae.distance_, ae.underlying_way_, 0, 0,
+               elevation_storage::elevation{}, false);
+          });
 
-          auto const is_u_turn =
-              prev_way == ae.underlying_way_ && n.dir_ != edge_dir;
-
-          auto const target =
-              node{ae.to_,
-                   additional->get_way_pos(w, ae.to_,
-                   ae.underlying_way_/*,
-                                           target_node_in_way_idx*/),
-                   edge_dir};
-          auto cost = edge_cost;
-
-          if (is_u_turn) {
-            cost += params.uturn_penalty_;
-          }
-
-          if (!is_additional_node(additional, ae.to_)) {
-            cost += node_cost(params, w.node_properties_[ae.to_]);
-          }
-
-          fn(target, cost, ae.distance_, ae.underlying_way_, 0, 0,
-             elevation_storage::elevation{}, false);
-        }
-      }
-
-      if (is_additional_node(additional, n)) {
+      if (additional->is_additional_node(n.n_)) {
         return;
       }
     }
@@ -393,16 +358,6 @@ struct generic_car {
 
   static constexpr node get_reverse(node const n) {
     return {n.n_, n.way_, opposite(n.dir_)};
-  }
-
-  static bool is_additional_node(sharing_data const* additional,
-                                 node_idx_t const n) {
-    return additional != nullptr && additional->is_additional_node(n);
-  }
-
-  static bool is_additional_node(sharing_data const* additional,
-                                 node const& n) {
-    return is_additional_node(additional, n.n_);
   }
 };
 

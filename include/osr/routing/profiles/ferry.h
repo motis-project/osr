@@ -143,42 +143,23 @@ struct ferry {
                        elevation_storage const*,
                        Fn&& fn) {
     if (additional != nullptr) {
-      if (auto const it = additional->additional_edges_.find(n.n_);
-          it != end(additional->additional_edges_)) {
-        for (auto const& ae : it->second) {
-          auto const edge_dir =
-              ae.reverse_ ? direction::kBackward : direction::kForward;
-          assert(ae.underlying_way_ != way_idx_t::invalid());
-          auto const way_props = w.way_properties_[ae.underlying_way_];
+      for_each_additional_edge<ferry>(
+          params, w, n, additional,
+          [&](additional_edge const& ae, cost_t const edge_cost,
+              direction const) {
+            auto const target = node{ae.to_};
+            auto cost = edge_cost;
 
-          auto const edge_cost =
-              way_cost(params, way_props, edge_dir, ae.distance_);
-          if (edge_cost == kInfeasible) {
-            continue;
-          }
-
-          if (!is_additional_node(additional, ae.to_)) {
-            auto const target_node_prop = w.node_properties_[ae.to_];
-            if (node_cost(params, target_node_prop) == kInfeasible) {
-              continue;
+            if (!additional->is_additional_node(ae.to_)) {
+              cost = clamp_cost(static_cast<std::uint64_t>(cost) +
+                                node_cost(params, w.node_properties_[ae.to_]));
             }
-          }
 
-          auto const target = node{
-              ae.to_,
-          };
-          auto cost = edge_cost;
+            fn(target, cost, ae.distance_, ae.underlying_way_, 0, 0,
+               elevation_storage::elevation{}, false);
+          });
 
-          if (!is_additional_node(additional, ae.to_)) {
-            cost += node_cost(params, w.node_properties_[ae.to_]);
-          }
-
-          fn(target, cost, ae.distance_, ae.underlying_way_, 0, 0,
-             elevation_storage::elevation{}, false);
-        }
-      }
-
-      if (is_additional_node(additional, n)) {
+      if (additional->is_additional_node(n.n_)) {
         return;
       }
     }
@@ -262,16 +243,6 @@ struct ferry {
   }
 
   static constexpr node get_reverse(node const n) { return n; }
-
-  static bool is_additional_node(sharing_data const* additional,
-                                 node_idx_t const n) {
-    return additional != nullptr && additional->is_additional_node(n);
-  }
-
-  static bool is_additional_node(sharing_data const* additional,
-                                 node const& n) {
-    return is_additional_node(additional, n.n_);
-  }
 };
 
 }  // namespace osr
