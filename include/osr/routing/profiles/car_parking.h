@@ -355,12 +355,12 @@ struct car_parking {
   }
 
   static constexpr double lower_bound_heuristic(parameters const& params,
-                                                double dist) {
+                                                double const dist) {
     return car::lower_bound_heuristic(params.car_, dist);
   }
 
   static constexpr double upper_bound_heuristic(parameters const& params,
-                                                double dist) {
+                                                double const dist) {
     return car::upper_bound_heuristic(params.car_, dist);
   }
 

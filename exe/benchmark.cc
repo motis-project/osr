@@ -224,12 +224,6 @@ int main(int argc, char const* argv[]) {
               location{w.get_node_pos(start).as_latlng(), level_t{0.F}};
           auto const end_loc =
               location{w.get_node_pos(end).as_latlng(), level_t{0.F}};
-          // std::cout << location{w.get_node_pos(start).as_latlng(),
-          // level_t{0.F}}
-          //           << " fromto "
-          //           << location{w.get_node_pos(end).as_latlng(),
-          //           level_t{0.F}}
-          //           << std::endl;
           if (opt.from_coords_) {
             auto const start_time = std::chrono::steady_clock::now();
             auto const d_res =

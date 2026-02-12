@@ -478,7 +478,7 @@ struct bike_sharing {
   }
 
   static constexpr double upper_bound_heuristic(parameters const& params,
-                                                double dist) {
+                                                double const dist) {
     return bikep::upper_bound_heuristic(params.bike_, dist);
   }
 
