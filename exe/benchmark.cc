@@ -14,6 +14,7 @@
 
 #include "conf/options_parser.h"
 
+#include "utl/memory_usage_printer.h"
 #include "utl/timer.h"
 #include "utl/verify.h"
 
@@ -41,6 +42,7 @@ public:
     param(max_dist_, "radius,r", "Radius");
     param(from_coords_, "matching,m", "Include node matching to coords");
     param(speed_, "speed,s", "Walking speed");
+    param(mem_usage_, "mem", "Track memory usage");
   }
 
   fs::path data_dir_{"osr"};
@@ -49,6 +51,7 @@ public:
   bool from_coords_{false};
   unsigned threads_{std::thread::hardware_concurrency()};
   float speed_{1.2F};
+  bool mem_usage_{false};
 };
 
 struct benchmark_result {
@@ -182,6 +185,10 @@ int main(int argc, char const* argv[]) {
     return 1;
   }
 
+  auto mem_usage = opt.mem_usage_
+                       ? std::make_unique<utl::memory_usage_printer>()
+                       : std::unique_ptr<utl::memory_usage_printer>{};
+
   auto const w = ways{opt.data_dir_, cista::mmap::protection::READ};
   auto const l = osr::lookup{w, opt.data_dir_, cista::mmap::protection::READ};
   auto const elevations = elevation_storage::try_open(opt.data_dir_);
@@ -217,10 +224,6 @@ int main(int argc, char const* argv[]) {
               location{w.get_node_pos(start).as_latlng(), level_t{0.F}};
           auto const end_loc =
               location{w.get_node_pos(end).as_latlng(), level_t{0.F}};
-          std::cout << location{w.get_node_pos(start).as_latlng(), level_t{0.F}}
-                    << " fromto "
-                    << location{w.get_node_pos(end).as_latlng(), level_t{0.F}}
-                    << std::endl;
           if (opt.from_coords_) {
             auto const start_time = std::chrono::steady_clock::now();
             auto const d_res =

@@ -1,5 +1,11 @@
 #pragma once
 
+#include <cstdint>
+#include <algorithm>
+#include <vector>
+
+#include "utl/verify.h"
+
 #include "osr/elevation_storage.h"
 #include "osr/routing/additional_edge.h"
 #include "osr/routing/dial.h"
@@ -11,9 +17,7 @@ namespace osr {
 
 struct sharing_data;
 
-constexpr auto const kDebug = false;
-
-template <Profile P>
+template <Profile P, bool EarlyTermination = false>
 struct dijkstra {
   using profile_t = P;
   using key = typename P::key;
@@ -21,6 +25,8 @@ struct dijkstra {
   using node = typename P::node;
   using entry = typename P::entry;
   using hash = typename P::hash;
+
+  static constexpr auto const kDebug = false;
 
   struct get_bucket {
     cost_t operator()(label const& l) { return l.cost(); }
@@ -31,6 +37,12 @@ struct dijkstra {
     pq_.n_buckets(max + 1U);
     cost_.clear();
     max_reached_ = false;
+    if constexpr (EarlyTermination) {
+      destinations_.clear();
+      remaining_destinations_ = 0U;
+      early_termination_max_cost_ = kInfeasible;
+      terminated_early_max_cost_ = false;
+    }
   }
 
   void add_start(ways const& w, label const l) {
@@ -41,7 +53,20 @@ struct dijkstra {
         l.get_node().print(std::cout, w);
         std::cout << "\n";
       }
+      utl::verify(l.cost() < pq_.n_buckets(),
+                  "dijkstra::add_start: label cost exceeds max: {} >= {}",
+                  l.cost(), pq_.n_buckets());
       pq_.push(l);
+    }
+  }
+
+  void add_destination(node const n) {
+    if constexpr (EarlyTermination) {
+      auto it = std::lower_bound(begin(destinations_), end(destinations_), n);
+      if (it == end(destinations_) || *it != n) {
+        destinations_.insert(it, n);
+        ++remaining_destinations_;
+      }
     }
   }
 
@@ -60,8 +85,31 @@ struct dijkstra {
            elevation_storage const* elevations) {
     while (!pq_.empty()) {
       auto l = pq_.pop();
+
       if (get_cost(l.get_node()) < l.cost()) {
         continue;
+      }
+
+      if constexpr (EarlyTermination) {
+        if (std::find(begin(destinations_), end(destinations_), l.get_node()) !=
+            end(destinations_)) {
+          --remaining_destinations_;
+          auto const curr_cost = get_cost(l.get_node());
+          early_termination_max_cost_ = std::min(
+              early_termination_max_cost_,
+              static_cast<cost_t>(std::min(
+                  {static_cast<std::uint64_t>(curr_cost) * 2,
+                   static_cast<std::uint64_t>(
+                       curr_cost + P::upper_bound_heuristic(params, 10000U)),
+                   static_cast<std::uint64_t>(kInfeasible - 1U)})));
+          if (remaining_destinations_ == 0U) {
+            break;
+          }
+        }
+        if (l.cost() > early_termination_max_cost_) {
+          terminated_early_max_cost_ = true;
+          break;
+        }
       }
 
       if constexpr (kDebug) {
@@ -81,13 +129,12 @@ struct dijkstra {
               neighbor.print(std::cout, w);
             }
 
-            auto const total = l.cost() + cost;
+            auto const total = static_cast<std::uint64_t>(l.cost()) + cost;
             if (total >= max) {
               max_reached_ = true;
               return;
             }
-            if (total < max &&
-                cost_[neighbor.get_key()].update(
+            if (cost_[neighbor.get_key()].update(
                     l, neighbor, static_cast<cost_t>(total), curr)) {
               auto next = label{neighbor, static_cast<cost_t>(total)};
               next.track(l, r, way, neighbor.get_node(), track);
@@ -131,7 +178,13 @@ struct dijkstra {
 
   dial<label, get_bucket> pq_{get_bucket{}};
   ankerl::unordered_dense::map<key, entry, hash> cost_;
-  bool max_reached_;
+  bool max_reached_{};
+
+  // for early termination
+  std::vector<node> destinations_;
+  std::size_t remaining_destinations_{0U};
+  cost_t early_termination_max_cost_{kInfeasible};
+  bool terminated_early_max_cost_{false};
 };
 
 }  // namespace osr

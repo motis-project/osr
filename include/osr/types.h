@@ -91,15 +91,20 @@ using platform_idx_t = cista::strong<std::uint32_t, struct platform_idx_>;
 using multi_level_elevator_idx_t =
     cista::strong<std::uint32_t, struct multi_level_elevator_idx_>;
 
-using distance_t = std::uint16_t;
+using distance_t = std::uint32_t;
 using elevation_monotonic_t =
     cista::strong<std::uint16_t, struct elevation_monotonic_>;
 
 using way_pos_t = std::uint8_t;
 
-using cost_t = std::uint16_t;
+using cost_t = std::uint32_t;
 
 constexpr auto const kInfeasible = std::numeric_limits<cost_t>::max();
+
+template <typename T>
+constexpr cost_t clamp_cost(T const c) {
+  return static_cast<cost_t>(std::min(c, static_cast<T>(kInfeasible)));
+}
 
 // direction
 enum class direction : std::uint8_t {

@@ -71,6 +71,8 @@ struct way_candidate {
   double dist_to_way_;
   way_idx_t way_{way_idx_t::invalid()};
   node_candidate left_{}, right_{};
+  geo::latlng closest_point_on_way_{};
+  unsigned segment_idx_{};
 };
 
 struct raw_way_candidate {
@@ -223,7 +225,6 @@ struct lookup {
 
   void insert(way_idx_t);
 
-private:
   template <Profile P>
   match_t get_way_candidates(P::parameters const& params,
                              location const& query,
@@ -242,7 +243,11 @@ private:
               query.pos_, ways_.way_polylines_[way],
               approx_distance_lng_degrees);
       if (squared_dist < squared_max_dist) {
-        auto wc = way_candidate{std::sqrt(squared_dist), way};
+        auto wc =
+            way_candidate{.dist_to_way_ = std::sqrt(squared_dist),
+                          .way_ = way,
+                          .closest_point_on_way_ = best,
+                          .segment_idx_ = static_cast<unsigned>(segment_idx)};
         wc.left_ =
             find_next_node<P>(params, wc, query, direction::kBackward,
                               query.lvl_, reverse, search_dir, blocked,
@@ -261,13 +266,14 @@ private:
   }
 
   template <Profile P>
-  bool is_way_node_feasible(way_candidate const& wc,
+  bool is_way_node_feasible(P::parameters const& params,
+                            way_candidate const& wc,
                             node_idx_t const node_idx,
                             location const& query,
                             bool const reverse,
                             direction const search_dir) const {
     auto const node_prop = ways_.r_->node_properties_[node_idx];
-    if (P::node_cost(node_prop) == kInfeasible) {
+    if (P::node_cost(params, node_prop) == kInfeasible) {
       return false;
     }
     auto found = false;
@@ -316,8 +322,8 @@ private:
 
                    auto const way_node = ways_.find_node_idx(osm_node_idx);
                    if (way_node.has_value()) {
-                     if (is_way_node_feasible<P>(wc, *way_node, query, reverse,
-                                                 search_dir) &&
+                     if (is_way_node_feasible<P>(params, wc, *way_node, query,
+                                                 reverse, search_dir) &&
                          (blocked == nullptr || !blocked->test(*way_node))) {
                        c.node_ = *way_node;
                        c.cost_ = P::way_cost(
@@ -336,6 +342,7 @@ private:
     return c;
   }
 
+private:
   std::vector<raw_way_candidate> get_raw_way_candidates(
       location const& query, double const max_match_distance) const;
 
@@ -356,7 +363,8 @@ private:
     if (!nc.valid()) {
       return;
     }
-    if (!is_way_node_feasible<P>(wc, nc.node_, query, reverse, search_dir)) {
+    if (!is_way_node_feasible<P>(params, wc, nc.node_, query, reverse,
+                                 search_dir)) {
       nc.node_ = node_idx_t::invalid();
       return;
     }

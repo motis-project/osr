@@ -1,5 +1,7 @@
 #pragma once
 
+#include <optional>
+
 #include "utl/for_each_bit_set.h"
 
 #include "osr/elevation_storage.h"
@@ -30,12 +32,20 @@ struct foot {
              (a.lvl_ == b.lvl_ || (is_zero(a.lvl_) && is_zero(b.lvl_)));
     }
 
+    friend constexpr bool operator<(node const& a, node const& b) noexcept {
+      return std::tie(a.n_, a.lvl_) < std::tie(b.n_, b.lvl_);
+    }
+
     static constexpr node invalid() noexcept {
       return {.n_ = node_idx_t::invalid(), .lvl_{kNoLevel}};
     }
     constexpr node_idx_t get_node() const noexcept { return n_; }
 
     constexpr node get_key() const noexcept { return *this; }
+
+    constexpr std::optional<direction> get_direction() const noexcept {
+      return {};
+    }
 
     static constexpr mode get_mode() noexcept {
       return IsWheelchair ? mode::kWheelchair : mode::kFoot;
@@ -68,7 +78,11 @@ struct foot {
     node_idx_t n_;
     cost_t cost_;
     level_t lvl_;
+#ifdef _MSC_VER
+    [[no_unique_address]] [[msvc::no_unique_address]] Tracking tracking_;
+#else
     [[no_unique_address]] Tracking tracking_;
+#endif
   };
 
   struct entry {
@@ -97,7 +111,11 @@ struct foot {
     node_idx_t pred_{node_idx_t::invalid()};
     cost_t cost_{kInfeasible};
     level_t pred_lvl_;
+#ifdef _MSC_VER
+    [[no_unique_address]] [[msvc::no_unique_address]] Tracking tracking_;
+#else
     [[no_unique_address]] Tracking tracking_;
+#endif
   };
 
   struct hash {
@@ -110,6 +128,13 @@ struct foot {
           wyhash::hash(static_cast<std::uint64_t>(to_idx(n.n_))));
     }
   };
+
+  static node create_node(node_idx_t const n,
+                          level_t const lvl,
+                          way_pos_t const,
+                          direction const) {
+    return node{n, lvl};
+  }
 
   template <typename Fn>
   static void resolve_start_node(ways::routing const& w,
@@ -174,7 +199,7 @@ struct foot {
         }
 
         auto const target_node_prop = w.node_properties_[target_node];
-        if (node_cost(target_node_prop) == kInfeasible) {
+        if (node_cost(params, target_node_prop) == kInfeasible) {
           return;
         }
 
@@ -186,10 +211,11 @@ struct foot {
         if (can_use_elevator(w, target_node, n.lvl_)) {
           for_each_elevator_level(
               w, target_node, [&](level_t const target_lvl) {
-                auto const dist = w.way_node_dist_[way][std::min(from, to)];
+                auto const dist =
+                    w.get_way_node_distance(way, std::min(from, to));
                 auto const cost =
                     way_cost(params, target_way_prop, way_dir, dist) +
-                    node_cost(target_node_prop);
+                    node_cost(params, target_node_prop);
                 fn(node{target_node, target_lvl},
                    static_cast<std::uint32_t>(cost), dist, way, from, to,
                    elevation_storage::elevation{}, false);
@@ -200,9 +226,9 @@ struct foot {
             return;
           }
 
-          auto const dist = w.way_node_dist_[way][std::min(from, to)];
+          auto const dist = w.get_way_node_distance(way, std::min(from, to));
           auto const cost = way_cost(params, target_way_prop, way_dir, dist) +
-                            node_cost(target_node_prop);
+                            node_cost(params, target_node_prop);
           fn(node{target_node, *target_lvl}, static_cast<std::uint32_t>(cost),
              dist, way, from, to, elevation_storage::elevation{}, false);
         }
@@ -323,7 +349,7 @@ struct foot {
   static constexpr cost_t way_cost(parameters const& params,
                                    way_properties const e,
                                    direction,
-                                   std::uint16_t const dist) {
+                                   distance_t const dist) {
     if ((e.is_foot_accessible() ||
          (!e.is_sidewalk_separate() && e.is_bike_accessible())) &&
         (!IsWheelchair || !e.is_steps())) {
@@ -337,13 +363,18 @@ struct foot {
     }
   }
 
-  static constexpr cost_t node_cost(node_properties const n) {
+  static constexpr cost_t node_cost(parameters const&,
+                                    node_properties const n) {
     return n.is_walk_accessible() ? (n.is_elevator() ? 90U : 0U) : kInfeasible;
   }
 
-  static constexpr double heuristic(parameters const& params,
-                                    double const dist) {
+  static constexpr double lower_bound_heuristic(parameters const& params,
+                                                double const dist) {
     return dist / (params.speed_meters_per_second_ + 0.1);
+  }
+  static constexpr double upper_bound_heuristic(parameters const& params,
+                                                double const dist) {
+    return dist / (params.speed_meters_per_second_ - 0.2);
   }
 
   static constexpr node get_reverse(node const n) { return n; }

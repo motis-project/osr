@@ -92,6 +92,7 @@ if ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "Clang")
             -Wno-nrvo
             -Wno-thread-safety-negative
             -Wno-unused-private-field
+            -Wno-unknown-attributes
             -Werror)
 elseif ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "AppleClang")
     set(osr-compile-options -Wall -Wextra -Werror -Wno-unknown-pragmas)
@@ -127,6 +128,7 @@ target_link_libraries(osr
         rtree
         unordered_dense
         boost-thread
+        boost-iostreams
 )
 
 # --- MAIN ---
@@ -155,6 +157,7 @@ target_link_libraries(osr-test gtest osr boost-json)
 if (OSR_MIMALLOC)
     target_link_libraries(osr-extract ${osr-mimalloc-lib})
     target_link_libraries(osr-backend ${osr-mimalloc-lib})
+    target_link_libraries(osr-test ${osr-mimalloc-lib})
     if (WIN32)
         add_custom_command(
                 TARGET osr-extract POST_BUILD

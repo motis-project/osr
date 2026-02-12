@@ -34,14 +34,12 @@ constexpr auto const kMaxMatchDistance = 100;
 constexpr auto const kMaxAllowedPathDifferenceRatio = 0.5;
 
 void load(std::string_view raw_data, std::string_view data_dir) {
-  if (!fs::exists(data_dir)) {
-    if (fs::exists(raw_data)) {
-      auto const p = fs::path{data_dir};
-      auto ec = std::error_code{};
-      fs::remove_all(p, ec);
-      fs::create_directories(p, ec);
-      osr::extract(false, raw_data, data_dir, fs::path{});
-    }
+  if (fs::exists(raw_data)) {
+    auto const p = fs::path{data_dir};
+    auto ec = std::error_code{};
+    fs::remove_all(p, ec);
+    fs::create_directories(p, ec);
+    osr::extract(false, raw_data, data_dir, fs::path{});
   }
 }
 
@@ -98,18 +96,30 @@ void run(ways const& w,
     auto const to_matches_span = std::span{begin(to_matches), end(to_matches)};
 
     auto const reference_start = std::chrono::steady_clock::now();
-    auto const reference =
-        route(car::parameters{}, w, l, search_profile::kCar, from_loc, to_loc,
-              from_matches_span, to_matches_span, max_cost, dir, nullptr,
-              nullptr, nullptr, routing_algorithm::kDijkstra);
+    auto const reference = [&]() {
+      try {
+        return route(car::parameters{}, w, l, search_profile::kCar, from_loc,
+                     to_loc, from_matches_span, to_matches_span, max_cost, dir,
+                     nullptr, nullptr, nullptr, routing_algorithm::kDijkstra);
+      } catch (std::exception const& ex) {
+        fmt::println("dijkstra exception: {}", ex.what());
+        throw ex;
+      }
+    }();
     auto const reference_time =
         std::chrono::steady_clock::now() - reference_start;
 
     auto const experiment_start = std::chrono::steady_clock::now();
-    auto const experiment =
-        route(car::parameters{}, w, l, search_profile::kCar, from_loc, to_loc,
-              from_matches_span, to_matches_span, max_cost, dir, nullptr,
-              nullptr, nullptr, routing_algorithm::kAStarBi);
+    auto const experiment = [&]() {
+      try {
+        return route(car::parameters{}, w, l, search_profile::kCar, from_loc,
+                     to_loc, from_matches_span, to_matches_span, max_cost, dir,
+                     nullptr, nullptr, nullptr, routing_algorithm::kAStarBi);
+      } catch (std::exception const& ex) {
+        fmt::println("a* bidir exception: {}", ex.what());
+        throw ex;
+      }
+    }();
     auto const experiment_time =
         std::chrono::steady_clock::now() - experiment_start;
 

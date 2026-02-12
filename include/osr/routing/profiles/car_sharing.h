@@ -2,6 +2,7 @@
 
 #include <cassert>
 #include <array>
+#include <optional>
 #include <string_view>
 #include <type_traits>
 
@@ -39,27 +40,35 @@ struct car_sharing {
                      .is_elevator_ = false,
                      .is_steps_ = false,
                      .speed_limit_ = speed_limit::kmh_10,
-                     .from_level_ = 0,
-                     .to_level_ = 0,
-                     .is_incline_down_ = false,
                      .is_platform_ = 0,
                      .is_parking_ = false,
                      .is_ramp_ = false,
                      .is_sidewalk_separate_ = false,
                      .motor_vehicle_no_ = false,
+                     .from_level_ = 0,
                      .has_toll_ = false,
-                     .is_big_street_ = false};
+                     .is_big_street_ = false,
+                     .to_level_ = 0,
+                     .is_bus_accessible_ = false,
+                     .in_route_ = false,
+                     .is_railway_accessible_ = false,
+                     .is_oneway_psv_ = false,
+                     .is_incline_down_ = false,
+                     .is_bus_accessible_with_penalty_ = false,
+                     .is_ferry_accessible_ = false};
 
   static constexpr auto const kAdditionalNodeProperties =
       node_properties{.from_level_ = 0,
                       .is_foot_accessible_ = true,
                       .is_bike_accessible_ = true,
                       .is_car_accessible_ = true,
+                      .is_bus_accessible_ = true,
                       .is_elevator_ = false,
                       .is_entrance_ = false,
                       .is_multi_level_ = false,
                       .is_parking_ = false,
-                      .to_level_ = 0};
+                      .to_level_ = 0,
+                      .is_bus_accessible_with_penalty_ = false};
 
   enum class node_type : std::uint8_t {
     kInitialFoot,
@@ -109,6 +118,11 @@ struct car_sharing {
              (a.lvl_ == b.lvl_ || (is_zero(a.lvl_) && is_zero(b.lvl_)));
     }
 
+    friend constexpr bool operator<(node const& a, node const& b) noexcept {
+      return std::tie(a.n_, a.type_, a.lvl_, a.way_, a.dir_) <
+             std::tie(b.n_, b.type_, b.lvl_, b.way_, b.dir_);
+    }
+
     boost::json::object geojson_properties(ways const& w) const {
       auto properties =
           boost::json::object{{"osm_node_id", to_idx(w.node_to_osm_[n_])},
@@ -134,6 +148,10 @@ struct car_sharing {
     static constexpr node invalid() noexcept { return {}; }
     constexpr node_idx_t get_node() const noexcept { return n_; }
     constexpr key get_key() const noexcept { return {n_, lvl_}; }
+
+    constexpr std::optional<direction> get_direction() const noexcept {
+      return dir_;
+    }
 
     constexpr mode get_mode() const noexcept {
       return is_rental_node() ? mode::kCar : mode::kFoot;
@@ -197,7 +215,11 @@ struct car_sharing {
     level_t lvl_;
     direction dir_;
     way_pos_t way_;
+#ifdef _MSC_VER
+    [[no_unique_address]] [[msvc::no_unique_address]] Tracking tracking_{};
+#else
     [[no_unique_address]] Tracking tracking_{};
+#endif
   };
 
   struct entry {
@@ -273,7 +295,12 @@ struct car_sharing {
     std::array<way_pos_t, kN> pred_way_{};
     std::bitset<kN> pred_dir_{};
     std::array<node_type, kN> pred_type_{};
+#ifdef _MSC_VER
+    [[no_unique_address]] [[msvc::no_unique_address]] std::array<Tracking, kN>
+        tracking_;
+#else
     [[no_unique_address]] std::array<Tracking, kN> tracking_;
+#endif
   };
 
   static footp::node to_foot(node const n) {
@@ -294,6 +321,13 @@ struct car_sharing {
             .lvl_ = lvl,
             .dir_ = n.dir_,
             .way_ = n.way_};
+  }
+
+  static node create_node(node_idx_t const n,
+                          level_t const lvl,
+                          way_pos_t const way,
+                          direction const dir) {
+    return node{n, node_type::kInvalid, lvl, dir, way};
   }
 
   template <typename Fn>
@@ -335,7 +369,7 @@ struct car_sharing {
 
     auto const& handle_additional_edge =
         [&](additional_edge const& ae, node_type const nt, cost_t const cost) {
-          fn(node{.n_ = ae.node_,
+          fn(node{.n_ = ae.to_,
                   .type_ = nt,
                   .lvl_ = nt == node_type::kRental ? kNoLevel : n.lvl_},
              cost, ae.distance_, way_idx_t::invalid(), 0, 1,
@@ -500,17 +534,23 @@ struct car_sharing {
   static constexpr cost_t way_cost(parameters const& params,
                                    way_properties const& e,
                                    direction const dir,
-                                   std::uint16_t const dist) {
+                                   distance_t const dist) {
     return footp::way_cost(params.foot_, e, dir, dist);
   }
 
-  static constexpr cost_t node_cost(node_properties const n) {
-    return footp::node_cost(n);
+  static constexpr cost_t node_cost(parameters const& params,
+                                    node_properties const n) {
+    return footp::node_cost(params.foot_, n);
   }
 
-  static constexpr double heuristic(parameters const& params,
-                                    double const dist) {
-    return car::heuristic(params.car_, dist);
+  static constexpr double lower_bound_heuristic(parameters const& params,
+                                                double const dist) {
+    return car::lower_bound_heuristic(params.car_, dist);
+  }
+
+  static constexpr double upper_bound_heuristic(parameters const& params,
+                                                double const dist) {
+    return car::upper_bound_heuristic(params.car_, dist);
   }
 
   static constexpr node get_reverse(node const n) {
