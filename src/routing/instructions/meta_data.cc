@@ -39,6 +39,12 @@ namespace osr {
       case mode::kCar:
         if (! w_props.is_car_accessible()) return false;
         break;
+    case mode::kFerry:
+        if (! w_props.is_ferry_accessible()) return false;
+        break;
+      case mode::kRailway:
+        if (! w_props.is_railway_accessible()) return false;
+        break;
       case mode::kFoot:
       case mode::kWheelchair:
         if (!w_props.is_foot_accessible()) return false;
