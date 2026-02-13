@@ -15,14 +15,30 @@ struct multi_counter {
     once_.resize(std::max(once_.size(), i + 1U));
     multi_.resize(std::max(multi_.size(), i + 1U));
     if (once_[i]) {
+      actualCount[i] = actualCount[i] + 1;
       if (!multi_[i]) {
         multi_.set(i, true);
       }
     } else {
       once_.set(i, true);
+      actualCount.insert({i, 1});
     }
   }
 
+  
+  void decrement(size_type const i) { 
+    if (once_[i] == false) {
+      return;
+    }
+    if (multi_[i] == true) {
+      actualCount[i] = actualCount[i] - 1;
+      multi_.set(i, actualCount[i] > 1);
+    } else {
+      once_.set(i, false);
+      actualCount[i] = 0;
+    }
+  }
+  
   size_type size() const noexcept { return once_.size(); }
 
   void reserve(size_type const size) {
@@ -31,6 +47,7 @@ struct multi_counter {
   }
 
   bitvec64 once_, multi_;
-};
+  std::map<uint64_t, uint16_t> actualCount;
+  };
 
 }  // namespace osr

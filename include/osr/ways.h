@@ -219,6 +219,40 @@ struct ways {
 
   void sync();
 
+  void build_area_ways_mapping(const osmium::Way& way);
+
+  void generate_area_ways();
+
+  void build_visibility_graph(uint64_t index);
+
+  void calc_visibility(uint64_t index, vecvec<double, double>& distances, int i, int start);
+
+  void add_virtual_way(uint64_t area_index, vec<osm_node_idx_t> nodes_on_way);
+
+  bool check_for_intersection(vec<point> line, vec< point> ring);
+
+  bool do_lines_cross(vec<point> lineA, vec<point> lineB);
+
+  bool is_point_in_polygon(point p, vec<point> polygon);
+
+  void reduce_visibility_graph(uint64_t index,
+                               vecvec<double, double>& distances,
+                               vecvec<int, int>& next, int start);
+
+  void extract_reduced_visibility_graph(uint64_t index,
+                                        vecvec<double, double>& distances,
+                                        vecvec<int, int>& next);
+
+  vec<osm_node_idx_t> trace_visibility_graph(uint64_t index,
+                                             vecvec<int, int>& next,
+                                             osm_node_idx_t start,
+                                             osm_node_idx_t end);
+
+  int osm_to_area_index(uint64_t index, osm_node_idx_t node_id);
+
+  template <typename T>
+  void debug_print_matrix(vecvec<T, T> matrix, int size);
+
   way_idx_t::value_t n_ways() const { return way_osm_idx_.size(); }
   node_idx_t::value_t n_nodes() const { return node_to_osm_.size(); }
 
@@ -344,6 +378,12 @@ struct ways {
   mm_vec<pair<way_idx_t, string_idx_t>> way_conditional_access_no_;
 
   multi_counter node_way_counter_;
+
+  uint64_t max_osm_way_idx_ = 0;
+  vec<osm_way_idx_t> areas_;
+  vec_map<osm_way_idx_t, uint64_t> area_indices_; 
+  vecvec<uint64_t, osm_node_idx_t, std::uint64_t> area_nodes_;
+  vecvec<uint64_t, point, std::uint64_t> area_node_positions_;
 };
 
 }  // namespace osr
