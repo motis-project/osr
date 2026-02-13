@@ -7,6 +7,14 @@
 
 namespace osr {
 
+double normalize(double const angle) {
+  double x = std::fmod(angle + 180.0, 360.0);
+  if (x < 0) {
+    x += 360.0;
+  }
+  return x - 180.0;
+}
+
 relative_direction get_relative_direction(const double angle) {
   bool is_left = angle > 0;
   double abs_angle = std::abs(angle);
@@ -29,14 +37,6 @@ relative_direction get_relative_direction(const double angle) {
 double get_angle(geo::latlng const& p1,
                  geo::latlng const& shared,
                  geo::latlng const& p2) {
-  auto normalize = [](double angle) {
-    double x = std::fmod(angle + 180.0, 360.0);
-    if (x < 0) {
-      x += 360.0;
-    }
-    return x - 180.0;
-  };
-
   const double b1 = geo::bearing(p1, shared);
   const double b2 = geo::bearing(shared, p2);
   return normalize(b2 - b1); // [-180,180]
