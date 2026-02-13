@@ -14,10 +14,6 @@ namespace osr {
 
 struct path {
   struct segment {
-    struct instruction_annotation {
-      relative_direction next_seg_direction_{relative_direction::kInvalid};
-      instruction_action action_{instruction_action::kNone};
-    };
 
     geo::polyline polyline_;
     level_t from_level_{kNoLevel};
@@ -29,7 +25,7 @@ struct path {
     distance_t dist_{0};
     elevation_storage::elevation elevation_{};
     mode mode_{mode::kFoot};
-    instruction_annotation instruction_annotation_{};
+    instruction_action instruction_annotation_{};
   };
 
   cost_t cost_{kInfeasible};

@@ -18,7 +18,9 @@ enum class relative_direction: std::uint8_t {
   kInvalid
 };
 
-relative_direction get_relative_direction(const double angle);
+double normalize(double angle);
+
+relative_direction get_relative_direction(double angle);
 
 double get_angle(geo::latlng const& p1,
                  geo::latlng const& shared,
