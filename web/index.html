@@ -594,6 +594,55 @@
         });
     });
 
+    const instructions = [
+        "None",
+        "Destination",
+        "Destination Left",
+        "Destination Right",
+        "Becomes",
+        "Continue",
+        "Turn Slight Right",
+        "Turn Slight Left",
+        "Turn Right",
+        "Turn Left",
+        "Turn Sharp Right",
+        "Turn Sharp Left",
+        "Turn Around",
+        "Ramp Straight",
+        "Ramp Left",
+        "Ramp Right",
+        "Exit Right",
+        "Exit Left",
+        "Stay Straight",
+        "Stay Left",
+        "Stay Right",
+        "Enter Roundabout",
+        "Exit Roundabout",
+        "Elevator",
+        "Stairs"
+    ];
+
+    const hoverPopup = new maplibregl.Popup({
+        closeButton: false,
+        closeOnClick: false
+    });
+
+    map.on('mousemove', 'path', (e) => {
+        map.getCanvas().style.cursor = 'pointer';
+
+        const instructionCode = e.features[0].properties.instruction;
+        const text = instructions[instructionCode] || "Unknown";
+
+        hoverPopup.setLngLat(e.lngLat)
+            .setHTML(`<strong>${text}</strong>`)
+            .addTo(map);
+    });
+
+    map.on('mouseleave', 'path', () => {
+        map.getCanvas().style.cursor = '';
+        hoverPopup.remove();
+    });
+
     const startMarker = new maplibregl.Marker({
         draggable: true,
         color: 'green'
