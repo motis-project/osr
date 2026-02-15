@@ -115,6 +115,50 @@ speed_limit get_speed_limit(tags const& t) {
   }
 }
 
+std::pair<highway,bool> get_highway(tags const& t) {
+  switch (cista::hash(t.highway_)) {
+    case cista::hash("motorway"): return { motorway, false };
+    case cista::hash("motorway_link"): return { motorway, true };
+    case cista::hash("trunk"): return { trunk, false };
+    case cista::hash("trunk_link"): return { trunk, true };
+    case cista::hash("primary"): return { primary, false };
+    case cista::hash("primary_link"): return { primary, true };
+    case cista::hash("secondary"): return { secondary, false };
+    case cista::hash("secondary_link"): return { secondary, true };
+    case cista::hash("tertiary"): return { tertiary, false };
+    case cista::hash("tertiary_link"): return { tertiary, true };
+    case cista::hash("residential"): return { residential, false };
+
+    case cista::hash("footway"):
+    case cista::hash("bridleway"):
+    case cista::hash("steps"):
+    case cista::hash("corridor"):
+    case cista::hash("path"):
+    case cista::hash("via_ferrata"): return { footish, false };
+
+    default: return { highway_other, false };
+  }
+}
+
+junction get_junction(tags const& t) {
+  switch (cista::hash(t.junction_)) {
+    case cista::hash("roundabout"): return roundabout;
+    case cista::hash("circular"): return circular;
+    case cista::hash("jughandle"): return jughandle;
+    default: return junction_none;
+  }
+}
+
+bool is_foot_crossing(tags const& t) {
+  switch (cista::hash(t.footway_)) {
+    case cista::hash("crossing"):
+    case cista::hash("traffic_island"): return true;
+    default: return false;
+  }
+}
+
+
+
 struct rel_way {
   way_properties p_;
   platform_idx_t pl_{platform_idx_t::invalid()};
@@ -124,6 +168,16 @@ using rel_ways_t = hash_map<osm_way_idx_t, rel_way>;
 
 std::tuple<level_t, level_t, bool> get_levels(tags const& t) {
   return get_levels(t.has_level_, t.level_bits_);
+}
+
+way_instruction_properties get_way_instruction_properties(tags const& t) {
+  auto ip = way_instruction_properties{};
+  const auto [h, l] = get_highway(t);
+  ip.highway_ = h;
+  ip.is_link_ = l;
+  ip.junction_ = get_junction(t);
+  ip.is_footway_crossing_ = ip.highway_ == footish ? is_foot_crossing(t) : false;
+  return ip;
 }
 
 way_properties get_way_properties(tags const& t) {
@@ -255,6 +309,8 @@ struct way_handler : public osm::handler::Handler {
       return;
     }
 
+    auto ip = get_way_instruction_properties(t);
+
     if (!t.has_level_ && it != end(rel_ways_)) {
       p.from_level_ = it->second.p_.from_level_;
       p.to_level_ = it->second.p_.to_level_;
@@ -300,6 +356,7 @@ struct way_handler : public osm::handler::Handler {
 
     w_.way_osm_idx_.push_back(osm_way_idx_t{w.positive_id()});
     w_.r_->way_properties_.emplace_back(p);
+    w_.way_instruction_properties_.emplace_back(ip);
 
     auto const polyline = w.nodes() | std::views::transform(get_point);
     auto const nodes = w.nodes() | std::views::transform(get_node_id);

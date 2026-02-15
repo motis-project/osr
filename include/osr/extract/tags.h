@@ -53,8 +53,12 @@ struct tags {
           oneway_ |= t.value() == "yes"sv;
           break;
         case cista::hash("junction"):
+          junction_ = t.value();
           oneway_ |= t.value() == "roundabout"sv;
           circular |= t.value() == "circular"sv;
+          break;
+        case cista::hash("footway"):
+          footway_ = t.value();
           break;
         case cista::hash("oneway:bicycle"):
           not_oneway_bike_ = t.value() == "no"sv;
@@ -236,6 +240,12 @@ struct tags {
 
   // https://wiki.openstreetmap.org/wiki/Key:ref
   std::string_view ref_;
+
+  // https://wiki.openstreetmap.org/wiki/Key:junction
+  std::string_view junction_;
+
+  // https://wiki.openstreetmap.org/wiki/Key:footway
+  std::string_view footway_;
 
   // https://wiki.openstreetmap.org/wiki/Key:vehicle
   bool is_destination_{false};

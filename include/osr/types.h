@@ -250,4 +250,22 @@ constexpr std::uint16_t to_meters_per_second(speed_limit const l) {
   return static_cast<std::uint16_t>(to_kmh(l) / 3.6);
 }
 
+enum highway : std::uint8_t {
+  motorway,
+  trunk,
+  primary,
+  secondary,
+  tertiary,
+  residential,
+  footish,
+  highway_other
+};
+
+enum junction : std::uint8_t {
+  roundabout,
+  circular,
+  jughandle,
+  junction_none
+};
+
 }  // namespace osr
