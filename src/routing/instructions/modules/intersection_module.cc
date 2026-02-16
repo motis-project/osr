@@ -5,15 +5,17 @@
 namespace osr {
 
 bool intersection_module::process(ways const& w,
-                                  path& path,
-                                  std::size_t const segment_idx,
-                                  instruction_meta_data const& meta) {
-  if (segment_idx == path.segments_.size() - 1) {
+                                  path&,
+                                  segment_contexts_window const& window) {
+  if (const auto next_seg_exists = window.has(1); ! next_seg_exists) {
     return false;
   }
 
-  auto& segment = path.segments_[segment_idx];
-  const auto& next_segment = path.segments_[segment_idx + 1];
+  const auto& segment_context = *window.focus();
+  const auto& next_segment_context = *window[1];
+
+  auto& segment = *segment_context.src_ptr_;
+  const auto& next_segment = *next_segment_context.src_ptr_;
 
   if (segment.to_ == node_idx_t::invalid() ||
       next_segment.to_ == node_idx_t::invalid() ||
@@ -51,7 +53,7 @@ bool intersection_module::process(ways const& w,
   }
 
   // Map relative direction to instruction action
-  switch (auto const rel_dir = meta.relative_directions_[segment_idx]; rel_dir) {
+  switch (auto const rel_dir = segment_context.relative_direction_; rel_dir) {
     case relative_direction::kStraight:
       segment.instruction_annotation_ = instruction_action::kContinue;
       break;

@@ -3,6 +3,7 @@
 #include "osr/routing/path.h"
 #include "utl/verify.h"
 
+#include "osr/util/sliding_window.h"
 #include "osr/routing/instructions/directions.h"
 #include "osr/routing/instructions/modules/intersection_module.h"
 #include "osr/routing/instructions/modules/destination_module.h"
@@ -21,27 +22,22 @@ void instruction_annotator::add_module(std::unique_ptr<instruction_module> m) {
 }
 
 void instruction_annotator::annotate(path& path) {
-  instruction_meta_data meta;
-  preprocess(path, meta);
+  std::vector<segment_context> segment_contexts;
+  preprocess(path, segment_contexts);
 
-  for (std::size_t i = 0; i < path.segments_.size(); ++i) {
-    if (i == 0U || (path.segments_.size() >= 2 && i == path.segments_.size() - 2U)) {
-      // The first and last segment are off-road.
-      // Necessary information for annotation is therefore missing.
-      continue;
-    }
+  const auto context_windows = sliding_window<1>(segment_contexts);
+
+  for (const auto cw : context_windows) {
     for (const auto& m : modules_) {
-      if (m->process(ways_, path, i, meta)) {
+      if (m->process(ways_, path, cw)) {
         break;
       }
     }
   }
 }
 
-void set_relative_direction(path::segment const& from,
-                            path::segment const& to,
-                            std::vector<relative_direction>& relative_directions,
-                            size_t idx) {
+relative_direction get_relative_direction(path::segment const& from,
+                                          path::segment const& to) {
   utl_verify(from.polyline_.size() > 1,
              "Polyline must have at least 2 elements but contains only {}",
              from.polyline_.size());
@@ -58,39 +54,44 @@ void set_relative_direction(path::segment const& from,
   }
 
   const double angle_in_deg = get_angle(second_to_last_coord, last_coord, target_coord);
-  relative_directions[idx] = get_relative_direction(angle_in_deg);
+  return get_relative_direction(angle_in_deg);
 }
 
-void set_traversed_node_hub(path::segment const& segment,
-                            path::segment const& next_segment,
-                            ways const& w,
-                            std::vector<std::optional<traversed_node_hub>>& hubs,
-                            const size_t idx) {
+std::optional<traversed_node_hub> get_traversed_node_hub(path::segment const& segment,
+                                                         path::segment const& next_segment,
+                                                         ways const& w) {
   if (segment.way_ == way_idx_t::invalid() ||
       next_segment.way_ == way_idx_t::invalid()) {
-    return;
+    return std::nullopt;
   }
 
   if (segment.from_ == node_idx_t::invalid() || segment.to_ == node_idx_t::invalid() ||
       next_segment.from_ == node_idx_t::invalid() || next_segment.to_ == node_idx_t::invalid()) {
-    return;
+    return std::nullopt;
   }
 
-  hubs[idx] = traversed_node_hub::from(w, segment, next_segment);
+  return traversed_node_hub::from(w, segment, next_segment);
 }
 
 
-void instruction_annotator::preprocess(path const& path,
-                                       instruction_meta_data& meta) {
-  meta.relative_directions_.resize(path.segments_.size(), relative_direction::kInvalid);
-  meta.traversed_node_hubs_.resize(path.segments_.size(), std::nullopt);
+void instruction_annotator::preprocess(path& path,
+                                       std::vector<segment_context>& meta) {
 
-  for (std::size_t i = 0; i + 1 < path.segments_.size(); ++i) {
-    auto const& segment = path.segments_[i];
-    auto const& next_segment = path.segments_[i + 1];
+  auto& segments = path.segments_;
+  for (std::size_t i = 0; i + 1 < segments.size(); ++i) {
+    auto const& segment = segments[i];
+    auto const& next_segment = segments[i + 1];
 
-    set_relative_direction(segment, next_segment, meta.relative_directions_, i);
-    set_traversed_node_hub(segment, next_segment, ways_, meta.traversed_node_hubs_, i);
+    meta.emplace_back(&segments[i],
+                      get_traversed_node_hub(segment, next_segment, ways_),
+                      get_relative_direction(segment, next_segment));
+  }
+
+  if (segments.size() > 1) {
+    // Sentinel for the last segment
+    meta.emplace_back(&segments.back(),
+                      std::nullopt,
+                      relative_direction::kInvalid);
   }
 }
 

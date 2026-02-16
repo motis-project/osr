@@ -18,7 +18,7 @@ public:
   void add_module(std::unique_ptr<instruction_module> m);
 
 private:
-  void preprocess(path const& path, instruction_meta_data& meta);
+  void preprocess(path& path, std::vector<segment_context>& meta);
 
   ways const& ways_;
   std::vector<std::unique_ptr<instruction_module>> modules_;

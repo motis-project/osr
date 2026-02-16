@@ -49,9 +49,10 @@ struct traversed_node_hub {
   std::vector<relative_way_segment> alts_right_{};
 };
 
-struct instruction_meta_data {
-  std::vector<std::optional<traversed_node_hub>> traversed_node_hubs_;
-  std::vector<relative_direction> relative_directions_;
+struct segment_context {
+  path::segment* src_ptr_;
+  std::optional<traversed_node_hub> traversed_node_hub_;
+  relative_direction relative_direction_;
 };
 
 } // namespace osr
