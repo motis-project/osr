@@ -75,6 +75,7 @@ namespace osr {
                                         point const hub,
                                         way_segment const& ws,
                                         mode const m,
+                                        bool const is_uturn,
                                         std::vector<relative_way_segment>& left,
                                         std::vector<relative_way_segment>& right) {
         const auto& way_polyline = w.way_polylines_[ws.way_idx_];
@@ -86,12 +87,14 @@ namespace osr {
           right.emplace_back(
             relative_diff,
             is_accessible(w, ws, m),
+            is_uturn,
             ws
           );
         } else {
           left.emplace_back(
             relative_diff,
             is_accessible(w, ws, m),
+            is_uturn,
             ws
           );
         }
@@ -123,6 +126,7 @@ namespace osr {
     
       void add_alternatives(ways const& w, node_idx_t const hub_node,
                             osm_node_idx_t const osm_hub_node,
+                            way_segment const& arrive_hub_on,
                             way_segment const& exit_from_hub,
                             way_idx_t const exit_way_idx, double const exit_angle,
                             point const from_point, point const hub_point,
@@ -151,8 +155,12 @@ namespace osr {
                 .osm_node_range_ = {
                     .from_ = static_cast<std::uint16_t>(hub_node_idx),
                     .to_ = static_cast<std::uint16_t>(hub_node_idx - 1)}};
+
+            const bool is_uturn_alt = alt_way == arrive_hub_on.way_idx_ &&
+                                      alt_seg_rev.is_way_aligned() ^ arrive_hub_on.is_way_aligned();
+
             emplace_relative_way_segment(w, exit_angle, from_point, hub_point,
-                                         alt_seg_rev, m, left, right);
+                                         alt_seg_rev, m, is_uturn_alt, left, right);
           }
           if (hub_node_idx + 1 < osm_nodes.size() &&
               (alt_way != exit_way_idx || !exit_from_hub.is_way_aligned())) {
@@ -161,8 +169,12 @@ namespace osr {
                 .osm_node_range_ = {
                     .from_ = static_cast<std::uint16_t>(hub_node_idx),
                     .to_ = static_cast<std::uint16_t>(hub_node_idx + 1)}};
+
+            const bool is_uturn_alt = alt_way == arrive_hub_on.way_idx_ &&
+                          alt_seg_forw.is_way_aligned() ^ arrive_hub_on.is_way_aligned();
+
             emplace_relative_way_segment(w, exit_angle, from_point, hub_point,
-                                         alt_seg_forw, m, left, right);
+                                         alt_seg_forw, m, is_uturn_alt, left, right);
           }
         }
       }
@@ -186,8 +198,8 @@ namespace osr {
       auto const geo = get_hub_geometry(w, node_hub.arrive_hub_on_, node_hub.exit_from_hub_);
       node_hub.exit_angle_ = get_angle(geo.from_.as_latlng(), geo.hub_.as_latlng(), geo.to_.as_latlng());
 
-      add_alternatives(w, node_hub.hub_node_, osm_hub_node, node_hub.exit_from_hub_, exit_on.way_,
-                       node_hub.exit_angle_, geo.from_, geo.hub_, arrive_on.mode_,
+      add_alternatives(w, node_hub.hub_node_, osm_hub_node, node_hub.arrive_hub_on_, node_hub.exit_from_hub_,
+                       exit_on.way_, node_hub.exit_angle_, geo.from_, geo.hub_, arrive_on.mode_,
                        node_hub.alts_left_, node_hub.alts_right_);
 
       std::ranges::sort(node_hub.alts_right_, std::ranges::greater{}, &relative_way_segment::angle_);

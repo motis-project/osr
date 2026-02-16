@@ -30,6 +30,7 @@ struct way_segment {
 struct relative_way_segment {
   double angle_;
   bool is_accessible_;
+  bool is_opposite_of_arrive_;
   way_segment segment_;
 };
 
