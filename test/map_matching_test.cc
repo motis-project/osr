@@ -332,7 +332,7 @@ TEST_F(map_matching_karlsruhe, beeline_in_the_middle) {
           // the following point is outside the map extract
           osr::location{.pos_ = {49.04717, 8.37875}, .lvl_ = osr::kNoLevel},
           osr::location{.pos_ = {49.053476, 8.399949}, .lvl_ = osr::kNoLevel},
-          osr::location{.pos_ = {49.058654, 8.399863}, .lvl_ = osr::kNoLevel},
+          osr::location{.pos_ = {49.0591517, 8.3998284}, .lvl_ = osr::kNoLevel},
       });
 
   EXPECT_EQ(33U, mr.path_.segments_.size());
@@ -489,7 +489,7 @@ TEST_F(map_matching_karlsruhe, beeline_in_the_middle) {
       },
       {
           {49.0586434, 8.3999179},
-          {49.0586578437431, 8.39991543416418},
+          {49.05915189714306, 8.399831089367737},
       },
   };
 
