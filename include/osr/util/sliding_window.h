@@ -16,6 +16,18 @@ struct window {
 
   It focus() const { return focus_; }
 
+  bool has(int const offset) const {
+    if (std::abs(offset) > static_cast<int>(Radius)) {
+      return false;
+    }
+    auto const target_idx = index_ + offset;
+    if (target_idx < 0 || target_idx >= size_) {
+      return false;
+    }
+
+    return true;
+  }
+
   It at(int const offset) const {
     if (std::abs(offset) > static_cast<int>(Radius)) {
       return end_;
