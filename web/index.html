@@ -261,6 +261,32 @@
             const m = Math.round(r.metadata.distance);
 
             meta.innerHTML = `${min} min ${sec} s<br>${m} meter`;
+
+            if (r.features) {
+                const newFeatures = [];
+                for (const f of r.features) {
+                    if (f.geometry.type === 'LineString') {
+                        newFeatures.push({
+                            type: 'Feature',
+                            properties: f.properties,
+                            geometry: {
+                                type: 'Point',
+                                coordinates: f.geometry.coordinates[0]
+                            }
+                        });
+                        newFeatures.push({
+                            type: 'Feature',
+                            properties: f.properties,
+                            geometry: {
+                                type: 'Point',
+                                coordinates: f.geometry.coordinates[f.geometry.coordinates.length - 1]
+                            }
+                        });
+                    }
+                }
+                r.features.push(...newFeatures);
+            }
+
             return r;
         } catch (e) {
             console.log(e);
@@ -388,6 +414,26 @@
                 'line-color': '#42a5f5',
                 'line-width': 5,
                 'line-opacity': 0.8
+            }
+        });
+        map.addLayer({
+            'id': 'path-endpoints',
+            'type': 'circle',
+            'source': 'path',
+            'filter': [
+                'all',
+                ['==', '$type', 'Point'],
+                [
+                    'any',
+                    ['!has', 'level'],
+                    ['==', 'level', currentLevel]
+                ]
+            ],
+            'paint': {
+                'circle-radius': 4,
+                'circle-color': '#fff',
+                'circle-stroke-width': 2,
+                'circle-stroke-color': '#1966a4'
             }
         });
     }
@@ -592,6 +638,55 @@
         map.on('mouseleave', layer, () => {
             map.getCanvas().style.cursor = '';
         });
+    });
+
+    const instructions = [
+        "None",
+        "Destination",
+        "Destination Left",
+        "Destination Right",
+        "Becomes",
+        "Continue",
+        "Turn Slight Right",
+        "Turn Slight Left",
+        "Turn Right",
+        "Turn Left",
+        "Turn Sharp Right",
+        "Turn Sharp Left",
+        "Turn Around",
+        "Ramp Straight",
+        "Ramp Left",
+        "Ramp Right",
+        "Exit Right",
+        "Exit Left",
+        "Stay Straight",
+        "Stay Left",
+        "Stay Right",
+        "Enter Roundabout",
+        "Exit Roundabout",
+        "Elevator",
+        "Stairs"
+    ];
+
+    const hoverPopup = new maplibregl.Popup({
+        closeButton: false,
+        closeOnClick: false
+    });
+
+    map.on('mousemove', 'path', (e) => {
+        map.getCanvas().style.cursor = 'pointer';
+
+        const instructionCode = e.features[0].properties.instruction;
+        const text = instructions[instructionCode] || "Unknown";
+
+        hoverPopup.setLngLat(e.lngLat)
+            .setHTML(`<strong>${text}</strong>`)
+            .addTo(map);
+    });
+
+    map.on('mouseleave', 'path', () => {
+        map.getCanvas().style.cursor = '';
+        hoverPopup.remove();
     });
 
     const startMarker = new maplibregl.Marker({

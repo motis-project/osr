@@ -21,6 +21,7 @@
 #include "osr/geojson.h"
 #include "osr/lookup.h"
 #include "osr/routing/algorithms.h"
+#include "osr/routing/instructions/instruction_annotator.h"
 #include "osr/routing/parameters.h"
 #include "osr/routing/profiles/bike.h"
 #include "osr/routing/profiles/bike_sharing.h"
@@ -140,8 +141,8 @@ struct http_server::impl {
                                                       foot_speed_result.value()}
             : get_parameters(profile);
 
-    auto const p = route(params, w_, l_, profile, from, to, max, dir, 100,
-                         nullptr, nullptr, elevations_, routing_algo);
+    auto p = route(params, w_, l_, profile, from, to, max, dir, 100,
+                   nullptr, nullptr, elevations_, routing_algo);
 
     auto const p1 = route(params, w_, l_, profile, from, std::vector{to}, max,
                           dir, 100, nullptr, nullptr, elevations_);
@@ -161,6 +162,10 @@ struct http_server::impl {
                        http::status::not_found));
       return;
     }
+
+    auto annotator = instruction_annotator{w_};
+    annotator.annotate(*p);
+
     cb(json_response(req, to_featurecollection(w_, p)));
   }
 

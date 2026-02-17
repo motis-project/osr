@@ -44,6 +44,31 @@ struct restriction {
   way_pos_t from_, to_;
 };
 
+struct way_instruction_properties {
+
+  template <std::size_t NMaxTypes>
+  friend constexpr auto static_type_hash(
+      way_instruction_properties const*,
+      cista::hash_data<NMaxTypes> h) noexcept {
+    return h.combine(cista::hash("way_instruction_properties v1"));
+  }
+
+  template <typename Ctx>
+  friend void serialize(Ctx&, way_instruction_properties const*,
+                        cista::offset_t) {}
+
+  template <typename Ctx>
+  friend void deserialize(Ctx const&, way_instruction_properties*) {}
+
+  std::uint8_t highway_ : 3;
+  std::uint8_t is_link_ : 1;
+  std::uint8_t junction_ : 2;
+  std::uint8_t is_footway_crossing_ : 1;
+  std::uint8_t reserved_ : 1;
+};
+
+static_assert(sizeof(way_instruction_properties) == 1);
+
 struct way_properties {
   constexpr bool is_accessible() const {
     return is_car_accessible() || is_bike_accessible() ||
@@ -339,6 +364,7 @@ struct ways {
   mm_vecvec<way_idx_t, osm_node_idx_t, std::uint64_t> way_osm_nodes_;
   mm_vecvec<string_idx_t, char, std::uint64_t> strings_;
   mm_vec_map<way_idx_t, string_idx_t> way_names_;
+  mm_vec_map<way_idx_t, way_instruction_properties> way_instruction_properties_;
 
   mm_bitvec<way_idx_t> way_has_conditional_access_no_;
   mm_vec<pair<way_idx_t, string_idx_t>> way_conditional_access_no_;

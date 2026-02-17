@@ -23,6 +23,7 @@ ways::ways(std::filesystem::path p, cista::mmap::protection const mode)
       strings_{mm_vec<char>(mm("strings_data.bin")),
                mm_vec<std::uint64_t>(mm("strings_idx.bin"))},
       way_names_{mm("way_names.bin")},
+      way_instruction_properties_{mm("way_instruction_properties.bin")},
       way_has_conditional_access_no_{
           mm_vec<std::uint64_t>(mm("way_has_conditional_access_no"))},
       way_conditional_access_no_{mm("way_conditional_access_no")} {}
@@ -254,6 +255,7 @@ void ways::sync() {
   strings_.data_.mmap_.sync();
   strings_.bucket_starts_.mmap_.sync();
   way_names_.mmap_.sync();
+  way_instruction_properties_.mmap_.sync();
 }
 
 std::optional<std::string_view> ways::get_access_restriction(
