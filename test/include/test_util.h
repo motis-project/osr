@@ -9,7 +9,8 @@
 std::optional<osr::path> route(osr::ways const& w,
                                osr::lookup const& l,
                                osr::location const& from,
-                               osr::location const& to);
+                               osr::location const& to,
+                               osr::search_profile sp);
 
 std::optional<osr::path> extract_and_route(std::string_view path,
                                            osr::location const& from,

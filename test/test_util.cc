@@ -12,10 +12,11 @@ namespace fs = std::filesystem;
 std::optional<osr::path> route(osr::ways const& w,
                                osr::lookup const& l,
                                osr::location const& from,
-                               osr::location const& to) {
+                               osr::location const& to,
+                               osr::search_profile const sp = osr::search_profile::kFoot) {
   return osr::route(
-    osr::foot<false, osr::elevator_tracking>::parameters{}, w, l,
-    osr::search_profile::kFoot, from, {to}, 900, osr::direction::kForward,
+    osr::get_parameters(sp), w, l,
+    sp, from, {to}, 900, osr::direction::kForward,
     250.0, nullptr, nullptr, nullptr, osr::routing_algorithm::kDijkstra);
 }
 
