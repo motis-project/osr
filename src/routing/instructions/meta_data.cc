@@ -1,5 +1,7 @@
 #include "osr/routing/instructions/meta_data.h"
 
+#include "osr/routing/instructions/instruction_util.h"
+
 namespace osr {
 
   bool way_segment::is_way_aligned() const {
@@ -231,6 +233,15 @@ namespace osr {
 
       print_alts("alts_left", alts_left_);
       print_alts("alts_right", alts_right_);
+    }
+
+    // TODO
+    bool traversed_node_hub::is_exit_natural_choice(ways const& w) const {
+      if (! ways_have_same_name(arrive_hub_on_.way_idx_, exit_from_hub_.way_idx_, w)) {
+        return false;
+      }
+
+      return true;
     }
 
 } // namespace osr

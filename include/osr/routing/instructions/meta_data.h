@@ -1,11 +1,8 @@
 #pragma once
 
-#include <ostream>
-#include <string_view>
 #include <vector>
 
 #include "osr/routing/instructions/directions.h"
-#include "osr/routing/mode.h"
 #include "osr/routing/path.h"
 #include "osr/types.h"
 #include "osr/ways.h"
@@ -39,6 +36,8 @@ struct traversed_node_hub {
   static traversed_node_hub from(ways const& w, path::segment const& arrive_on, path::segment const& exit_on);
 
   void print(std::ostream& out, ways const& w) const;
+
+  bool is_exit_natural_choice(ways const& w) const;
 
   way_segment arrive_hub_on_;
   node_idx_t hub_node_;
