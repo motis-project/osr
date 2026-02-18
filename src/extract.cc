@@ -281,6 +281,7 @@ struct way_handler : public osm::handler::Handler {
       } else {
         str_idx = string_idx_t{w_.strings_.size()};
         w_.strings_.emplace_back(s);
+        strings_set_.insert(str_idx);
       }
       return str_idx;
     };
