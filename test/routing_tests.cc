@@ -11,9 +11,13 @@
 
 namespace fs = std::filesystem;
 
-std::string extract_and_route(std::string_view path,
-                              osr::location const& from,
-                              osr::location const& to) {
+std::string extract_and_route(
+    std::string_view path,
+    osr::location const& from,
+    osr::location const& to,
+    osr::profile_parameters const& params =
+        osr::foot<false, osr::elevator_tracking>::parameters{},
+    osr::search_profile const profile = osr::search_profile::kFoot) {
   auto const dir = fs::temp_directory_path() / path;
   auto ec = std::error_code{};
   fs::remove_all(dir, ec);
@@ -24,16 +28,15 @@ std::string extract_and_route(std::string_view path,
   auto w = osr::ways{dir, cista::mmap::protection::READ};
   auto l = osr::lookup{w, dir, cista::mmap::protection::READ};
 
-  auto const p = osr::route(
-      osr::foot<false, osr::elevator_tracking>::parameters{}, w, l,
-      osr::search_profile::kFoot, from, {to}, 900, osr::direction::kForward,
-      250.0, nullptr, nullptr, nullptr, osr::routing_algorithm::kDijkstra);
+  auto const p = osr::route(params, w, l, profile, from, {to}, 900,
+                            osr::direction::kForward, 250.0, nullptr, nullptr,
+                            nullptr, osr::routing_algorithm::kDijkstra);
   utl::verify(p.has_value(), "{}: from={} to={} -> no route", path,
               fmt::streamed(from), fmt::streamed(to));
   return osr::to_featurecollection(w, *p, false);
 }
 
-TEST(routing, island) {
+TEST(routing, foot_island) {
   auto const from = osr::location{49.872715, 8.651534, osr::level_t{0.F}};
   auto const to = osr::location{49.873023, 8.651523, osr::level_t{0.F}};
   EXPECT_EQ(
@@ -41,7 +44,7 @@ TEST(routing, island) {
       extract_and_route("test/luisenplatz-darmstadt.osm.pbf", from, to));
 }
 
-TEST(routing, ferry) {
+TEST(routing, foot_ferry) {
   auto const from = osr::location{41.921472, 8.742216, osr::level_t{0.F}};
   auto const to = osr::location{41.921436, 8.740166, osr::level_t{0.F}};
   EXPECT_EQ(
@@ -49,7 +52,7 @@ TEST(routing, ferry) {
       extract_and_route("test/ajaccio-ferry.osm.pbf", from, to));
 }
 
-TEST(routing, corridor) {
+TEST(routing, foot_corridor) {
   auto const from =
       osr::location{51.54663831994142, -0.05622849779558692, osr::level_t{0.F}};
   auto const to =
@@ -59,7 +62,7 @@ TEST(routing, corridor) {
       extract_and_route("test/london-corridor.osm.pbf", from, to));
 }
 
-TEST(routing, stop_area) {
+TEST(routing, foot_stop_area) {
   auto const from =
       osr::location{48.725296645530705, 2.2612587304760723, osr::level_t{0.F}};
   auto const to =
@@ -67,4 +70,41 @@ TEST(routing, stop_area) {
   EXPECT_EQ(
       R"({"type":"FeatureCollection","metadata":{},"features":[{"type":"Feature","properties":{"level":0E0,"osm_way_id":0,"cost":13,"distance":13},"geometry":{"type":"LineString","coordinates":[[2.261314500627132E0,4.8725266362834425E1],[2.2613838E0,4.87253219E1]]}},{"type":"Feature","properties":{"level":0E0,"osm_way_id":1290289280,"cost":6,"distance":6},"geometry":{"type":"LineString","coordinates":[[2.2613838E0,4.87253219E1],[2.2613206E0,4.87253586E1]]}},{"type":"Feature","properties":{"level":0E0,"osm_way_id":1290289280,"cost":5,"distance":5},"geometry":{"type":"LineString","coordinates":[[2.2613206E0,4.87253586E1],[2.2612721E0,4.87253867E1]]}},{"type":"Feature","properties":{"level":0E0,"osm_way_id":1290289280,"cost":3,"distance":3},"geometry":{"type":"LineString","coordinates":[[2.2612721E0,4.87253867E1],[2.2612448E0,4.87254022E1]]}},{"type":"Feature","properties":{"level":0E0,"osm_way_id":892871341,"cost":6,"distance":7},"geometry":{"type":"LineString","coordinates":[[2.2612448E0,4.87254022E1],[2.2611731E0,4.87254412E1]]}},{"type":"Feature","properties":{"level":0E0,"osm_way_id":1419149027,"cost":7,"distance":9},"geometry":{"type":"LineString","coordinates":[[2.2611731E0,4.87254412E1],[2.2610764E0,4.87254927E1]]}},{"type":"Feature","properties":{"level":0E0,"osm_way_id":1419149026,"cost":16,"distance":19},"geometry":{"type":"LineString","coordinates":[[2.2610764E0,4.87254927E1],[2.260814E0,4.87254962E1]]}},{"type":"Feature","properties":{"level":0E0,"osm_way_id":1359929257,"cost":20,"distance":24},"geometry":{"type":"LineString","coordinates":[[2.260814E0,4.87254962E1],[2.2605996E0,4.87253278E1]]}},{"type":"Feature","properties":{"level":0E0,"osm_way_id":1429030767,"cost":10,"distance":12},"geometry":{"type":"LineString","coordinates":[[2.2605996E0,4.87253278E1],[2.2604973E0,4.87252419E1]]}},{"type":"Feature","properties":{"level":0E0,"osm_way_id":1429030769,"cost":2,"distance":2},"geometry":{"type":"LineString","coordinates":[[2.2604973E0,4.87252419E1],[2.2604761E0,4.87252248E1]]}},{"type":"Feature","properties":{"level":0E0,"osm_way_id":1429030768,"cost":7,"distance":8},"geometry":{"type":"LineString","coordinates":[[2.2604761E0,4.87252248E1],[2.2604036E0,4.87251661E1]]}},{"type":"Feature","properties":{"level":0E0,"osm_way_id":1359929257,"cost":22,"distance":26},"geometry":{"type":"LineString","coordinates":[[2.2604036E0,4.87251661E1],[2.2602208E0,4.87250223E1],[2.2601787E0,4.87249893E1]]}},{"type":"Feature","properties":{"level":1E0,"osm_way_id":222040526,"cost":25,"distance":30},"geometry":{"type":"LineString","coordinates":[[2.2601787E0,4.87249893E1],[2.2600672E0,4.87250507E1],[2.2600272E0,4.87250721E1],[2.2598576E0,4.87251608E1]]}},{"type":"Feature","properties":{"level":1E0,"osm_way_id":222040526,"cost":11,"distance":13},"geometry":{"type":"LineString","coordinates":[[2.2598576E0,4.87251608E1],[2.2597231E0,4.87252337E1]]}},{"type":"Feature","properties":{"level":1E0,"osm_way_id":222040526,"cost":4,"distance":5},"geometry":{"type":"LineString","coordinates":[[2.2597231E0,4.87252337E1],[2.2596673E0,4.87252638E1]]}},{"type":"Feature","properties":{"level":1E0,"osm_way_id":222040526,"cost":93,"distance":112},"geometry":{"type":"LineString","coordinates":[[2.2596673E0,4.87252638E1],[2.2596292E0,4.8725284E1],[2.2584789E0,4.87258964E1]]}},{"type":"Feature","properties":{"level":1E0,"osm_way_id":222040526,"cost":13,"distance":16},"geometry":{"type":"LineString","coordinates":[[2.2584789E0,4.87258964E1],[2.2583131E0,4.87259901E1]]}},{"type":"Feature","properties":{"level":1E0,"osm_way_id":642263621,"cost":8,"distance":10},"geometry":{"type":"LineString","coordinates":[[2.2583131E0,4.87259901E1],[2.2582647E0,4.87259491E1],[2.2582257E0,4.8725916E1]]}},{"type":"Feature","properties":{"level":1E0,"osm_way_id":642578765,"cost":2,"distance":3},"geometry":{"type":"LineString","coordinates":[[2.2582257E0,4.8725916E1],[2.2581937E0,4.87259329E1]]}},{"type":"Feature","properties":{"level":1E0,"osm_way_id":642263625,"cost":6,"distance":7},"geometry":{"type":"LineString","coordinates":[[2.2581937E0,4.87259329E1],[2.2581458E0,4.87258947E1],[2.2581625E0,4.87258856E1]]}},{"type":"Feature","properties":{"level":1E0,"osm_way_id":642578757,"cost":7,"distance":8},"geometry":{"type":"LineString","coordinates":[[2.2581625E0,4.87258856E1],[2.2582443E0,4.87258411E1]]}},{"type":"Feature","properties":{"level":5E-1,"osm_way_id":642263631,"cost":12,"distance":14},"geometry":{"type":"LineString","coordinates":[[2.2582443E0,4.87258411E1],[2.2581285E0,4.87257422E1]]}},{"type":"Feature","properties":{"level":0E0,"osm_way_id":1192127892,"cost":1,"distance":1},"geometry":{"type":"LineString","coordinates":[[2.2581285E0,4.87257422E1],[2.2581167E0,4.87257321E1]]}},{"type":"Feature","properties":{"level":0E0,"osm_way_id":1192127892,"cost":2,"distance":2},"geometry":{"type":"LineString","coordinates":[[2.2581167E0,4.87257321E1],[2.2581393E0,4.87257206E1]]}},{"type":"Feature","properties":{"level":0E0,"osm_way_id":0,"cost":55,"distance":66},"geometry":{"type":"LineString","coordinates":[[2.2581393E0,4.87257206E1],[2.2582250818254357E0,4.872579309702946E1]]}}]})",
       extract_and_route("test/station-border.osm.pbf", from, to));
+}
+
+TEST(routing, bus_private_gate) {
+  auto const from = osr::location{49.113532, 8.438036, osr::kNoLevel};
+  auto const to = osr::location{49.1020397, 8.4332380, osr::kNoLevel};
+  EXPECT_EQ(
+      R"({"type":"FeatureCollection","metadata":{},"features":[{"type":"Feature","properties":{"level":0E0,"osm_way_id":0,"cost":6,"distance":76},"geometry":{"type":"LineString","coordinates":[[8.438033588333512E0,4.9113532427453805E1],[8.4377581E0,4.91128665E1]]}},{"type":"Feature","properties":{"level":0E0,"osm_way_id":849584375,"cost":1,"distance":24},"geometry":{"type":"LineString","coordinates":[[8.4377581E0,4.91128665E1],[8.4376667E0,4.91126578E1]]}},{"type":"Feature","properties":{"level":0E0,"osm_way_id":137079241,"cost":3,"distance":46},"geometry":{"type":"LineString","coordinates":[[8.4376667E0,4.91126578E1],[8.4375677E0,4.91124791E1],[8.4374778E0,4.91122613E1]]}},{"type":"Feature","properties":{"level":0E0,"osm_way_id":849584376,"cost":2,"distance":28},"geometry":{"type":"LineString","coordinates":[[8.4374778E0,4.91122613E1],[8.437396E0,4.91121011E1],[8.4373648E0,4.91120195E1]]}},{"type":"Feature","properties":{"level":0E0,"osm_way_id":851838931,"cost":60,"distance":5},"geometry":{"type":"LineString","coordinates":[[8.4373648E0,4.91120195E1],[8.4373498E0,4.91119765E1]]}},{"type":"Feature","properties":{"level":0E0,"osm_way_id":849584369,"cost":72,"distance":6},"geometry":{"type":"LineString","coordinates":[[8.4373498E0,4.91119765E1],[8.4373272E0,4.91119262E1]]}},{"type":"Feature","properties":{"level":0E0,"osm_way_id":310571714,"cost":4,"distance":17},"geometry":{"type":"LineString","coordinates":[[8.4373272E0,4.91119262E1],[8.4372649E0,4.91117757E1]]}},{"type":"Feature","properties":{"level":0E0,"osm_way_id":310571711,"cost":36,"distance":108},"geometry":{"type":"LineString","coordinates":[[8.4372649E0,4.91117757E1],[8.4369716E0,4.91110229E1],[8.4369164E0,4.91108317E1]]}},{"type":"Feature","properties":{"level":0E0,"osm_way_id":3498959,"cost":16,"distance":57},"geometry":{"type":"LineString","coordinates":[[8.4369164E0,4.91108317E1],[8.4367049E0,4.91103396E1]]}},{"type":"Feature","properties":{"level":0E0,"osm_way_id":3498959,"cost":0,"distance":8},"geometry":{"type":"LineString","coordinates":[[8.4367049E0,4.91103396E1],[8.4366731E0,4.91102697E1]]}},{"type":"Feature","properties":{"level":0E0,"osm_way_id":3498959,"cost":0,"distance":10},"geometry":{"type":"LineString","coordinates":[[8.4366731E0,4.91102697E1],[8.4366345E0,4.91101859E1]]}},{"type":"Feature","properties":{"level":0E0,"osm_way_id":3498959,"cost":28,"distance":89},"geometry":{"type":"LineString","coordinates":[[8.4366345E0,4.91101859E1],[8.4363175E0,4.91094145E1]]}},{"type":"Feature","properties":{"level":0E0,"osm_way_id":3498959,"cost":0,"distance":5},"geometry":{"type":"LineString","coordinates":[[8.4363175E0,4.91094145E1],[8.4363014E0,4.91093749E1]]}},{"type":"Feature","properties":{"level":0E0,"osm_way_id":3498959,"cost":0,"distance":9},"geometry":{"type":"LineString","coordinates":[[8.4363014E0,4.91093749E1],[8.4362712E0,4.91093008E1]]}},{"type":"Feature","properties":{"level":0E0,"osm_way_id":3498959,"cost":12,"distance":45},"geometry":{"type":"LineString","coordinates":[[8.4362712E0,4.91093008E1],[8.4361122E0,4.91089107E1]]}},{"type":"Feature","properties":{"level":0E0,"osm_way_id":3498959,"cost":28,"distance":83},"geometry":{"type":"LineString","coordinates":[[8.4361122E0,4.91089107E1],[8.4358119E0,4.9108187E1]]}},{"type":"Feature","properties":{"level":0E0,"osm_way_id":3498959,"cost":28,"distance":79},"geometry":{"type":"LineString","coordinates":[[8.4358119E0,4.9108187E1],[8.4355482E0,4.91075004E1]]}},{"type":"Feature","properties":{"level":0E0,"osm_way_id":851838936,"cost":80,"distance":232},"geometry":{"type":"LineString","coordinates":[[8.4355482E0,4.91075004E1],[8.4354366E0,4.91072387E1],[8.4347732E0,4.91056838E1],[8.4346938E0,4.91054924E1]]}},{"type":"Feature","properties":{"level":0E0,"osm_way_id":155843105,"cost":24,"distance":75},"geometry":{"type":"LineString","coordinates":[[8.4346938E0,4.91054924E1],[8.4344235E0,4.91048453E1]]}},{"type":"Feature","properties":{"level":0E0,"osm_way_id":155843105,"cost":24,"distance":74},"geometry":{"type":"LineString","coordinates":[[8.4344235E0,4.91048453E1],[8.4341525E0,4.91042005E1]]}},{"type":"Feature","properties":{"level":0E0,"osm_way_id":155843105,"cost":36,"distance":107},"geometry":{"type":"LineString","coordinates":[[8.4341525E0,4.91042005E1],[8.4337533E0,4.91032736E1]]}},{"type":"Feature","properties":{"level":0E0,"osm_way_id":155843105,"cost":0,"distance":12},"geometry":{"type":"LineString","coordinates":[[8.4337533E0,4.91032736E1],[8.4337108E0,4.91031653E1]]}},{"type":"Feature","properties":{"level":0E0,"osm_way_id":155843105,"cost":28,"distance":83},"geometry":{"type":"LineString","coordinates":[[8.4337108E0,4.91031653E1],[8.4333945E0,4.91024469E1]]}},{"type":"Feature","properties":{"level":0E0,"osm_way_id":0,"cost":12,"distance":46},"geometry":{"type":"LineString","coordinates":[[8.4333945E0,4.91024469E1],[8.433240399498114E0,4.910203931113488E1]]}}]})",
+      extract_and_route("test/karlsruhe-kit-nord.osm.pbf", from, to,
+                        osr::bus::parameters{}, osr::search_profile::kBus));
+
+  // car profile should not be allowed to pass through the private gate ->
+  // expect no route
+  EXPECT_ANY_THROW(extract_and_route("test/karlsruhe-kit-nord.osm.pbf", from,
+                                     to, osr::car::parameters{},
+                                     osr::search_profile::kCar));
+}
+
+TEST(routing, ferry_route) {
+  auto const from = osr::location{53.544738, 9.971595, osr::kNoLevel};
+  auto const to = osr::location{53.540747, 9.974202, osr::kNoLevel};
+  EXPECT_EQ(
+      R"({"type":"FeatureCollection","metadata":{},"features":[{"type":"Feature","properties":{"level":0E0,"osm_way_id":0,"cost":0,"distance":3},"geometry":{"type":"LineString","coordinates":[[9.9715663E0,5.35447076E1],[9.9715663E0,5.35447076E1]]}},{"type":"Feature","properties":{"level":0E0,"osm_way_id":25445781,"cost":40,"distance":403},"geometry":{"type":"LineString","coordinates":[[9.9715663E0,5.35447076E1],[9.9714744E0,5.35445564E1],[9.971377E0,5.3544327E1],[9.9713103E0,5.35440655E1],[9.971313E0,5.35437668E1],[9.9713504E0,5.35434353E1],[9.9714368E0,5.35431238E1],[9.9716401E0,5.35427136E1],[9.9717758E0,5.35425032E1],[9.9720512E0,5.35422903E1],[9.9724062E0,5.3542125E1],[9.9733279E0,5.35417842E1],[9.973563E0,5.3541663E1]]}},{"type":"Feature","properties":{"level":0E0,"osm_way_id":1372460184,"cost":11,"distance":115},"geometry":{"type":"LineString","coordinates":[[9.973563E0,5.3541663E1],[9.9739284E0,5.35413931E1],[9.9741339E0,5.35412257E1],[9.9742222E0,5.35410764E1],[9.9742233E0,5.35409368E1],[9.9741898E0,5.35407539E1]]}},{"type":"Feature","properties":{"level":0E0,"osm_way_id":0,"cost":0,"distance":1},"geometry":{"type":"LineString","coordinates":[[9.9741898E0,5.35407539E1],[9.974193272653226E0,5.3540755204448416E1]]}}]})",
+      extract_and_route("test/hamburg-hafen-ferry.osm.pbf", from, to,
+                        osr::ferry::parameters{}, osr::search_profile::kFerry));
+}
+
+TEST(routing, tram_junction) {
+  // the railway profile needs a relatively high-resolution cost value,
+  // otherwise it will produce very weird routes at junctions, because all
+  // routes through the junction cost the same
+  auto const from = osr::location{49.0019715, 8.3943070, osr::kNoLevel};
+  auto const to = osr::location{49.002328, 8.395582, osr::kNoLevel};
+  EXPECT_EQ(
+      R"({"type":"FeatureCollection","metadata":{},"features":[{"type":"Feature","properties":{"level":0E0,"osm_way_id":0,"cost":4,"distance":14},"geometry":{"type":"LineString","coordinates":[[8.394302960176601E0,4.900197169592092E1],[8.3943169E0,4.90020954E1]]}},{"type":"Feature","properties":{"level":0E0,"osm_way_id":404384687,"cost":1,"distance":5},"geometry":{"type":"LineString","coordinates":[[8.3943169E0,4.90020954E1],[8.3943189E0,4.90021148E1],[8.3943214E0,4.90021421E1]]}},{"type":"Feature","properties":{"level":0E0,"osm_way_id":145048133,"cost":4,"distance":12},"geometry":{"type":"LineString","coordinates":[[8.3943214E0,4.90021421E1],[8.3943347E0,4.9002237E1],[8.3943377E0,4.90022509E1]]}},{"type":"Feature","properties":{"level":0E0,"osm_way_id":145048133,"cost":4,"distance":14},"geometry":{"type":"LineString","coordinates":[[8.3943377E0,4.90022509E1],[8.3943474E0,4.90022723E1],[8.3943902E0,4.90023232E1],[8.3944341E0,4.90023612E1]]}},{"type":"Feature","properties":{"level":0E0,"osm_way_id":145048133,"cost":2,"distance":7},"geometry":{"type":"LineString","coordinates":[[8.3944341E0,4.90023612E1],[8.3944564E0,4.9002373E1],[8.3944881E0,4.90023898E1],[8.3945052E0,4.90023989E1]]}},{"type":"Feature","properties":{"level":0E0,"osm_way_id":145048133,"cost":2,"distance":6},"geometry":{"type":"LineString","coordinates":[[8.3945052E0,4.90023989E1],[8.3945345E0,4.90024088E1],[8.3945768E0,4.90024214E1]]}},{"type":"Feature","properties":{"level":0E0,"osm_way_id":145048133,"cost":4,"distance":13},"geometry":{"type":"LineString","coordinates":[[8.3945768E0,4.90024214E1],[8.3946412E0,4.90024284E1],[8.3946882E0,4.90024286E1],[8.3947562E0,4.90024251E1]]}},{"type":"Feature","properties":{"level":0E0,"osm_way_id":150939191,"cost":7,"distance":21},"geometry":{"type":"LineString","coordinates":[[8.3947562E0,4.90024251E1],[8.3950429E0,4.90023862E1]]}},{"type":"Feature","properties":{"level":0E0,"osm_way_id":150939191,"cost":7,"distance":21},"geometry":{"type":"LineString","coordinates":[[8.3950429E0,4.90023862E1],[8.3953208E0,4.90023485E1]]}},{"type":"Feature","properties":{"level":0E0,"osm_way_id":150939191,"cost":1,"distance":3},"geometry":{"type":"LineString","coordinates":[[8.3953208E0,4.90023485E1],[8.3953654E0,4.90023425E1]]}},{"type":"Feature","properties":{"level":0E0,"osm_way_id":0,"cost":5,"distance":17},"geometry":{"type":"LineString","coordinates":[[8.3953654E0,4.90023425E1],[8.3955258E0,4.90023205E1],[8.395577741913971E0,4.900231379781756E1]]}}]})",
+      extract_and_route("test/tram-junction.osm.pbf", from, to,
+                        osr::railway::parameters{},
+                        osr::search_profile::kRailway));
 }

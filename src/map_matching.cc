@@ -593,6 +593,13 @@ matched_route map_match(
 
   std::reverse(begin(result.path_.segments_), end(result.path_.segments_));
 
+  for (auto const& seg : result.path_.segments_) {
+    result.path_.dist_ += seg.dist_;
+    result.path_.cost_ =
+        clamp_cost(static_cast<std::uint64_t>(result.path_.cost_) +
+                   static_cast<std::uint64_t>(seg.cost_));
+  }
+
   auto offset = std::size_t{0U};
   for (auto const& seg : segments) {
     result.segment_offsets_.emplace_back(offset);
