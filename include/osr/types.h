@@ -14,6 +14,7 @@
 #include "cista/containers/paged_vecvec.h"
 #include "cista/containers/vector.h"
 #include "cista/containers/vecvec.h"
+#include "cista/containers/fws_multimap.h"
 #include "cista/strong.h"
 
 namespace osr {
