@@ -35,7 +35,8 @@ boost::json::value to_line_string(std::initializer_list<T>&& line) {
 
 inline std::string to_featurecollection(ways const& w,
                                         std::optional<osr::path> const& p,
-                                        bool const with_properties = true) {
+                                        bool const with_properties = true,
+                                        bool const with_instructions = false) {
   return boost::json::serialize(boost::json::object{
       {"type", "FeatureCollection"},
       {"metadata", with_properties ? boost::json::value{{"duration", p->cost_},
@@ -43,19 +44,22 @@ inline std::string to_featurecollection(ways const& w,
                                    : boost::json::value{{}}},
       {"features",
        utl::all(p->segments_) | utl::transform([&](const path::segment& s) {
+
+         boost::json::object properties = {
+           {"level", s.from_level_.to_float()},
+           {"osm_way_id", s.way_ == way_idx_t::invalid()
+             ? 0U : to_idx(w.way_osm_idx_[s.way_])},
+           {"cost", s.cost_},
+           {"distance", s.dist_}};
+
+         if (with_instructions) {
+           properties["instruction"] = static_cast<int>(s.instruction_annotation_);
+         }
+
          return boost::json::object{
-             {"type", "Feature"},
-             {
-                 "properties",
-                 {{"level", s.from_level_.to_float()},
-                  {"osm_way_id", s.way_ == way_idx_t::invalid()
-                                     ? 0U
-                                     : to_idx(w.way_osm_idx_[s.way_])},
-                  {"cost", s.cost_},
-                  {"distance", s.dist_},
-                  {"instruction", static_cast<int>(s.instruction_annotation_)}},
-             },
-             {"geometry", to_line_string(s.polyline_)}};
+           {"type", "Feature"},
+           {"properties", std::move(properties)},
+           {"geometry", to_line_string(s.polyline_)}};
        }) | utl::emplace_back_to<boost::json::array>()}});
 }
 

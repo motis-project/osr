@@ -35,7 +35,7 @@ void test_instructions(
   const auto w = osr::ways{dir, cista::mmap::protection::READ};
   const auto l = osr::lookup{w, dir, cista::mmap::protection::READ};
 
-  auto p = route(w, l, from, to, sp);
+  auto p = route(w, l, from, to, osr::get_parameters(sp), sp);
   ASSERT_TRUE(p.has_value());
   osr::instruction_annotator annotator(w);
   annotator.annotate(p.value());
