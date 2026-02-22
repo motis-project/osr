@@ -143,10 +143,12 @@ enum class search_profile : std::uint8_t {
   kCarParkingWheelchair,
   kBikeSharing,
   kCarSharing,
+  kNumProfiles
 };
 
 constexpr auto const kNumProfiles =
-    static_cast<std::underlying_type_t<search_profile>>(10U);
+    static_cast<std::underlying_type_t<search_profile>>(
+        search_profile::kNumProfiles);
 
 search_profile to_profile(std::string_view);
 
