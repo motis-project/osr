@@ -281,7 +281,9 @@ struct generic_car {
     } else {
       if (e.is_car_accessible() &&
           (dir == direction::kForward || !e.is_oneway_car())) {
-        return (dist / e.max_speed_m_per_s()) * (e.is_destination() ? 5U : 1U) +
+        auto const s = e.max_speed_m_per_s();
+        return (dist / (s - std::min(s / 2U, 3U))) *
+                   (e.is_destination() ? 5U : 1U) +
                (e.is_destination() ? 120U : 0U);
       } else {
         return kInfeasible;
