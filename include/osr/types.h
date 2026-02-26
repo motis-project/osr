@@ -203,10 +203,10 @@ static_assert(kLevelBits == 6U);
 // speed
 enum speed_limit : std::uint8_t {
   kmh_10,
+  kmh_20,
   kmh_30,
   kmh_50,
   kmh_60,
-  kmh_70,
   kmh_80,
   kmh_100,
   kmh_120,
@@ -219,14 +219,14 @@ constexpr speed_limit get_speed_limit(unsigned const x) {
     return speed_limit::kmh_100;
   } else if (x >= 80) {
     return speed_limit::kmh_80;
-  } else if (x >= 70) {
-    return speed_limit::kmh_70;
   } else if (x >= 60) {
     return speed_limit::kmh_60;
   } else if (x >= 50) {
     return speed_limit::kmh_50;
   } else if (x >= 30) {
     return speed_limit::kmh_30;
+  } else if (x >= 20) {
+    return speed_limit::kmh_20;
   } else {
     return speed_limit::kmh_10;
   }
@@ -235,10 +235,10 @@ constexpr speed_limit get_speed_limit(unsigned const x) {
 constexpr std::uint16_t to_kmh(speed_limit const l) {
   switch (l) {
     case speed_limit::kmh_10: return 10U;
+    case speed_limit::kmh_20: return 20U;
     case speed_limit::kmh_30: return 30U;
     case speed_limit::kmh_50: return 50U;
     case speed_limit::kmh_60: return 60U;
-    case speed_limit::kmh_70: return 70U;
     case speed_limit::kmh_80: return 80U;
     case speed_limit::kmh_100: return 100U;
     case speed_limit::kmh_120: return 120U;
