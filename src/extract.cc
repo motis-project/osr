@@ -418,6 +418,22 @@ struct node_handler : public osm::handler::Handler {
       return;
     }
 
+    auto applies_to_bus = true;
+    if (auto const except_ptr = r.tags()["except"]; except_ptr != nullptr) {
+      auto val = std::string_view{except_ptr};
+      while (!val.empty()) {
+        auto const sep = val.find(';');
+        auto const token =
+            sep == std::string_view::npos ? val : val.substr(0, sep);
+        if (token == "bus"sv || token == "psv"sv) {
+          applies_to_bus = false;
+          break;
+        }
+        val.remove_prefix(sep == std::string_view::npos ? val.size()
+                                                        : sep + 1U);
+      }
+    }
+
     auto via = node_idx_t::invalid();
     for (auto const& m : r.members()) {
       switch (cista::hash(std::string_view{m.role()})) {
@@ -455,7 +471,8 @@ struct node_handler : public osm::handler::Handler {
     auto const l = std::scoped_lock{r_mutex_};
     for (auto const& from : c->from_) {
       for (auto const& to : c->to_) {
-        r_.emplace_back(resolved_restriction{restriction_type, from, to, via});
+        r_.emplace_back(resolved_restriction{restriction_type, from, to, via,
+                                             applies_to_bus});
       }
     }
   }

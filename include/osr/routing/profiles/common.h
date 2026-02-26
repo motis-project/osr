@@ -77,6 +77,7 @@ template <WayAwareProfile P,
           direction SearchDir,
           bool WithBlocked,
           bool WithRestrictions,
+          bool IsBus = false,
           typename Fn>
 void for_each_adjacent_node(typename P::parameters const& params,
                             ways::routing const& w,
@@ -109,7 +110,7 @@ void for_each_adjacent_node(typename P::parameters const& params,
       }
 
       if constexpr (WithRestrictions) {
-        if (w.is_restricted<SearchDir>(n.n_, n.way_, way_pos)) {
+        if (w.is_restricted<SearchDir, IsBus>(n.n_, n.way_, way_pos)) {
           return;
         }
       }
