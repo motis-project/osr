@@ -267,8 +267,8 @@ struct generic_car {
       auto const accessible_with_penalty = e.is_bus_accessible_with_penalty();
       if ((accessible || accessible_with_penalty) &&
           (dir == direction::kForward || !e.is_oneway_psv())) {
-        auto cost = static_cast<cost_t>((dist / e.max_speed_m_per_s()) *
-                                        (e.in_route() ? 1.0 : 1.2));
+        auto cost = static_cast<cost_t>(std::round(
+            (e.in_route() ? 1.0 : 1.2) * dist / e.max_speed_m_per_s()));
         if (e.is_parking()) {
           cost *= 2U;
         }
@@ -282,7 +282,8 @@ struct generic_car {
     } else {
       if (e.is_car_accessible() &&
           (dir == direction::kForward || !e.is_oneway_car())) {
-        return (dist / e.max_speed_m_per_s()) * (e.is_destination() ? 5U : 1U) +
+        return std::round((e.is_destination() ? 5.0 : 1.0) * dist /
+                          e.max_speed_m_per_s()) +
                (e.is_destination() ? 120U : 0U);
       } else {
         return kInfeasible;
