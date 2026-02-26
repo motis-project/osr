@@ -42,8 +42,22 @@ struct resolved_restriction {
 
 struct restriction {
   friend bool operator==(restriction, restriction) = default;
-  way_pos_t from_, to_;
-  bool applies_to_bus_{true};
+
+  template <std::size_t NMaxTypes>
+  friend constexpr auto static_type_hash(
+      restriction const*, cista::hash_data<NMaxTypes> h) noexcept {
+    return h.combine(cista::hash("restriction v1.1"));
+  }
+
+  template <typename Ctx>
+  friend void serialize(Ctx&, restriction const*, cista::offset_t) {}
+
+  template <typename Ctx>
+  friend void deserialize(Ctx const&, restriction*) {}
+
+  way_pos_t from_ : 4;
+  way_pos_t to_ : 4;
+  way_pos_t applies_to_bus_ : 1;
 };
 
 struct way_properties {
@@ -271,15 +285,13 @@ struct ways {
       auto const to_way =
           SearchDir == direction::kForward ? way_pos_t{to} : way_pos_t{from};
 
-      if constexpr (IsBus) {
-        return utl::any_of(r, [&](restriction const& x) {
+      return utl::any_of(r, [&](restriction const& x) {
+        if constexpr (IsBus) {
           return x.from_ == from_way && x.to_ == to_way && x.applies_to_bus_;
-        });
-      } else {
-        return utl::any_of(r, [&](restriction const& x) {
+        } else {
           return x.from_ == from_way && x.to_ == to_way;
-        });
-      }
+        }
+      });
     }
 
     template <bool IsBus = false>
