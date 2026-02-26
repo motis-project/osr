@@ -78,7 +78,7 @@ void ways::add_restriction(std::vector<resolved_restriction>& rs) {
           if (x.type_ == resolved_restriction::type::kNo) {
             r_->node_restrictions_[x.via_].push_back(
                 restriction{r_->get_way_pos(x.via_, x.from_),
-                            r_->get_way_pos(x.via_, x.to_)});
+                            r_->get_way_pos(x.via_, x.to_), x.applies_to_bus_});
           } else /* kOnly */ {
             for (auto const [i, from] :
                  utl::enumerate(r_->node_ways_[x.via_])) {
@@ -86,7 +86,8 @@ void ways::add_restriction(std::vector<resolved_restriction>& rs) {
                    utl::enumerate(r_->node_ways_[x.via_])) {
                 if (x.from_ == from && x.to_ != to) {
                   r_->node_restrictions_[x.via_].push_back(restriction{
-                      static_cast<way_pos_t>(i), static_cast<way_pos_t>(j)});
+                      static_cast<way_pos_t>(i), static_cast<way_pos_t>(j),
+                      x.applies_to_bus_});
                 }
               }
             }

@@ -215,7 +215,7 @@ struct generic_car {
           [&](additional_edge const& ae, cost_t const edge_cost,
               direction const edge_dir) {
             if (!additional->is_additional_node(n.n_)) {
-              if (w.is_restricted<SearchDir>(
+              if (w.is_restricted<SearchDir, IsBus>(
                       n.n_, n.way_, w.get_way_pos(n.n_, ae.underlying_way_))) {
                 return;
               }
@@ -235,7 +235,7 @@ struct generic_car {
       }
     }
 
-    for_each_adjacent_node<generic_car, SearchDir, WithBlocked, true>(
+    for_each_adjacent_node<generic_car, SearchDir, WithBlocked, true, IsBus>(
         params, w, n, blocked, params.uturn_penalty_, fn);
   }
 
@@ -250,7 +250,8 @@ struct generic_car {
       return false;
     }
 
-    if (w.is_restricted(n.n_, n.way_, w.get_way_pos(n.n_, way), search_dir)) {
+    if (w.is_restricted<IsBus>(n.n_, n.way_, w.get_way_pos(n.n_, way),
+                               search_dir)) {
       return false;
     }
 

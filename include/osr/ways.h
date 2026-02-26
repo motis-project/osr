@@ -37,11 +37,13 @@ struct resolved_restriction {
   enum class type { kNo, kOnly } type_;
   way_idx_t from_, to_;
   node_idx_t via_;
+  bool applies_to_bus_{true};
 };
 
 struct restriction {
   friend bool operator==(restriction, restriction) = default;
   way_pos_t from_, to_;
+  bool applies_to_bus_{true};
 };
 
 struct way_properties {
@@ -255,27 +257,39 @@ struct ways {
       return 0U;
     }
 
-    template <direction SearchDir>
+    template <direction SearchDir, bool IsBus = false>
     bool is_restricted(node_idx_t const n,
                        std::uint8_t const from,
                        std::uint8_t const to) const {
       if (!node_is_restricted_[n]) {
         return false;
       }
+
       auto const r = node_restrictions_[n];
-      auto const needle = SearchDir == direction::kForward
-                              ? restriction{from, to}
-                              : restriction{to, from};
-      return utl::find(r, needle) != end(r);
+      auto const from_way =
+          SearchDir == direction::kForward ? way_pos_t{from} : way_pos_t{to};
+      auto const to_way =
+          SearchDir == direction::kForward ? way_pos_t{to} : way_pos_t{from};
+
+      if constexpr (IsBus) {
+        return utl::any_of(r, [&](restriction const& x) {
+          return x.from_ == from_way && x.to_ == to_way && x.applies_to_bus_;
+        });
+      } else {
+        return utl::any_of(r, [&](restriction const& x) {
+          return x.from_ == from_way && x.to_ == to_way;
+        });
+      }
     }
 
+    template <bool IsBus = false>
     bool is_restricted(node_idx_t const n,
                        std::uint8_t const from,
                        std::uint8_t const to,
                        direction const search_dir) const {
       return search_dir == direction::kForward
-                 ? is_restricted<direction::kForward>(n, from, to)
-                 : is_restricted<direction::kBackward>(n, from, to);
+                 ? is_restricted<direction::kForward, IsBus>(n, from, to)
+                 : is_restricted<direction::kBackward, IsBus>(n, from, to);
     }
 
     bool is_loop(way_idx_t const w) const {
