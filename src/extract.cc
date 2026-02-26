@@ -80,10 +80,10 @@ bool is_big_street(tags const& t) {
 speed_limit get_speed_limit(tags const& t) {
   if (is_number(t.max_speed_) /* TODO: support units (kmh/mph) */) {
     return get_speed_limit(
-        static_cast<unsigned>(utl::parse<unsigned>(t.max_speed_)));
+        static_cast<unsigned>(utl::parse<unsigned>(t.max_speed_) * 0.9));
   } else {
     switch (cista::hash(t.highway_)) {
-      case cista::hash("motorway"): return get_speed_limit(90);
+      case cista::hash("motorway"): return get_speed_limit(100);
       case cista::hash("motorway_link"): return get_speed_limit(45);
       case cista::hash("trunk"): return get_speed_limit(85);
       case cista::hash("trunk_link"): return get_speed_limit(40);
@@ -94,10 +94,10 @@ speed_limit get_speed_limit(tags const& t) {
         return t.name_.empty() ? get_speed_limit(80) : get_speed_limit(60);
       case cista::hash("secondary_link"): return get_speed_limit(25);
       case cista::hash("tertiary"):
-        return t.name_.empty() ? get_speed_limit(70) : get_speed_limit(40);
+        return t.name_.empty() ? get_speed_limit(60) : get_speed_limit(40);
       case cista::hash("tertiary_link"): return get_speed_limit(20);
       case cista::hash("unclassified"): return get_speed_limit(40);
-      case cista::hash("residential"): return get_speed_limit(30);
+      case cista::hash("residential"): return get_speed_limit(20);
       case cista::hash("living_street"): return get_speed_limit(10);
       case cista::hash("service"): return get_speed_limit(15);
       case cista::hash("track"): return get_speed_limit(12);
