@@ -246,8 +246,18 @@ constexpr std::uint16_t to_kmh(speed_limit const l) {
   std::unreachable();
 }
 
-constexpr std::uint16_t to_meters_per_second(speed_limit const l) {
-  return static_cast<std::uint16_t>(to_kmh(l) / 3.6);
+constexpr float to_seconds_per_meter(speed_limit const l) {
+  switch (l) {
+    case speed_limit::kmh_10: return 3.6f / 10U;
+    case speed_limit::kmh_20: return 3.6f / 20U;
+    case speed_limit::kmh_30: return 3.6f / 30U;
+    case speed_limit::kmh_50: return 3.6f / 50U;
+    case speed_limit::kmh_60: return 3.6f / 60U;
+    case speed_limit::kmh_80: return 3.6f / 80U;
+    case speed_limit::kmh_100: return 3.6f / 100U;
+    case speed_limit::kmh_120: return 3.6f / 120U;
+  }
+  std::unreachable();
 }
 
 }  // namespace osr
