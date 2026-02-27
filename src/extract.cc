@@ -126,16 +126,16 @@ std::tuple<level_t, level_t, bool> get_levels(tags const& t) {
   return get_levels(t.has_level_, t.level_bits_);
 }
 
-way_properties get_way_properties(tags const& t) {
+way_properties get_way_properties(
+    tags const& t, osm_obj_type const obj_type = osm_obj_type::kWay) {
   auto const [from, to, _] = get_levels(t);
   auto p = way_properties{};
   std::memset(&p, 0, sizeof(way_properties));
-  p.is_foot_accessible_ = is_accessible<foot_profile>(t, osm_obj_type::kWay);
-  p.is_bike_accessible_ = is_accessible<bike_profile>(t, osm_obj_type::kWay);
-  p.is_car_accessible_ = is_accessible<car_profile>(t, osm_obj_type::kWay);
-  p.is_bus_accessible_ = is_accessible<bus_profile>(t, osm_obj_type::kWay);
-  p.is_railway_accessible_ =
-      is_accessible<railway_profile>(t, osm_obj_type::kWay);
+  p.is_foot_accessible_ = is_accessible<foot_profile>(t, obj_type);
+  p.is_bike_accessible_ = is_accessible<bike_profile>(t, obj_type);
+  p.is_car_accessible_ = is_accessible<car_profile>(t, obj_type);
+  p.is_bus_accessible_ = is_accessible<bus_profile>(t, obj_type);
+  p.is_railway_accessible_ = is_accessible<railway_profile>(t, obj_type);
   p.is_destination_ = t.is_destination_;
   p.is_oneway_car_ = t.oneway_;
   p.is_oneway_bike_ = t.oneway_ && !t.not_oneway_bike_;
@@ -156,8 +156,8 @@ way_properties get_way_properties(tags const& t) {
   p.is_big_street_ = is_big_street(t);
   p.in_route_ = t.is_route_;
   p.is_bus_accessible_with_penalty_ =
-      is_accessible_with_penalty<bus_profile>(t, osm_obj_type::kWay);
-  p.is_ferry_accessible_ = is_accessible<ferry_profile>(t, osm_obj_type::kWay);
+      is_accessible_with_penalty<bus_profile>(t, obj_type);
+  p.is_ferry_accessible_ = is_accessible<ferry_profile>(t, obj_type);
   return p;
 }
 
@@ -519,7 +519,7 @@ struct rel_ways_handler : public osm::handler::Handler {
       : pl_{pl}, rel_ways_{rel_ways} {}
 
   void relation(osm::Relation const& r) {
-    auto const p = get_way_properties(tags{r});
+    auto const p = get_way_properties(tags{r}, osm_obj_type::kRelation);
     if (!p.is_accessible()) {
       return;
     }
