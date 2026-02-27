@@ -90,11 +90,11 @@ struct way_properties {
   constexpr bool has_toll() const { return has_toll_; }
   constexpr bool is_sidewalk_separate() const { return is_sidewalk_separate_; }
   constexpr bool in_route() const { return in_route_; }
-  constexpr std::uint16_t max_speed_m_per_s() const {
-    return to_meters_per_second(static_cast<speed_limit>(speed_limit_));
-  }
   constexpr std::uint16_t max_speed_km_per_h() const {
     return to_kmh(static_cast<speed_limit>(speed_limit_));
+  }
+  constexpr float max_speed_s_per_m() const {
+    return to_seconds_per_meter(static_cast<speed_limit>(speed_limit_));
   }
   constexpr level_t from_level() const { return level_t{from_level_}; }
   constexpr level_t to_level() const { return level_t{to_level_}; }
