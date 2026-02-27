@@ -8,7 +8,7 @@
 
 namespace osr {
 
-enum class osm_obj_type : std::uint8_t { kWay, kNode };
+enum class osm_obj_type : std::uint8_t { kWay, kNode, kRelation };
 
 enum class override : std::uint8_t { kNone, kWhitelist, kBlacklist };
 
@@ -330,7 +330,7 @@ struct foot_profile {
   }
 
   static bool default_access(tags const& t, osm_obj_type const type) {
-    if (type == osm_obj_type::kWay) {
+    if (type == osm_obj_type::kWay || type == osm_obj_type::kRelation) {
       if (t.is_elevator_ || t.is_parking_) {
         return true;
       }
@@ -397,7 +397,7 @@ struct bike_profile {
   }
 
   static bool default_access(tags const& t, osm_obj_type const type) {
-    if (type == osm_obj_type::kWay) {
+    if (type == osm_obj_type::kWay || type == osm_obj_type::kRelation) {
       switch (cista::hash(t.highway_)) {
         case cista::hash("cycleway"):
         case cista::hash("primary"):
@@ -482,7 +482,7 @@ struct car_profile {
   }
 
   static bool default_access(tags const& t, osm_obj_type const type) {
-    if (type == osm_obj_type::kWay) {
+    if (type == osm_obj_type::kWay || type == osm_obj_type::kRelation) {
       switch (cista::hash(t.highway_)) {
         case cista::hash("motorway"):
         case cista::hash("motorway_link"):
@@ -511,7 +511,7 @@ struct car_profile {
 
 struct bus_profile {
   static override access_override(tags const& t, osm_obj_type const type) {
-    if (t.bus_ != override::kNone) {
+    if (t.bus_ != override::kNone && type != osm_obj_type::kRelation) {
       return t.bus_;
     } else if (t.access_ == override::kBlacklist || t.is_route_ ||
                t.is_ferry_route_) {
@@ -545,7 +545,10 @@ struct bus_profile {
 };
 
 struct railway_profile {
-  static override access_override(tags const&, osm_obj_type) {
+  static override access_override(tags const&, osm_obj_type const type) {
+    if (type == osm_obj_type::kRelation) {
+      return override::kBlacklist;
+    }
     return override::kNone;
   }
 
@@ -577,7 +580,7 @@ struct ferry_profile {
   }
 
   static bool default_access(tags const& t, osm_obj_type const type) {
-    if (type == osm_obj_type::kWay) {
+    if (type == osm_obj_type::kWay || type == osm_obj_type::kRelation) {
       return t.is_ferry_route_;
     } else {
       return true;
