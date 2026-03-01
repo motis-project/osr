@@ -82,7 +82,7 @@ struct way_properties {
   constexpr bool is_destination() const { return is_destination_; }
   constexpr bool is_oneway_car() const { return is_oneway_car_; }
   constexpr bool is_oneway_bike() const { return is_oneway_bike_; }
-  constexpr bool is_oneway_psv() const { return is_oneway_psv_; }
+  constexpr bool is_oneway_bus_psv() const { return is_oneway_bus_psv_; }
   constexpr bool is_elevator() const { return is_elevator_; }
   constexpr bool is_steps() const { return is_steps_; }
   constexpr bool is_ramp() const { return is_ramp_; }
@@ -136,7 +136,7 @@ struct way_properties {
   std::uint8_t in_route_ : 1;
 
   std::uint8_t is_railway_accessible_ : 1;
-  std::uint8_t is_oneway_psv_ : 1;
+  std::uint8_t is_oneway_bus_psv_ : 1;
   std::uint8_t is_incline_down_ : 1;
   std::uint8_t is_bus_accessible_with_penalty_ : 1;
   std::uint8_t is_ferry_accessible_ : 1;

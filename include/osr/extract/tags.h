@@ -59,8 +59,9 @@ struct tags {
         case cista::hash("oneway:bicycle"):
           not_oneway_bike_ = t.value() == "no"sv;
           break;
+        case cista::hash("oneway:bus"):
         case cista::hash("oneway:psv"):
-          not_oneway_psv_ = t.value() == "no"sv;
+          not_oneway_bus_psv_ |= t.value() == "no"sv;
           break;
         case cista::hash("motor_vehicle:forward"):
         case cista::hash("motor_vehicle"):
@@ -199,7 +200,7 @@ struct tags {
   bool not_oneway_bike_{false};
 
   // https://wiki.openstreetmap.org/wiki/Key:oneway:psv
-  bool not_oneway_psv_{false};
+  bool not_oneway_bus_psv_{false};
 
   // https://wiki.openstreetmap.org/wiki/Key:barrier
   std::string_view barrier_;

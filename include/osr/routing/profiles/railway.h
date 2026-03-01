@@ -246,7 +246,7 @@ struct railway {
                                    direction const dir,
                                    distance_t const dist) {
     if (e.is_railway_accessible() &&
-        (dir == direction::kForward || !e.is_oneway_psv())) {
+        (dir == direction::kForward || !e.is_oneway_bus_psv())) {
       return static_cast<cost_t>((dist / 3));
     } else {
       return kInfeasible;

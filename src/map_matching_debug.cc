@@ -220,7 +220,7 @@ void write_map_match_debug(
           {"isDestination", p.is_destination()},
           {"onewayCar", p.is_oneway_car()},
           {"onewayBike", p.is_oneway_bike()},
-          {"onewayPsv", p.is_oneway_psv()},
+          {"onewayPsv", p.is_oneway_bus_psv()},
           {"maxSpeedKmh", p.max_speed_km_per_h()},
           {"speedLimit", p.speed_limit_},
           {"fromLevel", p.from_level().to_float()},

@@ -139,7 +139,7 @@ way_properties get_way_properties(
   p.is_destination_ = t.is_destination_;
   p.is_oneway_car_ = t.oneway_;
   p.is_oneway_bike_ = t.oneway_ && !t.not_oneway_bike_;
-  p.is_oneway_psv_ = t.oneway_ && !t.not_oneway_psv_;
+  p.is_oneway_bus_psv_ = t.oneway_ && !t.not_oneway_bus_psv_;
   p.is_elevator_ = t.is_elevator_;
   p.is_steps_ = (t.highway_ == "steps"sv);
   p.is_parking_ = t.is_parking_;

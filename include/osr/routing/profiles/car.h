@@ -266,7 +266,7 @@ struct generic_car {
       auto const accessible = e.is_bus_accessible();
       auto const accessible_with_penalty = e.is_bus_accessible_with_penalty();
       if ((accessible || accessible_with_penalty) &&
-          (dir == direction::kForward || !e.is_oneway_psv())) {
+          (dir == direction::kForward || !e.is_oneway_bus_psv())) {
         auto cost = static_cast<cost_t>(
             std::rint((e.in_route() ? 1.0f : 1.2f) * static_cast<float>(dist) *
                       e.max_speed_s_per_m()));
