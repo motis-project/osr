@@ -302,16 +302,10 @@ struct way_handler : public osm::handler::Handler {
     w_.way_osm_idx_.push_back(osm_way_idx_t{w.positive_id()});
     w_.r_->way_properties_.emplace_back(p);
 
-    auto const polyline = w.nodes() | std::views::transform(get_point);
-    auto const nodes = w.nodes() | std::views::transform(get_node_id);
-
-    if (p.is_incline_down_) {
-      w_.way_polylines_.emplace_back(polyline | std::views::reverse);
-      w_.way_osm_nodes_.emplace_back(nodes | std::views::reverse);
-    } else {
-      w_.way_polylines_.emplace_back(polyline);
-      w_.way_osm_nodes_.emplace_back(nodes);
-    }
+    w_.way_polylines_.emplace_back(w.nodes() |
+                                   std::views::transform(get_point));
+    w_.way_osm_nodes_.emplace_back(w.nodes() |
+                                   std::views::transform(get_node_id));
 
     auto const name = t.name_.empty() ? t.ref_ : t.name_;
     if (!name.empty()) {

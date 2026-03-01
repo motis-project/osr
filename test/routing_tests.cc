@@ -108,3 +108,14 @@ TEST(routing, tram_junction) {
                         osr::railway::parameters{},
                         osr::search_profile::kRailway));
 }
+
+TEST(routing, incline_oneway_combination) {
+  // incline should not have any effect on oneway routing
+  auto const from = osr::location{54.4689477, 18.50720618, osr::kNoLevel};
+  auto const to = osr::location{54.467231, 18.509283, osr::kNoLevel};
+  EXPECT_EQ(
+      R"({"type":"FeatureCollection","metadata":{},"features":[{"type":"Feature","properties":{"level":0E0,"osm_way_id":0,"cost":27,"distance":83},"geometry":{"type":"LineString","coordinates":[[1.8508387854367566E1,5.4468709246545714E1],[1.8508399E1,5.44687279E1]]}},{"type":"Feature","properties":{"level":0E0,"osm_way_id":0,"cost":78,"distance":234},"geometry":{"type":"LineString","coordinates":[[1.8508399E1,5.44687279E1],[1.85083702E1,5.44686797E1],[1.8508267E1,5.44685215E1],[1.85081515E1,5.44683626E1],[1.85080358E1,5.44682182E1],[1.85079053E1,5.44680712E1],[1.85077339E1,5.44678954E1],[1.8507667128684414E1,5.446783507418094E1]]}}]})",
+      extract_and_route("test/gdynia-kariny.osm.pbf", from, to,
+                        osr::railway::parameters{},
+                        osr::search_profile::kRailway));
+}
