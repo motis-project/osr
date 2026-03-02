@@ -55,7 +55,8 @@ struct bike_sharing {
                      .is_oneway_bus_psv_ = false,
                      .is_incline_down_ = false,
                      .is_bus_accessible_with_penalty_ = false,
-                     .is_ferry_accessible_ = false};
+                     .is_ferry_accessible_ = false,
+                     .is_railway_accessible_with_penalty_ = false};
 
   static constexpr auto const kAdditionalNodeProperties =
       node_properties{.from_level_ = 0,
