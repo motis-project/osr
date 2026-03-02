@@ -25,6 +25,21 @@
 
 namespace osr {
 
+struct mm_match_distance {
+  double initial_{};
+  double expanded_{};
+};
+
+template <Profile P>
+mm_match_distance get_mm_match_distance(typename P::parameters const&) {
+  return {.initial_ = 100.0, .expanded_ = 300.0};
+}
+
+template <>
+mm_match_distance get_mm_match_distance<railway>(railway::parameters const&) {
+  return {.initial_ = 200.0, .expanded_ = 500.0};
+}
+
 template <Profile P>
 std::vector<matched_way<P>> match_input_point(
     ways const& w,
@@ -35,7 +50,8 @@ std::vector<matched_way<P>> match_input_point(
   auto matched_ways = std::vector<matched_way<P>>{};
   auto const approx_distance_lng_degrees =
       geo::approx_distance_lng_degrees(loc.pos_);
-  auto max_match_distance = 100.0;
+  auto const mm_dist = get_mm_match_distance<P>(params);
+  auto max_match_distance = mm_dist.initial_;
 
   auto const find_matches = [&]() {
     auto const squared_max_dist = std::pow(max_match_distance, 2);
@@ -92,7 +108,7 @@ std::vector<matched_way<P>> match_input_point(
   find_matches();
 
   if (matched_ways.empty()) {
-    max_match_distance = 300.0;
+    max_match_distance = mm_dist.expanded_;
     find_matches();
   }
 
@@ -103,7 +119,9 @@ template <Profile P>
 double get_dijkstra_limit(typename P::parameters const& params,
                           double const distance) {
   if (distance < 2000) {
-    return P::upper_bound_heuristic(params, distance) * 5.0 + 500.0;
+    return P::upper_bound_heuristic(params, distance) * 5.0 * 4.0 + 500.0;
+  } else if (distance < 10000) {
+    return P::upper_bound_heuristic(params, distance) * 3.0 * 4.0 + 500.0;
   } else {
     return P::upper_bound_heuristic(params, distance) * 3.0 + 500.0;
   }
