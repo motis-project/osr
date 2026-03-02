@@ -103,7 +103,9 @@ template <Profile P>
 double get_dijkstra_limit(typename P::parameters const& params,
                           double const distance) {
   if (distance < 2000) {
-    return P::upper_bound_heuristic(params, distance) * 5.0 + 500.0;
+    return P::upper_bound_heuristic(params, distance) * 5.0 * 4.0 + 500.0;
+  } else if (distance < 10000) {
+    return P::upper_bound_heuristic(params, distance) * 3.0 * 4.0 + 500.0;
   } else {
     return P::upper_bound_heuristic(params, distance) * 3.0 + 500.0;
   }
