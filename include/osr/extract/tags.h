@@ -512,7 +512,10 @@ struct car_profile {
 
 struct bus_profile {
   static override access_override(tags const& t, osm_obj_type const type) {
-    if (t.bus_ != override::kNone && type != osm_obj_type::kRelation) {
+    if (type == osm_obj_type::kRelation ||
+        (type == osm_obj_type::kWay && t.highway_.empty())) {
+      return override::kBlacklist;
+    } else if (t.bus_ != override::kNone && type != osm_obj_type::kRelation) {
       return t.bus_;
     } else if (t.access_ == override::kBlacklist || t.is_route_ ||
                t.is_ferry_route_) {
