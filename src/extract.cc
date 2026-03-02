@@ -158,6 +158,8 @@ way_properties get_way_properties(
   p.is_bus_accessible_with_penalty_ =
       is_accessible_with_penalty<bus_profile>(t, obj_type);
   p.is_ferry_accessible_ = is_accessible<ferry_profile>(t, obj_type);
+  p.is_railway_accessible_with_penalty_ =
+      is_accessible_with_penalty<railway_profile>(t, obj_type);
   return p;
 }
 

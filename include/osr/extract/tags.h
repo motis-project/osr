@@ -570,8 +570,8 @@ struct railway_profile {
     }
   }
 
-  static bool access_with_penalty(tags const&, osm_obj_type const) {
-    return false;
+  static bool access_with_penalty(tags const& t, osm_obj_type const type) {
+    return type == osm_obj_type::kWay && t.railway_ == "construction";
   }
 };
 
