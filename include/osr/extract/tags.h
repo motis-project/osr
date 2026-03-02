@@ -525,7 +525,7 @@ struct bus_profile {
   }
 
   static bool default_access(tags const& t, osm_obj_type const type) {
-    return car_profile::default_access(t, type);
+    return t.highway_ == "busway" || car_profile::default_access(t, type);
   }
 
   static bool access_with_penalty(tags const& t, osm_obj_type const type) {

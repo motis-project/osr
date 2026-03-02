@@ -102,6 +102,7 @@ speed_limit get_speed_limit(tags const& t) {
       case cista::hash("service"): return get_speed_limit(15);
       case cista::hash("track"): return get_speed_limit(12);
       case cista::hash("path"): return get_speed_limit(13);
+      case cista::hash("busway"): return get_speed_limit(50);
       default:
         switch (cista::hash(t.railway_)) {
           case cista::hash("rail"):
