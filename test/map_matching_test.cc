@@ -335,10 +335,10 @@ TEST_F(map_matching_karlsruhe, beeline_in_the_middle) {
           osr::location{.pos_ = {49.0591517, 8.3998284}, .lvl_ = osr::kNoLevel},
       });
 
-  EXPECT_EQ(33U, mr.path_.segments_.size());
+  EXPECT_EQ(32U, mr.path_.segments_.size());
   EXPECT_EQ(2U, mr.n_routed_);
   EXPECT_EQ(2U, mr.n_beelined_);
-  EXPECT_THAT(mr.segment_offsets_, ElementsAre(0U, 13U, 14U, 15U, 33U));
+  EXPECT_THAT(mr.segment_offsets_, ElementsAre(0U, 13U, 14U, 15U, 32U));
 
   auto expected_polylines = std::vector<std::vector<geo::latlng>>{
       {
@@ -486,10 +486,6 @@ TEST_F(map_matching_karlsruhe, beeline_in_the_middle) {
       {
           {49.0582586, 8.3999713},
           {49.0586434, 8.3999179},
-      },
-      {
-          {49.0586434, 8.3999179},
-          {49.05915189714306, 8.399831089367737},
       },
   };
 
