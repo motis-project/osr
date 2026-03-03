@@ -251,7 +251,8 @@ struct way_handler : public osm::handler::Handler {
 
     auto p =
         (t.is_platform() || t.is_parking_ || !t.highway_.empty() ||
-         (!t.railway_.empty() && it == end(rel_ways_)) || t.is_ferry_route_)
+         (!t.railway_.empty() && (!t.is_platform() || it == end(rel_ways_))) ||
+         t.is_ferry_route_)
             ? get_way_properties(t)
             : it->second.p_;
     if (!p.is_accessible()) {
@@ -517,7 +518,7 @@ struct rel_ways_handler : public osm::handler::Handler {
 
   void relation(osm::Relation const& r) {
     auto const p = get_way_properties(tags{r}, osm_obj_type::kRelation);
-    if (!p.is_accessible()) {
+    if (!p.is_accessible() && !p.in_route()) {
       return;
     }
 
