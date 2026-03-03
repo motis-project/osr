@@ -267,9 +267,15 @@ struct generic_car {
       auto const accessible_with_penalty = e.is_bus_accessible_with_penalty();
       if ((accessible || accessible_with_penalty) &&
           (dir == direction::kForward || !e.is_oneway_bus_psv())) {
+        auto const in_route = e.in_route();
+        auto sl = static_cast<speed_limit>(e.speed_limit_);
+        if (in_route && static_cast<std::uint8_t>(sl) <
+                            static_cast<std::uint8_t>(speed_limit::kmh_50)) {
+          sl = speed_limit::kmh_50;
+        }
         auto cost = static_cast<cost_t>(
-            std::rint((e.in_route() ? 1.0f : 1.2f) * static_cast<float>(dist) *
-                      e.max_speed_s_per_m()));
+            std::rint((in_route ? 1.0f : 1.2f) * static_cast<float>(dist) *
+                      to_seconds_per_meter(sl)));
         if (e.is_parking()) {
           cost *= 2U;
         }
