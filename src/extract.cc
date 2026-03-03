@@ -249,12 +249,13 @@ struct way_handler : public osm::handler::Handler {
       return;
     }
 
-    auto p =
-        (t.is_platform() || t.is_parking_ || !t.highway_.empty() ||
-         (!t.railway_.empty() && (!t.is_platform() || it == end(rel_ways_))) ||
-         t.is_ferry_route_)
-            ? get_way_properties(t)
-            : it->second.p_;
+    auto const in_route = it != end(rel_ways_) && it->second.p_.in_route_;
+
+    auto p = (t.is_platform() || t.is_parking_ || !t.highway_.empty() ||
+              (!t.railway_.empty() && (in_route || it == end(rel_ways_))) ||
+              t.is_ferry_route_)
+                 ? get_way_properties(t)
+                 : it->second.p_;
     if (!p.is_accessible()) {
       return;
     }
@@ -264,7 +265,7 @@ struct way_handler : public osm::handler::Handler {
       p.to_level_ = it->second.p_.to_level_;
     }
 
-    if (it != end(rel_ways_) && it->second.p_.in_route_) {
+    if (in_route) {
       p.in_route_ = true;
     }
 
