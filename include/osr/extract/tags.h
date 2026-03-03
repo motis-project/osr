@@ -433,6 +433,10 @@ struct car_profile {
       return override::kBlacklist;
     }
 
+    if (t.access_ == override::kWhitelist) {
+      return override::kWhitelist;
+    }
+
     if (!t.barrier_.empty()) {
       switch (cista::hash(t.barrier_)) {
         case cista::hash("cattle_grid"):
@@ -517,6 +521,8 @@ struct bus_profile {
       return override::kBlacklist;
     } else if (t.bus_ != override::kNone && type != osm_obj_type::kRelation) {
       return t.bus_;
+    } else if (t.access_ == override::kWhitelist) {
+      return override::kWhitelist;
     } else if (t.access_ == override::kBlacklist || t.is_route_ ||
                t.is_ferry_route_) {
       return override::kBlacklist;
