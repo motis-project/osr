@@ -163,3 +163,24 @@ TEST(routing, rome_bus_highway_service) {
       extract_and_route("test/rome-piazza-vittorio-emanuele.osm.pbf", from, to,
                         osr::bus::parameters{}, osr::search_profile::kBus));
 }
+
+TEST(routing, switzerland_motorway_shortcut) {
+  // highway exit + enter shortcut
+  auto const from = osr::location{47.303057180, 9.561929282963, osr::kNoLevel};
+  auto const to = osr::location{47.31075422405, 9.575005944968, osr::kNoLevel};
+  EXPECT_EQ(
+      R"({"type":"FeatureCollection","metadata":{},"features":[{"type":"Feature","properties":{"level":0E0,"osm_way_id":0,"cost":10,"distance":284},"geometry":{"type":"LineString","coordinates":[[9.561901310876577E0,4.730307704630513E1],[9.5622401E0,4.73032964E1],[9.5631905E0,4.73039245E1],[9.5638819E0,4.73043897E1],[9.564557E0,4.73048612E1]]}},{"type":"Feature","properties":{"level":0E0,"osm_way_id":345464997,"cost":3,"distance":89},"geometry":{"type":"LineString","coordinates":[[9.564557E0,4.73048612E1],[9.5649083E0,4.73051131E1],[9.5653714E0,4.73054411E1]]}},{"type":"Feature","properties":{"level":0E0,"osm_way_id":345464989,"cost":25,"distance":706},"geometry":{"type":"LineString","coordinates":[[9.5653714E0,4.73054411E1],[9.5662414E0,4.73060697E1],[9.5670476E0,4.73066468E1],[9.5678211E0,4.73071787E1],[9.5683852E0,4.73075441E1],[9.5689533E0,4.7307885E1],[9.5697104E0,4.73083001E1],[9.5704498E0,4.73086789E1],[9.5713228E0,4.73090933E1],[9.5719851E0,4.73093937E1],[9.5724251E0,4.73095851E1]]}},{"type":"Feature","properties":{"level":0E0,"osm_way_id":345464996,"cost":5,"distance":130},"geometry":{"type":"LineString","coordinates":[[9.5724251E0,4.73095851E1],[9.573867E0,4.73102321E1]]}},{"type":"Feature","properties":{"level":0E0,"osm_way_id":0,"cost":4,"distance":104},"geometry":{"type":"LineString","coordinates":[[9.573867E0,4.73102321E1],[9.575011315268094E0,4.7310748756107586E1]]}}]})",
+      extract_and_route("test/switzerland-motorway-shortcut.osm.pbf", from, to,
+                        osr::car::parameters{}, osr::search_profile::kCar));
+}
+
+TEST(routing, ballwil_shortcut) {
+  // side track "shortcut" - goes wrong if rounding is wrong
+  auto const from =
+      osr::location{47.15570087672, 8.315615519882, osr::kNoLevel};
+  auto const to = osr::location{47.15347392750, 8.316863681682, osr::kNoLevel};
+  EXPECT_EQ(
+      R"({"type":"FeatureCollection","metadata":{},"features":[{"type":"Feature","properties":{"level":0E0,"osm_way_id":0,"cost":12,"distance":104},"geometry":{"type":"LineString","coordinates":[[8.315623672478951E0,4.715570128880367E1],[8.315628E0,4.71556617E1],[8.3156385E0,4.71556178E1],[8.3156641E0,4.71555631E1],[8.3157083E0,4.71554997E1],[8.3158538E0,4.71552882E1],[8.3160479E0,4.71549502E1],[8.3161126E0,4.71548364E1]]}},{"type":"Feature","properties":{"level":0E0,"osm_way_id":30743688,"cost":10,"distance":80},"geometry":{"type":"LineString","coordinates":[[8.3161126E0,4.71548364E1],[8.316494E0,4.71541641E1]]}},{"type":"Feature","properties":{"level":0E0,"osm_way_id":30743688,"cost":6,"distance":51},"geometry":{"type":"LineString","coordinates":[[8.316494E0,4.71541641E1],[8.3167335E0,4.71537386E1]]}},{"type":"Feature","properties":{"level":0E0,"osm_way_id":0,"cost":4,"distance":32},"geometry":{"type":"LineString","coordinates":[[8.3167335E0,4.71537386E1],[8.316879613965764E0,4.715347805943454E1]]}}]})",
+      extract_and_route("test/ballwill-shortcut.osm.pbf", from, to,
+                        osr::car::parameters{}, osr::search_profile::kCar));
+}
