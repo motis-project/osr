@@ -28,6 +28,19 @@ function haversineDistance(pt1: [number, number], pt2: [number, number]): number
     return R * c;
 }
 
+function findClosestPointIdx(target: [number, number], geometry: [number, number][], startIdx: number): number {
+    let minIdx = startIdx;
+    let minDist = Infinity;
+    for (let i = startIdx; i < geometry.length; i++) {
+        const dist = haversineDistance(target, geometry[i]);
+        if (dist <= minDist) {
+            minDist = dist;
+            minIdx = i;
+        }
+    }
+    return minIdx;
+}
+
 interface PopupInfo {
     type: "way" | "node" | "point" | "combined";
     data: DebugWay | DebugNode | Record<string, unknown>;
@@ -58,6 +71,8 @@ export function Map() {
         getBoundingBox,
         getWay,
         getNode,
+        selectSegment,
+        setViewMode,
     } = useDebug();
 
     // Initialize map with raster tiles that allow overzoom
@@ -163,6 +178,7 @@ export function Map() {
         "input-points",
         "segment-start",
         "segment-dest",
+        "segment-labels",
     ];
 
     // Update map layers based on view mode and selection
@@ -213,9 +229,10 @@ export function Map() {
         }
 
         // Remove existing debug layers
-        // Iterate in reverse to remove top layers (which might depend on sources) first
         for (const id of [...LAYER_IDS].reverse()) {
             if (map.getLayer(id)) map.removeLayer(id);
+        }
+        for (const id of [...LAYER_IDS].reverse()) {
             if (map.getSource(id)) map.removeSource(id);
         }
 
@@ -285,14 +302,107 @@ export function Map() {
         };
 
         // Route mode: show final route and input points
+        // Route mode: show final route and input points
         if (viewMode === "route") {
-            // Final route line
-            if (data.finalRoute.geometry.length > 0) {
-                addLineLayer("final-route", data.finalRoute.geometry, "#3b82f6", 4);
+            const segmentFeatures: GeoJSON.Feature[] = [];
+            const labelFeatures: GeoJSON.Feature[] = [];
+
+            let currentGeoIdx = 0;
+            for (const seg of data.routeSegments) {
+                const from = data.inputPoints[seg.fromPointIdx];
+                const to = data.inputPoints[seg.toPointIdx];
+
+                let segmentGeom: [number, number][];
+                let isBeeline = false;
+
+                if (seg.allBeelined || seg.beeline || data.finalRoute.geometry.length === 0) {
+                    segmentGeom = [
+                        [from.lng, from.lat],
+                        [to.lng, to.lat],
+                    ];
+                    isBeeline = true;
+                } else {
+                    const endIdx = findClosestPointIdx(
+                        [to.lng, to.lat],
+                        data.finalRoute.geometry,
+                        currentGeoIdx
+                    );
+                    segmentGeom = data.finalRoute.geometry.slice(currentGeoIdx, endIdx + 1);
+                    currentGeoIdx = endIdx;
+                }
+
+                if (segmentGeom.length > 1) {
+                    segmentFeatures.push({
+                        type: "Feature",
+                        properties: {
+                            segmentIdx: seg.segmentIdx,
+                            isBeeline,
+                        },
+                        geometry: { type: "LineString", coordinates: segmentGeom },
+                    });
+
+                    // Midpoint calculation:
+                    // For beelines (usually just 2 points), use the geometric center.
+                    // For routes (many points), use the coordinate at the middle index to stay on the path.
+                    let labelPos: [number, number];
+                    if (segmentGeom.length === 2) {
+                        labelPos = [
+                            (segmentGeom[0][0] + segmentGeom[1][0]) / 2,
+                            (segmentGeom[0][1] + segmentGeom[1][1]) / 2,
+                        ];
+                    } else {
+                        const midIdx = Math.floor(segmentGeom.length / 2);
+                        labelPos = segmentGeom[midIdx];
+                    }
+
+                    labelFeatures.push({
+                        type: "Feature",
+                        properties: {
+                            segmentIdx: seg.segmentIdx,
+                            label: String(seg.segmentIdx),
+                            isBeeline,
+                        },
+                        geometry: { type: "Point", coordinates: labelPos },
+                    });
+                }
+            }
+
+            if (segmentFeatures.length > 0) {
+                map.addSource("final-route", {
+                    type: "geojson",
+                    data: { type: "FeatureCollection", features: segmentFeatures },
+                });
+
+                // Routed segments (blue)
+                map.addLayer({
+                    id: "final-route",
+                    type: "line",
+                    source: "final-route",
+                    filter: ["==", ["get", "isBeeline"], false],
+                    paint: {
+                        "line-color": "#3b82f6",
+                        "line-width": 4,
+                    },
+                });
+
+                // Beeline segments (red dashed)
+                map.addLayer({
+                    id: "segment-beeline",
+                    type: "line",
+                    source: "final-route",
+                    filter: ["==", ["get", "isBeeline"], true],
+                    paint: {
+                        "line-color": "#dc2626",
+                        "line-width": 3,
+                        "line-dasharray": [4, 2],
+                    },
+                });
+
                 map.addLayer({
                     id: "final-route-arrows",
                     type: "symbol",
                     source: "final-route",
+                    filter: ["==", ["get", "isBeeline"], false],
                     layout: {
                         "symbol-placement": "line",
                         "symbol-spacing": 100,
@@ -306,6 +416,34 @@ export function Map() {
                         "icon-halo-width": 2,
                     },
                 });
+
+                // Labels
+                map.addSource("segment-labels", {
+                    type: "geojson",
+                    data: { type: "FeatureCollection", features: labelFeatures },
+                });
+                map.addLayer({
+                    id: "segment-labels",
+                    type: "symbol",
+                    source: "segment-labels",
+                    layout: {
+                        "text-field": ["get", "label"],
+                        "text-size": 20,
+                        "text-allow-overlap": true,
+                        // Offset labels slightly so they don't sit directly on top of arrows
+                        "text-offset": [0, -1.2],
+                    },
+                    paint: {
+                        "text-color": "#ffffff",
+                        "text-halo-color": [
+                            "case",
+                            ["get", "isBeeline"],
+                            "#dc2626", // red for beeline
+                            "#3b82f6", // blue for routed
+                        ],
+                        "text-halo-width": 3,
+                    },
+                });
             }
 
             // Input points
@@ -315,19 +453,6 @@ export function Map() {
                 geometry: { type: "Point" as const, coordinates: [pt.lng, pt.lat] },
             }));
             addCircleLayer("input-points", pointFeatures, "#ef4444", 8);
-
-            // Beeline segments (for segments that couldn't be routed)
-            const beelineCoords: [number, number][][] = [];
-            for (const seg of data.routeSegments) {
-                if (seg.allBeelined || seg.beeline) {
-                    const from = data.inputPoints[seg.fromPointIdx];
-                    const to = data.inputPoints[seg.toPointIdx];
-                    beelineCoords.push([[from.lng, from.lat], [to.lng, to.lat]]);
-                }
-            }
-            if (beelineCoords.length > 0) {
-                addLineLayer("segment-beeline", beelineCoords, "#dc2626", 3, [4, 2]);
-            }
         }
 
         // Points mode
@@ -1058,6 +1183,7 @@ export function Map() {
             let foundNode: DebugNode | null = null;
             let foundNodeIdx: number | null = null;
             let foundProjectedPoint = false;
+            let foundSegmentIdx: number | null = null;
             const foundWays: DebugWay[] = [];
             let nodeLabels: DebugNodeLabel[] | undefined;
             let startLabel: DebugStartLabel | undefined;
@@ -1066,6 +1192,10 @@ export function Map() {
             for (const feature of features) {
                 const props = feature.properties || {};
                 const layerId = feature.layer.id;
+
+                if (props.segmentIdx !== undefined) {
+                    foundSegmentIdx = props.segmentIdx;
+                }
 
                 // Check if it's a node
                 if (layerId === "reached-nodes" || layerId === "unreached-nodes") {
@@ -1135,6 +1265,12 @@ export function Map() {
                 }
             }
 
+            if (foundSegmentIdx !== null) {
+                setViewMode("segment");
+                selectSegment(foundSegmentIdx);
+                return;
+            }
+
             // Determine popup type and data
             let type: "way" | "node" | "point" | "combined";
             let primaryData: DebugWay | DebugNode | Record<string, unknown>;
@@ -1171,7 +1307,7 @@ export function Map() {
                 startLabel,
             });
         },
-        [data, getWay, getNode, selectedSegmentIdx, isMeasuring]
+        [data, getWay, getNode, selectedSegmentIdx, isMeasuring, selectSegment, setViewMode]
     );
 
     // Setup map event handlers

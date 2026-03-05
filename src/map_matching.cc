@@ -135,8 +135,9 @@ matched_route map_match(
     std::vector<location> const& points,
     bitvec<node_idx_t> const* blocked,
     elevation_storage const* elevations,
-    std::function<std::optional<std::filesystem::path>(matched_route const&)>
-        debug_path_fn) {
+    std::function<void(matched_route const&,
+               std::function<boost::json::object()> const&)> const&
+      debug_fn) {
   utl::verify(points.size() >= 2, "map_match requires at least 2 points");
   auto const start_time = std::chrono::steady_clock::now();
 
@@ -630,11 +631,11 @@ matched_route map_match(
       std::chrono::duration_cast<std::chrono::milliseconds>(end_time -
                                                             start_time);
 
-  if (debug_path_fn) {
-    if (auto const debug_path = debug_path_fn(result); debug_path.has_value()) {
-      write_map_match_debug<P>(w, l, params, points, pds, segments, result,
-                               get_node_pos, *debug_path);
-    }
+  if (debug_fn) {
+    debug_fn(result, [&]() {
+      return build_map_match_debug_json<P>(w, l, params, points, pds, segments,
+                                           result, get_node_pos);
+    });
   }
 
   return result;
@@ -648,11 +649,12 @@ matched_route map_match(
     std::vector<location> const& points,
     bitvec<node_idx_t> const* blocked,
     elevation_storage const* elevations,
-    std::function<std::optional<std::filesystem::path>(matched_route const&)>
-        debug_path_fn) {
+    std::function<void(matched_route const&,
+                       std::function<boost::json::object()> const&)> const&
+        debug_fn) {
   return with_profile(profile, [&]<Profile P>(P&&) {
     return map_match<P>(w, l, std::get<typename P::parameters>(params), points,
-                        blocked, elevations, std::move(debug_path_fn));
+                        blocked, elevations, debug_fn);
   });
 }
 

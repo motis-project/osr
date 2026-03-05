@@ -183,4 +183,5 @@ export interface MapMatchDebugData {
     routeSegments: DebugRouteSegment[];
     finalRoute: DebugFinalRoute;
     totalDurationMs: number;
+    caller?: any;
 }
