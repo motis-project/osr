@@ -136,8 +136,8 @@ matched_route map_match(
     bitvec<node_idx_t> const* blocked,
     elevation_storage const* elevations,
     std::function<void(matched_route const&,
-               std::function<boost::json::object()> const&)> const&
-      debug_fn) {
+                       std::function<boost::json::object()> const&)> const&
+        debug_fn) {
   utl::verify(points.size() >= 2, "map_match requires at least 2 points");
   auto const start_time = std::chrono::steady_clock::now();
 

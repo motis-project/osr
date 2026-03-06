@@ -35,8 +35,7 @@ matched_route map_match(
     bitvec<node_idx_t> const* blocked = nullptr,
     elevation_storage const* = nullptr,
     std::function<void(matched_route const&,
-               std::function<boost::json::object()> const&)> const&
-      debug_fn =
-        nullptr);
+                       std::function<boost::json::object()> const&)> const&
+        debug_fn = nullptr);
 
 }  // namespace osr
