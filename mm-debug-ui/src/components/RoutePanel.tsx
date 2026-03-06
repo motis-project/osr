@@ -101,6 +101,22 @@ export function RoutePanel() {
                     ))}
                 </div>
             </div>
+
+            {/* Caller-specific data */}
+            {data.caller && (
+                <div>
+                    <h3 className="text-sm font-medium mb-2 uppercase tracking-wider text-[10px] text-muted-foreground">
+                        Caller Debug Data
+                    </h3>
+                    <Card className="p-0 overflow-hidden">
+                        <textarea
+                            readOnly
+                            className="w-full h-48 p-3 text-[10px] font-mono bg-secondary/20 text-foreground border-none resize-none focus:outline-none"
+                            value={JSON.stringify(data.caller, null, 2)}
+                        />
+                    </Card>
+                </div>
+            )}
         </div>
     );
 }

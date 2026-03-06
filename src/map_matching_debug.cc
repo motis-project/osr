@@ -4,8 +4,9 @@
 #include <fstream>
 #include <limits>
 #include <sstream>
+#include <string>
 
-#include "boost/iostreams/device/file.hpp"
+#include "boost/iostreams/device/back_inserter.hpp"
 #include "boost/iostreams/filter/gzip.hpp"
 #include "boost/iostreams/filtering_stream.hpp"
 
@@ -135,7 +136,7 @@ boost::json::object to_json_match(debug_match const& dm,
 }  // namespace
 
 template <Profile P>
-void write_map_match_debug(
+boost::json::object build_map_match_debug_json(
     ways const& w,
     lookup const& l,
     typename P::parameters const&,
@@ -143,8 +144,7 @@ void write_map_match_debug(
     std::vector<point_data<P>> const& pds,
     std::vector<segment_data<P>> const& segments,
     matched_route const& result,
-    std::function<geo::latlng(node_idx_t)> const& get_node_pos,
-    std::filesystem::path const& debug_path) {
+    std::function<geo::latlng(node_idx_t)> const& get_node_pos) {
   auto dbg_ways = std::vector<boost::json::object>{};
   auto dbg_nodes = std::vector<boost::json::object>{};
   auto dbg_route_segments = std::vector<debug_route_segment>{};
@@ -865,16 +865,29 @@ void write_map_match_debug(
       {"finalRoute", std::move(json_final_route)},
       {"totalDurationMs", result.total_duration_.count()}};
 
-  auto out_path = debug_path;
-  out_path += ".json.gz";
+  return debug_json;
+}
+
+std::string gzip_json(boost::json::value const& debug_json) {
+  auto gzip = std::string{};
   auto ofs = boost::iostreams::filtering_ostream{};
   ofs.push(boost::iostreams::gzip_compressor(
       boost::iostreams::gzip_params(boost::iostreams::gzip::best_compression)));
-  ofs.push(boost::iostreams::file_sink(out_path.string(), std::ios::binary));
+  ofs.push(boost::iostreams::back_inserter(gzip));
   ofs << boost::json::serialize(debug_json);
+  boost::iostreams::close(ofs);
+  return gzip;
 }
 
-template void write_map_match_debug<foot<false, elevator_tracking>>(
+void write_map_match_debug(boost::json::value const& debug_json,
+                           std::filesystem::path const& filename) {
+  auto const payload = gzip_json(debug_json);
+  auto out = std::ofstream{filename, std::ios::binary};
+  out.write(payload.data(), static_cast<std::streamsize>(payload.size()));
+}
+
+template boost::json::object
+build_map_match_debug_json<foot<false, elevator_tracking>>(
     ways const&,
     lookup const&,
     foot<false, elevator_tracking>::parameters const&,
@@ -882,10 +895,10 @@ template void write_map_match_debug<foot<false, elevator_tracking>>(
     std::vector<point_data<foot<false, elevator_tracking>>> const&,
     std::vector<segment_data<foot<false, elevator_tracking>>> const&,
     matched_route const&,
-    std::function<geo::latlng(node_idx_t)> const&,
-    std::filesystem::path const&);
+    std::function<geo::latlng(node_idx_t)> const&);
 
-template void write_map_match_debug<foot<true, elevator_tracking>>(
+template boost::json::object
+build_map_match_debug_json<foot<true, elevator_tracking>>(
     ways const&,
     lookup const&,
     foot<true, elevator_tracking>::parameters const&,
@@ -893,11 +906,10 @@ template void write_map_match_debug<foot<true, elevator_tracking>>(
     std::vector<point_data<foot<true, elevator_tracking>>> const&,
     std::vector<segment_data<foot<true, elevator_tracking>>> const&,
     matched_route const&,
-    std::function<geo::latlng(node_idx_t)> const&,
-    std::filesystem::path const&);
+    std::function<geo::latlng(node_idx_t)> const&);
 
-template void
-write_map_match_debug<bike<bike_costing::kSafe, kElevationNoCost>>(
+template boost::json::object
+build_map_match_debug_json<bike<bike_costing::kSafe, kElevationNoCost>>(
     ways const&,
     lookup const&,
     bike<bike_costing::kSafe, kElevationNoCost>::parameters const&,
@@ -906,11 +918,10 @@ write_map_match_debug<bike<bike_costing::kSafe, kElevationNoCost>>(
     std::vector<
         segment_data<bike<bike_costing::kSafe, kElevationNoCost>>> const&,
     matched_route const&,
-    std::function<geo::latlng(node_idx_t)> const&,
-    std::filesystem::path const&);
+    std::function<geo::latlng(node_idx_t)> const&);
 
-template void
-write_map_match_debug<bike<bike_costing::kFast, kElevationNoCost>>(
+template boost::json::object
+build_map_match_debug_json<bike<bike_costing::kFast, kElevationNoCost>>(
     ways const&,
     lookup const&,
     bike<bike_costing::kFast, kElevationNoCost>::parameters const&,
@@ -919,11 +930,10 @@ write_map_match_debug<bike<bike_costing::kFast, kElevationNoCost>>(
     std::vector<
         segment_data<bike<bike_costing::kFast, kElevationNoCost>>> const&,
     matched_route const&,
-    std::function<geo::latlng(node_idx_t)> const&,
-    std::filesystem::path const&);
+    std::function<geo::latlng(node_idx_t)> const&);
 
-template void
-write_map_match_debug<bike<bike_costing::kSafe, kElevationLowCost>>(
+template boost::json::object
+build_map_match_debug_json<bike<bike_costing::kSafe, kElevationLowCost>>(
     ways const&,
     lookup const&,
     bike<bike_costing::kSafe, kElevationLowCost>::parameters const&,
@@ -933,11 +943,10 @@ write_map_match_debug<bike<bike_costing::kSafe, kElevationLowCost>>(
     std::vector<
         segment_data<bike<bike_costing::kSafe, kElevationLowCost>>> const&,
     matched_route const&,
-    std::function<geo::latlng(node_idx_t)> const&,
-    std::filesystem::path const&);
+    std::function<geo::latlng(node_idx_t)> const&);
 
-template void
-write_map_match_debug<bike<bike_costing::kSafe, kElevationHighCost>>(
+template boost::json::object
+build_map_match_debug_json<bike<bike_costing::kSafe, kElevationHighCost>>(
     ways const&,
     lookup const&,
     bike<bike_costing::kSafe, kElevationHighCost>::parameters const&,
@@ -947,10 +956,9 @@ write_map_match_debug<bike<bike_costing::kSafe, kElevationHighCost>>(
     std::vector<
         segment_data<bike<bike_costing::kSafe, kElevationHighCost>>> const&,
     matched_route const&,
-    std::function<geo::latlng(node_idx_t)> const&,
-    std::filesystem::path const&);
+    std::function<geo::latlng(node_idx_t)> const&);
 
-template void write_map_match_debug<car>(
+template boost::json::object build_map_match_debug_json<car>(
     ways const&,
     lookup const&,
     car::parameters const&,
@@ -958,10 +966,10 @@ template void write_map_match_debug<car>(
     std::vector<point_data<car>> const&,
     std::vector<segment_data<car>> const&,
     matched_route const&,
-    std::function<geo::latlng(node_idx_t)> const&,
-    std::filesystem::path const&);
+    std::function<geo::latlng(node_idx_t)> const&);
 
-template void write_map_match_debug<car_parking<false, false>>(
+template boost::json::object
+build_map_match_debug_json<car_parking<false, false>>(
     ways const&,
     lookup const&,
     car_parking<false, false>::parameters const&,
@@ -969,10 +977,10 @@ template void write_map_match_debug<car_parking<false, false>>(
     std::vector<point_data<car_parking<false, false>>> const&,
     std::vector<segment_data<car_parking<false, false>>> const&,
     matched_route const&,
-    std::function<geo::latlng(node_idx_t)> const&,
-    std::filesystem::path const&);
+    std::function<geo::latlng(node_idx_t)> const&);
 
-template void write_map_match_debug<car_parking<true, false>>(
+template boost::json::object
+build_map_match_debug_json<car_parking<true, false>>(
     ways const&,
     lookup const&,
     car_parking<true, false>::parameters const&,
@@ -980,10 +988,10 @@ template void write_map_match_debug<car_parking<true, false>>(
     std::vector<point_data<car_parking<true, false>>> const&,
     std::vector<segment_data<car_parking<true, false>>> const&,
     matched_route const&,
-    std::function<geo::latlng(node_idx_t)> const&,
-    std::filesystem::path const&);
+    std::function<geo::latlng(node_idx_t)> const&);
 
-template void write_map_match_debug<car_parking<false, true>>(
+template boost::json::object
+build_map_match_debug_json<car_parking<false, true>>(
     ways const&,
     lookup const&,
     car_parking<false, true>::parameters const&,
@@ -991,10 +999,10 @@ template void write_map_match_debug<car_parking<false, true>>(
     std::vector<point_data<car_parking<false, true>>> const&,
     std::vector<segment_data<car_parking<false, true>>> const&,
     matched_route const&,
-    std::function<geo::latlng(node_idx_t)> const&,
-    std::filesystem::path const&);
+    std::function<geo::latlng(node_idx_t)> const&);
 
-template void write_map_match_debug<car_parking<true, true>>(
+template boost::json::object
+build_map_match_debug_json<car_parking<true, true>>(
     ways const&,
     lookup const&,
     car_parking<true, true>::parameters const&,
@@ -1002,10 +1010,9 @@ template void write_map_match_debug<car_parking<true, true>>(
     std::vector<point_data<car_parking<true, true>>> const&,
     std::vector<segment_data<car_parking<true, true>>> const&,
     matched_route const&,
-    std::function<geo::latlng(node_idx_t)> const&,
-    std::filesystem::path const&);
+    std::function<geo::latlng(node_idx_t)> const&);
 
-template void write_map_match_debug<bike_sharing>(
+template boost::json::object build_map_match_debug_json<bike_sharing>(
     ways const&,
     lookup const&,
     bike_sharing::parameters const&,
@@ -1013,10 +1020,10 @@ template void write_map_match_debug<bike_sharing>(
     std::vector<point_data<bike_sharing>> const&,
     std::vector<segment_data<bike_sharing>> const&,
     matched_route const&,
-    std::function<geo::latlng(node_idx_t)> const&,
-    std::filesystem::path const&);
+    std::function<geo::latlng(node_idx_t)> const&);
 
-template void write_map_match_debug<car_sharing<track_node_tracking>>(
+template boost::json::object
+build_map_match_debug_json<car_sharing<track_node_tracking>>(
     ways const&,
     lookup const&,
     car_sharing<track_node_tracking>::parameters const&,
@@ -1024,10 +1031,9 @@ template void write_map_match_debug<car_sharing<track_node_tracking>>(
     std::vector<point_data<car_sharing<track_node_tracking>>> const&,
     std::vector<segment_data<car_sharing<track_node_tracking>>> const&,
     matched_route const&,
-    std::function<geo::latlng(node_idx_t)> const&,
-    std::filesystem::path const&);
+    std::function<geo::latlng(node_idx_t)> const&);
 
-template void write_map_match_debug<bus>(
+template boost::json::object build_map_match_debug_json<bus>(
     ways const&,
     lookup const&,
     bus::parameters const&,
@@ -1035,10 +1041,9 @@ template void write_map_match_debug<bus>(
     std::vector<point_data<bus>> const&,
     std::vector<segment_data<bus>> const&,
     matched_route const&,
-    std::function<geo::latlng(node_idx_t)> const&,
-    std::filesystem::path const&);
+    std::function<geo::latlng(node_idx_t)> const&);
 
-template void write_map_match_debug<railway>(
+template boost::json::object build_map_match_debug_json<railway>(
     ways const&,
     lookup const&,
     railway::parameters const&,
@@ -1046,10 +1051,9 @@ template void write_map_match_debug<railway>(
     std::vector<point_data<railway>> const&,
     std::vector<segment_data<railway>> const&,
     matched_route const&,
-    std::function<geo::latlng(node_idx_t)> const&,
-    std::filesystem::path const&);
+    std::function<geo::latlng(node_idx_t)> const&);
 
-template void write_map_match_debug<ferry>(
+template boost::json::object build_map_match_debug_json<ferry>(
     ways const&,
     lookup const&,
     ferry::parameters const&,
@@ -1057,7 +1061,6 @@ template void write_map_match_debug<ferry>(
     std::vector<point_data<ferry>> const&,
     std::vector<segment_data<ferry>> const&,
     matched_route const&,
-    std::function<geo::latlng(node_idx_t)> const&,
-    std::filesystem::path const&);
+    std::function<geo::latlng(node_idx_t)> const&);
 
 }  // namespace osr

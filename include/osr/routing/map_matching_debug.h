@@ -111,7 +111,7 @@ struct debug_route_segment {
 };
 
 template <Profile P>
-void write_map_match_debug(
+boost::json::object build_map_match_debug_json(
     ways const& w,
     lookup const& l,
     typename P::parameters const& params,
@@ -119,7 +119,11 @@ void write_map_match_debug(
     std::vector<point_data<P>> const& pds,
     std::vector<segment_data<P>> const& segments,
     matched_route const& result,
-    std::function<geo::latlng(node_idx_t)> const& get_node_pos,
-    std::filesystem::path const& debug_path);
+    std::function<geo::latlng(node_idx_t)> const& get_node_pos);
+
+std::string gzip_json(boost::json::value const&);
+
+void write_map_match_debug(boost::json::value const&,
+                           std::filesystem::path const& filename);
 
 }  // namespace osr
