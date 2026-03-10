@@ -41,6 +41,78 @@ mm_match_distance get_mm_match_distance<railway>(railway::parameters const&) {
 }
 
 template <Profile P>
+bool is_forward_on_way(ways const& w,
+                       matched_way<P> const& from_mw,
+                       matched_way<P> const& to_mw) {
+  if (from_mw.segment_idx_ != to_mw.segment_idx_) {
+    return from_mw.segment_idx_ < to_mw.segment_idx_;
+  }
+
+  auto const& polyline = w.way_polylines_[from_mw.way_];
+  auto const& segment_start = polyline.at(from_mw.segment_idx_);
+  return geo::distance(segment_start, from_mw.projected_point_) <=
+         geo::distance(segment_start, to_mw.projected_point_);
+}
+
+template <Profile P>
+bool has_graph_node_between(ways const& w,
+                            matched_way<P> const& from_mw,
+                            matched_way<P> const& to_mw) {
+  auto const forward = is_forward_on_way(w, from_mw, to_mw);
+  auto const& osm_nodes = w.way_osm_nodes_[from_mw.way_];
+
+  auto const from_idx = from_mw.segment_idx_;
+  auto const to_idx = to_mw.segment_idx_;
+  auto const first_idx = forward ? from_idx + 1U : to_idx + 1U;
+  auto const last_idx = forward ? to_idx : from_idx;
+
+  for (auto idx = first_idx; idx <= last_idx; ++idx) {
+    if (w.find_node_idx(osm_nodes[idx]).has_value()) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+template <Profile P>
+additional_edge make_same_way_additional_edge(ways const& w,
+                                              matched_way<P> const& from_mw,
+                                              matched_way<P> const& to_mw) {
+  auto const forward = is_forward_on_way(w, from_mw, to_mw);
+  auto const& polyline = w.way_polylines_[from_mw.way_];
+
+  auto path = std::vector<geo::latlng>{from_mw.projected_point_};
+  auto prev = from_mw.projected_point_;
+  auto dist = 0.0;
+
+  auto const add_point = [&](geo::latlng const& point) {
+    dist += geo::distance(prev, point);
+    path.push_back(point);
+    prev = point;
+  };
+
+  if (forward) {
+    for (auto idx = from_mw.segment_idx_ + 1U; idx <= to_mw.segment_idx_;
+         ++idx) {
+      add_point(polyline[idx]);
+    }
+  } else {
+    for (auto idx = from_mw.segment_idx_; idx > to_mw.segment_idx_; --idx) {
+      add_point(polyline[idx]);
+    }
+  }
+
+  add_point(to_mw.projected_point_);
+
+  return additional_edge{.to_ = to_mw.additional_node_idx_,
+                         .distance_ = static_cast<distance_t>(dist),
+                         .underlying_way_ = from_mw.way_,
+                         .reverse_ = !forward,
+                         .polyline_ = std::move(path)};
+}
+
+template <Profile P>
 std::vector<matched_way<P>> match_input_point(
     ways const& w,
     lookup const& l,
@@ -210,6 +282,17 @@ matched_route map_match(
     for (auto const& mw : to_pd.matched_ways_) {
       add_additional_edge(mw, mw.fwd_in_, false, false);
       add_additional_edge(mw, mw.bwd_in_, true, false);
+    }
+    for (auto const& from_mw : from_pd.matched_ways_) {
+      for (auto const& to_mw : to_pd.matched_ways_) {
+        if (from_mw.way_ != to_mw.way_ ||
+            has_graph_node_between(w, from_mw, to_mw)) {
+          continue;
+        }
+
+        seg.additional_edges_[from_mw.additional_node_idx_].push_back(
+            make_same_way_additional_edge(w, from_mw, to_mw));
+      }
     }
 
     auto const max_match_penalty_it = std::max_element(

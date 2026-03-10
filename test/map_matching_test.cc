@@ -495,3 +495,31 @@ TEST_F(map_matching_karlsruhe, beeline_in_the_middle) {
   EXPECT_THAT(actual_polylines,
               Pointwise(PolylineMatches(), expected_polylines));
 }
+
+class map_matching_london : public map_matching_test {
+protected:
+  map_matching_london()
+      : map_matching_test("test/london-northern-line.osm.pbf") {}
+};
+
+TEST_F(map_matching_london, northern_line) {
+  // This tests a case where two consecutive points are matched to the same osr
+  // way and there are no osr nodes between the two matched points, thus
+  // requiring a direct edge between the two additional nodes.
+  // Otherwise, a giant detour is generated (over the River Thames).
+
+  auto const mr = osr::map_match(
+      w_, l_, osr::search_profile::kRailway, osr::railway::parameters{},
+      std::vector{
+          // Balham
+          osr::location{.pos_ = {51.443429, -0.152782}, .lvl_ = osr::kNoLevel},
+          // Tooting Bec
+          osr::location{.pos_ = {51.435750, -0.159402}, .lvl_ = osr::kNoLevel},
+          // Tooting Broadway
+          osr::location{.pos_ = {51.427805, -0.168136}, .lvl_ = osr::kNoLevel},
+      });
+
+  EXPECT_EQ(
+      R"({"type":"FeatureCollection","metadata":{},"features":[{"type":"Feature","properties":{"level":0E0,"osm_way_id":689129018,"cost":326,"distance":980},"geometry":{"type":"LineString","coordinates":[[-1.5277022640749896E-1,5.14434248276116E1],[-1.528186E-1,5.14433718E1],[-1.5296E-1,5.1443199E1],[-1.531195E-1,5.14430038E1],[-1.533013E-1,5.14427826E1],[-1.55187E-1,5.14404878E1],[-1.559461E-1,5.143928E1],[-1.566684E-1,5.14378739E1],[-1.572287E-1,5.14372959E1],[-1.583335E-1,5.14363843E1],[-1.589128E-1,5.14360081E1],[-1.590407E-1,5.14359333E1],[-1.592987E-1,5.14357824E1],[-1.5938785722441887E-1,5.143573876914223E1]]}},{"type":"Feature","properties":{"level":0E0,"osm_way_id":689129018,"cost":14,"distance":42},"geometry":{"type":"LineString","coordinates":[[-1.5938785722441887E-1,5.143573876914223E1],[-1.598208E-1,5.14355269E1]]}},{"type":"Feature","properties":{"level":0E0,"osm_way_id":689129018,"cost":350,"distance":1052},"geometry":{"type":"LineString","coordinates":[[-1.598208E-1,5.14355269E1],[-1.604979E-1,5.14352418E1],[-1.612097E-1,5.14348656E1],[-1.615151E-1,5.14346777E1],[-1.621663E-1,5.14342415E1],[-1.627351E-1,5.14337909E1],[-1.634107E-1,5.14331139E1],[-1.635821E-1,5.14328656E1],[-1.637225E-1,5.14325488E1],[-1.639167E-1,5.14320762E1],[-1.640189E-1,5.14318777E1],[-1.647738E-1,5.14310947E1],[-1.666569E-1,5.14292455E1],[-1.67733E-1,5.1428231E1],[-1.67951E-1,5.14279696E1],[-1.681201E-1,5.14278007E1],[-1.6812182130106906E-1,5.142779909364883E1]]}}]})",
+      osr::to_featurecollection(w_, mr.path_, false));
+}
