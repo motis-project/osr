@@ -488,36 +488,41 @@ struct car_profile {
 
   static bool default_access(tags const& t, osm_obj_type const type) {
     if (type == osm_obj_type::kWay || type == osm_obj_type::kRelation) {
-      switch (cista::hash(t.highway_)) {
-        case cista::hash("motorway"):
-        case cista::hash("motorway_link"):
-        case cista::hash("trunk"):
-        case cista::hash("trunk_link"):
-        case cista::hash("primary"):
-        case cista::hash("primary_link"):
-        case cista::hash("secondary"):
-        case cista::hash("secondary_link"):
-        case cista::hash("tertiary"):
-        case cista::hash("tertiary_link"):
-        case cista::hash("residential"):
-        case cista::hash("living_street"):
-        case cista::hash("unclassified"):
-        case cista::hash("service"): return true;
-        default: return false;
-      }
+      return possible_highway(t);
     } else {
       return true;
     }
   }
+
   static bool access_with_penalty(tags const&, osm_obj_type const) {
     return false;
+  }
+
+  static bool possible_highway(tags const& t) {
+    switch (cista::hash(t.highway_)) {
+      case cista::hash("motorway"):
+      case cista::hash("motorway_link"):
+      case cista::hash("trunk"):
+      case cista::hash("trunk_link"):
+      case cista::hash("primary"):
+      case cista::hash("primary_link"):
+      case cista::hash("secondary"):
+      case cista::hash("secondary_link"):
+      case cista::hash("tertiary"):
+      case cista::hash("tertiary_link"):
+      case cista::hash("residential"):
+      case cista::hash("living_street"):
+      case cista::hash("unclassified"):
+      case cista::hash("service"): return true;
+      default: return false;
+    }
   }
 };
 
 struct bus_profile {
   static override access_override(tags const& t, osm_obj_type const type) {
     if (type == osm_obj_type::kRelation ||
-        (type == osm_obj_type::kWay && t.highway_.empty())) {
+        (type == osm_obj_type::kWay && !possible_highway(t))) {
       return override::kBlacklist;
     } else if (t.bus_ != override::kNone && type != osm_obj_type::kRelation) {
       return t.bus_;
@@ -534,7 +539,8 @@ struct bus_profile {
   }
 
   static bool default_access(tags const& t, osm_obj_type const type) {
-    return t.highway_ == "busway" || car_profile::default_access(t, type);
+    return t.highway_ == "busway" || t.highway_ == "bus_guideway" ||
+           car_profile::default_access(t, type);
   }
 
   static bool access_with_penalty(tags const& t, osm_obj_type const type) {
@@ -550,6 +556,18 @@ struct bus_profile {
       return false;
     } else {
       return t.private_access_ && default_access(t, type);
+    }
+  }
+
+  static bool possible_highway(tags const& t) {
+    if (car_profile::possible_highway(t)) {
+      return true;
+    }
+    switch (cista::hash(t.highway_)) {
+      case cista::hash("busway"):
+      case cista::hash("bus_guideway"):
+      case cista::hash("pedestrian"): return true;
+      default: return false;
     }
   }
 };
