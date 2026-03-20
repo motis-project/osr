@@ -54,7 +54,7 @@ struct astar {
             : end_loc.pos_);
   }
 
-  void reset_pq() { pq_ = {}; }
+  void reset_pq() { pq_.buckets_ = {}; }
 
   void add_start(P::parameters const& params,
                  ways const& w,
