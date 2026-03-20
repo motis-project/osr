@@ -54,6 +54,8 @@ struct astar {
             : end_loc.pos_);
   }
 
+  void reset_pq() { pq_ = {}; }
+
   void add_start(P::parameters const& params,
                  ways const& w,
                  sharing_data const* sharing,
