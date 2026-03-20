@@ -119,8 +119,6 @@ struct astar {
   }
 
   void compact(std::size_t const max_key_count) {
-    pq_.n_buckets(0U);
-
     if constexpr (!std::same_as<key, node_idx_t>) {
       return;
     } else {

@@ -49,10 +49,7 @@ struct dial {
     }
   }
 
-  void n_buckets(dist_t const n) {
-    buckets_.resize(n);
-    buckets_.shrink_to_fit();
-  }
+  void n_buckets(dist_t const n) { buckets_.resize(n); }
 
   dist_t n_buckets() const { return static_cast<dist_t>(buckets_.size()); }
 
