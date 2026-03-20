@@ -364,6 +364,7 @@ matched_route map_match(
       auto const dijkstra_start = std::chrono::steady_clock::now();
       seg.astar_.run(params, w, *w.r_, dijkstra_max_cost, blocked,
                      seg.sharing_.get(), elevations, direction::kForward);
+      seg.astar_.reset_pq();
       seg.astar_duration_ =
           std::chrono::duration_cast<std::chrono::microseconds>(
               std::chrono::steady_clock::now() - dijkstra_start);
