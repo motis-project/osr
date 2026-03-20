@@ -116,6 +116,60 @@ struct astar {
     return it != end(cost_) ? it->second.cost(n) : kInfeasible;
   }
 
+  void compact(std::size_t const max_key_count) {
+    pq_.n_buckets(0U);
+
+    if constexpr (!std::same_as<key, node_idx_t>) {
+      return;
+    } else {
+      auto needed = bitvec<node_idx_t>{};
+      needed.resize(static_cast<decltype(needed.size())>(max_key_count));
+      auto needed_count = std::size_t{0U};
+      auto pending = std::vector<node>{};
+      pending.reserve(destinations_.size());
+
+      for (auto const& dest : destinations_) {
+        if (get_cost(dest) != kInfeasible) {
+          pending.push_back(dest);
+        }
+      }
+
+      while (!pending.empty()) {
+        auto const curr = pending.back();
+        pending.pop_back();
+        auto const key = curr.get_key();
+
+        auto const it = cost_.find(key);
+        if (it == end(cost_)) {
+          continue;
+        }
+
+        if (!needed.test(key)) {
+          needed.set(key);
+          ++needed_count;
+        }
+
+        if (auto const pred = it->second.pred(curr); pred.has_value()) {
+          pending.push_back(*pred);
+        }
+      }
+
+      if (needed_count == 0U) {
+        cost_.clear();
+        return;
+      }
+
+      auto compacted = ankerl::unordered_dense::map<key, entry, hash>{};
+      compacted.reserve(needed_count);
+      for (auto const& [entry_key, entry_value] : cost_) {
+        if (needed.test(entry_key)) {
+          compacted.emplace(entry_key, entry_value);
+        }
+      }
+      cost_ = std::move(compacted);
+    }
+  }
+
   template <direction SearchDir, bool WithBlocked>
   bool run(P::parameters const& params,
            ways const& w,

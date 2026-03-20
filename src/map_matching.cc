@@ -393,6 +393,10 @@ matched_route map_match(
       }
     }
 
+    if (!debug_fn) {
+      seg.astar_.compact(to_idx(next_additional_node));
+    }
+
     if (reached == 0U) {
       // calculate beelines
       seg.all_beelined_ = true;
