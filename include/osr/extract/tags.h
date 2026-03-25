@@ -63,6 +63,12 @@ struct tags {
         case cista::hash("oneway:psv"):
           not_oneway_bus_psv_ |= t.value() == "no"sv;
           break;
+        case cista::hash("busway"):
+        case cista::hash("busway:left"):
+        case cista::hash("busway:right"):
+        case cista::hash("busway:both"):
+          not_oneway_bus_psv_ |= t.value() == "opposite_lane"sv;
+          break;
         case cista::hash("motor_vehicle:forward"):
         case cista::hash("motor_vehicle"):
           motor_vehicle_ = t.value();
