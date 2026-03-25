@@ -183,6 +183,7 @@ struct tags {
         case cista::hash("route"):
           is_ferry_route_ = t.value() == "ferry"sv;
           break;
+        case cista::hash("service"): service_ = t.value(); break;
       }
     }
     if (circular && !oneway_defined) {
@@ -289,6 +290,9 @@ struct tags {
 
   // https://wiki.openstreetmap.org/wiki/Conditional_restrictions
   std::string_view access_conditional_no_;
+
+  // https://wiki.openstreetmap.org/wiki/Key:service
+  std::string_view service_;
 };
 
 template <typename T>
@@ -588,23 +592,40 @@ struct railway_profile {
 
   static bool default_access(tags const& t, osm_obj_type const type) {
     if (type == osm_obj_type::kWay) {
-      switch (cista::hash(t.railway_)) {
-        case cista::hash("rail"):
-        case cista::hash("light_rail"):
-        case cista::hash("monorail"):
-        case cista::hash("narrow_gauge"):
-        case cista::hash("subway"):
-        case cista::hash("tram"):
-        case cista::hash("funicular"): return true;
-        default: return false;
-      }
+      return possible_railway(t);
     } else {
       return true;
     }
   }
 
   static bool access_with_penalty(tags const& t, osm_obj_type const type) {
-    return type == osm_obj_type::kWay && t.railway_ == "construction";
+    if (type == osm_obj_type::kWay) {
+      if (t.railway_ == "construction") {
+        return true;
+      }
+      if (possible_railway(t)) {
+        switch (cista::hash(t.service_)) {
+          case cista::hash("yard"):
+          case cista::hash("spur"):
+          case cista::hash("crossover"): return true;
+          default: break;
+        }
+      }
+    }
+    return false;
+  }
+
+  static bool possible_railway(tags const& t) {
+    switch (cista::hash(t.railway_)) {
+      case cista::hash("rail"):
+      case cista::hash("light_rail"):
+      case cista::hash("monorail"):
+      case cista::hash("narrow_gauge"):
+      case cista::hash("subway"):
+      case cista::hash("tram"):
+      case cista::hash("funicular"): return true;
+      default: return false;
+    }
   }
 };
 
