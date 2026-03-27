@@ -196,11 +196,18 @@ struct ways {
 
   void generate_area_ways();
 
-  void build_visibility_graph(uint64_t index);
+  void build_visibility_graph(uint32_t area_index);
 
-  void calc_visibility(uint64_t index, vecvec<double, double>& distances, int i, int start);
+  void calc_visibility(uint32_t area_index,
+                       vecvec<double, double>& distances,
+                       uint32_t i,
+                       uint32_t start,
+                       uint32_t matrix_size,
+                       vec<point> outer_loop,
+                       vec<vec<osm_node_idx_t>> inner_loops);
 
-  void add_virtual_way(uint64_t area_index, vec<osm_node_idx_t> nodes_on_way);
+  void add_virtual_way(uint32_t area_index,
+                       vec<osm_node_idx_t> nodes_on_way);
 
   bool check_for_intersection(vec<point> line, vec< point> ring);
 
@@ -208,20 +215,23 @@ struct ways {
 
   bool is_point_in_polygon(point p, vec<point> polygon);
 
-  void reduce_visibility_graph(uint64_t index,
+  void reduce_visibility_graph(uint32_t area_index,
                                vecvec<double, double>& distances,
-                               vecvec<int, int>& next, int start);
+                               vecvec<uint32_t, uint32_t>& next,
+                               uint32_t start,
+                               uint32_t n);
 
-  void extract_reduced_visibility_graph(uint64_t index,
+  void extract_reduced_visibility_graph(uint32_t area_index,
                                         vecvec<double, double>& distances,
-                                        vecvec<int, int>& next);
+                                        vecvec<uint32_t, uint32_t>& next);
 
-  vec<osm_node_idx_t> trace_visibility_graph(uint64_t index,
-                                             vecvec<int, int>& next,
+  vec<osm_node_idx_t> trace_visibility_graph(uint32_t area_index,
+                                             vecvec<uint32_t, uint32_t>& next,
                                              osm_node_idx_t start,
                                              osm_node_idx_t end);
 
-  int osm_to_area_index(uint64_t index, osm_node_idx_t node_id);
+  uint32_t osm_to_area_index(vec<osm_node_idx_t> relevant_nodes,
+                             osm_node_idx_t node_id);
 
   template <typename T>
   void debug_print_matrix(vecvec<T, T> matrix, int size);
@@ -330,6 +340,64 @@ struct ways {
   vec_map<osm_way_idx_t, uint64_t> area_indices_; 
   vecvec<uint64_t, osm_node_idx_t, std::uint64_t> area_nodes_;
   vecvec<uint64_t, point, std::uint64_t> area_node_positions_;
+
+  //Vector of areas. An area is either a simple way-area or one of potentially multiple areas of a Multipolygon Relation.
+  //A single area consists of one outer way and zero or more inner ways.
+  vec<pair<osm_way_idx_t, vec<osm_way_idx_t>>> area_polygons_;
+  vec<vec<vec<osm_node_idx_t>>> area_polygon_nodes_;
+  vec<vec<vec<point>>> area_polygon_node_positions_;
+
+  //New Data Structures
+  //Used for unified Format
+  
+  //Vector containing all areas in unified format.
+  //Each entry in vector is a pair of single outer and multiple inner loops.
+  //The outer Loop is a Vector of pairs of wayID and Direction.
+  //The inner Loops is a VecVec of pairs of wayID and Direction.
+  vec<pair<vec<pair<osm_way_idx_t, bool>>, vec<vec<pair<osm_way_idx_t, bool>>>>> final_area_vector_;
+  
+  //Mapping from wayID to vector of nodeIDs.
+  std::map<osm_way_idx_t, vec<osm_node_idx_t>> final_area_nodes_;
+
+  //Mapping from nodeID to point-position
+  std::map<osm_node_idx_t, point> final_area_node_positions_;
+
+  vec<osm_node_idx_t> nodes_of_current_area_;
+  vec<point> positions_of_current_area_;
+
+  //Counts total number of nodes in the loops of the area. Ignores duplicate end-node of each way.
+  uint32_t get_area_number_of_nodes(uint32_t area_index);
+
+  //Counts total number of nodes in the outer loop. Ignores duplicate end-node of each way.
+  uint32_t get_area_number_of_outer_nodes(uint32_t area_index);
+
+  //Counts total number of nodes in all inner loops. Ignores duplicate end-node of each way.
+  uint32_t get_area_number_of_inner_nodes(uint32_t area_index);
+
+  vec<osm_node_idx_t> get_area_outer_loop(uint32_t area_index);
+
+  vec<vec<osm_node_idx_t>> get_area_inner_loops(uint32_t area_index);
+
+  vec<osm_node_idx_t> get_area_nodes(uint32_t area_index);
+
+  vec<vec<osm_node_idx_t>> get_area_nodes_by_loops(uint32_t area_index);
+
+  void ordered_area_loop_vector(vec<osm_node_idx_t>& loop, vec<pair<osm_way_idx_t, bool>> loop_data);
+
+  vec<point> get_area_loop_locations(vec<osm_node_idx_t> nodes_of_loop);
+
+  vec<vec<point>> get_area_inner_loop_locations(vec<vec<osm_node_idx_t>> nodes_of_inner_loops);
+
+  vec<point> get_area_locations(uint32_t area_index);
+
+  void debugPrintArea(uint32_t area_index);
+  //vec<pair<osm_way_idx_t, bool>> outerLoop;
+
+  //vecvec<int, pair<osm_way_idx_t, bool>> innerLoops;
+
+
+
+
 };
 
 }  // namespace osr

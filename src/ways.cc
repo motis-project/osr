@@ -163,8 +163,11 @@ void ways::connect_ways() {
     });
     r_->node_is_restricted_.resize(to_idx(node_idx));
   }
-
+  std::cout << "Entering Area Ways!\n";
+  std::cout << "Entering Area Ways!\n";
   generate_area_ways();
+  std::cout << "Exiting Area Ways!\n";
+  std::cout << "Exiting Area Ways!\n";
 
   // Build edges.
   {
@@ -250,150 +253,216 @@ void ways::sync() {
 }
 
 void ways::build_area_ways_mapping(const osmium::Way& way) {
-
+  /*
   //Gather IDs and Positions for all Nodes in Way.
   vec<osm_node_idx_t> nv;
   vec<point> pv;
-  areas_.push_back(osm_way_idx_t{way.positive_id()});
+  //first element is vector of outer nodes, further elements are vectors of inner nodes.
+  //Way-Area only has single loop.
+  vec<vec<osm_node_idx_t>> nodes;
+  vec<vec<point>> positions;
+
+  //Save area way IDs.
+  pair<osm_way_idx_t, vec<osm_way_idx_t>> outer_inner_pair;
+  outer_inner_pair.first = osm_way_idx_t{way.positive_id()};
+  outer_inner_pair.second = vec<osm_way_idx_t>{};
+  area_polygons_.push_back(outer_inner_pair);
+
+  //Gather Node IDs and Positions.
   for (auto n : way.nodes()) {
     nv.push_back(osm_node_idx_t{n.positive_ref()});
     pv.push_back(point::from_location(n.location()));
   }
-  area_nodes_.emplace_back(nv);
-  area_node_positions_.emplace_back(pv);
+
+  nodes.emplace_back(nv);
+  area_polygon_nodes_.emplace_back(nodes);
+  positions.emplace_back(pv);
+  area_polygon_node_positions_.emplace_back(positions);
+  */
+
+    pair<vec<pair<osm_way_idx_t, bool>>, vec<vec<pair<osm_way_idx_t, bool>>>> area_description;
+
+    pair<osm_way_idx_t, bool> onlyOuterWay = {(osm_way_idx_t)way.positive_id(), true};
+
+    vec<pair<osm_way_idx_t, bool>> outerLoop;
+
+    outerLoop.push_back(onlyOuterWay);
+
+    vec<vec<pair<osm_way_idx_t, bool>>> innerLoops = {};
+
+    area_description.first = outerLoop;
+    area_description.second = innerLoops;
+
+    final_area_vector_.push_back(area_description);
+
+    vec<osm_node_idx_t> nv;
+
+    // Gather Node IDs and Positions.
+    for (auto n : way.nodes()) {
+      nv.push_back(osm_node_idx_t{n.positive_ref()});
+      final_area_node_positions_.insert({(osm_node_idx_t)n.positive_ref(), point::from_location(n.location())});
+    }
+    final_area_nodes_.insert({onlyOuterWay.first, nv});
+
+
 }
 
 void ways::generate_area_ways() {
   //Generate Visibility Graph for each Area.
-  for (int i = 0; i < (int)areas_.size(); i++) {
+  //An Area is a single Multipolygon.
+  //It may consist of one or multiple outer Ways and
+  //none or multiple inner Ways.
+  //One Multipolygon Relation may contain multiple Multipolygons.
+  //This is the case when a single Relation contains multiple closed sets
+  //of outer Ways that describe multiple seperate Areas.
 
+  //For each area, single closed outer ring, optional with inner rings
+  for (uint32_t i = 0; i < final_area_vector_.size(); i++) {
     build_visibility_graph(i);
   }
 }
 
-void ways::build_visibility_graph(uint64_t index) {
+void ways::build_visibility_graph(uint32_t area_index) {
 
-  int n = (int)area_nodes_[index].size();
+  //Size of Matrix.
+  uint32_t n = get_area_number_of_nodes(area_index);
+  
+  //Size of outer Way.
+  uint32_t m = get_area_number_of_outer_nodes(area_index);
+ 
   vecvec<double, double> distances;
 
-  
   //Prepare distance Matrix
-  for (int i = 0; i < n; i++) {
+  for (uint32_t i = 0; i < n; i++) {
     vec<double> new_column;
-    for (int j = 0; j < n; j++) {
+    for (uint32_t j = 0; j < n; j++) {
       new_column.push_back(INFINITY);
     }
     new_column[i] = 0;
     distances.emplace_back(new_column);
   }
 
-auto positions_of_area = area_node_positions_[index];
+  auto positions_of_outer_loop = get_area_loop_locations(get_area_outer_loop(area_index));
 
   //Set adjacend distances
-  //TODO-J: Set m to size of outer nodes later
-  int m = n;
-  for (int i = 0; i < m - 1; i++) {
-    
-    point p0 = positions_of_area[i];
-    point p1 = positions_of_area[i+1];
+  for (uint32_t j = 0; j < m - 1; j++) {
+
+    point p0 = positions_of_outer_loop[j];
+    point p1 = positions_of_outer_loop[j + 1];
 
     double d = geo::distance(p0, p1);
 
-    distances[i + 1][i] = d;
-    distances[i][i + 1] = d;
+    distances[j][j + 1] = d;
+    distances[j + 1][j] = d;
   }
 
-  //TODO-J:
-  //Add Inner Ring Handling
-
+  uint32_t i = m;
+  vec<vec<osm_node_idx_t>> inner_loops = get_area_inner_loops(area_index);
+  for (vec<osm_node_idx_t> l : inner_loops) {
+    m = l.size();
+    vec<point> locations = get_area_loop_locations(l);
+    for (uint32_t j = 0; j < m - 1; j++) {
+      point p0 = locations[j];
+      point p1 = locations[j + 1];
+      double d = geo::distance(p0, p1);
+      distances[i][i + 1] = d;
+      distances[i + 1][i] = d;
+      i++;
+    }
+    //TODO-J: Check if distance from last to first is calculated later on of if it need manual work here.
+  }
+  nodes_of_current_area_ = get_area_nodes(area_index);
+  positions_of_current_area_ = get_area_locations(area_index);
   
-  for (int i = 0; i < n; i++) {
-    calc_visibility(index, distances, i, i+1);
+  for (uint32_t i = 0; i < n; i++) {
+    calc_visibility(area_index, distances, i, i + 1, n, positions_of_outer_loop,
+                    inner_loops);
   }
-
-  vecvec<int, int> next;
+  
+  vecvec<uint32_t, uint32_t> next;
   // Prepare next Matrix
-  for (int i = 0; i < n; i++) {
-    vec<int> new_column;
-    for (int j = 0; j < n; j++) {
-      new_column.push_back(std::numeric_limits<int>::max());
+  for (uint32_t i = 0; i < n; i++) {
+    vec<uint32_t> new_column;
+    for (uint32_t j = 0; j < n; j++) {
+      new_column.push_back(std::numeric_limits<uint32_t>::max());
     }
     next.emplace_back(new_column);
   }
-  //Simplify vis-graph
-  reduce_visibility_graph(index, distances, next, 0);
-  
-  //Transfer vis-graph to routing-graph.
-  extract_reduced_visibility_graph(index, distances, next);
 
+  //Simplify vis-graph
+  reduce_visibility_graph(area_index, distances, next, 0, n);
+
+  //Transfer vis-graph to routing-graph.
+  extract_reduced_visibility_graph(area_index, distances, next);
 }
 
-void ways::calc_visibility(uint64_t index,
+void ways::calc_visibility(uint32_t area_index,
                            vecvec<double, double>& distances,
-                           int i,
-                           int start) {
-  int n = (int)area_nodes_[index].size();
+                           uint32_t i,
+                           uint32_t start,
+                           uint32_t matrix_size,
+                           vec<point> outer_loop,
+                           vec<vec<osm_node_idx_t>> inner_loops) {
+  uint32_t n = matrix_size;
   bool visibility = false;
-  auto positions_of_area = area_node_positions_[index];
-  for (int j = start; j < n; j++) {
-    
-    if (i == j || (area_nodes_[index][i] == area_nodes_[index][j])) {
+
+  for (uint32_t j = start; j < n; j++) {
+
+    if (i == j || (nodes_of_current_area_[i] == nodes_of_current_area_[j])) {
+      continue;
+    }
+    vec<point> seg = {positions_of_current_area_[i], positions_of_current_area_[j]};
+
+    if (check_for_intersection(seg, outer_loop)) {
       continue;
     }
 
-    vec<point> seg = {area_node_positions_[index][i],
-                      area_node_positions_[index][j]};
-
-    // TODO-J: Fill with data from outerRing only instead of all data. m instead of n
-    vec<point> ring;
-    for (int k = 0; k < n-1; k++) {
-      ring.push_back(area_node_positions_[index][k]);
-    }
-
-    if (check_for_intersection(seg, ring)) {
-      continue;
-    }
     visibility = true;
-    //TODO-J:
-    // For each inner Ring:
-    // Fill ring
-    // if(check_for_intersection(seg, ring)){
-    // visibility = false;
-    // break;
-    //}
+
+    for (vec<osm_node_idx_t> l : inner_loops) {
+        if (check_for_intersection(seg, get_area_loop_locations(l))) {
+            visibility = false;
+            break;
+        }
+    }
 
     if (visibility) {
-      point p0 = positions_of_area[i];
-      point p1 = positions_of_area[j];
+
+      point p0 = positions_of_current_area_[i];
+      point p1 = positions_of_current_area_[j];
       double d = geo::distance(p0, p1);
       distances[i][j] = d;
       distances[j][i] = d;
     }
+
   }
 
 }
 
-void ways::add_virtual_way(uint64_t area_index, vec<osm_node_idx_t> nodes_on_way) {
+void ways::add_virtual_way(uint32_t area_index,
+                           vec<osm_node_idx_t> nodes_on_way) {
 
   max_osm_way_idx_++;
   way_osm_idx_.push_back(osm_way_idx_t{max_osm_way_idx_}); 
 
-  osm_way_idx_t w_id = areas_[(int)area_index];
+  //Copy properties from first way in outer loop.
+  osm_way_idx_t w_id = final_area_vector_[area_index].first[0].first;
   auto opt_way = find_way(w_id);
   way_idx_t way_id = *opt_way;
   way_properties prop = r_->way_properties_[way_id];
+
+
   vec<point> pointVec;
-  auto area_nodes = area_nodes_[area_index];
-  auto area_positions = area_node_positions_[area_index];
-  int next_index = 0;
-  for (auto n : nodes_on_way) {
-    for (int i = 0; i < area_nodes.size(); i++) {
-      if (area_nodes[i] == n) {
+  
+  uint32_t next_index = 0;
+  for (osm_node_idx_t n : nodes_on_way) {
+    for (uint32_t i = 0; i < nodes_of_current_area_.size(); i++) {
+      if (nodes_of_current_area_[i] == n) {
         next_index = i;
         break;
       }
     }
-    pointVec.push_back(area_positions[next_index]);
+    pointVec.push_back(positions_of_current_area_[next_index]);
   }
 
   way_polylines_.emplace_back(pointVec);
@@ -408,8 +477,7 @@ bool ways::check_for_intersection(vec<point> line, vec<point> ring) {
   for (auto r : ring) {
     if (first) {
       first = false;
-      prev_point = r;
-      continue;
+      prev_point = ring.back();
     }
 
     vec<point> current_ring_segment = {prev_point, r};
@@ -417,6 +485,7 @@ bool ways::check_for_intersection(vec<point> line, vec<point> ring) {
     if (do_lines_cross(line, current_ring_segment)) {
       return true;
     }
+
     prev_point = r;
   }
 
@@ -444,16 +513,16 @@ bool ways::check_for_intersection(vec<point> line, vec<point> ring) {
   point sample_position;
   sample_position.lat_ = (a.lat_ + b.lat_) / 2;
   sample_position.lng_ = (a.lng_ + b.lng_) / 2;
-  return !(is_point_in_polygon(sample_position, ring));
-
-
-
+  bool result = !(is_point_in_polygon(sample_position, ring));
+  
+  
+  return result;
 }
 
 bool ways::do_lines_cross(vec<point> lineA, vec<point> lineB) { 
   //Works for line-segments (vec<point> with exactly 2 elements). Returns true iff lines cross each other.
   //Based on https://en.wikipedia.org/wiki/Line%E2%80%93line_intersection#Given_two_points_on_each_line
-
+  /*
   double x1 = lineA[0].lat_;
   double y1 = lineA[0].lng_;
   double x2 = lineA[1].lat_;
@@ -462,6 +531,21 @@ bool ways::do_lines_cross(vec<point> lineA, vec<point> lineB) {
   double y3 = lineB[0].lng_;
   double x4 = lineB[1].lat_;
   double y4 = lineB[1].lng_;
+  */
+
+  //Project lines to origin relative to end of first line.
+  //Avoids potential precision issues at large latlng values.
+  double x1 = (int)lineA[0].lat_ - (int)lineA[1].lat_;
+  double y1 = (int)lineA[0].lng_ - (int)lineA[1].lng_;
+  double x2 = 0;
+  double y2 = 0;
+  double x3 = (int)lineB[0].lat_ - (int)lineA[1].lat_;
+  double y3 = (int)lineB[0].lng_ - (int)lineA[1].lng_;
+  double x4 = (int)lineB[1].lat_ - (int)lineA[1].lat_;
+  double y4 = (int)lineB[1].lng_ - (int)lineA[1].lng_;
+
+
+
  
   //Parallel lines can never "cross" each other. Avoids Div-by-0.
   double div = ((x1 - x2) * (y3 - y4) - (y1 - y2) * (x3 - x4));
@@ -474,7 +558,10 @@ bool ways::do_lines_cross(vec<point> lineA, vec<point> lineB) {
 
   double u = -(((x1 - x2) * (y1 - y3) - (y1 - y2) * (x1 - x3)) / div);
   
+
   return (0.0 < t && t < 1.0 && 0.0 < u && u < 1.0);
+  
+  
 }
 
 bool ways::is_point_in_polygon(point p, vec<point> polygon) { 
@@ -482,35 +569,40 @@ bool ways::is_point_in_polygon(point p, vec<point> polygon) {
   //Based on https://en.wikipedia.org/wiki/Point_in_polygon
   //Used to disqualify potential edges between nodes that pass outside of the way-area.
   //Returns true iff the point is contained inside the polygon.
-  int tracer_length = 100000;
+  
   point a_;
   point b_;
-  a_ = point(p.lat_ + tracer_length, p.lng_);
+  //Reasonably far-away trace with slight angle.
+  a_ = point(p.lat_ + 100000, p.lng_ - 250);
   b_ = p;
   vec<point> trace = {a_, b_};
-
+  
   //Count Crossings
-  int crossings = 0;
-  for (int j = 0; j < (int)polygon.size() - 1; j++) {
+  uint32_t crossings = 0;
+  for (uint32_t j = 0; j < polygon.size() - 1; j++) {
     vec<point> seg = {polygon[j], polygon[j + 1]};
     if (do_lines_cross(trace, seg)) {
       crossings++;
     }
   }
+  vec<point> seg = {polygon[polygon.size()-1], polygon[0]};
+  if (do_lines_cross(trace, seg)) {
+    crossings++;
+  }
 
-  //Even number of crossings indicates the point is outside of the polygon.
+  // Even number of crossings indicates the point is outside of the polygon.
   return !(crossings % 2 == 0);
 }
 
 void ways::reduce_visibility_graph(
-    uint64_t index, vecvec<double, double>& distances,
-                                   vecvec<int, int>& next,
-                                   int start) {
+    uint32_t area_index, vecvec<double, double>& distances,
+                                   vecvec<uint32_t, uint32_t>& next,
+                                   uint32_t start,
+                                   uint32_t n) {
 
-  int n = (int)area_nodes_[index].size();
   //Copy shortest direct Paths from distances to next.
-  for (int i = 0; i < n; i++) {
-    for (int j = start; j < n - 1; j++) {
+  for (uint32_t i = 0; i < n; i++) {
+    for (uint32_t j = start; j < n - 1; j++) {
       if (distances[i][j] != INFINITY && distances[i][j] != 0) {
         next[i][j] = j;
         next[j][i] = i;
@@ -519,9 +611,9 @@ void ways::reduce_visibility_graph(
   }
 
   //Create Paths in next
-  for (int k = 0; k < n; k++) {
-    for (int i = 0; i < n; i++) {
-      for (int j = start; j < n; j++) {
+  for (uint32_t k = 0; k < n; k++) {
+    for (uint32_t i = 0; i < n; i++) {
+      for (uint32_t j = start; j < n; j++) {
         if (distances[i][k] == INFINITY || distances[k][j] == INFINITY) {
           continue;
         }
@@ -537,57 +629,56 @@ void ways::reduce_visibility_graph(
 
 
 }
-void ways::extract_reduced_visibility_graph(uint64_t index,
+void ways::extract_reduced_visibility_graph(uint32_t area_index,
                                             vecvec<double, double>& distances,
-                                            vecvec<int, int>& next) {
+                                            vecvec<uint32_t, uint32_t>& next) {
 
   //Only Create Paths from access nodes.
-  auto way_nodes = area_nodes_[index];
   vec<osm_node_idx_t> access_nodes;
 
-  for (auto n : way_nodes) {
+  for (auto n : nodes_of_current_area_) {
     if (node_way_counter_.is_multi(to_idx(n))) {
       access_nodes.push_back(n);
     }
   }
 
   //Add Paths between all access nodes.
-  for (int i = 0; i < (int)access_nodes.size(); i++) {
-    for (int j = i + 1; j < (int)access_nodes.size(); j++) {
-      vec<osm_node_idx_t> nodes_on_way = trace_visibility_graph(index, next, access_nodes[i], access_nodes[j]);
-      add_virtual_way(index, nodes_on_way);
+  for (uint32_t i = 0; i < access_nodes.size(); i++) {
+    for (uint32_t j = i + 1; j < access_nodes.size(); j++) {
+      vec<osm_node_idx_t> nodes_on_way = trace_visibility_graph(area_index, next, access_nodes[i], access_nodes[j]);
+      add_virtual_way(area_index, nodes_on_way);
     }
   }
 
 }
-vec<osm_node_idx_t> ways::trace_visibility_graph(uint64_t index,
-                                                 vecvec<int, int>& next,
-                                                 osm_node_idx_t start,
-                                                 osm_node_idx_t end) {
+vec<osm_node_idx_t> ways::trace_visibility_graph(uint32_t area_index,
+                                                 vecvec<uint32_t, uint32_t>& next,
+                                                 osm_node_idx_t start, osm_node_idx_t end) {
 
   vec<osm_node_idx_t> path;
   path.push_back(start);
   osm_node_idx_t current_node = start;
-  int current_ind = osm_to_area_index(index, current_node);
-  int final_ind = osm_to_area_index(index, end);
+  uint32_t current_ind = osm_to_area_index(nodes_of_current_area_, current_node);
+  uint32_t final_ind = osm_to_area_index(nodes_of_current_area_, end);
   
+
   while (current_node != end) {
     current_ind = next[current_ind][final_ind];
-    current_node = area_nodes_[index][current_ind];
+    current_node = nodes_of_current_area_[current_ind];
     path.push_back(current_node);
   }
   return path;
 }
-int ways::osm_to_area_index(uint64_t index, osm_node_idx_t node_id) {
+uint32_t ways::osm_to_area_index(vec<osm_node_idx_t> relevant_nodes, osm_node_idx_t node_id) {
 
-    auto relevant_nodes = area_nodes_[index];
-  int counter = 0;
-    while (node_id != relevant_nodes[counter] && counter < relevant_nodes.size()) {
+  uint32_t counter = 0;
+  while (node_id != relevant_nodes[counter] && counter < relevant_nodes.size()) {
     counter++;
-    }
-    return counter;
+  }
 
+  return counter;
 }
+
 template <typename T>
 void ways::debug_print_matrix(vecvec<T, T> matrix, int size) {
   int n = size;
@@ -618,6 +709,157 @@ std::optional<std::string_view> ways::get_access_restriction(
       "access restriction for way with access restriction not found way={}",
       way_osm_idx_[way]);
   return strings_[it->second].view();
+}
+
+uint32_t ways::get_area_number_of_nodes(uint32_t area_index) { 
+    
+    return get_area_number_of_outer_nodes(area_index) + get_area_number_of_inner_nodes(area_index);
+}
+
+uint32_t ways::get_area_number_of_outer_nodes(uint32_t area_index) { 
+
+  vec<pair<osm_way_idx_t, bool>> outer_loops = final_area_vector_[area_index].first;
+
+  uint32_t outer_loop_node_counter = 0;
+
+  for (pair<osm_way_idx_t, bool> e : outer_loops) {
+    outer_loop_node_counter += final_area_nodes_[e.first].size() - 1;
+  }
+
+  return outer_loop_node_counter;
+}
+
+uint32_t ways::get_area_number_of_inner_nodes(uint32_t area_index) {
+
+  vec<vec<pair<osm_way_idx_t, bool>>> inner_loops = final_area_vector_[area_index].second;
+
+  uint32_t inner_loop_node_counter = 0;
+
+  for (uint32_t i = 0; i < inner_loops.size(); i++) {
+    for (uint32_t j = 0; j < inner_loops[i].size(); j++) {
+      osm_way_idx_t current_way = inner_loops[i][j].first;
+      inner_loop_node_counter += final_area_nodes_[current_way].size() - 1;
+    }
+  }
+
+  return inner_loop_node_counter;
+}
+
+vec<osm_node_idx_t> ways::get_area_outer_loop(uint32_t area_index) {
+
+  vec<osm_node_idx_t> outer_loop;
+  vec<pair<osm_way_idx_t, bool>> outer_loop_data = final_area_vector_[area_index].first;
+
+  ordered_area_loop_vector(outer_loop, outer_loop_data);
+
+  return outer_loop;
+}
+vec<vec<osm_node_idx_t>> ways::get_area_inner_loops(uint32_t area_index) {
+
+  vec<vec<osm_node_idx_t>> inner_loops;
+  vec<vec<pair<osm_way_idx_t, bool>>> inner_loops_data = final_area_vector_[area_index].second;
+
+  for (uint32_t i = 0; i < inner_loops_data.size(); i++) {
+    vec<pair<osm_way_idx_t, bool>> current_inner_loop_data = inner_loops_data[i];
+    vec<osm_node_idx_t> current_inner_loop;
+    ordered_area_loop_vector(current_inner_loop, current_inner_loop_data);
+    inner_loops.emplace_back(current_inner_loop);
+  }
+
+  return inner_loops;
+}
+
+vec<osm_node_idx_t> ways::get_area_nodes(uint32_t area_index) {
+
+  vec<osm_node_idx_t> nodes_of_area = get_area_outer_loop(area_index);
+
+  vec<vec<osm_node_idx_t>> inner_nodes_of_area = get_area_inner_loops(area_index);
+
+  for (vec<osm_node_idx_t> l : inner_nodes_of_area) {
+
+    for (osm_node_idx_t n : l) {
+      nodes_of_area.emplace_back(n);
+    }
+  }
+
+  return nodes_of_area;
+}
+
+vec<vec<osm_node_idx_t>> ways::get_area_nodes_by_loops(uint32_t area_index) {
+
+  vec<vec<osm_node_idx_t>> nodes_of_area;
+  nodes_of_area.emplace_back(get_area_outer_loop(area_index));
+
+  for (vec<osm_node_idx_t> l : get_area_inner_loops(area_index)) {
+    nodes_of_area.emplace_back(l);
+  }
+
+  return nodes_of_area;
+}
+
+void ways::ordered_area_loop_vector(vec<osm_node_idx_t>& loop, vec<pair<osm_way_idx_t, bool>> loop_data) {
+
+    for (uint32_t i = 0; i < loop_data.size(); i++) {
+
+    osm_way_idx_t current_way = loop_data[i].first;
+    bool direction = loop_data[i].second;
+    vec<osm_node_idx_t> current_way_nodes = final_area_nodes_[current_way];
+
+    if (!direction) {
+      for (uint32_t j = current_way_nodes.size() - 1; j > 0; j--) {
+        loop.push_back(current_way_nodes[j-1]);
+      }
+    } else {
+      for (uint32_t j = 0; j < current_way_nodes.size() - 1; j++) {
+        loop.push_back(current_way_nodes[j]);
+      }
+    }
+  }
+
+}
+
+vec<point> ways::get_area_loop_locations(vec<osm_node_idx_t> nodes_of_loop) {
+
+  vec<point> loop_locations;
+
+  for (osm_node_idx_t n : nodes_of_loop) {
+    loop_locations.push_back(final_area_node_positions_[n]);
+  }
+
+  return loop_locations;
+}
+
+vec<vec<point>> ways::get_area_inner_loop_locations(vec<vec<osm_node_idx_t>> nodes_of_inner_loops) {
+  vec<vec<point>> inner_loops_locations;
+
+  for (uint32_t i = 0; i < nodes_of_inner_loops.size(); i++) {
+    vec<osm_node_idx_t> current_inner_loop = nodes_of_inner_loops[i];
+    inner_loops_locations.push_back(get_area_loop_locations(current_inner_loop));
+  }
+
+  return inner_loops_locations;
+}
+
+vec<point> ways::get_area_locations(uint32_t area_index) {
+  vec<osm_node_idx_t> nodes_of_area = get_area_nodes(area_index);
+  return get_area_loop_locations(nodes_of_area);
+}
+
+void ways::debugPrintArea(uint32_t area_index) {
+  std::cout << "Area Debug Print of area " << area_index << ": \n ";
+
+  std::cout << "Area Outer WayIDs:\n";
+
+  for (pair<osm_way_idx_t, bool> w : final_area_vector_[area_index].first) {
+    std::cout << w.first << " in direction " << w.second << ",\n";
+
+    std::cout << "    Nodes of way: \n";
+    vec<osm_node_idx_t> nodes_of_way = final_area_nodes_[w.first];
+    for (osm_node_idx_t n : nodes_of_way) {
+      std::cout << "  " << n << " with position "
+                << final_area_node_positions_[n] << ",\n";
+    }
+  }
 }
 
 cista::wrapped<ways::routing> ways::routing::read(
