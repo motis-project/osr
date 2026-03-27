@@ -353,17 +353,12 @@ struct foot {
     if (IsWheelchair && e.is_steps()) {
       return kInfeasible;
     }
-    if (
-      e.is_foot_accessible() || (!e.is_sidewalk_separate() && e.is_bike_accessible()))
-      {
-      return (!e.is_foot_accessible() || e.is_sidewalk_separate() ? 90 : 0) +
-             static_cast<cost_t>(
-                 std::round(dist / (params.speed_meters_per_second_ +
-                                    (e.is_big_street_ ? -0.2 : 0) +
-                                    (e.motor_vehicle_no_ ? 0.1 : 0.0))));
-    } else {
-      return kInfeasible;
-    }
+    return (!e.is_foot_accessible() ? 90 : 0) +
+           (e.is_sidewalk_separate() ? 45 : 0) +
+           static_cast<cost_t>(
+               std::round(dist / (params.speed_meters_per_second_ +
+                                  (e.is_big_street_ ? -0.2 : 0) +
+                                  (e.motor_vehicle_no_ ? 0.1 : 0.0))));
   }
 
   static constexpr cost_t node_cost(parameters const&,
