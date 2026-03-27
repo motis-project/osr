@@ -350,9 +350,12 @@ struct foot {
                                    way_properties const e,
                                    direction,
                                    distance_t const dist) {
-    if ((e.is_foot_accessible() ||
-         (!e.is_sidewalk_separate() && e.is_bike_accessible())) &&
-        (!IsWheelchair || !e.is_steps())) {
+    if (IsWheelchair && e.is_steps()) {
+      return kInfeasible;
+    }
+    if (
+      e.is_foot_accessible() || (!e.is_sidewalk_separate() && e.is_bike_accessible()))
+      {
       return (!e.is_foot_accessible() || e.is_sidewalk_separate() ? 90 : 0) +
              static_cast<cost_t>(
                  std::round(dist / (params.speed_meters_per_second_ +
