@@ -353,6 +353,9 @@ struct foot {
     if (IsWheelchair && e.is_steps()) {
       return kInfeasible;
     }
+    if (!e.is_foot_accessible() && !e.is_bike_accessible()) {
+      return kInfeasible;
+    }
     return (!e.is_foot_accessible() ? 90 : 0) +
            (e.is_sidewalk_separate() ? 45 : 0) +
            static_cast<cost_t>(
