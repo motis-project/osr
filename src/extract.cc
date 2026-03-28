@@ -14,6 +14,7 @@
 #include "oneapi/tbb/parallel_pipeline.h"
 
 #include "osmium/area/assembler.hpp"
+#include "osmium/area/assembler_config.hpp"
 #include "osmium/area/multipolygon_manager.hpp"
 #include "osmium/handler/node_locations_for_ways.hpp"
 #include "osmium/index/map/flex_mem.hpp"
@@ -34,6 +35,16 @@
 #include "osr/platforms.h"
 #include "osr/preprocessing/elevation/provider.h"
 #include "osr/ways.h"
+
+//TODO-J: Remove Area Test Includes
+
+
+
+
+//End Area Test Includes
+
+using namespace osmium::area;
+
 
 namespace osm = osmium;
 namespace osm_io = osmium::io;
@@ -497,6 +508,200 @@ struct rel_ways_handler : public osm::handler::Handler {
   rel_ways_t& rel_ways_;
 };
 
+
+class multipoly_area_handler : public osmium::handler::Handler {
+
+public:
+  void area(osm::Area const& a) {
+    
+      if (a.is_multipolygon()) {
+        auto ring_count = a.num_rings();
+        std::cout << "Found MultiPolygon Area with " << ring_count.first
+                  << " outer rings and " << ring_count.second
+                  << " inner rings!\n";
+
+        std::cout << "The Area Type is: " << a.type() << "!\n";
+
+        std::cout << "The Area ID is: " << a.id() << "\n";
+      }
+    
+  }
+
+  void osm_object(const osmium::OSMObject& o) { 
+      
+    std::cout << "OBJECT!\n";
+  }
+
+  void node(const osmium::Node& n){
+  
+    std::cout << "NODE!\n";
+  }
+
+  void way(const osmium::Way& w){
+  
+    std::cout << "WAY!\n";
+  }
+
+  void relation(const osmium::Relation& r){
+  
+    std::cout << "RELATION!\n";
+  }
+    
+};
+
+
+
+//TODO-J: Sample Code Start
+
+
+
+
+
+namespace {
+
+void print_help() {
+  std::cout << "osmium_area_test [OPTIONS] OSMFILE\n\n"
+            << "Read OSMFILE and build multipolygons from it.\n"
+            << "\nOptions:\n"
+            << "  -h, --help           This help message\n"
+            << "  -w, --dump-wkt       Dump area geometries as WKT\n"
+            << "  -o, --dump-objects   Dump area objects\n";
+}
+
+void print_usage(const char* prgname) {
+  std::cerr << "Usage: " << prgname << " [OPTIONS] OSMFILE\n";
+}
+
+}  // anonymous namespace
+
+
+int area_test() {
+  
+  
+    // Initialize an empty DynamicHandler. Later it will be associated
+    // with one of the handlers. You can think of the DynamicHandler as
+    // a kind of "variant handler" or a "pointer handler" pointing to the
+    // real handler.
+  
+    multipoly_area_handler handler;
+
+
+    //const osmium::io::File input_file{argv[2]};
+      const osmium::io::File input_file{"C://Informatik//Master//ProjektPraktikumAlgorithmik//osr-area-routing//build//HP.osm"};
+
+    // Configuration for the multipolygon assembler. Here the default settings
+    // are used, but you could change multiple settings.
+    const osmium::area::Assembler::config_type assembler_config;
+
+    // Set up a filter matching only forests. This will be used to only build
+    // areas with matching tags.
+    osmium::TagsFilter filter{false};
+    filter.add_rule(true, "natural", "water");
+    filter.add_rule(true, "area", "yes");
+    //filter.add_rule(false, "natural", "wood");
+    //filter.add_rule(false, "landuse", "forest");
+    //filter.add_rule(true, "type", "multipolygon");
+    
+
+    // Initialize the MultipolygonManager. Its job is to collect all
+    // relations and member ways needed for each area. It then calls an
+    // instance of the osmium::area::Assembler class (with the given config)
+    // to actually assemble one area. The filter parameter is optional, if
+    // it is not set, all areas will be built.
+    osmium::area::MultipolygonManager<osmium::area::Assembler> mp_manager{
+        assembler_config, filter};
+
+    // We read the input file twice. In the first pass, only relations are
+    // read and fed into the multipolygon manager.
+    std::cerr << "Pass 1...\n";
+    osmium::relations::read_relations(input_file, mp_manager);
+    std::cerr << "Pass 1 done\n";
+
+    // Output the amount of main memory used so far. All multipolygon relations
+    // are in memory now.
+    std::cerr << "Memory:\n";
+    osmium::relations::print_used_memory(std::cerr, mp_manager.used_memory());
+
+    std::cerr << "Size of Node DB: "
+              << mp_manager.member_nodes_database().size() << "\n";
+    std::cerr << "Size of Way DB: "
+              << mp_manager.member_ways_database().size() << "\n";
+    std::cerr << "Size of Rel DB: "
+              << mp_manager.member_relations_database().size() << "\n";
+    std::cerr << "Size of non-member Rel DB: "
+              << mp_manager.relations_database().size() << "\n";
+    std::cerr << "Buffer Data: " << mp_manager.buffer().data()
+              << "\n";
+
+    std::cerr << "Count of non-removed Relations in DB: "
+              << mp_manager.relations_database().count_relations() << "\n";
+    /*
+    for (int i = 0; i < mp_manager.relations_database().count_relations();
+         i++) {
+      auto r = mp_manager.relations_database()[i];
+      std::cerr << "Relation " << i << " is: " << r->positive_id() << "\n";
+      
+      std::cerr << "Has all members?: " << r.has_all_members() << "\n";
+
+
+      auto obj = mp_manager.member_relations_database().get(r->positive_id());
+      auto member_size = obj->members().size();
+      std::cerr << "Size of Members: " << member_size << "\n";
+
+    }
+    */
+
+    // On the second pass we read all objects and run them first through the
+    // node location handler and then the multipolygon collector. The collector
+    // will put the areas it has created into the "buffer" which are then
+    // fed through our "handler".
+    std::cerr << "Pass 2...\n";
+    osmium::io::Reader reader{input_file};
+    osmium::apply(
+        reader,
+        mp_manager.handler([&handler](osmium::memory::Buffer&& buffer) {
+          osmium::apply(buffer, handler);
+        }));
+    reader.close();
+    std::cerr << "Pass 2 done\n";
+
+    // Output the amount of main memory used so far. All complete multipolygon
+    // relations have been cleaned up.
+    std::cerr << "Memory:\n";
+    osmium::relations::print_used_memory(std::cerr, mp_manager.used_memory());
+
+    std::cerr << "Size of Node DB: "
+              << mp_manager.member_nodes_database().size() << "\n";
+    std::cerr << "Size of Way DB: " << mp_manager.member_ways_database().size()
+              << "\n";
+    std::cerr << "Size of Rel DB: "
+              << mp_manager.member_relations_database().size() << "\n";
+    std::cerr << "Size of non-member Rel DB: "
+              << mp_manager.relations_database().size() << "\n";
+    std::cerr << "Buffer Data: " << mp_manager.buffer().data() << "\n";
+    std::cerr << "Count of non-removed Relations in DB: "
+              << mp_manager.relations_database().count_relations() << "\n";
+
+    /*
+    for (int i = 0; i < mp_manager.relations_database().count_relations();
+         i++) {
+      osm::relations::RelationHandle r = mp_manager.relations_database()[i];
+      std::cerr << "Relation " << i << " is: " << r->positive_id() << "\n";
+
+      std::cerr << "Has all members?: " << r.has_all_members() << "\n";
+
+
+      
+    }
+   */
+   return 0;
+  
+};
+
+
+
+// TODO-J: Sample Code End
+
 void extract(bool const with_platforms,
              fs::path const& in,
              fs::path const& out,
@@ -506,6 +711,11 @@ void extract(bool const with_platforms,
   if (!fs::is_directory(out)) {
     fs::create_directories(out);
   }
+  
+  //TODO-J: Remove Area Test Call
+  std::cout << "Starting Area Test: " << "\n";
+  std::cout << "Final Return: " << area_test() << "\n";
+  return;
 
   auto input_file = osm_io::File{};
   auto file_size = std::size_t{0U};
@@ -551,6 +761,66 @@ void extract(bool const with_platforms,
     reader.close();
     node_idx_builder.finish();
   }
+
+
+  //TODO-J: Clean up AreaManager Test Code
+  std::cout << "Begin Area Attempt!"
+            << "\n";
+  std::cout << "Begin Area Attempt!"
+            << "\n";
+  //Create Config for Assembler.
+  const osmium::area::Assembler::config_type assembler_config;
+
+  //Create Tag Filter. currently not used on manager init.
+  //osmium::TagsFilter filter{true};
+  //filter.add_rule(true, "highway", "pedestrian");
+  //filter.add_rule(true, "type", "multipolygon");
+
+  //Create Handler that converts osm-areas to osr-areas.
+  multipoly_area_handler mpa_handler = multipoly_area_handler();
+
+  //Init Manager.
+  osmium::area::MultipolygonManager<osmium::area::Assembler> multi_poly_manager{assembler_config};
+
+  //First Pass, collect relations of interest.
+  osmium::relations::read_relations(input_file, multi_poly_manager);
+
+
+  std::cerr << "Memory after first pass:\n";
+  osmium::relations::print_used_memory(std::cerr, multi_poly_manager.used_memory());
+
+  std::cout << "Buffer-Comits: " << multi_poly_manager.buffer().committed()
+            << "\n";
+
+  //Second Pass, construct areas.
+  osmium::io::Reader reader{input_file};
+  osmium::apply(reader, multi_poly_manager.handler(
+                            [&mpa_handler](osmium::memory::Buffer&& buffer) {osmium::apply(buffer, mpa_handler);
+                            }));
+  reader.close();
+
+  std::cerr << "Memory after second pass:\n";
+  osmium::relations::print_used_memory(std::cerr, multi_poly_manager.used_memory());
+
+  std::cout << "Buffer-Comits: "  << multi_poly_manager.buffer().committed() << "\n";
+
+
+  std::cout << "End Area Attempt!"
+            << "\n";
+  std::cout << "End Area Attempt!"
+            << "\n";
+  //osmium::memory::Buffer buffer = multi_poly_manager.read();
+
+
+  // Create an assembler configuration
+  //osmium::area::MultipolygonManager::assembler_config_type assembler_config = /* your assembler configuration */;
+
+  // Create a tags filter
+  //osmium::TagsFilter filter = osmium::TagsFilter{true};
+
+  // Instantiate the MultipolygonManager
+  //osmium::area::MultipolygonManager<osmium::area::Assembler> multi_poly_manager(assembler_config, filter);
+
 
   auto elevator_nodes = hash_map<osm_node_idx_t, level_bits_t>{};
   {  // Extract streets, places, and areas.
