@@ -52,6 +52,14 @@ TEST(routing, foot_ferry) {
       extract_and_route("test/ajaccio-ferry.osm.pbf", from, to));
 }
 
+TEST(routing, foot_sidewalk_separate) {
+  auto const from = osr::location{46.1714, 8.799939, osr::level_t{0.F}};
+  auto const to = osr::location{46.17249, 8.800507, osr::level_t{0.F}};
+  EXPECT_EQ(
+      R"({"type":"FeatureCollection","metadata":{},"features":[{"type":"Feature","properties":{"level":0E0,"osm_way_id":0,"cost":9,"distance":9},"geometry":{"type":"LineString","coordinates":[[8.799938095816453E0,4.617140034140192E1],[8.7999968E0,4.61714749E1]]}},{"type":"Feature","properties":{"level":0E0,"osm_way_id":313626022,"cost":52,"distance":52},"geometry":{"type":"LineString","coordinates":[[8.7999968E0,4.61714749E1],[8.8001826E0,4.61717214E1],[8.8002241E0,4.61717698E1],[8.8002659E0,4.61718363E1],[8.8002881E0,4.61718996E1]]}},{"type":"Feature","properties":{"level":0E0,"osm_way_id":37078706,"cost":157,"distance":22},"geometry":{"type":"LineString","coordinates":[[8.8002881E0,4.61718996E1],[8.800417E0,4.61718962E1],[8.8005511E0,4.61719431E1]]}},{"type":"Feature","properties":{"level":0E0,"osm_way_id":352238316,"cost":10,"distance":11},"geometry":{"type":"LineString","coordinates":[[8.8005511E0,4.61719431E1],[8.8005367E0,4.61720098E1],[8.8005388E0,4.61720441E1]]}},{"type":"Feature","properties":{"level":0E0,"osm_way_id":352238316,"cost":29,"distance":32},"geometry":{"type":"LineString","coordinates":[[8.8005388E0,4.61720441E1],[8.8005458E0,4.61721137E1],[8.8005774E0,4.61723293E1]]}},{"type":"Feature","properties":{"level":0E0,"osm_way_id":1214507783,"cost":9,"distance":11},"geometry":{"type":"LineString","coordinates":[[8.8005774E0,4.61723293E1],[8.8006558E0,4.61724109E1]]}},{"type":"Feature","properties":{"level":0E0,"osm_way_id":1214515049,"cost":15,"distance":15},"geometry":{"type":"LineString","coordinates":[[8.8006558E0,4.61724109E1],[8.8004622E0,4.61724207E1]]}},{"type":"Feature","properties":{"level":0E0,"osm_way_id":0,"cost":144,"distance":9},"geometry":{"type":"LineString","coordinates":[[8.8004622E0,4.61724207E1],[8.8004859E0,4.61724675E1],[8.800498396766157E0,4.6172492096108655E1]]}}]})",
+      extract_and_route("test/locarno.osm.pbf", from, to));
+}
+
 TEST(routing, foot_corridor) {
   auto const from =
       osr::location{51.54663831994142, -0.05622849779558692, osr::level_t{0.F}};
