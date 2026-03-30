@@ -36,20 +36,12 @@
 #include "osr/preprocessing/elevation/provider.h"
 #include "osr/ways.h"
 
-//TODO-J: DONT Remove Area Test Includes
 
-// For the location index. There are different types of indexes available.
-// This will work for all input files keeping the index in memory.
-//#include <osmium/index/map/flex_mem.hpp>
-
-// The type of index used. This must match the include file above
+//Multipolygon Location Index Type
 using index_type = osmium::index::map::FlexMem<osmium::unsigned_object_id_type, osmium::Location>;
 
-// The location handler always depends on the index type
+//Multipolygon Location Handler Type
 using location_handler_type = osmium::handler::NodeLocationsForWays<index_type>;
-
-
-//End Area Test Includes
 
 using namespace osmium::area;
 
@@ -224,10 +216,12 @@ struct way_handler : public osm::handler::Handler {
 
   void way(osm::Way const& w) {
     auto const osm_way_idx = osm_way_idx_t{w.positive_id()};
-    //Track highest Way ID to avoid conflicts when adding vis-graph ways later.
+
+    //Track highest Way ID to avoid conflicts when adding virtual area-routing ways later.
     if (uint64_t{w.positive_id()} > w_.max_osm_way_idx_) {
       w_.max_osm_way_idx_ = uint64_t{w.positive_id()};
     }
+
     auto const it = rel_ways_.find(osm_way_idx);
     auto t = tags{w};
 
@@ -293,7 +287,7 @@ struct way_handler : public osm::handler::Handler {
     if (it != end(rel_ways_) && it->second.pl_ != platform_idx_t::invalid()) {
       platforms_->platform_ref_[it->second.pl_].push_back(to_value(way_idx));
     }
-
+    
     w_.way_osm_idx_.push_back(osm_way_idx_t{w.positive_id()});
     w_.way_polylines_.emplace_back(w.nodes() |
                                    std::views::transform(get_point));
@@ -314,11 +308,6 @@ struct way_handler : public osm::handler::Handler {
       w_.way_conditional_access_no_.emplace_back(
           way_idx, register_string(t.access_conditional_no_));
     }
-
-    if (w.tags().has_tag("area", "yes")) {
-      w_.build_area_ways_mapping(w);
-    }
-
   }
 
   using strings_set_t = hash_set<string_idx_t, strings_hash, strings_equals>;
@@ -519,163 +508,170 @@ struct rel_ways_handler : public osm::handler::Handler {
 
 class multipoly_area_handler : public osmium::handler::Handler {
 
-public:
+  public:
+
+  multipoly_area_handler(ways& w, rel_ways_t& rel_ways)
+        : w_{w}, rel_ways_{rel_ways} {}
+  
 
   void area(const osmium::Area& a) {
-    std::cout << "================================================\n";
 
-    std::cout << "Area " << a.positive_id() << " is based on";
-    (a.from_way()) ? std::cout << " way " : std::cout << " relation ";
-    std::cout << a.orig_id() << "\n";
+    //Reject irrelevant areas.
+    auto t = tags{a};
+    osr::way_properties p = get_way_properties(t);
+    if (!p.is_accessible()) {
+      return;
+    }
 
-    std::cout << "It has " << a.num_rings().first << " outer rings and "
-              << a.num_rings().second << " inner rings.\n";
+    if (debug_print_areas_) {
+      std::cout << "================================================\n";
 
-    uint32_t outer_counter = 0;
-    uint32_t inner_counter = 0;
+      std::cout << "Area " << a.positive_id() << " is based on";
+      (a.from_way()) ? std::cout << " way " : std::cout << " relation ";
+      std::cout << a.orig_id() << "\n";
 
-    osm::memory::ItemIteratorRange<const osm::OuterRing> outer_rings = a.outer_rings();
-    for (const auto& outer_ring : outer_rings) {
-      std::cout << "----------------------------------------\n";
-      std::cout << "Outer Ring " << outer_counter
-                << " consists of the following nodes: \n";
+      std::cout << "It has " << a.num_rings().first << " outer rings and "
+                << a.num_rings().second << " inner rings.\n";
 
-      for (auto& node : outer_ring) {
-        std::cout << "Node " << node.positive_ref() << " @ " << node.location() << "\n";
-      }
+      uint32_t outer_counter = 0;
+      uint32_t inner_counter = 0;
 
-      inner_counter = 0;
-
-      std::cout << "Outer Ring " << outer_counter
-                << " consists of the following Inner Rings: \n";
-
-      auto inner_rings = a.inner_rings(outer_ring);
-      for (const auto& inner_ring : inner_rings) {
-        std::cout << "---------------------------\n";
-        std::cout << "Inner Ring " << inner_counter
+      osm::memory::ItemIteratorRange<const osm::OuterRing> outer_rings =
+          a.outer_rings();
+      for (const auto& outer_ring : outer_rings) {
+        std::cout << "----------------------------------------\n";
+        std::cout << "Outer Ring " << outer_counter
                   << " consists of the following nodes: \n";
 
-        for (auto& node : inner_ring) {
+        for (auto& node : outer_ring) {
           std::cout << "Node " << node.positive_ref() << " @ "
                     << node.location() << "\n";
         }
 
-        inner_counter++;
-        std::cout << "---------------------------\n";
+        inner_counter = 0;
+
+        std::cout << "Outer Ring " << outer_counter
+                  << " consists of the following Inner Rings: \n";
+
+        auto inner_rings = a.inner_rings(outer_ring);
+        for (const auto& inner_ring : inner_rings) {
+          std::cout << "---------------------------\n";
+          std::cout << "Inner Ring " << inner_counter
+                    << " consists of the following nodes: \n";
+
+          for (auto& node : inner_ring) {
+            std::cout << "Node " << node.positive_ref() << " @ "
+                      << node.location() << "\n";
+          }
+
+          inner_counter++;
+          std::cout << "---------------------------\n";
+        }
+        outer_counter++;
+        std::cout << "----------------------------------------\n";
       }
-      outer_counter++;
-      std::cout << "----------------------------------------\n";
+      std::cout << "================================================\n";
     }
-    std::cout << "================================================\n";
     
+    area_preprocessing(a);
 
   }
+
+
+  uint64_t create_internal_area(const osm::OuterRing& outer_ring, osm::memory::ItemIteratorRange<const osm::InnerRing> inner_rings, uint64_t original_id, bool based_on_way) {
+
+    vec<vec<osm_node_idx_t>> area_nodes_vector;
+    vec<osm_node_idx_t> outer_ring_nodes_vector;
+
+    //First node vector entry is vector of outer ring.
+    for (auto& node : outer_ring) {
+
+      //Register outer rings nodes and their positions.
+      outer_ring_nodes_vector.push_back((osm_node_idx_t)node.positive_ref());
+      w_.final_area_node_positions_.insert({(osm_node_idx_t)node.positive_ref(), point::from_location(node.location())});
+    }
+    // Store outer ring as first entry in area_node_vector.
+    area_nodes_vector.emplace_back(outer_ring_nodes_vector);
+
+    //Do the same for each inner ring belonging to this outer ring.
+    for (auto& inner_ring : inner_rings) {
     
+      vec<osm_node_idx_t> inner_ring_nodes_vector;
+
+      for (auto& node : inner_ring) {
+        
+        inner_ring_nodes_vector.push_back((osm_node_idx_t)node.positive_ref());
+        w_.final_area_node_positions_.insert({(osm_node_idx_t)node.positive_ref(), point::from_location(node.location())});
+      }
+      // Store inner ring as next entry in area_node_vector.
+      area_nodes_vector.emplace_back(inner_ring_nodes_vector);
+    }
+
+    //Assign completed area_nodes_vector an ID that matches it to the internal area entry.
+    uint64_t internal_area_id = w_.internal_area_id_;
+    w_.internal_area_id_ = w_.internal_area_id_ + 1;
+    pair<uint64_t, pair<uint64_t, bool>> internal_area_entry = {internal_area_id, {original_id, based_on_way}};
+    w_.final_final_area_vector_.emplace_back(internal_area_entry);
+
+    //Register areas ring node IDs via internal area ID.
+    w_.final_area_nodes_.insert({internal_area_id, area_nodes_vector});
+
+    return internal_area_id;
+  }
+
+
+  void area_preprocessing(const osm::Area& a) {
+
+    //For each outer ring of the area, create a new internal area entry.
+    for (const auto& outer_ring : a.outer_rings()) {
+
+      auto inner_rings = a.inner_rings(outer_ring);
+
+      uint64_t internal_area_id = create_internal_area(outer_ring, inner_rings, a.orig_id(), a.from_way());
+
+      // Register area properties.
+      auto t = tags{a};
+      osr::way_properties p = get_way_properties(t);
+      w_.final_area_properties_.insert({internal_area_id, p});
+    }
+  }
+
+
+  bool debug_print_areas_ = false;
+  ways& w_;
+  rel_ways_t& rel_ways_;
 };
 
-//TODO-J: Sample Code Start
 
-
-int area_test() {
+void area_collection(osm::io::File input_file, ways& w, rel_ways_t& rel_ways) {
   
-  
-    // Initialize an empty DynamicHandler. Later it will be associated
-    // with one of the handlers. You can think of the DynamicHandler as
-    // a kind of "variant handler" or a "pointer handler" pointing to the
-    // real handler.
-  
-    multipoly_area_handler handler;
-    //debug_test_handler debug_handler;
+    multipoly_area_handler handler = multipoly_area_handler(w, rel_ways);
 
-    //const osmium::io::File input_file{argv[2]};
-      const osmium::io::File input_file{"C://Informatik//Master//ProjektPraktikumAlgorithmik//osr-area-routing//build//HP.osm"};
+    const osmium::area::Assembler::config_type assembler_config = osmium::area::Assembler::config_type{};
 
-    // Configuration for the multipolygon assembler. Here the default settings
-    // are used, but you could change multiple settings.
-      const osmium::area::Assembler::config_type assembler_config = osmium::area::Assembler::config_type{};
-
-    // Set up a filter matching only forests. This will be used to only build
-    // areas with matching tags.
     osmium::TagsFilter filter{false};
-    filter.add_rule(true, "natural", "water");
-    //filter.add_rule(true, "area", "yes");
+    //filter.add_rule(true, "natural", "water");
+    filter.add_rule(true, "area", "yes");
     //filter.add_rule(false, "natural", "wood");
     //filter.add_rule(false, "landuse", "forest");
-    //filter.add_rule(true, "type", "multipolygon");
+    //filter.add_rule(false, "type", "multipolygon");
     
-
-    // Initialize the MultipolygonManager. Its job is to collect all
-    // relations and member ways needed for each area. It then calls an
-    // instance of the osmium::area::Assembler class (with the given config)
-    // to actually assemble one area. The filter parameter is optional, if
-    // it is not set, all areas will be built.
     osmium::area::MultipolygonManager<osmium::area::Assembler> mp_manager{
         assembler_config, filter};
 
-    // We read the input file twice. In the first pass, only relations are
-    // read and fed into the multipolygon manager.
-    std::cerr << "------------------------------Pass 1------------------------------\n";
+    //Collect relevant relations and track members
     osmium::relations::read_relations(input_file, mp_manager);
-    std::cerr << "------------------------------Pass 1 Completed------------------------------\n";
 
-    // Output the amount of main memory used so far. All multipolygon relations
-    // are in memory now.
-    std::cerr << "Memory:\n";
-    osmium::relations::print_used_memory(std::cerr, mp_manager.used_memory());
-
-    std::cerr << "Size of Node DB: "
-              << mp_manager.member_nodes_database().size() << "\n";
-    std::cerr << "Size of Way DB: "
-              << mp_manager.member_ways_database().size() << "\n";
-    std::cerr << "Size of Rel DB: "
-              << mp_manager.member_relations_database().size() << "\n";
-    std::cerr << "Size of non-member Rel DB: "
-              << mp_manager.relations_database().size() << "\n";
-    std::cerr << "Count of non-removed Relations in DB: "
-              << mp_manager.relations_database().count_relations() << "\n";
-    /*
-    for (int i = 0; i < mp_manager.relations_database().count_relations();
-         i++) {
-      auto r = mp_manager.relations_database()[i];
-      std::cerr << "Relation " << i << " is: " << r->positive_id() << "\n";
-      
-      std::cerr << "Has all members?: " << r.has_all_members() << "\n";
-
-
-      auto obj = mp_manager.member_relations_database().get(r->positive_id());
-      auto member_size = obj->members().size();
-      std::cerr << "Size of Members: " << member_size << "\n";
-
-    }
-    */
     index_type index;
 
     location_handler_type location_handler{index};
 
-    
-    // On the second pass we read all objects and run them first through the
-    // node location handler and then the multipolygon collector. The collector
-    // will put the areas it has created into the "buffer" which are then
-    // fed through our "handler".
-    std::cerr << "------------------------------Pass 2------------------------------\n";
+    //Collect all member data and parse areas with area_handler
     osmium::io::Reader reader{input_file};
-
     osmium::apply(reader, location_handler, mp_manager.handler([&handler](osmium::memory::Buffer&& buffer) {osmium::apply(buffer, handler);}));
     reader.close();
-    std::cerr << "------------------------------Pass 2 Completed------------------------------\n";
-
-    // Output the amount of main memory used so far. All complete multipolygon
-    // relations have been cleaned up.
-    std::cerr << "Memory:\n";
-    osmium::relations::print_used_memory(std::cerr, mp_manager.used_memory());
-
-   return 1;
-  
 };
 
-
-
-// TODO-J: Sample Code End
 
 void extract(bool const with_platforms,
              fs::path const& in,
@@ -686,11 +682,6 @@ void extract(bool const with_platforms,
   if (!fs::is_directory(out)) {
     fs::create_directories(out);
   }
-  
-  //TODO-J: Remove Area Test Call
-  //std::cout << "Starting Area Test: " << "\n";
-  //std::cout << "Final Return: " << area_test() << "\n";
-  //return;
 
   auto input_file = osm_io::File{};
   auto file_size = std::size_t{0U};
@@ -738,65 +729,6 @@ void extract(bool const with_platforms,
   }
 
 
-  //TODO-J: Clean up AreaManager Test Code
-  std::cout << "Begin Area Attempt!"
-            << "\n";
-  std::cout << "Begin Area Attempt!"
-            << "\n";
-  //Create Config for Assembler.
-  const osmium::area::Assembler::config_type assembler_config;
-
-  //Create Tag Filter. currently not used on manager init.
-  //osmium::TagsFilter filter{true};
-  //filter.add_rule(true, "highway", "pedestrian");
-  //filter.add_rule(true, "type", "multipolygon");
-
-  //Create Handler that converts osm-areas to osr-areas.
-  multipoly_area_handler mpa_handler = multipoly_area_handler();
-
-  //Init Manager.
-  osmium::area::MultipolygonManager<osmium::area::Assembler> multi_poly_manager{assembler_config};
-
-  //First Pass, collect relations of interest.
-  osmium::relations::read_relations(input_file, multi_poly_manager);
-
-
-  std::cerr << "Memory after first pass:\n";
-  osmium::relations::print_used_memory(std::cerr, multi_poly_manager.used_memory());
-
-  std::cout << "Buffer-Comits: " << multi_poly_manager.buffer().committed()
-            << "\n";
-
-  //Second Pass, construct areas.
-  osmium::io::Reader reader{input_file};
-  osmium::apply(reader, multi_poly_manager.handler(
-                            [&mpa_handler](osmium::memory::Buffer&& buffer) {osmium::apply(buffer, mpa_handler);
-                            }));
-  reader.close();
-
-  std::cerr << "Memory after second pass:\n";
-  osmium::relations::print_used_memory(std::cerr, multi_poly_manager.used_memory());
-
-  std::cout << "Buffer-Comits: "  << multi_poly_manager.buffer().committed() << "\n";
-
-
-  std::cout << "End Area Attempt!"
-            << "\n";
-  std::cout << "End Area Attempt!"
-            << "\n";
-  //osmium::memory::Buffer buffer = multi_poly_manager.read();
-
-
-  // Create an assembler configuration
-  //osmium::area::MultipolygonManager::assembler_config_type assembler_config = /* your assembler configuration */;
-
-  // Create a tags filter
-  //osmium::TagsFilter filter = osmium::TagsFilter{true};
-
-  // Instantiate the MultipolygonManager
-  //osmium::area::MultipolygonManager<osmium::area::Assembler> multi_poly_manager(assembler_config, filter);
-
-
   auto elevator_nodes = hash_map<osm_node_idx_t, level_bits_t>{};
   {  // Extract streets, places, and areas.
     pt->status("Load OSM / Ways").in_high(file_size).out_bounds(15, 40);
@@ -830,6 +762,8 @@ void extract(bool const with_platforms,
     pt->update(pt->in_high_);
     reader.close();
   }
+
+  area_collection(input_file, w, rel_ways);
 
   w.r_->write(out);
   w.sync();
