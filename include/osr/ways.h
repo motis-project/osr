@@ -193,8 +193,8 @@ struct ways {
 
   void sync();
 
-
-  void generate_area_ways();
+  //Begin of Visibility Graph Methods.
+  void generate_visibility_graph_areas();
 
 
   void build_visibility_graph(uint64_t area_index, uint64_t original_id, bool id_is_from_way);
@@ -229,6 +229,11 @@ struct ways {
 
   template <typename T>
   void debug_print_matrix(vecvec<T, T> matrix, int size);
+  //End of Visibility Graph Methods.
+
+  //Begin of Voronoi Segment Graph Methods.
+  void generate_voronoi_segment_areas();
+
 
   way_idx_t::value_t n_ways() const { return way_osm_idx_.size(); }
   node_idx_t::value_t n_nodes() const { return node_to_osm_.size(); }
@@ -329,32 +334,20 @@ struct ways {
 
   multi_counter node_way_counter_;
 
-  uint64_t max_osm_way_idx_ = 0;
-  vec<osm_way_idx_t> areas_;
-  vec_map<osm_way_idx_t, uint64_t> area_indices_; 
-  vecvec<uint64_t, osm_node_idx_t, std::uint64_t> area_nodes_;
-  vecvec<uint64_t, point, std::uint64_t> area_node_positions_;
-
-  //Vector of areas. An area is either a simple way-area or one of potentially multiple areas of a Multipolygon Relation.
-  //A single area consists of one outer way and zero or more inner ways.
-  vec<pair<osm_way_idx_t, vec<osm_way_idx_t>>> area_polygons_;
-  vec<vec<vec<osm_node_idx_t>>> area_polygon_nodes_;
-  vec<vec<vec<point>>> area_polygon_node_positions_;
-
-  //New Data Structures
-  //Used for unified Format
-  vec<pair<uint64_t, pair<uint64_t, bool>>> final_final_area_vector_;
-
-  uint64_t internal_area_id_ = 0;
   
 
-  std::map<uint64_t, vec<vec<osm_node_idx_t>>> final_area_nodes_;
+  //Internal Area Data Variables and Helper Methods.
+  vec<pair<uint64_t, pair<uint64_t, bool>>> internal_area_vector_;
 
+  uint64_t max_osm_way_idx_ = 0;
 
-  std::map<osm_node_idx_t, point> final_area_node_positions_;
+  uint64_t internal_area_id_ = 0;
 
+  std::map<uint64_t, vec<vec<osm_node_idx_t>>> internal_area_nodes_;
 
-  std::map<uint64_t, osr::way_properties> final_area_properties_;
+  std::map<osm_node_idx_t, point> internal_area_node_positions_;
+
+  std::map<uint64_t, osr::way_properties> internal_area_properties_;
 
 
   vec<osm_node_idx_t> nodes_of_current_area_;
@@ -389,7 +382,6 @@ struct ways {
 
 
   vec<point> get_area_locations(uint64_t area_index);
-
 
 };
 

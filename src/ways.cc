@@ -4,6 +4,16 @@
 
 #include "cista/io.h"
 
+// Selects the area routing mode to use.
+// 0: Default Behaviour - Follows ways along the outline of an area.
+// 1: Visibility Graph -  Computes Routes between all access points of an area,
+// taking the optimal path. 
+// 2: Voronoi Segment Graph - Computes a Voronoi Segment for each area,
+// resulting in more realistic paths.
+// Only works if allow_area_routing == true in extract.cc!
+constexpr uint8_t area_routing_mode = 2;
+
+
 namespace osr {
 
 ways::ways(std::filesystem::path p, cista::mmap::protection const mode)
@@ -23,11 +33,7 @@ ways::ways(std::filesystem::path p, cista::mmap::protection const mode)
       way_names_{mm("way_names.bin")},
       way_has_conditional_access_no_{
           mm_vec<std::uint64_t>(mm("way_has_conditional_access_no"))},
-      way_conditional_access_no_{mm("way_conditional_access_no")},
-      areas_ {},
-      area_indices_{},
-      area_nodes_{},
-      area_node_positions_{} {}
+      way_conditional_access_no_{mm("way_conditional_access_no")} {}
 
 void ways::build_components() {
   auto q = hash_set<way_idx_t>{};
@@ -150,9 +156,14 @@ void ways::connect_ways() {
   auto pt = utl::get_active_progress_tracker_or_activate("osr");
 
   {  // Assign graph node ids to every node with >1 way.
+    int upper_bound = 50;
+    if constexpr (area_routing_mode > 0) {
+      upper_bound = 45;
+    }
+
     pt->status("Create graph nodes")
         .in_high(node_way_counter_.size())
-        .out_bounds(40, 50);
+        .out_bounds(40, upper_bound);
 
     auto node_idx = node_idx_t{0U};
     node_way_counter_.multi_.for_each_set_bit([&](std::uint64_t const b_idx) {
@@ -163,17 +174,35 @@ void ways::connect_ways() {
     });
     r_->node_is_restricted_.resize(to_idx(node_idx));
   }
-  std::cout << "Entering Area Ways!\n";
-  std::cout << "Entering Area Ways!\n";
-  generate_area_ways();
-  std::cout << "Exiting Area Ways!\n";
-  std::cout << "Exiting Area Ways!\n";
+  
+
+  if constexpr (area_routing_mode == 1) {
+    pt->status("Generating Visibility Graph Routing Data")
+        .in_high(internal_area_vector_.size())
+        .out_bounds(45, 60);
+    // Generate Visibility Graph-Areas
+    generate_visibility_graph_areas();
+  } else if constexpr (area_routing_mode == 2) {
+    pt->status("Generating Voronoi Segment Graph Routing Data")
+        .in_high(internal_area_vector_.size())
+        .out_bounds(45, 60);
+    //Generate Voronoi Segment Graph-Areas
+    generate_voronoi_segment_areas();
+  }
+
+  
 
   // Build edges.
   {
+
+    int lower_bound = 50;
+    if constexpr (area_routing_mode > 0) {
+      lower_bound = 60;
+    }
+
     pt->status("Connect ways")
         .in_high(way_osm_nodes_.size())
-        .out_bounds(50, 75);
+        .out_bounds(lower_bound, 75);
     auto node_ways = mm_paged_vecvec<node_idx_t, way_idx_t>{
         cista::paged<mm_vec32<way_idx_t>>{
             mm_vec32<way_idx_t>{mm("tmp_node_ways_data.bin")}},
@@ -253,16 +282,19 @@ void ways::sync() {
 }
 
 
-void ways::generate_area_ways() {
+void ways::generate_visibility_graph_areas() {
   //Generate Visibility Graph for each Area.
-  //An Area is a single Multipolygon.
-  //It may consist of exactly one outer Ring and
-  //none or multiple inner Rings.
+  //An Area consists of 1 outer ring and multiple optional inner rings.
+  auto pt = utl::get_active_progress_tracker_or_activate("osr");
+  uint64_t progress_counter = 0;
+  for (auto area: internal_area_vector_) {
 
-  for (auto area: final_final_area_vector_) {
     build_visibility_graph(area.first, area.second.first, area.second.second);
+    progress_counter++;
+    pt->update(progress_counter);
   }
 }
+
 
 void ways::build_visibility_graph(uint64_t area_index, uint64_t original_id, bool id_is_from_way) {
 
@@ -285,9 +317,10 @@ void ways::build_visibility_graph(uint64_t area_index, uint64_t original_id, boo
     distances.emplace_back(new_column);
   }
 
+  //Cache outer loop data for reuse.
   auto positions_of_outer_loop = get_area_ring_locations(get_area_outer_ring(area_index));
-  //std::cout << "AAA\n";
-  //Set adjacend distances
+
+  //Set adjacend distances for outer and inner loops.
   for (uint32_t j = 0; j < m - 1; j++) {
 
     point p0 = positions_of_outer_loop[j];
@@ -314,15 +347,14 @@ void ways::build_visibility_graph(uint64_t area_index, uint64_t original_id, boo
     }
   }
 
+  //Cache area data for reuse.
   nodes_of_current_area_ = get_area_nodes(area_index);
   positions_of_current_area_ = get_area_locations(area_index);
 
-
+  //Calculate Line-of-sight between all nodes.
   for (uint32_t i = 0; i < n; i++) {
     calc_visibility(distances, i, i + 1, n, positions_of_outer_loop, inner_loops);
   }
-
-
 
 
   vecvec<uint32_t, uint32_t> next;
@@ -339,19 +371,18 @@ void ways::build_visibility_graph(uint64_t area_index, uint64_t original_id, boo
   //Simplify vis-graph
   reduce_visibility_graph(distances, next, 0, n);
 
- 
 
   //Transfer vis-graph to routing-graph.
   extract_reduced_visibility_graph(area_index, distances, next, original_id, id_is_from_way);
-  //std::cout << "HHH\n";
 }
+
 
 void ways::calc_visibility(vecvec<double, double>& distances, uint32_t i, uint32_t start, uint32_t matrix_size, vec<point> outer_loop, vec<vec<osm_node_idx_t>> inner_loops) {
 
   uint32_t n = matrix_size;
   bool visibility = false;
 
-
+  point p0 = positions_of_current_area_[i];
   
   for (uint32_t j = start; j < n; j++) {
     if (i == j || (nodes_of_current_area_[i] == nodes_of_current_area_[j])) {
@@ -379,19 +410,12 @@ void ways::calc_visibility(vecvec<double, double>& distances, uint32_t i, uint32
 
     
     if (visibility) {
-
-      point p0 = positions_of_current_area_[i];
       point p1 = positions_of_current_area_[j];
       double d = geo::distance(p0, p1);
       distances[i][j] = d;
       distances[j][i] = d;
     }
-
-
-
   }
-
-  
 }
 
 
@@ -400,23 +424,7 @@ void ways::add_virtual_way(uint64_t area_index, uint64_t original_id, bool id_is
   max_osm_way_idx_++;
   way_osm_idx_.push_back(osm_way_idx_t{max_osm_way_idx_}); 
 
-  way_properties way_prop = final_area_properties_[area_index];
-
-  /*
-  if (id_is_from_way) {
-    std::cout << "HHH-1\n";
-    // Copy properties from way the area is based on.
-    auto opt_way = find_way((osm_way_idx_t)original_id);
-    way_idx_t way_id = *opt_way;
-    way_prop = r_->way_properties_[way_id];
-    std::cout << "HHH-2\n";
-  } else {
-    std::cout << "HHH-3\n";
-    //Copy properties from relation the area is based on.
-    //TODO-J Find way to grab relevant way props for relation.
-  }
-  */
-
+  way_properties way_prop = internal_area_properties_[area_index];
 
   vec<point> pointVec;
   
@@ -596,22 +604,22 @@ void ways::extract_reduced_visibility_graph(uint64_t area_index, vecvec<double, 
   
   //Only Create Paths from access nodes.
   vec<osm_node_idx_t> access_nodes;
-  //std::cout << "GGG-1\n";
+
   for (auto n : nodes_of_current_area_) {
     if (node_way_counter_.is_multi(to_idx(n))) {
       access_nodes.push_back(n);
     }
   }
   
-  //std::cout << "GGG-2\n";
+
   //Add Paths between all access nodes.
   for (uint32_t i = 0; i < access_nodes.size(); i++) {
     for (uint32_t j = i + 1; j < access_nodes.size(); j++) {
-      //std::cout << "GGG-3\n";
+
       vec<osm_node_idx_t> nodes_on_way = trace_visibility_graph(next, access_nodes[i], access_nodes[j]);
-      //std::cout << "GGG-4\n";
+
       add_virtual_way(area_index, original_id, id_is_from_way, nodes_on_way);
-      //std::cout << "GGG-5\n";
+
     }
   }
 
@@ -624,33 +632,17 @@ vec<osm_node_idx_t> ways::trace_visibility_graph(vecvec<uint32_t, uint32_t>& nex
   osm_node_idx_t current_node = start;
   uint32_t current_ind = osm_to_area_index(nodes_of_current_area_, current_node);
   uint32_t final_ind = osm_to_area_index(nodes_of_current_area_, end);
-  //std::cout << "GGG-3-3\n";
-
-  //std::cout << "Starting to trace visibility graph.\n";
-  //std::cout << "Start-node: " << current_node << "\n ";
-  //std::cout << "End-node: " << end << "\n ";
-  //std::cout << "Matrix-Size: " << next[0].size() << "\n";
   
-  uint32_t iter_count_debug = 0;
+
   while (current_node != end) {
-      //TODO-J: Delte Debug!
-    auto debug_prev_index = current_ind;
+
     current_ind = next[current_ind][final_ind];
-    //std::cout << "New current Index is " << current_ind << "\n";
-    if (current_ind == 4294967295) {
-      std::cout << "ATTENTION: UNSET PART OF NEXT MATRIX WAS READ!!!\n";
-      std::cout << "ATTENTION: UNSET PART OF NEXT MATRIX WAS READ!!!\n";
-      std::cout << "ATTENTION: UNSET PART OF NEXT MATRIX WAS READ!!!\n";
-      std::cout << "Previous Ind was " << debug_prev_index << " and goal was "
-                << final_ind << "\n";
-    }
+
     current_node = nodes_of_current_area_[current_ind];
-    //std::cout << "New current Node is: " << current_node << "\n ";
-    //std::cout << "Adding current Node to the path.\n ";
+
     path.push_back(current_node);
-    iter_count_debug++;
   }
-  //std::cout << "GGG-3-4\n";
+
   return path;
 }
 
@@ -683,6 +675,15 @@ void ways::debug_print_matrix(vecvec<T, T> matrix, int size) {
 
 }
 
+void ways::generate_voronoi_segment_areas() {
+
+
+    //Iterate over each area, build voronoi diagram from area data (edges) and extract voronoi vertices and edges to osr.
+
+    //As Input Type, use uint32_t via point.asLocation().
+
+}
+
 std::optional<std::string_view> ways::get_access_restriction(
     way_idx_t const way) const {
   if (!way_has_conditional_access_no_.test(way)) {
@@ -700,7 +701,7 @@ std::optional<std::string_view> ways::get_access_restriction(
 
 uint32_t ways::get_area_number_of_nodes(uint64_t area_index) { 
     
-  auto all_rings = final_area_nodes_[area_index];
+  auto all_rings = internal_area_nodes_[area_index];
 
   uint32_t loop_node_counter = 0;
 
@@ -712,7 +713,7 @@ uint32_t ways::get_area_number_of_nodes(uint64_t area_index) {
 
 uint32_t ways::get_area_number_of_outer_nodes(uint64_t area_index) { 
 
-  return final_area_nodes_[area_index][0].size();
+  return internal_area_nodes_[area_index][0].size();
 }
 
 uint32_t ways::get_area_number_of_inner_nodes(uint64_t area_index) {
@@ -726,7 +727,7 @@ uint32_t ways::get_area_number_of_inner_nodes(uint64_t area_index) {
 
 uint32_t ways::get_area_number_of_rings(uint64_t area_index) { 
 
-    return final_area_nodes_[area_index].size();
+    return internal_area_nodes_[area_index].size();
 }
 
 uint32_t ways::get_area_number_of_inner_rings(uint64_t area_index) {
@@ -736,16 +737,16 @@ uint32_t ways::get_area_number_of_inner_rings(uint64_t area_index) {
 
 vec<osm_node_idx_t> ways::get_area_outer_ring(uint64_t area_index) {
 
-  return final_area_nodes_[area_index][0];
+  return internal_area_nodes_[area_index][0];
 }
 
 vec<vec<osm_node_idx_t>> ways::get_area_inner_rings(uint64_t area_index) {
 
   vec<vec<osm_node_idx_t>> inner_loops;
 
-  for (uint32_t i = 1; i < final_area_nodes_[area_index].size(); i++) {
+  for (uint32_t i = 1; i < internal_area_nodes_[area_index].size(); i++) {
     vec<osm_node_idx_t> current_inner_loop;
-    inner_loops.emplace_back(final_area_nodes_[area_index][i]);
+    inner_loops.emplace_back(internal_area_nodes_[area_index][i]);
   }
 
   return inner_loops;
@@ -755,7 +756,7 @@ vec<osm_node_idx_t> ways::get_area_nodes(uint64_t area_index) {
 
   vec<osm_node_idx_t> nodes_of_area;
 
-  for (auto ring : final_area_nodes_[area_index]) {
+  for (auto ring : internal_area_nodes_[area_index]) {
     for (uint32_t i = 0; i < ring.size() - 1; i++) {
       nodes_of_area.emplace_back(ring[i]);
     }
@@ -770,7 +771,7 @@ vec<point> ways::get_area_ring_locations(vec<osm_node_idx_t> nodes_of_ring) {
   vec<point> ring_locations;
 
   for (auto n : nodes_of_ring) {
-    ring_locations.push_back(final_area_node_positions_[n]);
+    ring_locations.push_back(internal_area_node_positions_[n]);
   }
   /*
   for (uint32_t i = 0; i < nodes_of_ring.size()-1; i++) {
@@ -785,7 +786,7 @@ vec<point> ways::get_area_locations(uint64_t area_index) {
 
   vec<point> locations;
   
-  for (vec<osm_node_idx_t> r : final_area_nodes_[area_index]) {
+  for (vec<osm_node_idx_t> r : internal_area_nodes_[area_index]) {
     auto node_locations = get_area_ring_locations(r);
     for (uint32_t i = 0; i < r.size() - 1; i++) {
       locations.emplace_back(node_locations[i]);

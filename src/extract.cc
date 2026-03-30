@@ -36,6 +36,12 @@
 #include "osr/preprocessing/elevation/provider.h"
 #include "osr/ways.h"
 
+// Selects if area routing should be computed.
+// The specific type of area routing can be selected in ways.cc
+// by setting area_routing_mode to a value between 0 and 2.
+// If allow_area_routing is false, the routing mode is ignored
+// and no multipolygons are gathered.
+constexpr bool allow_area_routing = true;
 
 //Multipolygon Location Index Type
 using index_type = osmium::index::map::FlexMem<osmium::unsigned_object_id_type, osmium::Location>;
@@ -588,7 +594,7 @@ class multipoly_area_handler : public osmium::handler::Handler {
 
       //Register outer rings nodes and their positions.
       outer_ring_nodes_vector.push_back((osm_node_idx_t)node.positive_ref());
-      w_.final_area_node_positions_.insert({(osm_node_idx_t)node.positive_ref(), point::from_location(node.location())});
+      w_.internal_area_node_positions_.insert({(osm_node_idx_t)node.positive_ref(), point::from_location(node.location())});
     }
     // Store outer ring as first entry in area_node_vector.
     area_nodes_vector.emplace_back(outer_ring_nodes_vector);
@@ -601,7 +607,7 @@ class multipoly_area_handler : public osmium::handler::Handler {
       for (auto& node : inner_ring) {
         
         inner_ring_nodes_vector.push_back((osm_node_idx_t)node.positive_ref());
-        w_.final_area_node_positions_.insert({(osm_node_idx_t)node.positive_ref(), point::from_location(node.location())});
+        w_.internal_area_node_positions_.insert({(osm_node_idx_t)node.positive_ref(), point::from_location(node.location())});
       }
       // Store inner ring as next entry in area_node_vector.
       area_nodes_vector.emplace_back(inner_ring_nodes_vector);
@@ -611,10 +617,10 @@ class multipoly_area_handler : public osmium::handler::Handler {
     uint64_t internal_area_id = w_.internal_area_id_;
     w_.internal_area_id_ = w_.internal_area_id_ + 1;
     pair<uint64_t, pair<uint64_t, bool>> internal_area_entry = {internal_area_id, {original_id, based_on_way}};
-    w_.final_final_area_vector_.emplace_back(internal_area_entry);
+    w_.internal_area_vector_.emplace_back(internal_area_entry);
 
     //Register areas ring node IDs via internal area ID.
-    w_.final_area_nodes_.insert({internal_area_id, area_nodes_vector});
+    w_.internal_area_nodes_.insert({internal_area_id, area_nodes_vector});
 
     return internal_area_id;
   }
@@ -632,7 +638,7 @@ class multipoly_area_handler : public osmium::handler::Handler {
       // Register area properties.
       auto t = tags{a};
       osr::way_properties p = get_way_properties(t);
-      w_.final_area_properties_.insert({internal_area_id, p});
+      w_.internal_area_properties_.insert({internal_area_id, p});
     }
   }
 
@@ -763,7 +769,11 @@ void extract(bool const with_platforms,
     reader.close();
   }
 
-  area_collection(input_file, w, rel_ways);
+  //Gather Multipolygons
+  if constexpr (allow_area_routing) {
+    pt->status("Collecting Area Multipolygons");
+    area_collection(input_file, w, rel_ways);
+  }
 
   w.r_->write(out);
   w.sync();
