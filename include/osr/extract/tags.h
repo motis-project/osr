@@ -592,7 +592,15 @@ struct railway_profile {
 
   static bool default_access(tags const& t, osm_obj_type const type) {
     if (type == osm_obj_type::kWay) {
-      return possible_railway(t);
+      if (!possible_railway(t)) {
+        return false;
+      }
+      switch (cista::hash(t.service_)) {
+        case cista::hash("yard"):
+        case cista::hash("spur"): return false;
+        default: break;
+      }
+      return true;
     } else {
       return true;
     }
