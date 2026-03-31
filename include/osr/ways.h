@@ -30,6 +30,22 @@
 #include "osr/types.h"
 #include "osr/util/multi_counter.h"
 #include <osmium/osm/area.hpp>
+#include <boost/polygon/voronoi_diagram.hpp>
+#include "boost/polygon/voronoi.hpp"
+
+
+struct Point {
+  int a;
+  int b;
+  Point(int x, int y) : a(x), b(y) {}
+};
+
+struct Segment {
+  Point p0;
+  Point p1;
+  Segment(int x1, int y1, int x2, int y2) : p0(x1, y1), p1(x2, y2) {}
+  Segment(Point p0_, Point p1_) : p0{p0_}, p1{p1_} {}
+};
 
 namespace osr {
 
@@ -231,9 +247,87 @@ struct ways {
   void debug_print_matrix(vecvec<T, T> matrix, int size);
   //End of Visibility Graph Methods.
 
+
+
+
   //Begin of Voronoi Segment Graph Methods.
+
+
   void generate_voronoi_segment_areas();
 
+  void build_voronoi_graph(uint64_t area_index, uint64_t original_id, bool id_is_from_way);
+
+  std::vector<Segment> extract_area_segments(
+      uint64_t area_index,
+      vec<osm_node_idx_t> outer_nodes,
+      vec<vec<osm_node_idx_t>> inner_rings);
+
+
+  //Removes all edges that link to non-access nodes.
+  std::vector<boost::polygon::voronoi_edge<double>> remove_irrelevant_edges(
+      std::vector<boost::polygon::voronoi_edge<double>> edges,
+      std::set<osm_node_idx_t> irrelevant_nodes);
+
+
+  //Finds nodes in the voronoi diagram that do not match any osm nodes.
+  std::vector<osr::point> find_additional_nodes(
+      std::vector<boost::polygon::voronoi_edge<double>> edges,
+      vec<osm_node_idx_t> all_area_nodes,
+      vec<osm_node_idx_t> outer_ring,
+      vec<vec<osm_node_idx_t>> inner_rings);
+
+
+  //Expects start-end duplicate.
+  void area_ring_to_segments(std::vector<Segment>& segments, vec<osm_node_idx_t> ring);
+
+  std::vector<boost::polygon::voronoi_edge<double>> get_relevant_voronoi_edges(
+      std::vector<boost::polygon::voronoi_edge<double>> all_edges,
+      uint64_t area_index);
+
+  osr::point voronoi_position_to_osr_position(double x, double y);
+
+
+  bool does_voronoi_vertex_match_node(boost::polygon::voronoi_vertex<double> *vert, osm_node_idx_t node);
+
+
+  void add_virtual_voronoi_nodes(uint64_t area_index,
+                                 uint64_t original_id,
+                                 bool id_is_from_way,
+                                 vec<osm_node_idx_t>& voronoi_nodes,
+                                 std::vector<osr::point> additional_Locations);
+
+
+  bool voronoi_dijkstra(std::vector<osm_node_idx_t> graph_nodes,
+      std::map<osm_node_idx_t, uint32_t> graph_node_index,
+      std::vector<pair<double, pair<osm_node_idx_t, osm_node_idx_t>>> edges,
+                osm_node_idx_t source,
+      osm_node_idx_t target,
+      std::vector<osm_node_idx_t>& path);
+
+
+  std::vector<pair<double, pair<osm_node_idx_t, osm_node_idx_t>>>
+  voronoi_build_edges(
+      std::vector<boost::polygon::voronoi_edge<double>> voronoi_edges,
+      std::vector<osm_node_idx_t> graph_nodes);
+
+  double voronoi_dijkstra_get_distance(
+      osm_node_idx_t from,
+      osm_node_idx_t to,
+      std::vector<pair<double, pair<osm_node_idx_t, osm_node_idx_t>>>
+          connected_edges);
+
+
+  std::vector<pair<double, pair<osm_node_idx_t, osm_node_idx_t>>> get_connected_edges(
+          osm_node_idx_t from,
+          std::vector<pair<double, pair<osm_node_idx_t, osm_node_idx_t>>>
+              edges);
+
+
+  osm_node_idx_t get_closest_neighbor(std::set<osm_node_idx_t> Q,
+                                      std::vector<double> dist,
+      std::map<osm_node_idx_t, uint32_t> graph_node_index);
+
+  //End of Voronoi Segment Graph Methods.
 
   way_idx_t::value_t n_ways() const { return way_osm_idx_.size(); }
   node_idx_t::value_t n_nodes() const { return node_to_osm_.size(); }
@@ -340,6 +434,7 @@ struct ways {
   vec<pair<uint64_t, pair<uint64_t, bool>>> internal_area_vector_;
 
   uint64_t max_osm_way_idx_ = 0;
+  uint64_t max_osm_node_idx_ = 0;
 
   uint64_t internal_area_id_ = 0;
 
@@ -368,13 +463,13 @@ struct ways {
 
   uint32_t get_area_number_of_inner_rings(uint64_t area_index);
 
-
+  // Start-End duplicate!
   vec<osm_node_idx_t> get_area_outer_ring(uint64_t area_index);
 
-
+  // Start-End duplicate!
   vec<vec<osm_node_idx_t>> get_area_inner_rings(uint64_t area_index);
 
-
+  // No start-end duplicate!
   vec<osm_node_idx_t> get_area_nodes(uint64_t area_index);
 
 

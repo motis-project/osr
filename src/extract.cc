@@ -177,6 +177,26 @@ std::pair<node_properties, level_bits_t> get_node_properties(tags const& t) {
   return {p, t.level_bits_};
 }
 
+
+struct node_counting_handler : public osm::handler::Handler {
+  
+
+  node_counting_handler(ways& w) : w_{w} {}
+      
+
+  void node(osm::Node const& n) {
+    
+    // Track highest Node ID to avoid conflicts when adding virtual area-routing
+    // nodes later.
+    if (uint64_t{n.positive_id()} > w_.max_osm_node_idx_) {
+      w_.max_osm_node_idx_ = uint64_t{n.positive_id()};
+    }
+
+  } 
+  ways& w_;
+};
+
+
 struct way_handler : public osm::handler::Handler {
   using is_transparent = void;
 
@@ -724,11 +744,13 @@ void extract(bool const with_platforms,
 
     auto inaccessible_handler = mark_inaccessible_handler{pl != nullptr, w};
     auto rel_ways_h = rel_ways_handler{pl.get(), rel_ways};
+    auto node_counting = node_counting_handler{w};
     auto reader = osm_io::Reader{input_file, osm_eb::node | osm_eb::relation,
                                  osmium::io::read_meta::no};
     while (auto buffer = reader.read()) {
       pt->update(reader.offset());
-      osm::apply(buffer, node_idx_builder, inaccessible_handler, rel_ways_h);
+      osm::apply(buffer, node_idx_builder, inaccessible_handler, rel_ways_h,
+                 node_counting);
     }
     reader.close();
     node_idx_builder.finish();

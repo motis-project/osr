@@ -1,18 +1,65 @@
 #include "osr/ways.h"
 
+
 #include "utl/parallel_for.h"
 
 #include "cista/io.h"
+
+
+#include "boost/polygon/voronoi.hpp"
+using namespace boost::polygon;
+using boost::polygon::voronoi_builder;
+using boost::polygon::voronoi_diagram;
+
 
 // Selects the area routing mode to use.
 // 0: Default Behaviour - Follows ways along the outline of an area.
 // 1: Visibility Graph -  Computes Routes between all access points of an area,
 // taking the optimal path. 
 // 2: Voronoi Segment Graph - Computes a Voronoi Segment for each area,
-// resulting in more realistic paths.
+// resulting in more realistic paths. (only 90% complete- Polylines have to be computed and inserted via method add_virtual_way().
 // Only works if allow_area_routing == true in extract.cc!
-constexpr uint8_t area_routing_mode = 2;
+constexpr uint8_t area_routing_mode = 0;
 
+
+//Voronoi Structures Begin
+
+
+
+namespace boost {
+namespace polygon {
+
+template <>
+struct geometry_concept<Point> {
+  typedef point_concept type;
+};
+
+template <>
+struct point_traits<Point> {
+  typedef int coordinate_type;
+
+  static inline coordinate_type get(const Point& point, orientation_2d orient) {
+    return (orient == HORIZONTAL) ? point.a : point.b;
+  }
+};
+
+template <>
+struct geometry_concept<Segment> {
+  typedef segment_concept type;
+};
+
+template <>
+struct segment_traits<Segment> {
+  typedef int coordinate_type;
+  typedef Point point_type;
+
+  static inline point_type get(const Segment& segment, direction_1d dir) {
+    return dir.to_int() ? segment.p1 : segment.p0;
+  }
+};
+} 
+} 
+// Voronoi Structures End
 
 namespace osr {
 
@@ -156,7 +203,7 @@ void ways::connect_ways() {
   auto pt = utl::get_active_progress_tracker_or_activate("osr");
 
   {  // Assign graph node ids to every node with >1 way.
-    int upper_bound = 50;
+    float upper_bound = 50;
     if constexpr (area_routing_mode > 0) {
       upper_bound = 45;
     }
@@ -195,7 +242,7 @@ void ways::connect_ways() {
   // Build edges.
   {
 
-    int lower_bound = 50;
+    float lower_bound = 50;
     if constexpr (area_routing_mode > 0) {
       lower_bound = 60;
     }
@@ -427,21 +474,27 @@ void ways::add_virtual_way(uint64_t area_index, uint64_t original_id, bool id_is
   way_properties way_prop = internal_area_properties_[area_index];
 
   vec<point> pointVec;
-  
   uint32_t next_index = 0;
   for (osm_node_idx_t n : nodes_on_way) {
+
     for (uint32_t i = 0; i < nodes_of_current_area_.size(); i++) {
+
       if (nodes_of_current_area_[i] == n) {
+
         next_index = i;
         break;
       }
     }
-    pointVec.push_back(positions_of_current_area_[next_index]);
-  }
 
+    pointVec.push_back(positions_of_current_area_[next_index]);
+
+  }
   way_polylines_.emplace_back(pointVec);
+
   way_osm_nodes_.emplace_back(nodes_on_way);
+
   r_->way_properties_.emplace_back(way_prop);
+
 }
 
 
@@ -678,11 +731,597 @@ void ways::debug_print_matrix(vecvec<T, T> matrix, int size) {
 void ways::generate_voronoi_segment_areas() {
 
 
-    //Iterate over each area, build voronoi diagram from area data (edges) and extract voronoi vertices and edges to osr.
+    auto pt = utl::get_active_progress_tracker_or_activate("osr");
+    uint64_t progress_counter = 0;
+    for (auto area : internal_area_vector_) {
 
-    //As Input Type, use uint32_t via point.asLocation().
+      
+        build_voronoi_graph(area.first, area.second.first, area.second.second);
+        progress_counter++;
+        pt->update(progress_counter);
+
+    }
 
 }
+
+void ways::build_voronoi_graph(uint64_t area_index,
+                               uint64_t original_id,
+                               bool id_is_from_way) {
+
+
+
+
+  vec<osm_node_idx_t> relevant_outer_nodes = get_area_outer_ring(area_index);
+  vec<vec<osm_node_idx_t>> relevant_inner_ring_nodes =
+      get_area_inner_rings(area_index);
+
+  // Construct complete list of relevant nodes for area by ring. Start-End
+  // Duplicate for each ring.
+  vec<vec<osm_node_idx_t>> relevant_nodes_by_ring;
+  relevant_nodes_by_ring.push_back(relevant_outer_nodes);
+  for (auto inner_ring : relevant_inner_ring_nodes) {
+    relevant_nodes_by_ring.push_back(inner_ring);
+  }
+
+  // Construct flat vector that contains each node only once and does not
+  // separate by ring.
+  vec<osm_node_idx_t> relevant_unique_nodes_of_area;
+  for (auto ring : relevant_nodes_by_ring) {
+    for (uint32_t i = 0; i < ring.size() - 1; i++) {
+      relevant_unique_nodes_of_area.push_back(ring[i]);
+    }
+  }
+
+  // Generates Input segments for voronoi diagram from rings.
+  std::vector<Segment> area_segments = extract_area_segments(
+      area_index, relevant_outer_nodes, relevant_inner_ring_nodes);
+
+  // Generates Voronoi Data
+  voronoi_diagram<double> vd;
+  construct_voronoi(area_segments.begin(), area_segments.end(), &vd);
+
+
+
+  // Filters out infinite edges and those inside of inner rings.
+  std::vector<boost::polygon::voronoi_edge<double>> vor_edg =
+      get_relevant_voronoi_edges(vd.edges(), area_index);
+
+  // Get all Access Nodes of area.
+  std::set<osm_node_idx_t> access_nodes;
+  std::set<osm_node_idx_t> irrelevant_nodes;
+  for (uint32_t i = 0; i < relevant_unique_nodes_of_area.size(); i++) {
+    bool is_access =
+        node_way_counter_.multi_[(uint64_t)relevant_unique_nodes_of_area[i]];
+    if (is_access) {
+      access_nodes.insert(relevant_unique_nodes_of_area[i]);
+    } else {
+      irrelevant_nodes.insert(relevant_unique_nodes_of_area[i]);
+    }
+  }
+
+
+
+  // Remove all edges that connect to irrelevant nodes.
+  vor_edg = remove_irrelevant_edges(vor_edg, irrelevant_nodes);
+
+
+  vec<osm_node_idx_t> access_node_vector(access_nodes.begin(),
+                                         access_nodes.end());
+
+  // Find all valid node locations created by the voronoi diagram
+  std::vector<osr::point> additional_Locations =
+      find_additional_nodes(vor_edg, access_node_vector, relevant_outer_nodes,
+                            relevant_inner_ring_nodes);
+
+  vec<osm_node_idx_t> voronoi_nodes;
+  add_virtual_voronoi_nodes(area_index, original_id, id_is_from_way,
+                            voronoi_nodes, additional_Locations);
+
+  nodes_of_current_area_ = get_area_nodes(area_index);
+  for (auto n : voronoi_nodes) {
+    nodes_of_current_area_.push_back(n);
+  }
+  positions_of_current_area_ = get_area_locations(area_index);
+  for (auto n : voronoi_nodes) {
+    positions_of_current_area_.push_back(internal_area_node_positions_[n]);
+  }
+
+  // BUILD CUSTOM GRAPH
+
+  // Vertices
+  // Contains all Nodes in der Graph
+  std::vector<osm_node_idx_t> graph_nodes;
+  // Maps a nodes ID into an index in graph_nodes offset by 1
+  std::map<osm_node_idx_t, uint32_t> graph_node_index;
+  uint32_t index_counter = 0;
+  for (auto n : access_nodes) {
+    graph_nodes.push_back(n);
+    graph_node_index.insert({n, index_counter});
+    index_counter++;
+  }
+  for (auto n : voronoi_nodes) {
+    graph_nodes.push_back(n);
+    graph_node_index.insert({n, index_counter});
+    index_counter++;
+  }
+
+  std::vector<pair<double, pair<osm_node_idx_t, osm_node_idx_t>>> edges =
+      voronoi_build_edges(vor_edg, graph_nodes);
+
+
+  //TODO: Get Pathfinding working on the graph and compute the poly-lines between each of the access points of the area.
+  //Insert dijkstra paths as polylines via method add_virtual_way().
+
+  //Disabled Test- Path not correct. Out of Time.
+  //std::vector<osm_node_idx_t> test_path;
+
+  //voronoi_dijkstra(graph_nodes, graph_node_index, edges, access_node_vector[2], access_node_vector[4], test_path);
+
+}
+
+std::vector<Segment> ways::extract_area_segments(
+    uint64_t area_index,
+    vec<osm_node_idx_t> outer_nodes,
+    vec<vec<osm_node_idx_t>> inner_rings) {
+
+    std::vector<Segment> segments;
+
+    
+    area_ring_to_segments(segments, outer_nodes);
+
+    for (vec<osm_node_idx_t> inner_ring : inner_rings) {
+      area_ring_to_segments(segments, inner_ring);
+    }
+    
+    return segments;
+}
+
+
+
+std::vector<boost::polygon::voronoi_edge<double>> ways::remove_irrelevant_edges(
+    std::vector<boost::polygon::voronoi_edge<double>> edges,
+    std::set<osm_node_idx_t> irrelevant_nodes) {
+
+    std::vector<boost::polygon::voronoi_edge<double>> relevant_edges;
+
+    //Check for each edge if vert0 or vert1 match an irrelevant Node.
+    //If yes, discard edge.
+
+    for (auto e : edges) {
+        
+      bool matched_irrelevant = false;
+      std::set<osm_node_idx_t>::iterator itr;
+      for (itr = irrelevant_nodes.begin(); itr != irrelevant_nodes.end(); itr++) {
+        
+        if (does_voronoi_vertex_match_node(e.vertex0(), *itr)) {
+          matched_irrelevant = true;
+          break;
+        } else if (does_voronoi_vertex_match_node(e.vertex1(), *itr)) {
+          matched_irrelevant = true;
+          break;
+        }
+      }
+
+      if (!matched_irrelevant) {
+        relevant_edges.push_back(e);
+      }
+    }
+
+
+  return relevant_edges;
+}
+
+
+
+std::vector<osr::point> ways::find_additional_nodes(
+    std::vector<boost::polygon::voronoi_edge<double>> edges,
+    vec<osm_node_idx_t> access_area_nodes,
+    vec<osm_node_idx_t> outer_ring,
+    vec<vec<osm_node_idx_t>> inner_rings) {
+
+    std::vector<osr::point> additional_Locations;
+
+    //All locations used by edges must now either be access nodes or new locations used in the voronoi diagram.
+
+    //Go over all edges and collect all locations, that have not already been collected and that do not match any node of the area.
+    for (voronoi_edge<double> e : edges) {
+      
+      //Does vert0 match any access point?
+      bool vert0_is_new = true;
+      for (auto n : access_area_nodes) {
+        if (does_voronoi_vertex_match_node(e.vertex0(), n)) {
+          vert0_is_new = false;
+          break;
+        }
+      }
+
+      // Does vert1 match any access point?
+      bool vert1_is_new = true;
+      for (auto n : access_area_nodes) {
+        if (does_voronoi_vertex_match_node(e.vertex1(), n)) {
+          vert1_is_new = false;
+          break;
+        }
+      }
+
+      //Store those points that did not match any access point.
+      if (vert0_is_new) {
+        additional_Locations.push_back(voronoi_position_to_osr_position(e.vertex0()->x(), e.vertex0()->y()));
+      }
+
+      if (vert1_is_new) {
+        additional_Locations.push_back(voronoi_position_to_osr_position(e.vertex1()->x(), e.vertex1()->y()));
+      }
+      
+
+    }
+
+
+
+    //For each of them, check if they lie within the outer ring but not in any inner ring.
+    std::vector<osr::point> valid_additional_Locations;
+    auto outer_locations = get_area_ring_locations(outer_ring);
+    for (osr::point p : additional_Locations) {
+      bool valid_location = false;
+      //Check Point Candidate against outer Ring.
+      if (!is_point_in_polygon(p, outer_locations)) {
+        continue;
+      }
+      valid_location = true;
+      // Check Point Candidate against each inner Ring.
+      for (auto inner_ring : inner_rings) {
+        auto inner_locations = get_area_ring_locations(inner_ring);
+        if (is_point_in_polygon(p, inner_locations)) {
+          valid_location = false;
+          break;
+        }
+      }
+
+      if (!valid_location) {
+        continue;
+      }
+
+      //Location was inside the outer and outside of all inner rings -> Valid.
+      valid_additional_Locations.push_back(p);
+    }
+
+  //Then return these as Points.
+  return valid_additional_Locations;
+}
+
+
+
+void ways::area_ring_to_segments(std::vector<Segment>& segments, vec<osm_node_idx_t> ring) {
+
+  auto nodes = ring;
+
+  osm_node_idx_t node_id0 = nodes[0];
+  osr::point location0 = internal_area_node_positions_[node_id0];
+  auto x0 = location0.as_location().x();
+  auto y0 = location0.as_location().y();
+  Point prev_point = Point(x0, y0);
+
+    for (uint32_t i = 1; i < nodes.size(); i++) {
+    //std::cout << "Node " << i << " is " << nodes[i] << "\n";
+    osm_node_idx_t node_id1 = nodes[i];
+    osr::point location1 = internal_area_node_positions_[node_id1];
+    int x1 = location1.as_location().x();
+    int y1 = location1.as_location().y();
+    Point p1 = Point(x1, y1);
+
+    Segment seg = Segment(prev_point, p1);
+
+    segments.push_back(seg);
+
+    prev_point = p1;
+  }
+
+}
+
+
+std::vector<boost::polygon::voronoi_edge<double>> ways::get_relevant_voronoi_edges(std::vector<boost::polygon::voronoi_edge<double>> all_edges, uint64_t area_index) {
+
+
+  std::cout << "We have " << all_edges.size() << " initial edges.\n";
+
+  //We are only interested in those edges, that are finite.
+  std::vector<voronoi_edge<double>> finite_edges;
+  for (voronoi_edge<double> e : all_edges) {
+    if (e.is_finite() && e.is_primary()) {
+      finite_edges.push_back(e);
+    }
+  }
+
+  std::cout << finite_edges.size() << " of these are finite and primary.\n";
+
+  //We do not want double edges, filter out (b, a) for each (a, b)
+  std::vector<voronoi_edge<double>> unique_edges;
+  std::vector<voronoi_edge<double>*> duplicate_edges;
+  for (auto edge : finite_edges) {
+  
+    //Check if edge is duplicate itself->continue with next
+    bool is_unique = true;
+    for (voronoi_edge<double>* dup : duplicate_edges) {
+      if (dup->cell() == edge.twin()->cell()) {
+        if (dup == edge.twin()) {
+          is_unique = false;
+          break;
+        }
+      }
+    }
+
+    if (!is_unique) {
+      continue;
+    }
+
+    //Mark edge as unique and remember self-pointer as duplicate.
+    unique_edges.push_back(edge);
+    duplicate_edges.push_back(edge.twin()->twin());
+  }
+
+
+  std::cout << "After removing duplicate twins, we still have " << unique_edges.size() << " unique edges.\n";
+  
+
+  //We ignore all edges that are inside an inner ring.
+  std::vector<voronoi_edge<double>> relevant_edges;
+  vec<vec<osm_node_idx_t>> inner_rings = get_area_inner_rings(area_index);
+
+  for (voronoi_edge<double> edge : unique_edges) {
+    bool is_valid = true;
+    auto vert_0 = edge.vertex0();
+    auto vert_1 = edge.vertex1();
+    double x0 = vert_0->x();
+    double y0 = vert_0->y();
+    double x1 = vert_1->x();
+    double y1 = vert_1->y();
+
+    osr::point a = voronoi_position_to_osr_position(x0, y0);
+    osr::point b = voronoi_position_to_osr_position(x1, y1);
+
+    point sample_position;
+    sample_position.lat_ = (a.lat_ + b.lat_) / 2;
+    sample_position.lng_ = (a.lng_ + b.lng_) / 2;
+
+    //Check if edge midpoint is outside of all inner rings.
+    for (auto r : inner_rings) {
+      auto ring_locations = get_area_ring_locations(r);
+      if (is_point_in_polygon(sample_position, ring_locations)) {
+        is_valid = false;
+        break;
+      }
+    }
+
+    if (is_valid) {
+      relevant_edges.push_back(edge);
+    }
+  }
+
+  std::cout << relevant_edges.size() << " of those were outside the inner rings.\n";
+
+  return relevant_edges;
+}
+
+
+osr::point ways::voronoi_position_to_osr_position(double x, double y) {
+
+  double x_coord = x;
+  double y_coord = y;
+
+  // Divide by osmium::Location precision
+  double manual_scaled_x = x_coord / 10000000;
+  double manual_scaled_y = y_coord / 10000000;
+
+  geo::latlng lalo = geo::latlng(manual_scaled_y, manual_scaled_x);
+
+  osr::point p = osr::point().from_latlng(lalo);
+
+  return p;
+}
+
+
+bool ways::does_voronoi_vertex_match_node(boost::polygon::voronoi_vertex<double> *vert, osm_node_idx_t node) {
+  
+  auto vert_loc = voronoi_position_to_osr_position(vert->x(), vert->y()).as_location();
+  
+  return (vert_loc == internal_area_node_positions_[node].as_location());
+}
+
+
+void ways::add_virtual_voronoi_nodes(uint64_t area_index,
+                                     uint64_t original_id,
+                                     bool id_is_from_way,
+    vec<osm_node_idx_t>& voronoi_nodes,
+    std::vector<osr::point> additional_Locations) {
+
+
+
+
+
+
+    for (osr::point p : additional_Locations) {
+    
+      //Create new ID for node
+      max_osm_node_idx_ = max_osm_node_idx_ + 1;
+      osm_node_idx_t new_node_id = (osm_node_idx_t)max_osm_node_idx_;
+
+      //Store information for remaining area processing
+      voronoi_nodes.push_back(new_node_id);
+      internal_area_node_positions_.insert({new_node_id, p});
+
+    }
+}
+
+bool ways::voronoi_dijkstra(std::vector<osm_node_idx_t> graph_nodes,
+    std::map<osm_node_idx_t, uint32_t> graph_node_index,
+    std::vector<pair<double, pair<osm_node_idx_t, osm_node_idx_t>>> edges,
+                            osm_node_idx_t source,
+    osm_node_idx_t target,
+    std::vector<osm_node_idx_t>& path) {
+
+  //Current node
+  osm_node_idx_t u;
+  // Init
+
+  std::vector<double> dist;
+  std::set<osm_node_idx_t> Q;
+
+  for (auto n : graph_nodes) {
+    dist.push_back(INFINITY);
+    path.push_back((osm_node_idx_t)0);
+    Q.insert(n);
+  }
+
+  dist[graph_node_index[source]] = 0;
+  //End of Init
+
+
+  while (!Q.empty()) {
+    //Step to next Node
+
+    u = get_closest_neighbor(Q, dist, graph_node_index);
+
+    if (u == target) {
+      return true;
+    }
+
+    Q.erase(u);
+
+
+
+    double alt;
+    std::vector<pair<double, pair<osm_node_idx_t, osm_node_idx_t>>> connected_edges = get_connected_edges(u, edges);
+
+
+    for (auto e : connected_edges) {
+      alt = dist[graph_node_index[e.second.first]] + e.first;
+      if (alt < dist[graph_node_index[e.second.second]]) {
+        dist[graph_node_index[e.second.second]] = alt;
+        path[graph_node_index[e.second.second]] = u;
+
+      } 
+    }
+  }
+
+  return (u == target);
+
+}
+
+
+
+std::vector<pair<double, pair<osm_node_idx_t, osm_node_idx_t>>> ways::voronoi_build_edges(std::vector<boost::polygon::voronoi_edge<double>> voronoi_edges, std::vector<osm_node_idx_t> graph_nodes) {
+
+    std::vector<pair<double, pair<osm_node_idx_t, osm_node_idx_t>>> edges;
+    //For each vor_kannte, finde node for vert0 und vert1
+    for (auto vor_edge : voronoi_edges) {
+      
+      bool found_vert_0_node = false;
+      bool found_vert_1_node = false;
+      osm_node_idx_t node0;
+      osm_node_idx_t node1;
+
+      //Find Node for verts
+      auto vert0 = vor_edge.vertex0();
+      auto vert1 = vor_edge.vertex1();
+      for (osm_node_idx_t n : graph_nodes) {
+          
+        if (!found_vert_0_node && (!found_vert_1_node || (found_vert_1_node && node1 != n))) {
+          if (does_voronoi_vertex_match_node(vert0, n)) {
+
+            found_vert_0_node = true;
+            node0 = n;
+          }
+        }
+        if (!found_vert_1_node && (!found_vert_0_node || (found_vert_0_node && node0 != n))) {
+          if (does_voronoi_vertex_match_node(vert1, n)) {
+
+            found_vert_1_node = true;
+            node1 = n;
+          }
+        }
+
+        if (found_vert_0_node && found_vert_1_node) {
+          break;
+        }
+
+      }
+
+      if (found_vert_0_node && found_vert_1_node && node0 != node1) {
+        
+        double distance = geo::distance(internal_area_node_positions_[node0].as_latlng(), internal_area_node_positions_[node1].as_latlng());
+
+        if (distance <= 0.00001) {
+          continue;
+        }
+
+        pair<double, pair<osm_node_idx_t, osm_node_idx_t>> e0 = {
+            distance, {node0, node1}};
+        pair<double, pair<osm_node_idx_t, osm_node_idx_t>> e1 = {
+            distance, {node1, node0}};
+
+        edges.push_back(e0);
+        edges.push_back(e1);
+      }
+    }
+    
+    return edges;
+
+
+
+  return std::vector<pair<double, pair<osm_node_idx_t, osm_node_idx_t>>>();
+}
+
+double ways::voronoi_dijkstra_get_distance(
+    osm_node_idx_t from,
+    osm_node_idx_t to,
+    std::vector<pair<double, pair<osm_node_idx_t, osm_node_idx_t>>>
+        connected_edges) {
+
+    double found_distance = INFINITY;
+
+    for (auto c : connected_edges) {
+      if (c.second.first == from && c.second.second == to) {
+        found_distance = c.first;
+      }
+    }
+  return found_distance;
+}
+
+std::vector<pair<double, pair<osm_node_idx_t, osm_node_idx_t>>>
+ways::get_connected_edges(
+    osm_node_idx_t from,
+    std::vector<pair<double, pair<osm_node_idx_t, osm_node_idx_t>>> edges) {
+  
+    std::vector<pair<double, pair<osm_node_idx_t, osm_node_idx_t>>>
+      connected_edges;
+
+    for (auto e : edges) {
+    
+      if (from == e.second.first) {
+        connected_edges.push_back(e);
+      }
+    }
+
+    return connected_edges;
+
+}
+
+osm_node_idx_t ways::get_closest_neighbor(
+    std::set<osm_node_idx_t> Q,
+    std::vector<double> dist,
+    std::map<osm_node_idx_t, uint32_t> graph_node_index) {
+  osm_node_idx_t min_dist_node = (osm_node_idx_t)0;
+  double min_dist = INFINITY;
+
+  for (auto q : Q) {
+    if (dist[graph_node_index[q]] <= min_dist) {
+      min_dist = dist[graph_node_index[q]];
+      min_dist_node = q;
+    }
+  }
+  return min_dist_node;
+}
+
 
 std::optional<std::string_view> ways::get_access_restriction(
     way_idx_t const way) const {
@@ -773,12 +1412,7 @@ vec<point> ways::get_area_ring_locations(vec<osm_node_idx_t> nodes_of_ring) {
   for (auto n : nodes_of_ring) {
     ring_locations.push_back(internal_area_node_positions_[n]);
   }
-  /*
-  for (uint32_t i = 0; i < nodes_of_ring.size()-1; i++) {
 
-    ring_locations.push_back(final_area_node_positions_[nodes_of_ring[i]]);
-  }
-  */
   return ring_locations;
 }
 
@@ -791,11 +1425,7 @@ vec<point> ways::get_area_locations(uint64_t area_index) {
     for (uint32_t i = 0; i < r.size() - 1; i++) {
       locations.emplace_back(node_locations[i]);
     }
-    /*
-    for (auto loc : get_area_ring_locations(r)) {
-      locations.emplace_back(loc);
-    }
-    */
+    
   }
 
   return locations;
