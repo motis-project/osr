@@ -11,6 +11,8 @@
 #include "osr/elevation_storage.h"
 #include "osr/routing/mode.h"
 #include "osr/routing/path.h"
+#include "osr/routing/profiles/common.h"
+#include "osr/routing/turns.h"
 #include "osr/ways.h"
 
 namespace osr {
@@ -20,12 +22,18 @@ struct sharing_data;
 struct railway {
   static constexpr auto const kName = "railway";
   static constexpr auto const kMaxMatchDistance = 200U;
-  static constexpr auto const kUturnPenalty = cost_t{60U};
+  static constexpr auto const kUturnPenalty = cost_t{700U};
 
   using key = node_idx_t;
 
   struct parameters {
     using profile_t = railway;
+    quantized_angle_t slight_curve_angle_{quantize_turn_angle(25.0)};
+    quantized_angle_t tight_curve_angle_{quantize_turn_angle(60.0)};
+    quantized_angle_t extreme_turn_angle_{quantize_turn_angle(90.0)};
+    cost_t slight_curve_penalty_{10U};
+    cost_t tight_curve_penalty_{100U};
+    cost_t extreme_turn_penalty_{700U};
   };
 
   struct node {
@@ -213,6 +221,9 @@ struct railway {
             auto const [target, cost] = get_adjacent_additional_node<railway>(
                 params, w, n, additional, ae, edge_dir, edge_cost,
                 kUturnPenalty);
+            if (cost == kInfeasible) {
+              return;
+            }
 
             fn(target, cost, ae.distance_, ae.underlying_way_, 0, 0,
                elevation_storage::elevation{}, false);
@@ -261,6 +272,19 @@ struct railway {
 
   static constexpr cost_t node_cost(parameters const&, node_properties const&) {
     return 0U;
+  }
+
+  static constexpr cost_t turn_cost(parameters const& params,
+                                    quantized_angle_t const turn_angle) {
+    if (turn_angle > params.extreme_turn_angle_) {
+      return params.extreme_turn_penalty_;
+    } else if (turn_angle > params.tight_curve_angle_) {
+      return params.tight_curve_penalty_;
+    } else if (turn_angle > params.slight_curve_angle_) {
+      return params.slight_curve_penalty_;
+    } else {
+      return 0U;
+    }
   }
 
   static constexpr double lower_bound_heuristic(parameters const&,

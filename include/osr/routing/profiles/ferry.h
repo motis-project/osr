@@ -11,6 +11,7 @@
 #include "osr/elevation_storage.h"
 #include "osr/routing/mode.h"
 #include "osr/routing/path.h"
+#include "osr/routing/profiles/common.h"
 #include "osr/ways.h"
 
 namespace osr {

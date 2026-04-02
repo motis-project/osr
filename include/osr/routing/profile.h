@@ -143,9 +143,14 @@ concept WayAwareProfile = Profile<P> &&
                                                   node_idx_t,
                                                   way_pos_t,
                                                   direction> &&
-                          requires(typename P::node const node,
+                          requires(typename P::parameters const& params,
+                                   quantized_angle_t const turn_angle,
+                                   typename P::node const node,
                                    ways::routing const& routing,
                                    sharing_data const* sharing) {
+                            {
+                              P::turn_cost(params, turn_angle)
+                            } -> std::same_as<cost_t>;
                             {
                               node.get_way(routing, sharing)
                             } -> std::same_as<way_idx_t>;
