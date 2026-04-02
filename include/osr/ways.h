@@ -235,8 +235,8 @@ struct ways {
     return r_->node_positions_.at(i);
   }
 
-  std::size_t get_polyline_node_idx(way_idx_t const way,
-                                   std::uint16_t const target_routing_idx) const;
+  std::size_t get_polyline_node_idx(
+      way_idx_t const way, std::uint16_t const target_routing_idx) const;
 
   cista::mmap mm(char const* file) {
     return cista::mmap{(p_ / file).generic_string().c_str(), mode_};
