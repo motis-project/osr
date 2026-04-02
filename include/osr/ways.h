@@ -28,6 +28,7 @@
 #include "utl/zip.h"
 
 #include "osr/point.h"
+#include "osr/routing/turns.h"
 #include "osr/types.h"
 #include "osr/util/multi_counter.h"
 
@@ -199,6 +200,7 @@ struct ways {
   void add_restriction(std::vector<resolved_restriction>&);
   void compute_big_street_neighbors();
   void connect_ways();
+  void compute_turn_bearings();
   void build_components();
 
   std::optional<way_idx_t> find_way(osm_way_idx_t const i) {
@@ -232,6 +234,9 @@ struct ways {
   point get_node_pos(node_idx_t const i) const {
     return r_->node_positions_.at(i);
   }
+
+  std::size_t get_polyline_node_idx(
+      way_idx_t const way, std::uint16_t const target_routing_idx) const;
 
   cista::mmap mm(char const* file) {
     return cista::mmap{(p_ / file).generic_string().c_str(), mode_};
@@ -330,6 +335,15 @@ struct ways {
       }
     }
 
+    quantized_angle_t get_turn_angle(node_idx_t const n,
+                                     way_pos_t const from,
+                                     direction const from_dir,
+                                     way_pos_t const to,
+                                     direction const to_dir) const {
+      return osr::get_turn_angle(node_turn_bearings_[n][from], from_dir,
+                                 node_turn_bearings_[n][to], to_dir);
+    }
+
     static cista::wrapped<routing> read(std::filesystem::path const&);
     void write(std::filesystem::path const&) const;
 
@@ -350,6 +364,7 @@ struct ways {
 
     vecvec<node_idx_t, way_idx_t> node_ways_;
     vecvec<node_idx_t, std::uint16_t> node_in_way_idx_;
+    vecvec<node_idx_t, turn_bearing> node_turn_bearings_;
 
     bitvec<node_idx_t> node_is_restricted_;
     vecvec<node_idx_t, restriction> node_restrictions_;

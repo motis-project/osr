@@ -98,7 +98,9 @@ struct dijkstra {
           early_termination_max_cost_ = std::min(
               early_termination_max_cost_,
               static_cast<cost_t>(std::min(
-                  {static_cast<std::uint64_t>(curr_cost) * 2,
+                  {static_cast<std::uint64_t>(curr_cost) * 2 +
+                       static_cast<std::uint64_t>(
+                           P::upper_bound_heuristic(params, 1500U)),
                    static_cast<std::uint64_t>(
                        curr_cost + P::upper_bound_heuristic(params, 10000U)),
                    static_cast<std::uint64_t>(kInfeasible - 1U)})));

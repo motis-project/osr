@@ -95,6 +95,7 @@ boost::json::object to_json_match(debug_match const& dm,
       {"wayIdx", static_cast<std::int64_t>(dm.way_array_idx_)},
       {"projectedPoint", to_json_coord(dm.projected_point_)},
       {"distToWay", dm.dist_to_way_},
+      {"matchPenalty", static_cast<std::int64_t>(dm.match_penalty_)},
       {"waySegmentIdx", dm.way_segment_idx_},
       {"oneway", dm.oneway_},
       {"additionalNodeIdx",
@@ -324,6 +325,8 @@ boost::json::object build_map_match_debug_json(
         seg.astar_.early_termination_max_cost_;
     dbg_seg.dijkstra_terminated_early_max_cost_ =
         seg.astar_.terminated_early_max_cost_;
+    dbg_seg.selected_start_match_idx_ = seg.selected_start_match_idx_;
+    dbg_seg.selected_dest_match_idx_ = seg.selected_dest_match_idx_;
     dbg_seg.dijkstra_remaining_destinations_ =
         seg.astar_.remaining_destinations_;
     dbg_seg.d_dijkstra_ = seg.astar_duration_;
@@ -350,6 +353,7 @@ boost::json::object build_map_match_debug_json(
       dm.way_array_idx_ = register_way(mw.way_, false, std::nullopt, nullptr);
       dm.projected_point_ = mw.projected_point_;
       dm.dist_to_way_ = mw.dist_to_way_;
+      dm.match_penalty_ = mw.match_penalty_;
       dm.way_segment_idx_ = mw.segment_idx_;
       dm.oneway_ = mw.oneway_;
       dm.additional_node_array_idx_ =
@@ -400,6 +404,7 @@ boost::json::object build_map_match_debug_json(
       dm.way_array_idx_ = register_way(mw.way_, false, std::nullopt, nullptr);
       dm.projected_point_ = mw.projected_point_;
       dm.dist_to_way_ = mw.dist_to_way_;
+      dm.match_penalty_ = mw.match_penalty_;
       dm.way_segment_idx_ = mw.segment_idx_;
       dm.oneway_ = mw.oneway_;
       dm.additional_node_array_idx_ =
@@ -509,6 +514,12 @@ boost::json::object build_map_match_debug_json(
         // to info is in dest_matches
       } else {
         bee.reason_ = "no_destinations_reached";
+      }
+      if (seg.selected_start_match_idx_) {
+        bee.from_match_idx_ = seg.selected_start_match_idx_;
+      }
+      if (seg.selected_dest_match_idx_) {
+        bee.to_match_idx_ = seg.selected_dest_match_idx_;
       }
       bee.distance_ = seg.beeline_dist_;
       bee.cost_ = seg.min_cost_;
@@ -719,11 +730,12 @@ boost::json::object build_map_match_debug_json(
   }
 
   auto json_input_points = boost::json::array{};
-  for (auto const& loc : points) {
-    json_input_points.emplace_back(
-        boost::json::object{{"lat", loc.pos_.lat()},
-                            {"lng", loc.pos_.lng()},
-                            {"level", loc.lvl_.to_float()}});
+  for (auto const [idx, loc] : utl::enumerate(points)) {
+    json_input_points.emplace_back(boost::json::object{
+        {"lat", loc.pos_.lat()},
+        {"lng", loc.pos_.lng()},
+        {"level", loc.lvl_.to_float()},
+        {"matchingDistance", pds.at(idx).matching_distance_}});
   }
 
   auto json_ways = boost::json::array{};
@@ -752,6 +764,10 @@ boost::json::object build_map_match_debug_json(
         {"maxReachedInDijkstra", seg.max_reached_in_dijkstra_},
         {"dijkstraTerminatedEarlyMaxCost",
          seg.dijkstra_terminated_early_max_cost_},
+        {"selectedStartMatchIdx",
+         to_json_opt_size_t(seg.selected_start_match_idx_)},
+        {"selectedDestMatchIdx",
+         to_json_opt_size_t(seg.selected_dest_match_idx_)},
         {"dijkstraRemainingDestinations", seg.dijkstra_remaining_destinations_},
         {"dijkstraDurationUs", seg.d_dijkstra_.count()}};
 
@@ -816,12 +832,28 @@ boost::json::object build_map_match_debug_json(
   auto json_final_route = boost::json::object{
       {"totalCost", static_cast<std::int64_t>(result.path_.cost_)}};
   auto final_geom = boost::json::array{};
+  auto final_segment_offsets = boost::json::array{};
+  auto geometry_offset = std::size_t{0U};
+  auto path_segment_offset = std::size_t{0U};
+
+  for (auto const segment_offset : result.segment_offsets_) {
+    while (path_segment_offset < segment_offset &&
+           path_segment_offset < result.path_.segments_.size()) {
+      geometry_offset +=
+          result.path_.segments_[path_segment_offset].polyline_.size();
+      ++path_segment_offset;
+    }
+    final_segment_offsets.emplace_back(
+        static_cast<std::int64_t>(geometry_offset));
+  }
+
   for (auto const& seg : result.path_.segments_) {
     for (auto const& pt : seg.polyline_) {
       final_geom.emplace_back(to_json_coord(pt));
     }
   }
   json_final_route["geometry"] = std::move(final_geom);
+  json_final_route["segmentOffsets"] = std::move(final_segment_offsets);
 
   // Compute bounding box
   auto min_lng = std::numeric_limits<double>::max();
