@@ -12,6 +12,7 @@
 #include "osr/routing/mode.h"
 #include "osr/routing/path.h"
 #include "osr/routing/profiles/common.h"
+#include "osr/routing/turns.h"
 #include "osr/ways.h"
 
 namespace osr {
@@ -29,6 +30,10 @@ struct generic_car {
     using profile_t = generic_car;
     cost_t uturn_penalty_{120U};
     cost_t private_gate_penalty_{60U};
+    quantized_angle_t slow_turn_angle_{quantize_turn_angle(65.0)};
+    quantized_angle_t sharp_turn_angle_{quantize_turn_angle(110.0)};
+    cost_t slow_turn_penalty_{IsBus ? 10U : 0U};
+    cost_t sharp_turn_penalty_{IsBus ? 60U : 0U};
   };
 
   struct node {
@@ -225,6 +230,9 @@ struct generic_car {
                 get_adjacent_additional_node<generic_car>(
                     params, w, n, additional, ae, edge_dir, edge_cost,
                     params.uturn_penalty_);
+            if (cost == kInfeasible) {
+              return;
+            }
 
             fn(target, cost, ae.distance_, ae.underlying_way_, 0, 0,
                elevation_storage::elevation{}, false);
@@ -309,6 +317,18 @@ struct generic_car {
     } else {
       return n.is_car_accessible() ? 0U : kInfeasible;
     }
+  }
+
+  static constexpr cost_t turn_cost(parameters const& params,
+                                    quantized_angle_t const turn_angle) {
+    auto cost = cost_t{0U};
+    if (turn_angle > params.slow_turn_angle_) {
+      cost += params.slow_turn_penalty_;
+    }
+    if (turn_angle > params.sharp_turn_angle_) {
+      cost += params.sharp_turn_penalty_;
+    }
+    return cost;
   }
 
   static constexpr double lower_bound_heuristic(parameters const&,

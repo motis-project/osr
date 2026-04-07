@@ -62,6 +62,7 @@ struct debug_match {
   std::size_t way_array_idx_{};
   geo::latlng projected_point_{};
   double dist_to_way_{};
+  cost_t match_penalty_{};
   unsigned way_segment_idx_{};
   bool oneway_{};
   std::size_t additional_node_array_idx_{};
@@ -101,6 +102,8 @@ struct debug_route_segment {
   cost_t dijkstra_early_termination_max_cost_{};
   bool max_reached_in_dijkstra_{false};
   bool dijkstra_terminated_early_max_cost_{false};
+  std::optional<std::size_t> selected_start_match_idx_{};
+  std::optional<std::size_t> selected_dest_match_idx_{};
   std::vector<debug_match> start_matches_{};
   std::vector<debug_match> dest_matches_{};
   std::optional<debug_beeline> beeline_{};
