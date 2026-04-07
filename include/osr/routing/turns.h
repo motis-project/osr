@@ -25,17 +25,20 @@ struct turn_bearing {
   quantized_angle_t to_next_{};
 };
 
-template <double MaxAngle = 360.0>
 constexpr quantized_angle_t quantize_angle(double const degrees) {
+  auto normalized = boost::math::ccmath::fmod(degrees, 360.0);
+  if (normalized < 0.0) {
+    normalized += 360.0;
+  }
+
   return static_cast<quantized_angle_t>(
       static_cast<unsigned>(boost::math::ccmath::lround(
-          std::clamp(degrees, 0.0, MaxAngle) * static_cast<double>(kAngleBins) /
-          360.0)) %
+          normalized * static_cast<double>(kAngleBins) / 360.0)) %
       kAngleBins);
 }
 
 constexpr quantized_angle_t quantize_turn_angle(double const degrees) {
-  return quantize_angle<180.0>(degrees);
+  return quantize_angle(std::clamp(degrees, 0.0, 180.0));
 }
 
 constexpr quantized_angle_t reverse_bearing(quantized_angle_t const bearing) {
