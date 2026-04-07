@@ -1,6 +1,5 @@
 #pragma once
 
-#include <cassert>
 #include <cstdint>
 #include <algorithm>
 
@@ -26,16 +25,17 @@ struct turn_bearing {
   quantized_angle_t to_next_{};
 };
 
+template <double MaxAngle = 360.0>
 constexpr quantized_angle_t quantize_angle(double const degrees) {
-  assert(degrees >= 0.0 && degrees <= 360.0);
   return static_cast<quantized_angle_t>(
       static_cast<unsigned>(boost::math::ccmath::lround(
-          degrees * static_cast<double>(kAngleBins) / 360.0)) %
+          std::clamp(degrees, 0.0, MaxAngle) * static_cast<double>(kAngleBins) /
+          360.0)) %
       kAngleBins);
 }
 
 constexpr quantized_angle_t quantize_turn_angle(double const degrees) {
-  return quantize_angle(std::clamp(degrees, 0.0, 180.0));
+  return quantize_angle<180.0>(degrees);
 }
 
 constexpr quantized_angle_t reverse_bearing(quantized_angle_t const bearing) {
