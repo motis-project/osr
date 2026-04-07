@@ -32,8 +32,8 @@ struct generic_car {
     cost_t private_gate_penalty_{60U};
     quantized_angle_t slow_turn_angle_{quantize_turn_angle(65.0)};
     quantized_angle_t sharp_turn_angle_{quantize_turn_angle(110.0)};
-    cost_t slow_turn_penalty_{IsBus ? 10U : 5U};
-    cost_t sharp_turn_penalty_{IsBus ? 60U : 10U};
+    cost_t slow_turn_penalty_{IsBus ? 10U : 0U};
+    cost_t sharp_turn_penalty_{IsBus ? 60U : 0U};
   };
 
   struct node {
