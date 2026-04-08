@@ -181,6 +181,7 @@ struct tags {
           is_incline_down_ = t.value() == "down"sv || value.starts_with("-"sv);
         } break;
         case cista::hash("route"):
+          route_type_ = t.value();
           is_ferry_route_ = t.value() == "ferry"sv;
           break;
         case cista::hash("service"): service_ = t.value(); break;
@@ -193,8 +194,28 @@ struct tags {
 
   bool is_platform() const { return is_platform_ && !is_construction_; }
 
+  bool is_public_transport_route() const {
+    switch (cista::hash(route_type_)) {
+      case cista::hash("bus"):
+      case cista::hash("trolleybus"):
+      case cista::hash("minibus"):
+      case cista::hash("share_taxi"):
+      case cista::hash("train"):
+      case cista::hash("light_rail"):
+      case cista::hash("subway"):
+      case cista::hash("tram"):
+      case cista::hash("monorail"):
+      case cista::hash("ferry"):
+      case cista::hash("funicular"): return true;
+      default: return false;
+    }
+  }
+
   // https://wiki.openstreetmap.org/wiki/Relation:route
   bool is_route_{false};
+
+  // https://wiki.openstreetmap.org/wiki/Key:route
+  std::string_view route_type_;
 
   // https://wiki.openstreetmap.org/wiki/Tag:route%3Dferry
   bool is_ferry_route_{false};

@@ -156,7 +156,7 @@ way_properties get_way_properties(
       (t.motor_vehicle_ == "no"sv) || (t.vehicle_ == override::kBlacklist);
   p.has_toll_ = t.toll_;
   p.is_big_street_ = is_big_street(t);
-  p.in_route_ = t.is_route_;
+  p.in_route_ = t.is_route_ && t.is_public_transport_route();
   p.is_bus_accessible_with_penalty_ =
       is_accessible_with_penalty<bus_profile>(t, obj_type);
   p.is_ferry_accessible_ = is_accessible<ferry_profile>(t, obj_type);

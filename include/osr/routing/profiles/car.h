@@ -33,7 +33,7 @@ struct generic_car {
     quantized_angle_t slow_turn_angle_{quantize_turn_angle(65.0)};
     quantized_angle_t sharp_turn_angle_{quantize_turn_angle(110.0)};
     cost_t slow_turn_penalty_{IsBus ? 10U : 0U};
-    cost_t sharp_turn_penalty_{IsBus ? 60U : 0U};
+    cost_t sharp_turn_penalty_{IsBus ? 25U : 0U};
   };
 
   struct node {
@@ -276,14 +276,15 @@ struct generic_car {
       if ((accessible || accessible_with_penalty) &&
           (dir == direction::kForward || !e.is_oneway_bus_psv())) {
         auto const in_route = e.in_route();
+        auto const bus_only = !e.is_car_accessible();
         auto sl = static_cast<speed_limit>(e.speed_limit_);
         if (in_route && static_cast<std::uint8_t>(sl) <
                             static_cast<std::uint8_t>(speed_limit::kmh_50)) {
           sl = speed_limit::kmh_50;
         }
         auto cost = static_cast<cost_t>(
-            std::rint((in_route ? 1.0f : 1.2f) * static_cast<float>(dist) *
-                      to_seconds_per_meter(sl)));
+            std::rint(((in_route || bus_only) ? 1.0f : 1.5f) *
+                      static_cast<float>(dist) * to_seconds_per_meter(sl)));
         if (e.is_parking()) {
           cost *= 2U;
         }
