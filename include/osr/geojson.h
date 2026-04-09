@@ -1,7 +1,6 @@
-#include "boost/json.hpp"
+#pragma once
 
-#include "fmt/ranges.h"
-#include "fmt/std.h"
+#include "boost/json.hpp"
 
 #include "utl/pairwise.h"
 #include "utl/pipes.h"
