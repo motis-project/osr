@@ -22,7 +22,7 @@ struct sharing_data;
 struct railway {
   static constexpr auto const kName = "railway";
   static constexpr auto const kMaxMatchDistance = 200U;
-  static constexpr auto const kUturnPenalty = cost_t{700U};
+  static constexpr auto const kUturnPenalty = cost_t{1000U};
 
   using key = node_idx_t;
 
@@ -31,9 +31,10 @@ struct railway {
     quantized_angle_t slight_curve_angle_{quantize_turn_angle(25.0)};
     quantized_angle_t tight_curve_angle_{quantize_turn_angle(60.0)};
     quantized_angle_t extreme_turn_angle_{quantize_turn_angle(90.0)};
-    cost_t slight_curve_penalty_{10U};
-    cost_t tight_curve_penalty_{100U};
-    cost_t extreme_turn_penalty_{700U};
+    cost_t slight_curve_penalty_{17U};
+    cost_t tight_curve_penalty_{200U};
+    cost_t extreme_turn_penalty_{1000U};
+    cost_t small_curve_penalty_per_bin_{1U};
   };
 
   struct node {
@@ -260,7 +261,7 @@ struct railway {
     auto const accessible_with_penalty = e.is_railway_accessible_with_penalty();
     if ((accessible || accessible_with_penalty) &&
         (dir == direction::kForward || !e.is_oneway_bus_psv())) {
-      auto cost = static_cast<cost_t>((dist / 3));
+      auto cost = static_cast<cost_t>(dist);
       if (accessible_with_penalty) {
         cost *= e.in_route() ? 2U : 4U;
       }
@@ -283,13 +284,13 @@ struct railway {
     } else if (turn_angle > params.slight_curve_angle_) {
       return params.slight_curve_penalty_;
     } else {
-      return 0U;
+      return params.small_curve_penalty_per_bin_ * turn_angle;
     }
   }
 
   static constexpr double lower_bound_heuristic(parameters const&,
                                                 double const dist) {
-    return dist / 3;
+    return dist;
   }
 
   static constexpr double upper_bound_heuristic(parameters const& params,
