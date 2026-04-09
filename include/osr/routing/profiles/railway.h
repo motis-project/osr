@@ -260,7 +260,7 @@ struct railway {
     auto const accessible_with_penalty = e.is_railway_accessible_with_penalty();
     if ((accessible || accessible_with_penalty) &&
         (dir == direction::kForward || !e.is_oneway_bus_psv())) {
-      auto cost = static_cast<cost_t>((dist / 3));
+      auto cost = static_cast<cost_t>(dist);
       if (accessible_with_penalty) {
         cost *= e.in_route() ? 2U : 4U;
       }
@@ -289,7 +289,7 @@ struct railway {
 
   static constexpr double lower_bound_heuristic(parameters const&,
                                                 double const dist) {
-    return dist / 3;
+    return dist;
   }
 
   static constexpr double upper_bound_heuristic(parameters const& params,
