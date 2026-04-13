@@ -597,7 +597,8 @@ struct bus_profile {
     switch (cista::hash(t.highway_)) {
       case cista::hash("busway"):
       case cista::hash("bus_guideway"):
-      case cista::hash("pedestrian"): return true;
+      case cista::hash("pedestrian"):
+      case cista::hash("track"): return true;
       default: return false;
     }
   }
