@@ -40,6 +40,11 @@ mm_match_distance get_mm_match_distance<railway>(railway::parameters const&) {
   return {.initial_ = 200.0, .expanded_ = 500.0};
 }
 
+template <>
+mm_match_distance get_mm_match_distance<ferry>(ferry::parameters const&) {
+  return {.initial_ = 500.0, .expanded_ = 1500.0};
+}
+
 template <Profile P>
 bool is_forward_on_way(ways const& w,
                        matched_way<P> const& from_mw,
