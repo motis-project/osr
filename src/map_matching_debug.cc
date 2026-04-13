@@ -318,8 +318,7 @@ boost::json::object build_map_match_debug_json(
     dbg_seg.all_beelined_ = seg.all_beelined_;
     dbg_seg.min_cost_ = seg.min_cost_;
     dbg_seg.max_cost_ = seg.max_cost_;
-    dbg_seg.dijkstra_cost_limit_ = static_cast<cost_t>(
-        seg.astar_.pq_.n_buckets() > 0 ? seg.astar_.pq_.n_buckets() - 1 : 0);
+    dbg_seg.dijkstra_cost_limit_ = seg.dijkstra_cost_limit_;
     dbg_seg.max_reached_in_dijkstra_ = seg.astar_.max_reached_;
     dbg_seg.dijkstra_early_termination_max_cost_ =
         seg.astar_.early_termination_max_cost_;

@@ -322,7 +322,7 @@ export function SegmentPanel() {
                 )}
               >
                 <div className="text-muted-foreground text-[10px] uppercase tracking-tight mb-0.5">
-                  Max Reached
+                  Limit Hit
                 </div>
                 <div className="font-medium text-sm">
                   {selectedSeg.maxReachedInDijkstra ? "Yes" : "No"}

@@ -349,6 +349,7 @@ matched_route map_match(
         std::min(static_cast<double>(std::numeric_limits<cost_t>::max() - 1U),
                  dijkstra_max));
 
+    seg.dijkstra_cost_limit_ = dijkstra_max_cost;
     seg.astar_.reset(dijkstra_max_cost, from_pd.loc_, to_pd.loc_);
 
     auto const get_min_start_cost = [&](matched_way<P> const& from_mw) {
