@@ -32,7 +32,7 @@ struct mm_match_distance {
 
 template <Profile P>
 mm_match_distance get_mm_match_distance(typename P::parameters const&) {
-  return {.initial_ = 100.0, .expanded_ = 300.0};
+  return {.initial_ = 150.0, .expanded_ = 300.0};
 }
 
 template <>
