@@ -33,7 +33,10 @@ struct tags {
       switch (cista::hash(std::string_view{t.key()})) {
         using namespace std::string_view_literals;
         case cista::hash("ramp"): is_ramp_ |= t.value() != "no"sv; break;
-        case cista::hash("type"): is_route_ |= t.value() == "route"sv; break;
+        case cista::hash("type"):
+          is_route_ |=
+              o.type() == osmium::item_type::relation && t.value() == "route"sv;
+          break;
         case cista::hash("parking"): is_parking_ = true; break;
         case cista::hash("amenity"):
           is_parking_ |=
