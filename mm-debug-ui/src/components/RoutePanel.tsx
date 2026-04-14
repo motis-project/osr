@@ -4,7 +4,8 @@ import { Card } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 
 export function RoutePanel() {
-  const { data, highlightedSegmentIdx, setHighlightedSegment } = useDebug();
+  const { data, highlightedSegmentIdx, setHighlightedSegment, showSegment } =
+    useDebug();
 
   if (!data) return null;
 
@@ -97,11 +98,12 @@ export function RoutePanel() {
             <div
               key={seg.segmentIdx}
               className={cn(
-                "flex items-center gap-3 rounded-md border border-transparent px-2 py-2 text-xs transition-colors",
+                "flex cursor-pointer items-center gap-3 rounded-md border border-transparent px-2 py-2 text-xs transition-colors",
                 highlightedSegmentIdx === seg.segmentIdx
                   ? "border-primary/40 bg-primary/10"
                   : "hover:border-border hover:bg-accent/60",
               )}
+              onClick={() => showSegment(seg.segmentIdx)}
               onMouseEnter={() => setHighlightedSegment(seg.segmentIdx)}
               onMouseLeave={() => setHighlightedSegment(null)}
             >

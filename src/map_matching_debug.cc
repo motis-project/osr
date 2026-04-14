@@ -152,12 +152,87 @@ boost::json::object build_map_match_debug_json(
   auto way_to_array_idx = hash_map<way_idx_t, std::size_t>{};
   auto node_to_array_idx = hash_map<node_idx_t, std::size_t>{};
 
+  std::function<std::size_t(node_idx_t, bool, geo::latlng const*, bool)>
+      register_node;
   std::function<std::size_t(way_idx_t, bool, std::optional<way_idx_t>,
                             std::vector<geo::latlng> const*)>
-      register_way =
-          [&](way_idx_t const way_idx, bool is_additional,
-              std::optional<way_idx_t> underlying,
-              std::vector<geo::latlng> const* add_geom) -> std::size_t {
+      register_way;
+
+  auto const populate_way_properties = [&](boost::json::object& way_obj,
+                                           way_idx_t const way_idx) {
+    auto const& p = w.r_->way_properties_[way_idx];
+    way_obj["properties"] = boost::json::object{
+        {"car", p.is_car_accessible()},
+        {"bike", p.is_bike_accessible()},
+        {"foot", p.is_foot_accessible()},
+        {"bus", p.is_bus_accessible()},
+        {"busWithPenalty", p.is_bus_accessible_with_penalty()},
+        {"railway", p.is_railway_accessible()},
+        {"railwayWithPenalty", p.is_railway_accessible_with_penalty()},
+        {"ferry", p.is_ferry_accessible()},
+        {"isBigStreet", p.is_big_street()},
+        {"isDestination", p.is_destination()},
+        {"onewayCar", p.is_oneway_car()},
+        {"onewayBike", p.is_oneway_bike()},
+        {"onewayPsv", p.is_oneway_bus_psv()},
+        {"maxSpeedKmh", p.max_speed_km_per_h()},
+        {"speedLimit", p.speed_limit_},
+        {"fromLevel", p.from_level().to_float()},
+        {"toLevel", p.to_level().to_float()},
+        {"isElevator", p.is_elevator()},
+        {"isSidewalkSeparate", p.is_sidewalk_separate()},
+        {"isSteps", p.is_steps()},
+        {"isParking", p.is_parking()},
+        {"isRamp", p.is_ramp()},
+        {"inRoute", p.in_route()},
+        {"component",
+         static_cast<std::int64_t>(to_idx(w.r_->way_component_[way_idx]))}};
+  };
+
+  std::function<void(boost::json::object&, node_idx_t, bool)>
+      populate_node_fields = [&](boost::json::object& node_obj,
+                                 node_idx_t const node_idx,
+                                 bool const include_way_indices) {
+        node_obj["osmId"] =
+            static_cast<std::int64_t>(to_idx(w.node_to_osm_[node_idx]));
+        auto const pos = w.get_node_pos(node_idx).as_latlng();
+        node_obj["pos"] = boost::json::array{pos.lng(), pos.lat()};
+
+        auto levels = boost::json::array{};
+        foot<true>::for_each_elevator_level(
+            *w.r_, node_idx, [&](level_t const level) {
+              levels.emplace_back(level.to_float());
+            });
+
+        auto const& p = w.r_->node_properties_[node_idx];
+        node_obj["properties"] = boost::json::object{
+            {"car", p.is_car_accessible()},
+            {"bike", p.is_bike_accessible()},
+            {"foot", p.is_walk_accessible()},
+            {"bus", p.is_bus_accessible()},
+            {"busWithPenalty", p.is_bus_accessible_with_penalty()},
+            {"isRestricted", w.r_->node_is_restricted_[node_idx]},
+            {"isEntrance", p.is_entrance()},
+            {"isElevator", p.is_elevator()},
+            {"isParking", p.is_parking()},
+            {"isMultiLevel", p.is_multi_level()},
+            {"fromLevel", p.from_level().to_float()},
+            {"toLevel", p.to_level().to_float()},
+            {"levels", std::move(levels)}};
+
+        if (include_way_indices) {
+          auto way_indices = boost::json::array{};
+          for (auto const& wi : w.r_->node_ways_[node_idx]) {
+            way_indices.emplace_back(static_cast<std::int64_t>(
+                register_way(wi, false, std::nullopt, nullptr)));
+          }
+          node_obj["wayIndices"] = std::move(way_indices);
+        }
+      };
+
+  register_way = [&](way_idx_t const way_idx, bool is_additional,
+                     std::optional<way_idx_t> underlying,
+                     std::vector<geo::latlng> const* add_geom) -> std::size_t {
     if (way_idx == way_idx_t::invalid()) {
       return std::numeric_limits<std::size_t>::max();
     }
@@ -199,6 +274,13 @@ boost::json::object build_map_match_debug_json(
             static_cast<std::int64_t>(to_idx(way_nodes.back()));
       }
 
+      auto node_indices = boost::json::array{};
+      for (auto const node_idx : way_nodes) {
+        node_indices.emplace_back(static_cast<std::int64_t>(
+            register_node(node_idx, false, nullptr, false)));
+      }
+      way_obj["nodeIndices"] = std::move(node_indices);
+
       // Node distances
       auto dists = boost::json::array{};
       for (auto i = 0U; i < w.r_->way_node_dist_[way_idx].size(); ++i) {
@@ -207,33 +289,7 @@ boost::json::object build_map_match_debug_json(
                 way_idx, static_cast<std::uint16_t>(i))));
       }
       way_obj["nodeDistances"] = std::move(dists);
-
-      // Properties
-      auto const& p = w.r_->way_properties_[way_idx];
-      way_obj["properties"] = boost::json::object{
-          {"car", p.is_car_accessible()},
-          {"bike", p.is_bike_accessible()},
-          {"foot", p.is_foot_accessible()},
-          {"bus", p.is_bus_accessible()},
-          {"busWithPenalty", p.is_bus_accessible_with_penalty()},
-          {"railway", p.is_railway_accessible()},
-          {"isBigStreet", p.is_big_street()},
-          {"isDestination", p.is_destination()},
-          {"onewayCar", p.is_oneway_car()},
-          {"onewayBike", p.is_oneway_bike()},
-          {"onewayPsv", p.is_oneway_bus_psv()},
-          {"maxSpeedKmh", p.max_speed_km_per_h()},
-          {"speedLimit", p.speed_limit_},
-          {"fromLevel", p.from_level().to_float()},
-          {"toLevel", p.to_level().to_float()},
-          {"isElevator", p.is_elevator()},
-          {"isSidewalkSeparate", p.is_sidewalk_separate()},
-          {"isSteps", p.is_steps()},
-          {"isParking", p.is_parking()},
-          {"isRamp", p.is_ramp()},
-          {"inRoute", p.in_route()},
-          {"component",
-           static_cast<std::int64_t>(to_idx(w.r_->way_component_[way_idx]))}};
+      populate_way_properties(way_obj, way_idx);
     } else if (add_geom) {
       auto geom = boost::json::array{};
       for (auto const& pt : *add_geom) {
@@ -246,14 +302,18 @@ boost::json::object build_map_match_debug_json(
     return idx;
   };
 
-  auto const register_node =
-      [&](node_idx_t const node_idx, bool is_additional = false,
-          geo::latlng const* add_pos = nullptr) -> std::size_t {
+  register_node = [&](node_idx_t const node_idx, bool is_additional,
+                      geo::latlng const* add_pos,
+                      bool const include_way_indices) -> std::size_t {
     if (node_idx == node_idx_t::invalid()) {
       return std::numeric_limits<std::size_t>::max();
     }
     if (auto const it = node_to_array_idx.find(node_idx);
         it != node_to_array_idx.end()) {
+      if (!is_additional && include_way_indices &&
+          !dbg_nodes[it->second].if_contains("wayIndices")) {
+        populate_node_fields(dbg_nodes[it->second], node_idx, true);
+      }
       return it->second;
     }
     auto const idx = dbg_nodes.size();
@@ -265,32 +325,7 @@ boost::json::object build_map_match_debug_json(
     node_obj["isAdditionalNode"] = is_additional;
 
     if (!is_additional) {
-      node_obj["osmId"] =
-          static_cast<std::int64_t>(to_idx(w.node_to_osm_[node_idx]));
-      auto const pos = w.get_node_pos(node_idx).as_latlng();
-      node_obj["pos"] = boost::json::array{pos.lng(), pos.lat()};
-
-      auto const& p = w.r_->node_properties_[node_idx];
-      node_obj["properties"] = boost::json::object{
-          {"car", p.is_car_accessible()},
-          {"bike", p.is_bike_accessible()},
-          {"foot", p.is_walk_accessible()},
-          {"bus", p.is_bus_accessible()},
-          {"busWithPenalty", p.is_bus_accessible_with_penalty()},
-          {"isRestricted", w.r_->node_is_restricted_[node_idx]},
-          {"isEntrance", p.is_entrance()},
-          {"isElevator", p.is_elevator()},
-          {"isParking", p.is_parking()},
-          {"isMultiLevel", p.is_multi_level()},
-          {"fromLevel", p.from_level().to_float()},
-          {"toLevel", p.to_level().to_float()}};
-
-      auto way_indices = boost::json::array{};
-      for (auto const& wi : w.r_->node_ways_[node_idx]) {
-        way_indices.emplace_back(static_cast<std::int64_t>(
-            register_way(wi, false, std::nullopt, nullptr)));
-      }
-      node_obj["wayIndices"] = std::move(way_indices);
+      populate_node_fields(node_obj, node_idx, include_way_indices);
     } else if (add_pos) {
       node_obj["pos"] = boost::json::array{add_pos->lng(), add_pos->lat()};
     }
@@ -337,8 +372,8 @@ boost::json::object build_map_match_debug_json(
       if (!nc.valid()) {
         return {};
       }
-      auto const node_arr_idx =
-          register_node(nc.node_, w.is_additional_node(nc.node_));
+      auto const node_arr_idx = register_node(
+          nc.node_, w.is_additional_node(nc.node_), nullptr, true);
       return {.valid_ = true,
               .node_array_idx_ = node_arr_idx,
               .dist_to_node_ = nc.dist_to_node_,
@@ -355,8 +390,8 @@ boost::json::object build_map_match_debug_json(
       dm.match_penalty_ = mw.match_penalty_;
       dm.way_segment_idx_ = mw.segment_idx_;
       dm.oneway_ = mw.oneway_;
-      dm.additional_node_array_idx_ =
-          register_node(mw.additional_node_idx_, true, &mw.projected_point_);
+      dm.additional_node_array_idx_ = register_node(
+          mw.additional_node_idx_, true, &mw.projected_point_, false);
 
       if (mw.fwd_node_ != P::node::invalid()) {
         dm.fwd_node_ = debug_node_ref{
@@ -406,8 +441,8 @@ boost::json::object build_map_match_debug_json(
       dm.match_penalty_ = mw.match_penalty_;
       dm.way_segment_idx_ = mw.segment_idx_;
       dm.oneway_ = mw.oneway_;
-      dm.additional_node_array_idx_ =
-          register_node(mw.additional_node_idx_, true, &mw.projected_point_);
+      dm.additional_node_array_idx_ = register_node(
+          mw.additional_node_idx_, true, &mw.projected_point_, false);
 
       if (mw.fwd_node_ != P::node::invalid()) {
         dm.fwd_node_ = debug_node_ref{
@@ -454,7 +489,8 @@ boost::json::object build_map_match_debug_json(
           auto const is_add =
               w.is_additional_node(node_idx) ||
               (seg.sharing_ && seg.sharing_->is_additional_node(node_idx));
-          auto const node_arr_idx = register_node(node_idx, is_add);
+          auto const node_arr_idx =
+              register_node(node_idx, is_add, nullptr, true);
           auto step = debug_route_step{
               .node_array_idx_ = node_arr_idx,
               .way_pos_ = way_pos_t{0U},  // simplified
@@ -467,7 +503,7 @@ boost::json::object build_map_match_debug_json(
                 (seg.sharing_ &&
                  seg.sharing_->is_additional_node(pred_node_idx));
             step.pred_node_array_idx_ =
-                register_node(pred_node_idx, pred_is_add);
+                register_node(pred_node_idx, pred_is_add, nullptr, true);
           }
           dbg_result.path_.push_back(std::move(step));
           dbg_result.geometry_.push_back(get_node_pos(node_idx));
@@ -548,6 +584,19 @@ boost::json::object build_map_match_debug_json(
         way_obj["toNodeId"] = static_cast<std::int64_t>(to_idx(edge.to_));
         way_obj["reverse"] = edge.reverse_;
 
+        auto node_indices = boost::json::array{};
+        auto const from_is_additional =
+            w.is_additional_node(node_idx) ||
+            (seg.sharing_ && seg.sharing_->is_additional_node(node_idx));
+        auto const to_is_additional =
+            w.is_additional_node(edge.to_) ||
+            (seg.sharing_ && seg.sharing_->is_additional_node(edge.to_));
+        node_indices.emplace_back(static_cast<std::int64_t>(
+            register_node(node_idx, from_is_additional, nullptr, false)));
+        node_indices.emplace_back(static_cast<std::int64_t>(
+            register_node(edge.to_, to_is_additional, nullptr, false)));
+        way_obj["nodeIndices"] = std::move(node_indices);
+
         auto geom = boost::json::array{};
         for (auto const& pt : edge.polyline_) {
           geom.emplace_back(boost::json::array{pt.lng(), pt.lat()});
@@ -590,7 +639,7 @@ boost::json::object build_map_match_debug_json(
       }
 
       // Register the node if not already registered
-      auto const arr_idx = register_node(node_idx, false);
+      auto const arr_idx = register_node(node_idx, false, nullptr, true);
 
       P::resolve_all(*w.r_, node_idx, kNoLevel, [&](auto const& n) {
         auto const cost = seg.astar_.get_cost(n);
@@ -611,7 +660,8 @@ boost::json::object build_map_match_debug_json(
               auto const pred_node_idx = pred->get_node();
               // Register predecessor too if needed
               auto const pred_arr_idx = register_node(
-                  pred_node_idx, w.is_additional_node(pred_node_idx));
+                  pred_node_idx, w.is_additional_node(pred_node_idx), nullptr,
+                  true);
               if (pred_arr_idx != std::numeric_limits<std::size_t>::max()) {
                 label.pred_node_array_idx_ = pred_arr_idx;
               }
@@ -660,7 +710,8 @@ boost::json::object build_map_match_debug_json(
                 w.is_additional_node(pred_node_idx) ||
                 (seg.sharing_ &&
                  seg.sharing_->is_additional_node(pred_node_idx));
-            auto const pred_arr_idx = register_node(pred_node_idx, pred_is_add);
+            auto const pred_arr_idx =
+                register_node(pred_node_idx, pred_is_add, nullptr, true);
             if (pred_arr_idx != std::numeric_limits<std::size_t>::max()) {
               label.pred_node_array_idx_ = pred_arr_idx;
             }
@@ -711,7 +762,8 @@ boost::json::object build_map_match_debug_json(
                 w.is_additional_node(pred_node_idx) ||
                 (seg.sharing_ &&
                  seg.sharing_->is_additional_node(pred_node_idx));
-            auto const pred_arr_idx = register_node(pred_node_idx, pred_is_add);
+            auto const pred_arr_idx =
+                register_node(pred_node_idx, pred_is_add, nullptr, true);
             if (pred_arr_idx != std::numeric_limits<std::size_t>::max()) {
               label.pred_node_array_idx_ = pred_arr_idx;
             }

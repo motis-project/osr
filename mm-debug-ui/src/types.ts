@@ -21,12 +21,15 @@ export interface WayProperties {
   bike: boolean;
   foot: boolean;
   bus: boolean;
-  tram: boolean;
+  busWithPenalty: boolean;
   railway: boolean;
+  railwayWithPenalty: boolean;
+  ferry: boolean;
   isBigStreet: boolean;
   isDestination: boolean;
   onewayCar: boolean;
   onewayBike: boolean;
+  onewayPsv: boolean;
   maxSpeedKmh: number;
   speedLimit: number;
   fromLevel: number;
@@ -45,6 +48,7 @@ export interface NodeProperties {
   bike: boolean;
   foot: boolean;
   bus: boolean;
+  busWithPenalty: boolean;
   isRestricted: boolean;
   isEntrance: boolean;
   isElevator: boolean;
@@ -52,6 +56,7 @@ export interface NodeProperties {
   isMultiLevel: boolean;
   fromLevel: number;
   toLevel: number;
+  levels: number[];
 }
 
 export interface DebugWay {
@@ -64,7 +69,7 @@ export interface DebugWay {
   reverse?: boolean;
   underlyingWayIdx?: number;
   geometry: [number, number][]; // [lng, lat][]
-  nodeIndices?: (number | null)[];
+  nodeIndices?: number[];
   nodeDistances?: number[];
   properties?: WayProperties;
 }
