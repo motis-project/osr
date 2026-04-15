@@ -588,8 +588,13 @@ struct bus_profile {
         }
       }
       return false;
+    } else if (type == osm_obj_type::kWay) {
+      return (t.private_access_ && default_access(t, type)) ||
+             ((t.bus_ == override::kWhitelist ||
+               t.access_ != override::kBlacklist) &&
+              t.highway_ == "track");
     } else {
-      return t.private_access_ && default_access(t, type);
+      return false;
     }
   }
 
