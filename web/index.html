@@ -12,8 +12,8 @@
     <script src="https://unpkg.com/maplibre-contour@0.0.5/dist/index.min.js"></script>
     <style>
         body {
-            margin: 0;
-            padding: 0;
+            display: flex;
+            overflow: hidden;
         }
 
         html, body, #map {
@@ -81,7 +81,7 @@
             background: #bdffb1;
         }
 
-        #profile, #direction, #routing-algorithm, #foot-speed {
+        #profile, #direction, #routing-algorithm, #foot-speed, #sidebar-toggle-btn {
             position: absolute;
             top: 5px;
             right: 5px;
@@ -103,6 +103,10 @@
             top: 134px;
         }
 
+        #sidebar-toggle-btn {
+            top: 177px;
+        }
+
         #journey-info {
             color: white;
             position: absolute;
@@ -120,35 +124,101 @@
         .context {
             margin: 0.5em;
         }
+
+        #sidebar {
+            width: 0;
+            height: 100vh;
+            background: #f8f9fa;
+            border-left: 1px solid #ddd;
+            transition: width 0.3s ease;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+
+            .action-select {
+                margin-bottom: 3px;
+            }
+        }
+        #sidebar.open {
+            width: 350px;
+        }
+
+        #sidebar-content {
+            min-width: 350px;
+            padding: 20px;
+            height: 100%;
+            overflow-y: auto;
+        }
+
+        #map-container {
+            flex-grow: 1;
+            position: relative;
+            height: 100vh;
+        }
+
+        #map {
+            width: 100%;
+            height: 100%;
+        }
+
+
     </style>
 </head>
 <body>
-<a id="graph-toggle" href="#" onclick="toggleGraph()">G</a>
-<div id="levels"></div>
-<select id="profile" onchange="selectProfile(event)">
-    <option value="foot">foot</option>
-    <option value="wheelchair">wheelchair</option>
-    <option value="bike">bike</option>
-    <option value="bike_elevation_low">bike (low elevation)</option>
-    <option value="bike_elevation_high">bike (high elevation)</option>
-    <option value="car" selected>car</option>
-</select>
-<select id="direction" onchange="selectDirection(event)">
-    <option value="forward" selected>forward</option>
-    <option value="backward">backward</option>
-</select>
-<select id="routing-algorithm" onchange="selectRoutingAlgorithm(event)">
-    <option value="dijkstra" selected>dijkstra</option>
-    <option value="bidirectional">bidirectional A*</option>
-</select>
-<input id="foot-speed" type="number" value="1.2" min="0.1" step="0.1"
-       onchange="setSpeed(event)"/>
-<div id="journey-info">
-    Test
+<div id="map-container">
+    <a id="graph-toggle" href="#" onclick="toggleGraph()">G</a>
+    <button id="sidebar-toggle-btn" onclick="toggleSidebar()">Generate Test</button>
+    <div id="levels"></div>
+    <select id="profile" onchange="selectProfile(event)">
+        <option value="foot">foot</option>
+        <option value="wheelchair">wheelchair</option>
+        <option value="bike">bike</option>
+        <option value="bike_elevation_low">bike (low elevation)</option>
+        <option value="bike_elevation_high">bike (high elevation)</option>
+        <option value="car" selected>car</option>
+    </select>
+    <select id="direction" onchange="selectDirection(event)">
+        <option value="forward" selected>forward</option>
+        <option value="backward">backward</option>
+    </select>
+    <select id="routing-algorithm" onchange="selectRoutingAlgorithm(event)">
+        <option value="dijkstra" selected>dijkstra</option>
+        <option value="bidirectional">bidirectional A*</option>
+    </select>
+    <input id="foot-speed" type="number" value="1.2" min="0.1" step="0.1"
+           onchange="setSpeed(event)"/>
+    <div id="journey-info">
+        Test
+    </div>
+    <div id="map"></div>
 </div>
-<div id="map"></div>
+
+<div id="sidebar">
+    <div id="sidebar-content">
+        <h3>Test Case Generator</h3>
+        <input type="text" id="test-name" placeholder="Test Name (e.g. right_turn)"
+               style="width: 100%; padding: 8px; margin-bottom: 15px; box-sizing: border-box;">
+        <input type="text" id="feed-name" placeholder="The name of the OSM feed"
+               style="width: 100%; padding: 8px; margin-bottom: 15px; box-sizing: border-box;">
+        <hr>
+        <div id="instruction-list"></div>
+        <button onclick="postTestCase()"
+                style="width:100%; padding:12px; background:#28a745; color:white; border:none; border-radius:4px; cursor:pointer; margin-top: 20px;">
+            Save
+        </button>
+    </div>
+</div>
 <script type="module">
     import {style} from "./style.js";
+
+    window.toggleSidebar = () => {
+        const sidebar = document.getElementById('sidebar');
+        sidebar.classList.toggle('open');
+
+        setTimeout(() => {
+            map.resize();
+        }, 310);
+    };
 
     const start = [8.65749737, 50.10416625]
     const destination = [8.65750757, 50.10417645];
@@ -163,10 +233,48 @@
 
     const meta = document.getElementById('journey-info');
 
+    const instructionOptions = [
+        "kNone", "kDestination", "kDestinationLeft", "kDestinationRight",
+        "kBecomes", "kContinue", "kTurnSlightRight", "kTurnSlightLeft",
+        "kTurnRight", "kTurnLeft", "kTurnSharpRight", "kTurnSharpLeft",
+        "kTurnAround", "kRampStraight", "kRampLeft", "kRampRight",
+        "kExitRight", "kExitLeft", "kStayStraight", "kStayLeft",
+        "kStayRight", "kEnterRoundabout", "kExitRoundabout", "kElevator", "kStairs"
+    ];
+
+    let currentRouteData = null;
+
+    const populateSidebar = (features) => {
+        const list = document.getElementById('instruction-list');
+        list.innerHTML = '';
+        currentRouteData = features;
+
+        features.forEach((f, index) => {
+            if (f.geometry.type === 'LineString') {
+                const div = document.createElement('div');
+                div.className = 'instruction-item';
+
+                // Map the API's numeric instruction to our string label
+                const currentIdx = f.properties.instruction || 0;
+
+                div.innerHTML = `
+                <small>Segment ${index}</small>
+                <select class="action-select" data-index="${index}">
+                    ${instructionOptions.map((opt, i) =>
+                    `<option value="${opt}" ${i === currentIdx ? 'selected' : ''}>${opt}</option>`
+                ).join('')}
+                </select>
+            `;
+                list.appendChild(div);
+            }
+        });
+    };
+
     const updateRoute = async () => {
         try {
             const route = await getRoute();
-            if (!route.error) {
+            if (!route.error && route.features) {
+                populateSidebar(route.features);
                 map.getSource('path').setData(route);
             }
         } catch (e) {
@@ -230,6 +338,53 @@
         return table;
     }
 
+    const postTestCase = async () => {
+        const testName = document.getElementById('test-name').value;
+        const feedName = document.getElementById('feed-name').value;
+
+        const selects = document.querySelectorAll('.action-select');
+        const actions = Array.from(selects).map(s => s.value);
+
+        const testCase = {
+            name: testName,
+            osm_file: feedName,
+            start: {
+                lat: query.start[1],
+                lng: query.start[0],
+                lvl: query.start_level || 0
+            },
+            end: {
+                lat: query.destination[1],
+                lng: query.destination[0],
+                lvl: query.destination_level || 0
+            },
+            profile: query.profile,
+            expected_actions: actions
+        };
+
+        try {
+            const response = await fetch(`${window.origin}/api/test-case`, {
+                method: 'POST',
+                mode: 'cors',
+                headers: {
+                    'Access-Control-Allow-Origin': '*',
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(testCase)
+            });
+
+            if (response.ok) {
+                alert(`Test "${testName}" saved successfully!`);
+            } else {
+                const err = await response.text();
+                alert("Error saving test: " + err);
+            }
+        } catch (e) {
+            alert("Failed to reach server: " + e.message);
+        }
+    }
+    window.postTestCase = postTestCase;
+
     const getRoute = async () => {
         const response = await fetch(`${window.origin}/api/route`, {
             method: 'POST',
@@ -263,6 +418,11 @@
             meta.innerHTML = `${min} min ${sec} s<br>${m} meter`;
 
             if (r.features) {
+                r.features = r.features.map((f, i) => {
+                    f.id = i;
+                    return f;
+                });
+                console.log(r.features)
                 const newFeatures = [];
                 for (const f of r.features) {
                     if (f.geometry.type === 'LineString') {
@@ -640,33 +800,7 @@
         });
     });
 
-    const instructions = [
-        "None",
-        "Destination",
-        "Destination Left",
-        "Destination Right",
-        "Becomes",
-        "Continue",
-        "Turn Slight Right",
-        "Turn Slight Left",
-        "Turn Right",
-        "Turn Left",
-        "Turn Sharp Right",
-        "Turn Sharp Left",
-        "Turn Around",
-        "Ramp Straight",
-        "Ramp Left",
-        "Ramp Right",
-        "Exit Right",
-        "Exit Left",
-        "Stay Straight",
-        "Stay Left",
-        "Stay Right",
-        "Enter Roundabout",
-        "Exit Roundabout",
-        "Elevator",
-        "Stairs"
-    ];
+
 
     const hoverPopup = new maplibregl.Popup({
         closeButton: false,
@@ -675,12 +809,31 @@
 
     map.on('mousemove', 'path', (e) => {
         map.getCanvas().style.cursor = 'pointer';
-
         const instructionCode = e.features[0].properties.instruction;
-        const text = instructions[instructionCode] || "Unknown";
+        const actualText = instructionOptions[instructionCode] || "Unknown";
+
+        const featureIndex = e.features[0].id || 0;
+
+        let expectedText = "kNone";
+        const matchingSelect = document.querySelector(`.action-select[data-index="${featureIndex}"]`);
+        if (matchingSelect) {
+            expectedText = matchingSelect.value;
+        }
+
+        const isMatch = actualText === expectedText // Simple normalization check
+        const statusColor = isMatch ? '#28a745' : '#dc3545';
 
         hoverPopup.setLngLat(e.lngLat)
-            .setHTML(`<strong>${text}</strong>`)
+            .setHTML(`
+            <div style="font-family: sans-serif; padding: 5px;">
+                <div style="margin-bottom: 5px;">
+                    <strong>Actual:</strong> <code>${actualText}</code>
+                </div>
+                <div style="color: ${statusColor};">
+                    <strong>Expected:</strong> <code>${expectedText}</code>
+                </div>
+            </div>
+        `)
             .addTo(map);
     });
 

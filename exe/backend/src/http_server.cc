@@ -83,14 +83,16 @@ struct http_server::impl {
        lookup const& l,
        platforms const* pl,
        elevation_storage const* elevations,
-       std::string const& static_file_path)
+       std::string const& static_file_path,
+       bool const provide_test_features)
       : ioc_{ios},
         thread_pool_{thread_pool},
         w_{g},
         l_{l},
         pl_{pl},
         elevations_{elevations},
-        server_{ioc_} {
+        server_{ioc_},
+        provide_test_features_(provide_test_features) {
     try {
       if (!static_file_path.empty() && fs::is_directory(static_file_path)) {
         static_file_path_ = fs::canonical(static_file_path).string();
@@ -166,7 +168,38 @@ struct http_server::impl {
     auto annotator = instruction_annotator{w_};
     annotator.annotate(*p);
 
-    cb(json_response(req, to_featurecollection(w_, p)));
+    cb(json_response(req, to_featurecollection(w_, p, true, true)));
+  }
+
+  static void handle_test_case(web_server::http_req_t const& req,
+                               web_server::http_res_cb_t const& cb) {
+    try {
+      auto const test_case = boost::json::parse(req.body()).as_object();
+      // hacky
+      const std::string test_cases_file_path =
+          "../test/routing/instructions/data/test-cases.json";
+      boost::json::array all_tests;
+
+      std::ifstream ifs(test_cases_file_path);
+      if (ifs.is_open()) {
+        std::string content((std::istreambuf_iterator<char>(ifs)),
+                            std::istreambuf_iterator<char>());
+        if (!content.empty()) {
+          all_tests = boost::json::parse(content).as_array();
+        }
+        ifs.close();
+      }
+
+      all_tests.push_back(test_case);
+
+      std::ofstream ofs(test_cases_file_path);
+      ofs << boost::json::serialize(all_tests);
+      ofs.close();
+      return cb(json_response(req, "Saved", http::status::ok));
+    } catch (std::exception const& e) {
+      return cb(
+          json_response(req, e.what(), http::status::internal_server_error));
+    }
   }
 
   void handle_levels(web_server::http_req_t const& req,
@@ -261,6 +294,14 @@ struct http_server::impl {
       case http::verb::options: return cb(json_response(req, {}));
       case http::verb::post: {
         auto const& target = req.target();
+        if (provide_test_features_ && target.starts_with("/api/test-case")) {
+          return run_parallel(
+              [this](web_server::http_req_t const& req1,
+                     web_server::http_res_cb_t const& cb1) {
+                handle_test_case(req1, cb1);
+              },
+    req, cb);
+        }
         if (target.starts_with("/api/route")) {
           return run_parallel(
               [this](web_server::http_req_t const& req1,
@@ -363,6 +404,7 @@ private:
   web_server server_;
   bool serve_static_files_{false};
   std::string static_file_path_;
+  bool provide_test_features_{false};
 };
 
 http_server::http_server(boost::asio::io_context& ioc,
@@ -371,8 +413,9 @@ http_server::http_server(boost::asio::io_context& ioc,
                          lookup const& l,
                          platforms const* pl,
                          elevation_storage const* elevation,
-                         std::string const& static_file_path)
-    : impl_{new impl(ioc, thread_pool, w, l, pl, elevation, static_file_path)} {
+                         std::string const& static_file_path,
+                         bool const provide_test_features)
+    : impl_{new impl(ioc, thread_pool, w, l, pl, elevation, static_file_path, provide_test_features)} {
 }
 
 http_server::~http_server() = default;

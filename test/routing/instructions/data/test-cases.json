@@ -2,41 +2,129 @@
   {
     "name": "intersection_right_turn",
     "osm_file": "komponistenviertel-darmstadt-pbf.osm.pbf",
-    "start": {"lat": 49.883621, "lng": 8.677029, "lvl": 0.0},
-    "end": {"lat": 49.885453, "lng": 8.678910, "lvl": 0.0},
+    "start": {
+      "lat": 4.9883621E1,
+      "lng": 8.677029E0,
+      "lvl": 0E0
+    },
+    "end": {
+      "lat": 4.9885453E1,
+      "lng": 8.67891E0,
+      "lvl": 0E0
+    },
     "profile": "kFoot",
-    "expected_actions": ["kNone", "kTurnRight", "kNone", "kDestination"]
+    "expected_actions": [
+      "kNone",
+      "kTurnRight",
+      "kNone",
+      "kDestination"
+    ]
   },
   {
     "name": "intersection_left_turn",
     "osm_file": "komponistenviertel-darmstadt-pbf.osm.pbf",
-    "start": {"lat": 49.884520, "lng": 8.675994, "lvl": 0.0},
-    "end": {"lat": 49.884308, "lng": 8.674567, "lvl": 0.0},
+    "start": {
+      "lat": 4.988452E1,
+      "lng": 8.675994E0,
+      "lvl": 0E0
+    },
+    "end": {
+      "lat": 4.9884308E1,
+      "lng": 8.674567E0,
+      "lvl": 0E0
+    },
     "profile": "kFoot",
-    "expected_actions": ["kNone", "kTurnLeft", "kNone", "kDestination"]
+    "expected_actions": [
+      "kNone",
+      "kTurnLeft",
+      "kNone",
+      "kDestination"
+    ]
   },
   {
     "name": "intersection_continue",
     "osm_file": "komponistenviertel-darmstadt-pbf.osm.pbf",
-    "start": {"lat": 49.883621, "lng": 8.677029, "lvl": 0.0},
-    "end": {"lat": 49.884755, "lng": 8.675667, "lvl": 0.0},
+    "start": {
+      "lat": 4.9883621E1,
+      "lng": 8.677029E0,
+      "lvl": 0E0
+    },
+    "end": {
+      "lat": 4.9884755E1,
+      "lng": 8.675667E0,
+      "lvl": 0E0
+    },
     "profile": "kFoot",
-    "expected_actions": ["kNone", "kContinue", "kNone", "kDestination"]
+    "expected_actions": [
+      "kNone",
+      "kContinue",
+      "kNone",
+      "kDestination"
+    ]
   },
   {
     "name": "intersection_composition_1",
     "osm_file": "komponistenviertel-darmstadt-pbf.osm.pbf",
-    "start": {"lat": 49.882061, "lng": 8.679368, "lvl": 0.0},
-    "end": {"lat": 49.883765, "lng": 8.679143, "lvl": 0.0},
+    "start": {
+      "lat": 4.9882061E1,
+      "lng": 8.679368E0,
+      "lvl": 0E0
+    },
+    "end": {
+      "lat": 4.9883765E1,
+      "lng": 8.679143E0,
+      "lvl": 0E0
+    },
     "profile": "kCar",
-    "expected_actions": ["kNone", "kContinue", "kContinue", "kTurnLeft", "kContinue", "kContinue", "kTurnLeft", "kContinue", "kTurnLeft", "kContinue", "kContinue", "kNone", "kDestination"]
+    "expected_actions": [
+      "kNone",
+      "kContinue",
+      "kContinue",
+      "kTurnLeft",
+      "kContinue",
+      "kContinue",
+      "kTurnLeft",
+      "kContinue",
+      "kTurnLeft",
+      "kContinue",
+      "kContinue",
+      "kNone",
+      "kDestination"
+    ]
   },
   {
     "name": "intersection_composition_2",
     "osm_file": "komponistenviertel-darmstadt-pbf.osm.pbf",
-    "start": {"lat": 49.880222, "lng": 8.673360, "lvl": 0.0},
-    "end": {"lat": 49.886988, "lng": 8.677882, "lvl": 0.0},
+    "start": {
+      "lat": 4.9880222E1,
+      "lng": 8.67336E0,
+      "lvl": 0E0
+    },
+    "end": {
+      "lat": 4.9886988E1,
+      "lng": 8.677882E0,
+      "lvl": 0E0
+    },
     "profile": "kCar",
-    "expected_actions": ["kNone", "kTurnLeft", "kContinue", "kContinue", "kContinue", "kContinue", "kTurnRight", "kContinue", "kContinue", "kContinue", "kContinue", "kContinue", "kTurnLeft", "kContinue", "kContinue", "kContinue", "kNone", "kDestination"]
+    "expected_actions": [
+      "kNone",
+      "kTurnLeft",
+      "kContinue",
+      "kContinue",
+      "kContinue",
+      "kContinue",
+      "kTurnRight",
+      "kContinue",
+      "kContinue",
+      "kContinue",
+      "kContinue",
+      "kContinue",
+      "kTurnLeft",
+      "kContinue",
+      "kContinue",
+      "kContinue",
+      "kNone",
+      "kDestination"
+    ]
   }
 ]
