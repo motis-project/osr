@@ -167,7 +167,7 @@
 <body>
 <div id="map-container">
     <a id="graph-toggle" href="#" onclick="toggleGraph()">G</a>
-    <button id="sidebar-toggle-btn" onclick="toggleSidebar()">Generate Test</button>
+    <button id="sidebar-toggle-btn" onclick="toggleSidebar()">Test Framework</button>
     <div id="levels"></div>
     <select id="profile" onchange="selectProfile(event)">
         <option value="foot">foot</option>
@@ -194,18 +194,38 @@
 </div>
 
 <div id="sidebar">
-    <div id="sidebar-content">
-        <h3>Test Case Generator</h3>
-        <input type="text" id="test-name" placeholder="Test Name (e.g. right_turn)"
-               style="width: 100%; padding: 8px; margin-bottom: 15px; box-sizing: border-box;">
-        <input type="text" id="feed-name" placeholder="The name of the OSM feed"
-               style="width: 100%; padding: 8px; margin-bottom: 15px; box-sizing: border-box;">
-        <hr>
-        <div id="instruction-list"></div>
-        <button onclick="postTestCase()"
-                style="width:100%; padding:12px; background:#28a745; color:white; border:none; border-radius:4px; cursor:pointer; margin-top: 20px;">
-            Save
+    <div style="display: flex; background: #eee; border-bottom: 1px solid #ccc;">
+        <button class="tab-btn active" onclick="openTab(event, 'gen-tab')"
+                style="flex:1; padding: 10px; border:none; cursor:pointer;">Generate
         </button>
+        <button class="tab-btn" onclick="openTab(event, 'explore-tab')"
+                style="flex:1; padding: 10px; border:none; cursor:pointer;">Explore
+        </button>
+    </div>
+
+    <div id="sidebar-content">
+        <div id="gen-tab" class="tab-content">
+            <h3>Test Case Generator</h3>
+            <input type="text" id="test-name" placeholder="Test Name (e.g. right_turn)"
+                   style="width: 100%; padding: 8px; margin-bottom: 15px; box-sizing: border-box;">
+            <select id="feed-name"
+                   style="width: 100%; padding: 8px; margin-bottom: 15px; box-sizing: border-box;">
+                <option value="">Loading feeds...</option>
+            </select>
+            <hr>
+            <div id="instruction-list"></div>
+            <button onclick="postTestCase()"
+                    style="width:100%; padding:12px; background:#28a745; color:white; border:none; border-radius:4px; cursor:pointer; margin-top: 20px;">
+                Save
+            </button>
+        </div>
+        <div id="explore-tab" class="tab-content" style="display:none;">
+            <h3>Existing Tests</h3>
+            <button onclick="loadTestsAndInject()" style="width:100%; margin-bottom:10px;">Refresh List</button>
+            <div id="existing-tests-list">
+                <p style="color: #666; font-style: italic;">Load tests to see them here...</p>
+            </div>
+        </div>
     </div>
 </div>
 <script type="module">
@@ -218,6 +238,97 @@
         setTimeout(() => {
             map.resize();
         }, 310);
+    };
+
+    window.openTab = (evt, tabName) => {
+        const contents = document.getElementsByClassName("tab-content");
+        for (let i = 0; i < contents.length; i++) contents[i].style.display = "none";
+
+        const buttons = document.getElementsByClassName("tab-btn");
+        for (let i = 0; i < buttons.length; i++) buttons[i].classList.remove("active");
+
+        document.getElementById(tabName).style.display = "block";
+        evt.currentTarget.classList.add("active");
+    };
+
+    let testCases = []
+    const testNames = new Set()
+
+    window.loadTestsFromServer = async () => {
+        try {
+            // You'll need a GET endpoint on your server that returns the tests.json content
+            const response = await fetch(`${window.origin}/api/test-framework/test-cases`);
+            const tests = await response.json();
+            testCases = [...tests]
+
+            testNames.clear()
+            testCases.forEach((tc) => {
+                testNames.add(tc.name)
+            })
+        } catch (e) {
+            console.error("Failed to load tests", e);
+        }
+    };
+
+    window.loadAvailableFeeds = async () => {
+        try {
+            const response = await fetch(`${window.origin}/api/test-framework/feeds`);
+            const feeds = await response.json();
+            const select = document.getElementById('feed-name');
+
+            // Clear "Loading..." and populate
+            select.innerHTML = feeds.map(file =>
+                `<option value="${file}">${file}</option>`
+            ).join('');
+        } catch (e) {
+            console.error("Failed to load feeds:", e);
+            document.getElementById('osm-file-select').innerHTML = '<option>Error loading feeds</option>';
+        }
+    }
+    window.loadAvailableFeeds();
+
+    window.injectTestCasesIntoExploreTab = () => {
+        const listDiv = document.getElementById('existing-tests-list');
+        listDiv.innerHTML = '';
+
+        testCases.forEach((t, idx) => {
+            const item = document.createElement('div');
+            item.style = "padding: 10px; border-bottom: 1px solid #ddd; cursor: pointer; background: #fff; margin-bottom: 5px;";
+            item.innerHTML = `<strong>${t.name}</strong><br><small>${t.profile}</small>`;
+            item.onclick = () => injectTestCaseIntoMap(t);
+            listDiv.appendChild(item);
+        });
+    }
+
+    window.loadTestsAndInject = () => {
+        window.loadTestsFromServer().then(injectTestCasesIntoExploreTab);
+    }
+
+    window.injectTestCaseIntoMap = async (testCase) => {
+        // Set global query state
+        query.start = [testCase.start.lng, testCase.start.lat];
+        query.destination = [testCase.end.lng, testCase.end.lat];
+        query.profile = testCase.profile;
+
+        // Update markers
+        startMarker.setLngLat(query.start);
+        destinationMarker.setLngLat(query.destination);
+
+        // Update dropdowns
+        document.getElementById('profile').value = testCase.profile;
+
+        // Trigger route update
+        await updateRoute();
+
+        // After route is loaded, manually override the sidebar selects with saved values
+        const selects = document.querySelectorAll('.action-select');
+        testCase.expected_actions.forEach((action, i) => {
+            if (selects[i]) selects[i].value = action;
+        });
+
+        document.getElementById('test-name').value = testCase.name;
+        document.getElementById('feed-name').value = testCase.osm_file;
+        document.querySelector('.tab-btn').click();
     };
 
     const start = [8.65749737, 50.10416625]
@@ -276,6 +387,10 @@
             if (!route.error && route.features) {
                 populateSidebar(route.features);
                 map.getSource('path').setData(route);
+                map.flyTo({
+                    center: query.start,
+                    essential: true
+                });
             }
         } catch (e) {
         }
@@ -338,9 +453,26 @@
         return table;
     }
 
-    const postTestCase = async () => {
+    window.postTestCase = async () => {
         const testName = document.getElementById('test-name').value;
         const feedName = document.getElementById('feed-name').value;
+
+        if (!testName) {
+            alert("Please enter a test name.");
+            return;
+        }
+
+        if (!feedName) {
+            alert("Please provide a feed.");
+            return;
+        }
+
+        if (testNames.has(testName)) {
+            const proceed = confirm(`Test "${testName}" already exists. Do you want to overwrite it?`);
+            if (!proceed) {
+                return;
+            }
+        }
 
         const selects = document.querySelectorAll('.action-select');
         const actions = Array.from(selects).map(s => s.value);
@@ -363,7 +495,7 @@
         };
 
         try {
-            const response = await fetch(`${window.origin}/api/test-case`, {
+            const response = await fetch(`${window.origin}/api/test-framework/test-case`, {
                 method: 'POST',
                 mode: 'cors',
                 headers: {
@@ -374,6 +506,7 @@
             });
 
             if (response.ok) {
+                loadTestsAndInject();
                 alert(`Test "${testName}" saved successfully!`);
             } else {
                 const err = await response.text();
@@ -383,7 +516,6 @@
             alert("Failed to reach server: " + e.message);
         }
     }
-    window.postTestCase = postTestCase;
 
     const getRoute = async () => {
         const response = await fetch(`${window.origin}/api/route`, {
@@ -840,6 +972,41 @@
     map.on('mouseleave', 'path', () => {
         map.getCanvas().style.cursor = '';
         hoverPopup.remove();
+    });
+
+    map.on('click', 'path-endpoints', (e) => {
+        e.originalEvent.stopPropagation();
+
+        const properties = e.features[0].properties;
+
+        const popupContent = `
+        <div style="font-family: ui-sans-serif, system-ui; padding: 8px;">
+            <h4 style="margin: 0 0 8px 0; border-bottom: 1px solid #ccc;">Traversed Node Hub</h4>
+            <p style="font-size: 11pt; margin: 4px 0;"><strong>Node ID:</strong> ${properties.osm_node_id || 'N/A'}</p>
+            <div style="background: #f4f4f4; padding: 10px; border-radius: 4px; border: 1px dashed #999;">
+                <p style="margin: 0; color: #666; font-style: italic;">
+                    Debug view for outgoing edges and alternative routes will be rendered here.
+                </p>
+            </div>
+            <p style="font-size: 9pt; color: #888; margin-top: 8px;">
+                Lat: ${e.lngLat.lat.toFixed(6)}, Lng: ${e.lngLat.lng.toFixed(6)}
+            </p>
+        </div>
+    `;
+
+        new maplibregl.Popup()
+            .setLngLat(e.lngLat)
+            .setHTML(popupContent)
+            .addTo(map);
+    });
+
+    // Change cursor to pointer when hovering over a hub
+    map.on('mouseenter', 'path-endpoints', () => {
+        map.getCanvas().style.cursor = 'pointer';
+    });
+
+    map.on('mouseleave', 'path-endpoints', () => {
+        map.getCanvas().style.cursor = '';
     });
 
     const startMarker = new maplibregl.Marker({

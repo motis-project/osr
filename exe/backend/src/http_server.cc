@@ -41,6 +41,9 @@ namespace json = boost::json;
 
 namespace osr::backend {
 
+const std::filesystem::path test_data_dir = TEST_DATA_DIR;
+const std::filesystem::path test_cases_path = test_data_dir / "test-cases.json";
+
 template <typename Body>
 void set_cors_headers(http::response<Body>& res) {
   using namespace boost::beast::http;
@@ -171,31 +174,78 @@ struct http_server::impl {
     cb(json_response(req, to_featurecollection(w_, p, true, true)));
   }
 
-  static void handle_test_case(web_server::http_req_t const& req,
-                               web_server::http_res_cb_t const& cb) {
+  static void handle_post_test_case(web_server::http_req_t const& req,
+                                    web_server::http_res_cb_t const& cb) {
     try {
-      auto const test_case = boost::json::parse(req.body()).as_object();
-      // hacky
-      const std::string test_cases_file_path =
-          "../test/routing/instructions/data/test-cases.json";
-      boost::json::array all_tests;
+      auto const test_case = json::parse(req.body()).as_object();
+      json::array all_tests;
+      auto const new_name = test_case.at("name").as_string();
 
-      std::ifstream ifs(test_cases_file_path);
+      std::ifstream ifs(test_cases_path);
       if (ifs.is_open()) {
         std::string content((std::istreambuf_iterator<char>(ifs)),
                             std::istreambuf_iterator<char>());
         if (!content.empty()) {
-          all_tests = boost::json::parse(content).as_array();
+          all_tests = json::parse(content).as_array();
         }
         ifs.close();
       }
 
-      all_tests.push_back(test_case);
+      bool found = false;
+      for (auto& existing_test : all_tests) {
+        if (existing_test.as_object().at("name").as_string() == new_name) {
+          existing_test = test_case; // Replace existing entry
+          found = true;
+          break;
+        }
+      }
+      if (!found) {
+        all_tests.push_back(test_case);
+      }
 
-      std::ofstream ofs(test_cases_file_path);
+      std::ofstream ofs(test_cases_path);
       ofs << boost::json::serialize(all_tests);
       ofs.close();
       return cb(json_response(req, "Saved", http::status::ok));
+    } catch (std::exception const& e) {
+      return cb(
+          json_response(req, e.what(), http::status::internal_server_error));
+    }
+  }
+
+  static void handle_get_test_cases(web_server::http_req_t const& req,
+                                    web_server::http_res_cb_t const& cb) {
+    try {
+      std::ifstream ifs(test_cases_path);
+      if (ifs.is_open()) {
+        std::string content((std::istreambuf_iterator<char>(ifs)),
+                            std::istreambuf_iterator<char>());
+        ifs.close();
+        if (!content.empty()) {
+          return cb(json_response(req, content, http::status::ok));
+        }
+      }
+    } catch (std::exception const& e) {
+      return cb(
+          json_response(req, e.what(), http::status::internal_server_error));
+    }
+  }
+
+  static void handle_get_available_feeds(web_server::http_req_t const& req,
+                                         web_server::http_res_cb_t const& cb) {
+    try {
+      json::array feeds;
+
+      if (fs::exists(test_data_dir) && fs::is_directory(test_data_dir)) {
+        for (auto const& entry : fs::directory_iterator(test_data_dir)) {
+          if (entry.is_regular_file() && entry.path().extension() == ".pbf") {
+            feeds.push_back(entry.path().filename().c_str());
+          }
+        }
+      }
+
+      return cb(
+          json_response(req, boost::json::serialize(feeds), http::status::ok));
     } catch (std::exception const& e) {
       return cb(
           json_response(req, e.what(), http::status::internal_server_error));
@@ -294,13 +344,9 @@ struct http_server::impl {
       case http::verb::options: return cb(json_response(req, {}));
       case http::verb::post: {
         auto const& target = req.target();
-        if (provide_test_features_ && target.starts_with("/api/test-case")) {
-          return run_parallel(
-              [this](web_server::http_req_t const& req1,
-                     web_server::http_res_cb_t const& cb1) {
-                handle_test_case(req1, cb1);
-              },
-    req, cb);
+        if (provide_test_features_ &&
+            target.starts_with("/api/test-framework/test-case")) {
+          return handle_post_test_case(req, cb);
         }
         if (target.starts_with("/api/route")) {
           return run_parallel(
@@ -335,7 +381,21 @@ struct http_server::impl {
                                   http::status::not_found));
         }
       }
-      case http::verb::get:
+      case http::verb::get: {
+        auto const& target = req.target();
+        if (provide_test_features_ &&
+            target.starts_with("/api/test-framework/test-cases")) {
+          return run_parallel(
+              [this](web_server::http_req_t const& req1,
+                     web_server::http_res_cb_t const& cb1) {
+                handle_get_test_cases(req1, cb1);
+              },
+              req, cb);
+        } else if (provide_test_features_ &&
+                   target.starts_with("/api/test-framework/feeds")) {
+          return handle_get_available_feeds(req, cb);
+        }
+      }
       case http::verb::head: return handle_static(req, cb);
       default:
         return cb(json_response(req,

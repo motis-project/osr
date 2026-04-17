@@ -131,6 +131,8 @@ target_link_libraries(osr
         boost-iostreams
 )
 
+set(ABS_TEST_DATA_DIR "${CMAKE_CURRENT_SOURCE_DIR}/test/routing/instructions/data")
+
 # --- MAIN ---
 add_executable(osr-extract exe/extract.cc)
 target_link_libraries(osr-extract osr)
@@ -142,6 +144,9 @@ file(GLOB_RECURSE osr-backend-src exe/backend/*.cc)
 add_executable(osr-backend ${osr-backend-src})
 target_link_libraries(osr-backend osr web-server conf boost-json)
 target_include_directories(osr-backend PRIVATE exe/backend/include)
+target_compile_definitions(osr-backend PRIVATE
+        TEST_DATA_DIR="${ABS_TEST_DATA_DIR}"
+)
 
 # --- TEST ---
 configure_file(
@@ -152,6 +157,9 @@ file(GLOB_RECURSE osr-test-files test/*cc)
 add_executable(osr-test ${osr-test-files})
 target_include_directories(osr-test PRIVATE ${CMAKE_CURRENT_BINARY_DIR}/generated test/include)
 target_link_libraries(osr-test gmock osr boost-json)
+target_compile_definitions(osr-test PRIVATE
+        TEST_DATA_DIR="${ABS_TEST_DATA_DIR}"
+)
 
 # --- MIMALLOC ---
 if (OSR_MIMALLOC)

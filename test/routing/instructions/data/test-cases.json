@@ -5,14 +5,14 @@
     "start": {
       "lat": 4.9883621E1,
       "lng": 8.677029E0,
-      "lvl": 0E0
+      "lvl": 0
     },
     "end": {
       "lat": 4.9885453E1,
       "lng": 8.67891E0,
-      "lvl": 0E0
+      "lvl": 0
     },
-    "profile": "kFoot",
+    "profile": "foot",
     "expected_actions": [
       "kNone",
       "kTurnRight",
@@ -33,7 +33,7 @@
       "lng": 8.674567E0,
       "lvl": 0E0
     },
-    "profile": "kFoot",
+    "profile": "foot",
     "expected_actions": [
       "kNone",
       "kTurnLeft",
@@ -54,7 +54,7 @@
       "lng": 8.675667E0,
       "lvl": 0E0
     },
-    "profile": "kFoot",
+    "profile": "foot",
     "expected_actions": [
       "kNone",
       "kContinue",
@@ -75,7 +75,7 @@
       "lng": 8.679143E0,
       "lvl": 0E0
     },
-    "profile": "kCar",
+    "profile": "car",
     "expected_actions": [
       "kNone",
       "kContinue",
@@ -105,7 +105,7 @@
       "lng": 8.677882E0,
       "lvl": 0E0
     },
-    "profile": "kCar",
+    "profile": "car",
     "expected_actions": [
       "kNone",
       "kTurnLeft",
