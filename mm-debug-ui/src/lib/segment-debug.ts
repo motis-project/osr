@@ -40,6 +40,17 @@ export function getLabelSignature(label: DebugNodeLabel): string {
   return `${label.label}::${label.cost}::${label.predNodeIdx ?? "root"}`;
 }
 
+export function sortDebugNodeLabels(
+  labels: DebugNodeLabel[],
+): DebugNodeLabel[] {
+  return [...labels].sort((left, right) => {
+    if (left.cost !== right.cost) {
+      return left.cost - right.cost;
+    }
+    return getLabelSignature(left).localeCompare(getLabelSignature(right));
+  });
+}
+
 export function segmentHasReachedDestination(
   segment: DebugRouteSegment,
 ): boolean {
@@ -106,14 +117,14 @@ export function getSegmentLabelNodes(
   }
 
   return Object.entries(segment.nodeLabels)
-    .map(([nodeIdx, labels]) => ({
-      nodeIdx: Number(nodeIdx),
-      labels,
-      minCost: labels.reduce(
-        (best, entry) => Math.min(best, entry.cost),
-        Number.POSITIVE_INFINITY,
-      ),
-    }))
+    .map(([nodeIdx, labels]) => {
+      const sortedLabels = sortDebugNodeLabels(labels);
+      return {
+        nodeIdx: Number(nodeIdx),
+        labels: sortedLabels,
+        minCost: sortedLabels[0]?.cost ?? Number.POSITIVE_INFINITY,
+      };
+    })
     .filter((entry) => entry.labels.length > 0)
     .sort((left, right) => left.minCost - right.minCost);
 }

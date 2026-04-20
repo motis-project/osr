@@ -32,6 +32,7 @@ interface DebugState {
 interface DebugContextType extends DebugState {
   loadData: (data: MapMatchDebugData) => void;
   setViewMode: (mode: ViewMode) => void;
+  showPoint: (idx: number) => void;
   showSegment: (idx: number) => void;
   selectPoint: (idx: number | null) => void;
   selectSegment: (idx: number | null) => void;
@@ -101,8 +102,34 @@ export function DebugProvider({ children }: { children: ReactNode }) {
     }));
   };
 
+  const showPoint = (idx: number) => {
+    setState((s) => ({
+      ...s,
+      viewMode: "points",
+      selectedPointIdx: idx,
+      selectedSegmentIdx: null,
+      highlightedSegmentIdx: null,
+      selectedNodeIdx: null,
+      selectedNodeLabelSignature: null,
+      selectedWayIdx: null,
+      selectedMatchIdx: null,
+      selectedRouteCandidate: null,
+      highlightedWayIdx: null,
+      highlightedMatchIdx: null,
+    }));
+  };
+
   const selectPoint = (idx: number | null) => {
-    setState((s) => ({ ...s, selectedPointIdx: idx }));
+    setState((s) => ({
+      ...s,
+      selectedPointIdx: idx,
+      selectedSegmentIdx: null,
+      selectedNodeIdx: null,
+      selectedNodeLabelSignature: null,
+      selectedWayIdx: null,
+      selectedMatchIdx: null,
+      selectedRouteCandidate: null,
+    }));
   };
 
   const showSegment = (idx: number) => {
@@ -139,7 +166,9 @@ export function DebugProvider({ children }: { children: ReactNode }) {
       ...s,
       selectedNodeIdx: idx,
       selectedNodeLabelSignature:
-        idx === null ? null : s.selectedNodeLabelSignature,
+        idx === null || s.selectedNodeIdx !== idx
+          ? null
+          : s.selectedNodeLabelSignature,
     }));
   };
 
@@ -254,6 +283,7 @@ export function DebugProvider({ children }: { children: ReactNode }) {
         ...state,
         loadData,
         setViewMode,
+        showPoint,
         showSegment,
         selectPoint,
         selectSegment,

@@ -32,12 +32,17 @@ struct mm_match_distance {
 
 template <Profile P>
 mm_match_distance get_mm_match_distance(typename P::parameters const&) {
-  return {.initial_ = 100.0, .expanded_ = 300.0};
+  return {.initial_ = 150.0, .expanded_ = 300.0};
 }
 
 template <>
 mm_match_distance get_mm_match_distance<railway>(railway::parameters const&) {
   return {.initial_ = 200.0, .expanded_ = 500.0};
+}
+
+template <>
+mm_match_distance get_mm_match_distance<ferry>(ferry::parameters const&) {
+  return {.initial_ = 500.0, .expanded_ = 1500.0};
 }
 
 template <Profile P>
@@ -344,6 +349,7 @@ matched_route map_match(
         std::min(static_cast<double>(std::numeric_limits<cost_t>::max() - 1U),
                  dijkstra_max));
 
+    seg.dijkstra_cost_limit_ = dijkstra_max_cost;
     seg.astar_.reset(dijkstra_max_cost, from_pd.loc_, to_pd.loc_);
 
     auto const get_min_start_cost = [&](matched_way<P> const& from_mw) {

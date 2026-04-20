@@ -60,6 +60,7 @@ struct segment_data {
   std::unique_ptr<sharing_data> sharing_{};
   cost_t min_cost_{std::numeric_limits<cost_t>::max()};
   cost_t max_cost_{std::numeric_limits<cost_t>::min()};
+  cost_t dijkstra_cost_limit_{};
   bool all_beelined_{false};
   std::size_t beeline_from_{};
   distance_t beeline_dist_{};

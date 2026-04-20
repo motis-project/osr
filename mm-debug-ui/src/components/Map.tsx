@@ -24,6 +24,7 @@ import {
   getPointMatchSelection,
   getSegmentMatch,
   kInspectorNodeHoverEvent,
+  sortDebugNodeLabels,
 } from "../lib/segment-debug";
 import type { DebugMatch, DebugWay, InputPoint } from "../types";
 
@@ -232,6 +233,7 @@ export function Map() {
     getBoundingBox,
     getWay,
     getNode,
+    showPoint,
     showSegment,
     selectNode,
     selectNodeLabel,
@@ -356,6 +358,7 @@ export function Map() {
     "start-projected-points",
     "dest-projected-points",
     "input-points",
+    "input-point-labels",
     "selected-point-match-connectors",
     "selected-point-match-connectors-labels",
     "selected-point-radius",
@@ -499,6 +502,46 @@ export function Map() {
           "circle-color": color,
           "circle-stroke-color": "#fff",
           "circle-stroke-width": radius > 6 ? 2 : 1,
+        },
+      });
+    };
+
+    const addInputPointLayers = (
+      features: GeoJSON.Feature[],
+      radius: number,
+      withNumbers = false,
+    ) => {
+      addCircleLayer("input-points", features, "#ef4444", radius);
+
+      if (!withNumbers || features.length === 0) {
+        return;
+      }
+
+      map.addLayer({
+        id: "input-point-labels",
+        type: "symbol",
+        source: "input-points",
+        layout: {
+          "text-field": ["to-string", ["+", ["get", "idx"], 1]],
+          "text-size": [
+            "interpolate",
+            ["linear"],
+            ["zoom"],
+            10,
+            10,
+            14,
+            12,
+            18,
+            14,
+          ],
+          "text-font": ["Open Sans Bold"],
+          "text-allow-overlap": true,
+          "text-ignore-placement": true,
+        },
+        paint: {
+          "text-color": "#ffffff",
+          "text-halo-color": "#7f1d1d",
+          "text-halo-width": 2,
         },
       });
     };
@@ -960,7 +1003,7 @@ export function Map() {
         properties: { idx: i, type: "input" },
         geometry: { type: "Point" as const, coordinates: [pt.lng, pt.lat] },
       }));
-      addCircleLayer("input-points", pointFeatures, "#ef4444", 8);
+      addInputPointLayers(pointFeatures, 8, true);
     }
 
     // Points mode
@@ -1086,7 +1129,7 @@ export function Map() {
         properties: { type: "gps" },
         geometry: { type: "Point" as const, coordinates: [pt.lng, pt.lat] },
       };
-      addCircleLayer("input-points", [gpsFeature], "#ef4444", 10);
+      addInputPointLayers([gpsFeature], 10);
     }
 
     // Segment mode
@@ -1237,7 +1280,7 @@ export function Map() {
         properties: { idx: i, type: "input" },
         geometry: { type: "Point" as const, coordinates: [pt.lng, pt.lat] },
       }));
-      addCircleLayer("input-points", pointFeatures, "#ef4444", 6);
+      addInputPointLayers(pointFeatures, 6);
 
       if (selectedSegmentIdx === null) {
         return;
@@ -1310,8 +1353,17 @@ export function Map() {
       const graphWayFeatures: GeoJSON.Feature[] = [];
       const additionalEdgeFeatures: GeoJSON.Feature[] = [];
       const additionalEdgeMarkerFeatures: GeoJSON.Feature[] = [];
+      const visibleWayNodeIndices = new Set<number>();
       const allMatches = [...seg.startMatches, ...seg.destMatches];
       const seenWays = new Set<number>();
+
+      const collectWayNodes = (way: DebugWay) => {
+        for (const nodeIdx of way.nodeIndices ?? []) {
+          if (Number.isFinite(nodeIdx)) {
+            visibleWayNodeIndices.add(nodeIdx);
+          }
+        }
+      };
 
       // Helper to create a tiny segment centered at 'center' aligned with p1->p2
       const createCenteredSegment = (
@@ -1394,6 +1446,7 @@ export function Map() {
           } else {
             graphWayFeatures.push(feature);
           }
+          collectWayNodes(way);
         }
       }
 
@@ -1417,6 +1470,7 @@ export function Map() {
             };
             additionalEdgeFeatures.push(feature);
             processAdditionalEdge(way);
+            collectWayNodes(way);
           }
         }
       }
@@ -1575,6 +1629,30 @@ export function Map() {
       const displayedNodes = new Set(
         Object.keys(nodeLabels).map((k) => parseInt(k, 10)),
       );
+      for (const idx of visibleWayNodeIndices) {
+        if (displayedNodes.has(idx)) {
+          continue;
+        }
+
+        const node = data.nodes[idx];
+        if (!node) {
+          continue;
+        }
+
+        displayedNodes.add(idx);
+        unreachedNodeFeatures.push({
+          type: "Feature",
+          properties: {
+            nodeIdx: idx,
+            internalId: node.internalId,
+            osmId: node.osmId,
+            isAdditional: node.isAdditionalNode,
+            isReached: false,
+          },
+          geometry: { type: "Point", coordinates: node.pos },
+        });
+      }
+
       for (const m of allMatches) {
         for (const idx of [
           m.additionalNodeIdx,
@@ -2399,6 +2477,7 @@ export function Map() {
 
       let foundNodeIdx: number | null = null;
       let foundProjectedPoint = false;
+      let foundPointIdx: number | null = null;
       let foundSegmentIdx: number | null = null;
       let foundWayIdx: number | null = null;
       let foundMatchIdx: number | null = null;
@@ -2411,6 +2490,13 @@ export function Map() {
           const segmentIdx = Number(props.segmentIdx);
           if (Number.isFinite(segmentIdx)) {
             foundSegmentIdx = segmentIdx;
+          }
+        }
+
+        if (layerId === "input-points" || layerId === "input-point-labels") {
+          const pointIdx = Number(props.idx);
+          if (Number.isFinite(pointIdx)) {
+            foundPointIdx = pointIdx;
           }
         }
 
@@ -2460,6 +2546,11 @@ export function Map() {
         }
       }
 
+      if (foundPointIdx !== null) {
+        showPoint(foundPointIdx);
+        return;
+      }
+
       if (foundSegmentIdx !== null) {
         showSegment(foundSegmentIdx);
         return;
@@ -2468,11 +2559,10 @@ export function Map() {
       if (foundNodeIdx !== null) {
         selectNode(foundNodeIdx);
         if (selectedSegment?.nodeLabels?.[String(foundNodeIdx)]?.length) {
-          selectNodeLabel(
-            getLabelSignature(
-              selectedSegment.nodeLabels[String(foundNodeIdx)][0],
-            ),
+          const sortedLabels = sortDebugNodeLabels(
+            selectedSegment.nodeLabels[String(foundNodeIdx)],
           );
+          selectNodeLabel(getLabelSignature(sortedLabels[0]));
         }
       }
 
@@ -2497,6 +2587,7 @@ export function Map() {
       isMeasuring,
       selectNode,
       selectNodeLabel,
+      showPoint,
       showSegment,
       selectMatch,
       selectRouteCandidate,

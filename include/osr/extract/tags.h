@@ -33,7 +33,10 @@ struct tags {
       switch (cista::hash(std::string_view{t.key()})) {
         using namespace std::string_view_literals;
         case cista::hash("ramp"): is_ramp_ |= t.value() != "no"sv; break;
-        case cista::hash("type"): is_route_ |= t.value() == "route"sv; break;
+        case cista::hash("type"):
+          is_route_ |=
+              o.type() == osmium::item_type::relation && t.value() == "route"sv;
+          break;
         case cista::hash("parking"): is_parking_ = true; break;
         case cista::hash("amenity"):
           is_parking_ |=
@@ -585,8 +588,13 @@ struct bus_profile {
         }
       }
       return false;
+    } else if (type == osm_obj_type::kWay) {
+      return (t.private_access_ && default_access(t, type)) ||
+             ((t.bus_ == override::kWhitelist ||
+               t.access_ != override::kBlacklist) &&
+              t.highway_ == "track");
     } else {
-      return t.private_access_ && default_access(t, type);
+      return false;
     }
   }
 
@@ -597,7 +605,8 @@ struct bus_profile {
     switch (cista::hash(t.highway_)) {
       case cista::hash("busway"):
       case cista::hash("bus_guideway"):
-      case cista::hash("pedestrian"): return true;
+      case cista::hash("pedestrian"):
+      case cista::hash("track"): return true;
       default: return false;
     }
   }
