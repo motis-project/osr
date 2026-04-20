@@ -554,21 +554,38 @@
                     f.id = i;
                     return f;
                 });
-                console.log(r.features)
                 const newFeatures = [];
-                for (const f of r.features) {
+                for (const [index, f] of r.features.entries()) {
+                    let next_segment = null;
+                    if (index < r.features.length - 1) {
+                        next_segment = r.features[index + 1];
+                    }
                     if (f.geometry.type === 'LineString') {
+                        if (index === 0) {
+                            newFeatures.push({
+                                type: 'Feature',
+                                properties: {
+                                    prevOsmNodeId: 0,
+                                    prevOsmWayId: 0,
+                                    osmNodeId: f.properties.segment_from,
+                                    nextOsmNodeId: f.properties.segment_to,
+                                    nextOsmWayId: f.properties.osm_way_id
+                                },
+                                geometry: {
+                                    type: 'Point',
+                                    coordinates: f.geometry.coordinates[0]
+                                }
+                            });
+                        }
                         newFeatures.push({
                             type: 'Feature',
-                            properties: f.properties,
-                            geometry: {
-                                type: 'Point',
-                                coordinates: f.geometry.coordinates[0]
-                            }
-                        });
-                        newFeatures.push({
-                            type: 'Feature',
-                            properties: f.properties,
+                            properties: {
+                                prevOsmNodeId: f.properties.segment_from,
+                                prevOsmWayId: f.properties.osm_way_id,
+                                osmNodeId: f.properties.segment_to,
+                                nextOsmNodeId: next_segment ? next_segment.properties.segment_to : 0,
+                                nextOsmWayId: next_segment ? next_segment.properties.osm_way_id : 0
+                            },
                             geometry: {
                                 type: 'Point',
                                 coordinates: f.geometry.coordinates[f.geometry.coordinates.length - 1]
@@ -581,7 +598,6 @@
 
             return r;
         } catch (e) {
-            console.log(e);
             return {
                 "type": "FeatureCollection",
                 "metadata": {},
@@ -941,10 +957,14 @@
 
     map.on('mousemove', 'path', (e) => {
         map.getCanvas().style.cursor = 'pointer';
-        const instructionCode = e.features[0].properties.instruction;
+        const pathFeature = e.features[0];
+        const instructionCode = pathFeature.properties.instruction;
+        const osmWayId = pathFeature.properties.osm_way_id;
+        const osmNodeFromId = pathFeature.properties.segment_from;
+        const osmNodeToId = pathFeature.properties.segment_to;
         const actualText = instructionOptions[instructionCode] || "Unknown";
 
-        const featureIndex = e.features[0].id || 0;
+        const featureIndex = pathFeature.id || 0;
 
         let expectedText = "kNone";
         const matchingSelect = document.querySelector(`.action-select[data-index="${featureIndex}"]`);
@@ -957,15 +977,25 @@
 
         hoverPopup.setLngLat(e.lngLat)
             .setHTML(`
-            <div style="font-family: sans-serif; padding: 5px;">
-                <div style="margin-bottom: 5px;">
-                    <strong>Actual:</strong> <code>${actualText}</code>
+                <div style="font-family: sans-serif; padding: 8px; line-height: 1.5; min-width: 180px;">
+                    <div style="margin-bottom: 8px; padding-bottom: 8px; border-bottom: 1px solid #eee; font-size: 0.85em; color: #666;">
+                        <div><strong>Way ID:</strong> <code>${osmWayId}</code></div>
+                        <div style="display: flex; gap: 10px; margin-top: 2px;">
+                            <span><strong>From:</strong> <code>${osmNodeFromId}</code></span>
+                            <span><strong>To:</strong> <code>${osmNodeToId}</code></span>
+                        </div>
+                    </div>
+
+                    <div style="margin-bottom: 5px;">
+                        <strong style="display: block; font-size: 0.75em; text-transform: uppercase; color: #999;">Actual</strong>
+                        <code>${actualText}</code>
+                    </div>
+                    <div style="color: ${statusColor};">
+                        <strong style="display: block; font-size: 0.75em; text-transform: uppercase; color: #999;">Expected</strong>
+                        <code>${expectedText}</code>
+                    </div>
                 </div>
-                <div style="color: ${statusColor};">
-                    <strong>Expected:</strong> <code>${expectedText}</code>
-                </div>
-            </div>
-        `)
+            `)
             .addTo(map);
     });
 
@@ -982,7 +1012,7 @@
         const popupContent = `
         <div style="font-family: ui-sans-serif, system-ui; padding: 8px;">
             <h4 style="margin: 0 0 8px 0; border-bottom: 1px solid #ccc;">Traversed Node Hub</h4>
-            <p style="font-size: 11pt; margin: 4px 0;"><strong>Node ID:</strong> ${properties.osm_node_id || 'N/A'}</p>
+            <p style="font-size: 11pt; margin: 4px 0;"><strong>OSM Node ID:</strong> ${properties.osmNodeId || 'N/A'}</p>
             <div style="background: #f4f4f4; padding: 10px; border-radius: 4px; border: 1px dashed #999;">
                 <p style="margin: 0; color: #666; font-style: italic;">
                     Debug view for outgoing edges and alternative routes will be rendered here.

@@ -35,7 +35,8 @@ boost::json::value to_line_string(std::initializer_list<T>&& line) {
 inline std::string to_featurecollection(ways const& w,
                                         std::optional<osr::path> const& p,
                                         bool const with_properties = true,
-                                        bool const with_instructions = false) {
+                                        bool const with_instructions = false,
+                                        bool const with_osm_nodes = false) {
   return boost::json::serialize(boost::json::object{
       {"type", "FeatureCollection"},
       {"metadata", with_properties ? boost::json::value{{"duration", p->cost_},
@@ -53,6 +54,15 @@ inline std::string to_featurecollection(ways const& w,
 
          if (with_instructions) {
            properties["instruction"] = static_cast<int>(s.instruction_annotation_);
+         }
+
+         if (with_osm_nodes) {
+           properties["segment_from"] = s.from_ == node_idx_t::invalid()
+                                            ? 0U
+                                            : to_idx(w.node_to_osm_[s.from_]);
+           properties["segment_to"] = s.to_ == node_idx_t::invalid()
+                                          ? 0U
+                                          : to_idx(w.node_to_osm_[s.to_]);
          }
 
          return boost::json::object{

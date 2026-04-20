@@ -171,7 +171,7 @@ struct http_server::impl {
     auto annotator = instruction_annotator{w_};
     annotator.annotate(*p);
 
-    cb(json_response(req, to_featurecollection(w_, p, true, true)));
+    cb(json_response(req, to_featurecollection(w_, p, true, true, true)));
   }
 
   static void handle_post_test_case(web_server::http_req_t const& req,
