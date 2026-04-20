@@ -517,6 +517,33 @@
         }
     }
 
+    const getHub = async (osmPrevNode, osmHubNode, osmNextNode, osmArriveWay, osmExitWay, mode) => {
+        const params = new URLSearchParams();
+        params.append("osm_prev_node", osmPrevNode);
+        params.append("osm_hub_node", osmHubNode);
+        params.append("osm_next_node", osmNextNode);
+        params.append("osm_arrive_way", osmArriveWay);
+        params.append("osm_exit_way", osmExitWay);
+        params.append("mode", mode);
+        const response = await fetch(`${window.origin}/api/test-framework/hub?${params}`, {
+            method: 'GET',
+            mode: 'cors',
+            headers: {
+                'Access-Control-Allow-Origin': '*',
+                'Content-Type': 'application/json'
+            },
+        });
+        try {
+            return response.json();
+        } catch (e) {
+            return {
+                "type": "FeatureCollection",
+                "metadata": {},
+                "features": []
+            };
+        }
+    };
+
     const getRoute = async () => {
         const response = await fetch(`${window.origin}/api/route`, {
             method: 'POST',
@@ -565,11 +592,13 @@
                             newFeatures.push({
                                 type: 'Feature',
                                 properties: {
+                                    id: r.features.length + newFeatures.length,
                                     prevOsmNodeId: 0,
                                     prevOsmWayId: 0,
                                     osmNodeId: f.properties.segment_from,
                                     nextOsmNodeId: f.properties.segment_to,
-                                    nextOsmWayId: f.properties.osm_way_id
+                                    nextOsmWayId: f.properties.osm_way_id,
+                                    mode: f.properties.mode
                                 },
                                 geometry: {
                                     type: 'Point',
@@ -580,11 +609,13 @@
                         newFeatures.push({
                             type: 'Feature',
                             properties: {
+                                id: r.features.length + newFeatures.length,
                                 prevOsmNodeId: f.properties.segment_from,
                                 prevOsmWayId: f.properties.osm_way_id,
                                 osmNodeId: f.properties.segment_to,
                                 nextOsmNodeId: next_segment ? next_segment.properties.segment_to : 0,
-                                nextOsmWayId: next_segment ? next_segment.properties.osm_way_id : 0
+                                nextOsmWayId: next_segment ? next_segment.properties.osm_way_id : 0,
+                                mode: f.properties.mode
                             },
                             geometry: {
                                 type: 'Point',
@@ -595,7 +626,7 @@
                 }
                 r.features.push(...newFeatures);
             }
-
+            console.log(r);
             return r;
         } catch (e) {
             return {
@@ -1004,19 +1035,26 @@
         hoverPopup.remove();
     });
 
-    map.on('click', 'path-endpoints', (e) => {
+    map.on('click', 'path-endpoints', async (e) => {
         e.originalEvent.stopPropagation();
 
         const properties = e.features[0].properties;
+
+        const hubMeta = await getHub(
+            properties.prevOsmNodeId,
+            properties.osmNodeId,
+            properties.nextOsmNodeId,
+            properties.prevOsmWayId,
+            properties.nextOsmWayId,
+            properties.mode
+        );
 
         const popupContent = `
         <div style="font-family: ui-sans-serif, system-ui; padding: 8px;">
             <h4 style="margin: 0 0 8px 0; border-bottom: 1px solid #ccc;">Traversed Node Hub</h4>
             <p style="font-size: 11pt; margin: 4px 0;"><strong>OSM Node ID:</strong> ${properties.osmNodeId || 'N/A'}</p>
-            <div style="background: #f4f4f4; padding: 10px; border-radius: 4px; border: 1px dashed #999;">
-                <p style="margin: 0; color: #666; font-style: italic;">
-                    Debug view for outgoing edges and alternative routes will be rendered here.
-                </p>
+            <div style="display: flex; justify-content: center; background: #fff; border: 1px solid #ddd; border-radius: 4px; margin: 8px 0;">
+                <canvas id="hub-canvas-${properties.id}" width="200" height="200"></canvas>
             </div>
             <p style="font-size: 9pt; color: #888; margin-top: 8px;">
                 Lat: ${e.lngLat.lat.toFixed(6)}, Lng: ${e.lngLat.lng.toFixed(6)}
@@ -1024,10 +1062,19 @@
         </div>
     `;
 
-        new maplibregl.Popup()
+        const popup = new maplibregl.Popup()
             .setLngLat(e.lngLat)
             .setHTML(popupContent)
             .addTo(map);
+
+
+
+            const canvas = document.getElementById(`hub-canvas-${properties.id}`);
+            if (canvas) {
+                const ctx = canvas.getContext('2d');
+                renderHub(ctx, hubMeta);
+            }
+
     });
 
     // Change cursor to pointer when hovering over a hub
@@ -1107,6 +1154,84 @@
             .setDOMContent(actionsDiv)
             .addTo(map);
     });
+
+    const renderHub = (ctx, data) => {
+        const w = ctx.canvas.width;
+        const h = ctx.canvas.height;
+        const cx = w / 2;
+        const cy = h / 2;
+        const len = 70;
+        const pathColor = '#42a5f5';
+
+        // Helper: Calculates XY based on the South-Arrival orientation
+        // AND your "negative is right" rule.
+        const getXY = (relativeAngle) => {
+            const rad = ((-relativeAngle - 90) * Math.PI) / 180;
+            return {
+                x: cx + len * Math.cos(rad),
+                y: cy + len * Math.sin(rad)
+            };
+        };
+
+        ctx.clearRect(0, 0, w, h);
+
+        // 1. Draw Arrival (From South to Center)
+        ctx.beginPath();
+        ctx.strokeStyle = pathColor;
+        ctx.lineWidth = 6;
+        ctx.moveTo(cx, cy + len);
+        ctx.lineTo(cx, cy);
+        ctx.stroke();
+
+        // 2. Draw Main Exit
+        const exitPos = getXY(data.exit_angle);
+        ctx.beginPath();
+        ctx.strokeStyle = pathColor;
+        ctx.lineWidth = 6;
+        ctx.moveTo(cx, cy);
+        ctx.lineTo(exitPos.x, exitPos.y);
+        ctx.stroke();
+
+        // Arrowhead for Exit
+        const exitRad = Math.atan2(exitPos.y - cy, exitPos.x - cx);
+        ctx.beginPath();
+        ctx.fillStyle = pathColor;
+        ctx.moveTo(exitPos.x, exitPos.y);
+        ctx.lineTo(exitPos.x - 12 * Math.cos(exitRad - Math.PI/6), exitPos.y - 12 * Math.sin(exitRad - Math.PI/6));
+        ctx.lineTo(exitPos.x - 12 * Math.cos(exitRad + Math.PI/6), exitPos.y - 12 * Math.sin(exitRad + Math.PI/6));
+        ctx.fill();
+
+        // 3. Draw Alternatives (Relative to the Exit Angle)
+        const drawAlt = (alt, color) => {
+            if (alt.is_opposite_of_arrive) {
+                return;
+            }
+            // Calculate the absolute angle relative to the arrival path
+            // Absolute = Exit Direction + Relative Offset
+            const absoluteAngle = data.exit_angle + alt.angle;
+
+            const pos = getXY(absoluteAngle);
+            ctx.beginPath();
+            ctx.strokeStyle = alt.is_accessible ? color : '#ef4444';
+            ctx.setLineDash(alt.is_accessible ? [] : [4, 4]);
+            ctx.lineWidth = 3;
+            ctx.moveTo(cx, cy);
+            ctx.lineTo(pos.x, pos.y);
+            ctx.stroke();
+        };
+
+        data.alts_left.forEach(a => drawAlt(a, '#000000'));
+        data.alts_right.forEach(a => drawAlt(a, '#000000'));
+
+        // 4. Center Hub Point
+        ctx.beginPath();
+        ctx.arc(cx, cy, 6, 0, Math.PI * 2);
+        ctx.fillStyle = '#1e293b';
+        ctx.fill();
+        ctx.strokeStyle = '#fff';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+    }
 </script>
 </body>
 </html>

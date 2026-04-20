@@ -7,6 +7,7 @@
 #include "boost/beast/core/string.hpp"
 #include "boost/beast/version.hpp"
 #include "boost/json.hpp"
+#include "boost/url/parse.hpp"
 
 #include "fmt/core.h"
 
@@ -252,6 +253,86 @@ struct http_server::impl {
     }
   }
 
+  void handle_get_traversed_node_hub(web_server::http_req_t const& req,
+                                     web_server::http_res_cb_t const& cb) {
+
+    try {
+      auto target = req.target();
+      auto view = boost::urls::parse_origin_form(target);
+
+      std::array<node_idx_t, 3> nodes_indices;
+      nodes_indices.fill(node_idx_t::invalid());
+      std::array<way_idx_t, 2> way_indices;
+      way_indices.fill(way_idx_t::invalid());
+
+      if (view.has_value()) {
+        auto const params = view->params();
+        auto const mode_param_iter = params.find("mode");
+        if (mode_param_iter == params.end() || !(*mode_param_iter).has_value) {
+          return cb(json_response(req, "Parameter mode is missing",
+                                  http::status::bad_request));
+        }
+
+        const auto m = static_cast<mode>(std::stol((*mode_param_iter).value));
+
+        for (const auto [i, node_param] :
+             utl::enumerate<std::vector<std::string>>(
+                 {"osm_prev_node", "osm_hub_node", "osm_next_node"})) {
+          const auto node_param_iter = params.find(node_param);
+          if (node_param_iter != params.end() && (*node_param_iter).has_value) {
+            osm_node_idx_t const osm_node_idx(
+                std::stoll((*node_param_iter).value));
+            if (osm_node_idx != 0U) {
+              nodes_indices[i] = w_.get_node_idx(osm_node_idx);
+            }
+          }
+        }
+
+        for (const auto [i, way_param] :
+             utl::enumerate<std::vector<std::string>>(
+                 {"osm_arrive_way", "osm_exit_way"})) {
+          const auto way_param_iter = params.find(way_param);
+          if (way_param_iter != params.end() && (*way_param_iter).has_value) {
+            osm_way_idx_t const osm_way_idx(
+                std::stoll((*way_param_iter).value));
+            if (osm_way_idx != 0U) {
+              if (const auto opt_way_idx = w_.find_way(osm_way_idx);
+                  opt_way_idx.has_value()) {
+                way_indices[i] = *opt_way_idx;
+              }
+            }
+          }
+        }
+
+        if (std::ranges::any_of(nodes_indices, [](node_idx_t const idx) {
+              return idx == node_idx_t::invalid();
+            })) {
+          return cb(json_response(req, "At least one node idx is invalid",
+                                  http::status::bad_request));
+        }
+
+        if (std::ranges::any_of(way_indices, [](way_idx_t const idx) {
+              return idx == way_idx_t::invalid();
+            })) {
+          return cb(json_response(req, "At least one way idx is invalid",
+                                  http::status::bad_request));
+        }
+
+        const auto hub = traversed_node_hub::from(
+            w_, nodes_indices[0], way_indices[0], nodes_indices[1],
+            way_indices[1], nodes_indices[2], m);
+
+        return cb(json_response(req, hub.to_json(w_), http::status::ok));
+      }
+
+      return cb(
+          json_response(req, "Parameters missing", http::status::bad_request));
+    } catch (std::exception const& e) {
+      return cb(
+          json_response(req, e.what(), http::status::internal_server_error));
+    }
+  }
+
   void handle_levels(web_server::http_req_t const& req,
                      web_server::http_res_cb_t const& cb) {
     auto const query = boost::json::parse(req.body()).as_object();
@@ -383,17 +464,24 @@ struct http_server::impl {
       }
       case http::verb::get: {
         auto const& target = req.target();
-        if (provide_test_features_ &&
-            target.starts_with("/api/test-framework/test-cases")) {
-          return run_parallel(
-              [this](web_server::http_req_t const& req1,
-                     web_server::http_res_cb_t const& cb1) {
-                handle_get_test_cases(req1, cb1);
-              },
-              req, cb);
-        } else if (provide_test_features_ &&
-                   target.starts_with("/api/test-framework/feeds")) {
-          return handle_get_available_feeds(req, cb);
+        if (provide_test_features_) {
+          if (target.starts_with("/api/test-framework/test-cases")) {
+            return run_parallel(
+                [this](web_server::http_req_t const& req1,
+                       web_server::http_res_cb_t const& cb1) {
+                  handle_get_test_cases(req1, cb1);
+                },
+                req, cb);
+          } else if (target.starts_with("/api/test-framework/feeds")) {
+            return handle_get_available_feeds(req, cb);
+          } else if (target.starts_with("/api/test-framework/hub")) {
+            return run_parallel(
+                [this](web_server::http_req_t const& req1,
+                       web_server::http_res_cb_t const& cb1) {
+                  handle_get_traversed_node_hub(req1, cb1);
+                },
+                req, cb);
+          }
         }
       }
       case http::verb::head: return handle_static(req, cb);

@@ -33,11 +33,16 @@ struct relative_way_segment {
 
 struct traversed_node_hub {
 
-  static traversed_node_hub from(ways const& w, path::segment const& arrive_on, path::segment const& exit_on);
+  static traversed_node_hub from(ways const& w, node_idx_t prev_node,
+                                 way_idx_t arrive_way, node_idx_t hub_node,
+                                 way_idx_t depart_way, node_idx_t next_node,
+                                 mode m);
 
   void print(std::ostream& out, ways const& w) const;
 
   bool is_exit_natural_choice(ways const& w) const;
+
+  std::string to_json(ways const& w) const;
 
   way_segment arrive_hub_on_;
   node_idx_t hub_node_;

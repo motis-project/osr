@@ -70,7 +70,10 @@ std::optional<traversed_node_hub> get_traversed_node_hub(path::segment const& se
     return std::nullopt;
   }
 
-  return traversed_node_hub::from(w, segment, next_segment);
+
+  return traversed_node_hub::from(w, segment.from_, segment.way_, segment.to_,
+                                  next_segment.way_, next_segment.to_,
+                                  segment.mode_);
 }
 
 

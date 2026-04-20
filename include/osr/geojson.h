@@ -50,7 +50,8 @@ inline std::string to_featurecollection(ways const& w,
            {"osm_way_id", s.way_ == way_idx_t::invalid()
              ? 0U : to_idx(w.way_osm_idx_[s.way_])},
            {"cost", s.cost_},
-           {"distance", s.dist_}};
+           {"distance", s.dist_},
+           {"mode", static_cast<int>(s.mode_)}};
 
          if (with_instructions) {
            properties["instruction"] = static_cast<int>(s.instruction_annotation_);

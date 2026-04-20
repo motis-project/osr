@@ -206,7 +206,7 @@ struct ways {
   void connect_ways();
   void build_components();
 
-  std::optional<way_idx_t> find_way(osm_way_idx_t const i) {
+  std::optional<way_idx_t> find_way(osm_way_idx_t const i) const {
     auto const it = std::lower_bound(begin(way_osm_idx_), end(way_osm_idx_), i);
     return it != end(way_osm_idx_) && *it == i
                ? std::optional{way_idx_t{
