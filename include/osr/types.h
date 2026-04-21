@@ -168,6 +168,8 @@ struct level_t {
     return (v_ == kNoLevel) ? 0.0F : (kMinLevel + ((v_ - 1U) / 4.0F));
   }
 
+  constexpr bool has_level() const { return v_ != kNoLevel; }
+
   constexpr level_t() = default;
 
   auto operator<=>(level_t const&) const = default;
