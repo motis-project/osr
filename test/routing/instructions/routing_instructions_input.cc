@@ -5,24 +5,12 @@
 namespace osr::test {
 
 search_profile profile_from_string(std::string_view const s) {
-  if (s == "kFoot") return search_profile::kFoot;
-  if (s == "kWheelchair") return search_profile::kWheelchair;
-  if (s == "kBike") return search_profile::kBike;
-  if (s == "kBikeFast") return search_profile::kBikeFast;
-  if (s == "kBikeElevationLow") return search_profile::kBikeElevationLow;
-  if (s == "kBikeElevationHigh") return search_profile::kBikeElevationHigh;
-  if (s == "kCar") return search_profile::kCar;
-  if (s == "kCarDropOff") return search_profile::kCarDropOff;
-  if (s == "kCarDropOffWheelchair")
-    return search_profile::kCarDropOffWheelchair;
-  if (s == "kCarParking") return search_profile::kCarParking;
-  if (s == "kCarParkingWheelchair")
-    return search_profile::kCarParkingWheelchair;
-  if (s == "kBikeSharing") return search_profile::kBikeSharing;
-  if (s == "kCarSharing") return search_profile::kBus;
-  if (s == "kBus") return search_profile::kCar;
-  if (s == "kRailway") return search_profile::kRailway;
-  if (s == "kFerry") return search_profile::kFerry;
+  if (s == "foot") return search_profile::kFoot;
+  if (s == "car") return search_profile::kCar;
+  if (s == "bike") return search_profile::kBike;
+  if (s == "wheelchair") return search_profile::kWheelchair;
+  if (s == "bike_elevation_low") return search_profile::kBikeElevationLow;
+  if (s == "bike_elevation_high") return search_profile::kBikeElevationHigh;
   return search_profile::kFoot;
 }
 
@@ -55,6 +43,16 @@ instruction_action action_from_string(std::string_view const s) {
   return instruction_action::kNone;
 }
 
+direction direction_from_string(std::string_view const s) {
+  if (s == "backward") return direction::kBackward;
+  return direction::kForward;
+}
+
+routing_algorithm routing_algo_from_string(std::string_view const s) {
+  if (s == "bidirectional") return routing_algorithm::kAStarBi;
+  return routing_algorithm::kDijkstra;
+}
+
 std::vector<routing_instructions_input> load_from_json(
     const std::string& path) {
   std::ifstream ifs(path);
@@ -84,6 +82,14 @@ std::vector<routing_instructions_input> load_from_json(
     const auto profile =
         profile_from_string(test_case_obj.at("profile").as_string());
 
+    // Parse Direction
+    const auto direction =
+        direction_from_string(test_case_obj.at("direction").as_string());
+
+    // Parse routing algorithm
+    const auto algo =
+        routing_algo_from_string(test_case_obj.at("routing_algo").as_string());
+
     // Parse Actions Array
     std::vector<instruction_action> expected_actions;
     for (auto& act : test_case_obj.at("expected_actions").as_array()) {
@@ -92,7 +98,8 @@ std::vector<routing_instructions_input> load_from_json(
 
     cases.emplace_back(test_case_obj.at("name").as_string().c_str(),
                        test_case_obj.at("osm_file").as_string().c_str(), start,
-                       end, profile, std::move(expected_actions));
+                       end, profile, direction, algo,
+                       std::move(expected_actions));
   }
   return cases;
 }

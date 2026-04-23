@@ -5,14 +5,16 @@
     "start": {
       "lat": 4.9883621E1,
       "lng": 8.677029E0,
-      "lvl": 0
+      "lvl": 0E0
     },
     "end": {
       "lat": 4.9885453E1,
       "lng": 8.67891E0,
-      "lvl": 0
+      "lvl": 0E0
     },
     "profile": "foot",
+    "direction": "forward",
+    "routing_algo": "dijkstra",
     "expected_actions": [
       "kNone",
       "kTurnRight",
@@ -34,6 +36,8 @@
       "lvl": 0E0
     },
     "profile": "foot",
+    "direction": "forward",
+    "routing_algo": "dijkstra",
     "expected_actions": [
       "kNone",
       "kTurnLeft",
@@ -55,6 +59,8 @@
       "lvl": 0E0
     },
     "profile": "foot",
+    "direction": "forward",
+    "routing_algo": "dijkstra",
     "expected_actions": [
       "kNone",
       "kContinue",
@@ -76,6 +82,8 @@
       "lvl": 0E0
     },
     "profile": "car",
+    "direction": "forward",
+    "routing_algo": "dijkstra",
     "expected_actions": [
       "kNone",
       "kContinue",
@@ -106,6 +114,8 @@
       "lvl": 0E0
     },
     "profile": "car",
+    "direction": "forward",
+    "routing_algo": "dijkstra",
     "expected_actions": [
       "kNone",
       "kTurnLeft",

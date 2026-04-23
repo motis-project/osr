@@ -14,6 +14,8 @@ void test_instructions(
     location const& from,
     location const& to,
     search_profile const sp,
+    routing_algorithm const algo,
+    direction const direction,
     std::vector<instruction_action> const& expected_actions) {
   auto const pbf_path =
       fmt::format("test/routing/instructions/data/{}", pbf_name);
@@ -28,7 +30,7 @@ void test_instructions(
   const auto w = ways{dir, cista::mmap::protection::READ};
   const auto l = lookup{w, dir, cista::mmap::protection::READ};
 
-  auto p = route(w, l, from, to, osr::get_parameters(sp), sp);
+  auto p = route(w, l, from, to, osr::get_parameters(sp), sp, direction, algo);
   ASSERT_TRUE(p.has_value());
   osr::instruction_annotator annotator(w);
   annotator.annotate(p.value());
@@ -46,7 +48,8 @@ TEST_P(routing_instructions_test_fixture, ValidatesInstructions) {
   const auto& test_params = GetParam();
 
   test_instructions(test_params.osm_file, test_params.start, test_params.end,
-                    test_params.profile, test_params.expected_actions);
+                    test_params.profile, test_params.routing_algo,
+                    test_params.direction, test_params.expected_actions);
 }
 
 }
