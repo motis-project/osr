@@ -1,6 +1,5 @@
 #pragma once
 
-#include <cista/strong.h>
 #include <optional>
 
 #include "utl/for_each_bit_set.h"
@@ -237,8 +236,6 @@ struct foot {
             return in_direction ? e : e.swapped();
           }();
 
-          auto elevation_cost{0U};
-
           // assumes elevation is dominated in one direction
           auto const dx = to_idx(elevation.up_) > to_idx(elevation.down_)
                               ? static_cast<int>(to_idx(elevation.up_))
@@ -250,9 +247,11 @@ struct foot {
           if (IsWheelchair && std::abs(grad) > kMaxWheelchairGradient) return;
 
           // tobler's hiking function
-          auto const tobler_speed = params.speed_meters_per_second_ *
-                                    std::exp(-3.5F * std::abs(grad + 0.05F));
-          elevation_cost = static_cast<cost_t>(std::max(
+          auto const tobler_speed =
+              params.speed_meters_per_second_ *
+              std::exp(-3.5F *
+                       std::abs(grad + ((elevations == nullptr) ? 0 : 0.05F)));
+          auto elevation_cost = static_cast<cost_t>(std::max(
               0.F,
               static_cast<float>(dist) / tobler_speed -
                   static_cast<float>(dist) / params.speed_meters_per_second_));
