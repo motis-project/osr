@@ -253,6 +253,54 @@ struct http_server::impl {
     }
   }
 
+  void handle_get_way_instruction_properties(
+      web_server::http_req_t const& req, web_server::http_res_cb_t const& cb) {
+
+    constexpr auto instruction_properties_to_json =
+        [](way_instruction_properties const& props) {
+          return boost::json::object{
+              {"highway", get_highway_name(props.get_highway())},
+              {"junction", get_junction_name(props.get_junction())},
+              {"is_link", props.is_link()},
+              {"is_footway_crossing", props.is_footway_crossing()},
+          };
+        };
+
+    try {
+      auto target = req.target();
+      auto view = boost::urls::parse_origin_form(target);
+      if (view.has_value()) {
+        auto const params = view->params();
+
+        auto const way_param_iter = params.find("way");
+        if (way_param_iter == params.end() || !(*way_param_iter).has_value) {
+          return cb(json_response(req, "Parameter mode is missing",
+                                  http::status::bad_request));
+        }
+
+        const auto osm_way_idx =
+            osm_way_idx_t{std::stoll((*way_param_iter).value)};
+        const auto way_idx = w_.find_way(osm_way_idx);
+        if (!way_idx.has_value()) {
+          return cb(json_response(req, "no mapping for given way",
+                                  http::status::bad_request));
+        }
+        return cb(
+            json_response(req,
+                          boost::json::serialize(instruction_properties_to_json(
+                              w_.way_instruction_properties_[*way_idx])),
+                          http::status::ok));
+      }
+
+      return cb(
+          json_response(req, "Parameters missing", http::status::bad_request));
+
+    } catch (std::exception const& e) {
+      return cb(
+          json_response(req, e.what(), http::status::internal_server_error));
+    }
+  }
+
   void handle_get_traversed_node_hub(web_server::http_req_t const& req,
                                      web_server::http_res_cb_t const& cb) {
 
@@ -322,7 +370,9 @@ struct http_server::impl {
             w_, nodes_indices[0], way_indices[0], nodes_indices[1],
             way_indices[1], nodes_indices[2], m);
 
-        return cb(json_response(req, hub.to_json(w_), http::status::ok));
+        return cb(json_response(req,
+                                hub.to_json(w_),
+                                http::status::ok));
       }
 
       return cb(
@@ -479,6 +529,14 @@ struct http_server::impl {
                 [this](web_server::http_req_t const& req1,
                        web_server::http_res_cb_t const& cb1) {
                   handle_get_traversed_node_hub(req1, cb1);
+                },
+                req, cb);
+          } else if (target.starts_with(
+                         "/api/test-framework/instruction-properties")) {
+            return run_parallel(
+                [this](web_server::http_req_t const& req1,
+                       web_server::http_res_cb_t const& cb1) {
+                  handle_get_way_instruction_properties(req1, cb1);
                 },
                 req, cb);
           }

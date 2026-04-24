@@ -161,6 +161,35 @@
             height: 100%;
         }
 
+        .kv-list {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+            max-width: 400px;
+            font-family: sans-serif;
+        }
+
+        .kv-list li {
+            display: flex;
+            justify-content: space-between;
+            padding: 8px 0;
+            border-bottom: 1px solid #eee;
+        }
+
+        .kv-list li:last-child {
+            border-bottom: none;
+        }
+
+        .kv-list .key {
+            font-weight: 600;
+            color: #ffffff;
+        }
+
+        .kv-list .value {
+            color: #ffffff;
+            text-align: right;
+        }
+
 
     </style>
 </head>
@@ -227,6 +256,10 @@
             </div>
         </div>
     </div>
+</div>
+<div id="hub-way-tooltip"
+     style="position: absolute; display: none; background: #333; color: white; padding: 5px; border-radius: 4px; pointer-events: none;">
+    Point Info
 </div>
 <script type="module">
     import {style} from "./style.js";
@@ -309,6 +342,8 @@
         query.start = [testCase.start.lng, testCase.start.lat];
         query.destination = [testCase.end.lng, testCase.end.lat];
         query.profile = testCase.profile;
+        query.routing = testCase.routing_algo;
+        query.direction = testCase.direction;
 
         // Update markers
         startMarker.setLngLat(query.start);
@@ -546,6 +581,28 @@
         }
     };
 
+    const getWayInstructionProperties = async (osmWay) => {
+        const params = new URLSearchParams();
+        params.append("way", osmWay);
+        const response = await fetch(`${window.origin}/api/test-framework/instruction-properties?${params}`, {
+            method: 'GET',
+            mode: 'cors',
+            headers: {
+                'Access-Control-Allow-Origin': '*',
+                'Content-Type': 'application/json'
+            },
+        });
+        try {
+            return response.json();
+        } catch (e) {
+            return {
+                "type": "FeatureCollection",
+                "metadata": {},
+                "features": []
+            };
+        }
+    };
+
     const getRoute = async () => {
         const response = await fetch(`${window.origin}/api/route`, {
             method: 'POST',
@@ -628,7 +685,6 @@
                 }
                 r.features.push(...newFeatures);
             }
-            console.log(r);
             return r;
         } catch (e) {
             return {
@@ -1056,13 +1112,16 @@
             <h4 style="margin: 0 0 8px 0; border-bottom: 1px solid #ccc;">Traversed Node Hub</h4>
             <p style="font-size: 11pt; margin: 4px 0;"><strong>OSM Node ID:</strong> ${properties.osmNodeId || 'N/A'}</p>
             <div style="display: flex; justify-content: center; background: #fff; border: 1px solid #ddd; border-radius: 4px; margin: 8px 0;">
-                <canvas id="hub-canvas-${properties.id}" width="200" height="200"></canvas>
+                <svg id="hub-svg-${properties.id}" width="200" height="200">
+                </svg>
             </div>
             <p style="font-size: 9pt; color: #888; margin-top: 8px;">
                 Lat: ${e.lngLat.lat.toFixed(6)}, Lng: ${e.lngLat.lng.toFixed(6)}
             </p>
         </div>
     `;
+
+
 
         const popup = new maplibregl.Popup()
             .setLngLat(e.lngLat)
@@ -1071,10 +1130,9 @@
 
 
 
-            const canvas = document.getElementById(`hub-canvas-${properties.id}`);
-            if (canvas) {
-                const ctx = canvas.getContext('2d');
-                renderHub(ctx, hubMeta);
+            const svg = document.getElementById(`hub-svg-${properties.id}`);
+            if (svg) {
+                renderHub(svg, hubMeta);
             }
 
     });
@@ -1157,12 +1215,25 @@
             .addTo(map);
     });
 
-    const renderHub = (ctx, data) => {
-        const w = ctx.canvas.width;
-        const h = ctx.canvas.height;
+    const drawLineInSvg = (svg, x1, y1, x2, y2, color, stroke) => {
+        const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
+        line.setAttribute("x1", x1);
+        line.setAttribute("y1", y1);
+        line.setAttribute("x2", x2);
+        line.setAttribute("y2", y2);
+        line.setAttribute("stroke", color);
+        line.setAttribute("stroke-width", stroke);
+        svg.appendChild(line);
+        return line;
+    }
+
+    const renderHub = (svg, data) => {
+        const w = svg.viewBox.width || svg.width.baseVal.value;
+        const h = svg.viewBox.height || svg.height.baseVal.value;
         const cx = w / 2;
         const cy = h / 2;
         const len = 70;
+        const hubColor = '#4b4747'
         const pathColor = '#42a5f5';
 
         // Helper: Calculates XY based on the South-Arrival orientation
@@ -1174,34 +1245,55 @@
                 y: cy + len * Math.sin(rad)
             };
         };
+        const hubWayTooltip = document.getElementById('hub-way-tooltip');
+        const addWaySegmentTooltip = (segment, drawnPath) => {
+            drawnPath.addEventListener('mousemove', async (e) => {
+                hubWayTooltip.style.display = 'block';
+                // Position the tooltip near the mouse cursor
+                hubWayTooltip.style.left = e.pageX + 10 + 'px';
+                hubWayTooltip.style.top = e.pageY + 10 + 'px';
 
-        ctx.clearRect(0, 0, w, h);
+                const way_id = segment.way_id || segment.segment.way_id;
+                const instruction_properties = await getWayInstructionProperties(way_id);
+                hubWayTooltip.innerHTML =
+                    `<ul class="kv-list">
+                        <li>
+                            <span class="key">Way</span>
+                            <span class="value">${way_id}</span>
+                        </li>
+                        <li>
+                            <span class="key">Highway</span>
+                            <span class="value">${instruction_properties.highway}</span>
+                        </li>
+                        <li>
+                            <span class="key">Junction</span>
+                            <span class="value">${instruction_properties.junction}</span>
+                        </li>
+                        <li>
+                            <span class="key">Is Link?</span>
+                            <span class="value">${instruction_properties.is_link}</span>
+                        </li>
+                        <li>
+                            <span class="key">Is crossing?</span>
+                            <span class="value">${instruction_properties.is_footway_crossing}</span>
+                        </li>
+                    </ul>`;
+            });
+
+            drawnPath.addEventListener('mouseout', () => {
+                hubWayTooltip.style.display = 'none';
+                hubWayTooltip.innerText = '';
+            });
+        }
 
         // 1. Draw Arrival (From South to Center)
-        ctx.beginPath();
-        ctx.strokeStyle = pathColor;
-        ctx.lineWidth = 6;
-        ctx.moveTo(cx, cy + len);
-        ctx.lineTo(cx, cy);
-        ctx.stroke();
+        const arrivalPath = drawLineInSvg(svg, cx, cy + len, cx, cy, pathColor, 6);
+        addWaySegmentTooltip(data.arrive_hub_on, arrivalPath);
 
-        // 2. Draw Main Exit
+        // // 2. Draw Main Exit
         const exitPos = getXY(data.exit_angle);
-        ctx.beginPath();
-        ctx.strokeStyle = pathColor;
-        ctx.lineWidth = 6;
-        ctx.moveTo(cx, cy);
-        ctx.lineTo(exitPos.x, exitPos.y);
-        ctx.stroke();
-
-        // Arrowhead for Exit
-        const exitRad = Math.atan2(exitPos.y - cy, exitPos.x - cx);
-        ctx.beginPath();
-        ctx.fillStyle = pathColor;
-        ctx.moveTo(exitPos.x, exitPos.y);
-        ctx.lineTo(exitPos.x - 12 * Math.cos(exitRad - Math.PI/6), exitPos.y - 12 * Math.sin(exitRad - Math.PI/6));
-        ctx.lineTo(exitPos.x - 12 * Math.cos(exitRad + Math.PI/6), exitPos.y - 12 * Math.sin(exitRad + Math.PI/6));
-        ctx.fill();
+        const exitPath = drawLineInSvg(svg, cx, cy, exitPos.x, exitPos.y, pathColor, 6);
+        addWaySegmentTooltip(data.exit_from_hub, exitPath);
 
         // 3. Draw Alternatives (Relative to the Exit Angle)
         const drawAlt = (alt, color) => {
@@ -1213,26 +1305,24 @@
             const absoluteAngle = data.exit_angle + alt.angle;
 
             const pos = getXY(absoluteAngle);
-            ctx.beginPath();
-            ctx.strokeStyle = alt.is_accessible ? color : '#ef4444';
-            ctx.setLineDash(alt.is_accessible ? [] : [4, 4]);
-            ctx.lineWidth = 3;
-            ctx.moveTo(cx, cy);
-            ctx.lineTo(pos.x, pos.y);
-            ctx.stroke();
+            const strokeColor = alt.is_accessible ? color : '#ef4444';
+            const altPath = drawLineInSvg(svg, cx, cy, pos.x, pos.y, strokeColor, 3);
+            addWaySegmentTooltip(alt, altPath);
         };
 
         data.alts_left.forEach(a => drawAlt(a, '#000000'));
         data.alts_right.forEach(a => drawAlt(a, '#000000'));
 
-        // 4. Center Hub Point
-        ctx.beginPath();
-        ctx.arc(cx, cy, 6, 0, Math.PI * 2);
-        ctx.fillStyle = '#1e293b';
-        ctx.fill();
-        ctx.strokeStyle = '#fff';
-        ctx.lineWidth = 2;
-        ctx.stroke();
+        let centerDot = svg.querySelector('.center-dot');
+        if (!centerDot) {
+            centerDot = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+            centerDot.setAttribute("cx", cx);
+            centerDot.setAttribute("cy", cy);
+            centerDot.setAttribute("r", 5);
+            centerDot.setAttribute("fill", hubColor);
+            centerDot.classList.add('center-dot');
+            svg.appendChild(centerDot);
+        }
     }
 </script>
 </body>

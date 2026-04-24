@@ -60,6 +60,14 @@ struct way_instruction_properties {
   template <typename Ctx>
   friend void deserialize(Ctx const&, way_instruction_properties*) {}
 
+  constexpr highway get_highway() const { return static_cast<highway>(highway_); }
+
+  constexpr junction get_junction() const { return static_cast<junction>(junction_); }
+
+  constexpr bool is_link() const { return is_link_ == 1U; }
+
+  constexpr bool is_footway_crossing() const { return is_footway_crossing_ == 1U; }
+
   std::uint8_t highway_ : 3;
   std::uint8_t is_link_ : 1;
   std::uint8_t junction_ : 2;
