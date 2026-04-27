@@ -9,29 +9,36 @@
 
 namespace osr {
 
-struct way_osm_nodes_idx_range {
-  std::uint16_t from_;
-  std::uint16_t to_; // inclusive
-};
-
-struct way_segment {
-
-  bool is_way_aligned() const;
-
-  static way_segment from(const ways& w, osm_node_idx_t from, osm_node_idx_t to, way_idx_t way);
-
-  way_idx_t way_idx_;
-  way_osm_nodes_idx_range osm_node_range_;
-};
-
-struct relative_way_segment {
-  double angle_;
-  bool is_accessible_;
-  bool is_opposite_of_arrive_;
-  way_segment segment_;
-};
-
 struct traversed_node_hub {
+
+  struct way_osm_nodes_idx_range {
+
+    way_osm_nodes_idx_range flip() const;
+
+    std::uint16_t from_;
+    std::uint16_t to_; // inclusive
+  };
+
+  struct way_segment {
+
+    bool is_way_aligned() const;
+
+    static way_segment from(const ways& w, way_idx_t way, osm_node_idx_t from,
+                            osm_node_idx_t to);
+
+    way_segment flip_directions() const;
+
+    way_idx_t way_idx_;
+    way_osm_nodes_idx_range osm_node_range_;
+  };
+
+  struct relative_way_segment {
+    double angle_;
+    bool can_enter_hub_;
+    bool can_exit_hub_;
+    bool is_opposite_of_arrive_;
+    way_segment segment_;
+  };
 
   static traversed_node_hub from(ways const& w, node_idx_t prev_node,
                                  way_idx_t arrive_way, node_idx_t hub_node,

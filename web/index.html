@@ -1252,7 +1252,6 @@
                 // Position the tooltip near the mouse cursor
                 hubWayTooltip.style.left = e.pageX + 10 + 'px';
                 hubWayTooltip.style.top = e.pageY + 10 + 'px';
-
                 const way_id = segment.way_id || segment.segment.way_id;
                 const instruction_properties = await getWayInstructionProperties(way_id);
                 hubWayTooltip.innerHTML =
@@ -1276,6 +1275,14 @@
                         <li>
                             <span class="key">Is crossing?</span>
                             <span class="value">${instruction_properties.is_footway_crossing}</span>
+                        </li>
+                        <li>
+                            <span class="key">Can enter hub?</span>
+                            <span class="value">${segment.can_enter_hub}</span>
+                        </li>
+                        <li>
+                            <span class="key">Can exit hub?</span>
+                            <span class="value">${segment.can_exit_hub}</span>
                         </li>
                     </ul>`;
             });
@@ -1305,7 +1312,11 @@
             const absoluteAngle = data.exit_angle + alt.angle;
 
             const pos = getXY(absoluteAngle);
-            const strokeColor = alt.is_accessible ? color : '#ef4444';
+
+            const can_enter_hub = alt.can_enter_hub;
+            const can_exit_hub = alt.can_exit_hub;
+
+            const strokeColor = can_exit_hub ? color : (can_enter_hub ? '#d78b13' : '#ef4444');
             const altPath = drawLineInSvg(svg, cx, cy, pos.x, pos.y, strokeColor, 3);
             addWaySegmentTooltip(alt, altPath);
         };

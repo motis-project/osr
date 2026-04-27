@@ -9,21 +9,34 @@
 
 namespace osr {
 
-bool way_segment::is_way_aligned() const {
+using hub_t = traversed_node_hub;
+using osm_nodes_range_t = hub_t::way_osm_nodes_idx_range;
+using way_segment_t = hub_t::way_segment;
+using relative_way_segment_t = hub_t::relative_way_segment;
+
+osm_nodes_range_t osm_nodes_range_t::flip() const {
+  return {
+      .from_ = to_,
+      .to_ = from_,
+  };
+}
+
+bool way_segment_t::is_way_aligned() const {
   return osm_node_range_.from_ <= osm_node_range_.to_;
 }
 
-way_segment way_segment::from(const ways& w,
-                              const osm_node_idx_t from,
-                              osm_node_idx_t const to,
-                              way_idx_t const way) {
+way_segment_t way_segment_t::from(const ways& w,
+                                  way_idx_t const way,
+                                  osm_node_idx_t const from,
+                                  osm_node_idx_t const to) {
 
   const auto& way_osm_nodes = w.way_osm_nodes_[way];
   const auto it_from = std::ranges::find(way_osm_nodes, from);
   const auto it_to = std::ranges::find(way_osm_nodes, to);
 
-  std::uint16_t from_idx, to_idx;
-  from_idx = to_idx = static_cast<std::uint16_t>(way_osm_nodes.size());
+  std::uint16_t to_idx;
+  std::uint16_t from_idx = to_idx =
+      static_cast<std::uint16_t>(way_osm_nodes.size());
 
   if (it_from != way_osm_nodes.end() && it_to != way_osm_nodes.end()) {
     from_idx = static_cast<std::uint16_t>(
@@ -39,9 +52,15 @@ way_segment way_segment::from(const ways& w,
           }};
 }
 
+way_segment_t way_segment_t::flip_directions() const {
+  return {.way_idx_ = way_idx_, .osm_node_range_ = osm_node_range_.flip()};
+}
+
 namespace {
 
-bool is_accessible(ways const& w, way_segment const& ws, mode const m) {
+bool is_accessible(ways const& w,
+                   way_segment_t const& ws,
+                   mode const m) {
 
   const auto w_props = w.r_->way_properties_[ws.way_idx_];
   switch (m) {
@@ -84,21 +103,25 @@ void emplace_relative_way_segment(ways const& w,
                                   double const exit_angle,
                                   point const prev_hub,
                                   point const hub,
-                                  way_segment const& ws,
+                                  way_segment_t const& ws,
                                   mode const m,
                                   bool const is_uturn,
-                                  std::vector<relative_way_segment>& left,
-                                  std::vector<relative_way_segment>& right) {
+                                  std::vector<relative_way_segment_t>& left,
+                                  std::vector<relative_way_segment_t>& right) {
   const auto& way_polyline = w.way_polylines_[ws.way_idx_];
 
   point const to = way_polyline[ws.osm_node_range_.to_];
   double const alt_angle =
       get_angle(prev_hub.as_latlng(), hub.as_latlng(), to.as_latlng());
   double const diff = alt_angle - exit_angle;
+
+  bool const can_exit_hub = is_accessible(w, ws, m);
+  bool const can_enter_hub = is_accessible(w, ws.flip_directions(), m);
+
   if (double const relative_diff = normalize(diff); relative_diff < 0) {
-    right.emplace_back(relative_diff, is_accessible(w, ws, m), is_uturn, ws);
+    right.emplace_back(relative_diff, can_enter_hub, can_exit_hub, is_uturn, ws);
   } else {
-    left.emplace_back(relative_diff, is_accessible(w, ws, m), is_uturn, ws);
+    left.emplace_back(relative_diff, can_enter_hub, can_exit_hub, is_uturn, ws);
   }
 }
 
@@ -109,8 +132,8 @@ struct hub_geometry {
 };
 
 hub_geometry get_hub_geometry(ways const& w,
-                              way_segment const& arrive,
-                              way_segment const& exit) {
+                              way_segment_t const& arrive,
+                              way_segment_t const& exit) {
   const auto& arrive_polyline = w.way_polylines_[arrive.way_idx_];
   const auto& exit_polyline = w.way_polylines_[exit.way_idx_];
 
@@ -130,15 +153,15 @@ hub_geometry get_hub_geometry(ways const& w,
 void add_alternatives(ways const& w,
                       node_idx_t const hub_node,
                       osm_node_idx_t const osm_hub_node,
-                      way_segment const& arrive_hub_on,
-                      way_segment const& exit_from_hub,
+                      way_segment_t const& arrive_hub_on,
+                      way_segment_t const& exit_from_hub,
                       way_idx_t const exit_way_idx,
                       double const exit_angle,
                       point const from_point,
                       point const hub_point,
                       mode const m,
-                      std::vector<relative_way_segment>& left,
-                      std::vector<relative_way_segment>& right) {
+                      std::vector<relative_way_segment_t>& left,
+                      std::vector<relative_way_segment_t>& right) {
   const auto& alt_ways = w.r_->node_ways_[hub_node];
   for (const auto alt_way : alt_ways) {
     const auto& osm_nodes = w.way_osm_nodes_[alt_way];
@@ -157,7 +180,7 @@ void add_alternatives(ways const& w,
 
     if (hub_node_idx > 0 &&
         (alt_way != exit_way_idx || exit_from_hub.is_way_aligned())) {
-      way_segment alt_seg_rev = {
+      way_segment_t alt_seg_rev = {
           .way_idx_ = alt_way,
           .osm_node_range_ = {
               .from_ = static_cast<std::uint16_t>(hub_node_idx),
@@ -172,7 +195,7 @@ void add_alternatives(ways const& w,
     }
     if (hub_node_idx + 1 < osm_nodes.size() &&
         (alt_way != exit_way_idx || !exit_from_hub.is_way_aligned())) {
-      way_segment alt_seg_forw = {
+      way_segment_t alt_seg_forw = {
           .way_idx_ = alt_way,
           .osm_node_range_ = {
               .from_ = static_cast<std::uint16_t>(hub_node_idx),
@@ -205,9 +228,9 @@ traversed_node_hub traversed_node_hub::from(ways const& w,
   osm_node_idx_t const osm_next_hub_node = w.node_to_osm_[next_node];
 
   node_hub.arrive_hub_on_ =
-      way_segment::from(w, osm_prev_hub_node, osm_hub_node, arrive_way);
+      way_segment::from(w, arrive_way, osm_prev_hub_node, osm_hub_node);
   node_hub.exit_from_hub_ =
-      way_segment::from(w, osm_hub_node, osm_next_hub_node, depart_way);
+      way_segment::from(w, depart_way, osm_hub_node, osm_next_hub_node);
 
   auto const geo =
       get_hub_geometry(w, node_hub.arrive_hub_on_, node_hub.exit_from_hub_);
@@ -240,7 +263,9 @@ void traversed_node_hub::print(std::ostream& out, ways const& w) const {
       auto const& alt = alts[i];
       out << "{way=" << w.way_osm_idx_[alt.segment_.way_idx_]
           << ", angle=" << alt.angle_
-          << ", accessible=" << (alt.is_accessible_ ? "true" : "false") << "}";
+          << ", can_enter_hub=" << (alt.can_enter_hub_ ? "true" : "false")
+          << ", can_exit_hub=" << (alt.can_exit_hub_ ? "true" : "false")
+          << "}";
       if (i != alts.size() - 1) {
         out << ", ";
       }
@@ -285,7 +310,8 @@ std::string traversed_node_hub::to_json(ways const& w) const {
         return boost::json::object{
             {"segment", way_segment_to_json(rel_way_seg.segment_)},
             {"angle", rel_way_seg.angle_},
-            {"is_accessible", rel_way_seg.is_accessible_},
+            {"can_enter_hub", rel_way_seg.can_enter_hub_},
+            {"can_exit_hub", rel_way_seg.can_exit_hub_},
             {"is_opposite_of_arrive", rel_way_seg.is_opposite_of_arrive_}};
       };
 
