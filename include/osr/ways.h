@@ -61,12 +61,77 @@ struct restriction {
   way_pos_t applies_to_bus_ : 1;
 };
 
+enum class access_value : std::uint8_t {
+  kUnknown,
+  kAllowed,
+  kForbidden,
+};
+
+enum class hgv_info_field : std::uint16_t {
+  kAccess = 1U << 0U,
+  kMaxSpeed = 1U << 1U,
+  kMaxLength = 1U << 2U,
+  kMaxWeightRating = 1U << 3U,
+  kMaxHeight = 1U << 4U,
+  kMaxWidth = 1U << 5U,
+  kMaxWeight = 1U << 6U,
+  kMaxAxleLoad = 1U << 7U,
+  kMaxAxles = 1U << 8U,
+  kHazmat = 1U << 9U,
+};
+
+constexpr std::uint16_t to_mask(hgv_info_field const field) {
+  return static_cast<std::uint16_t>(field);
+}
+
+struct hgv_way_info {
+  friend bool operator==(hgv_way_info, hgv_way_info) = default;
+
+  template <std::size_t NMaxTypes>
+  friend constexpr auto static_type_hash(
+      hgv_way_info const*, cista::hash_data<NMaxTypes> h) noexcept {
+    return h.combine(cista::hash("hgv_way_info v1"));
+  }
+
+  template <typename Ctx>
+  friend void serialize(Ctx&, hgv_way_info const*, cista::offset_t) {}
+
+  template <typename Ctx>
+  friend void deserialize(Ctx const&, hgv_way_info*) {}
+
+  constexpr bool has(hgv_info_field const field) const {
+    return (fields_ & to_mask(field)) != 0U;
+  }
+
+  constexpr access_value hgv_access() const {
+    return static_cast<access_value>(hgv_access_);
+  }
+
+  constexpr access_value hazmat_access() const {
+    return static_cast<access_value>(hazmat_access_);
+  }
+
+  std::uint16_t fields_{0U};
+  std::uint8_t hgv_access_{static_cast<std::uint8_t>(access_value::kUnknown)};
+  std::uint8_t hazmat_access_{
+      static_cast<std::uint8_t>(access_value::kUnknown)};
+  std::uint8_t maxspeed_km_h_{0U};
+  std::uint8_t maxaxles_{0U};
+  std::uint16_t maxlength_dm_{0U};
+  std::uint16_t maxweightrating_100kg_{0U};
+  std::uint16_t maxheight_cm_{0U};
+  std::uint16_t maxwidth_cm_{0U};
+  std::uint16_t maxweight_100kg_{0U};
+  std::uint16_t maxaxleload_100kg_{0U};
+};
+
 struct way_properties {
   constexpr bool is_accessible() const {
     return is_car_accessible() || is_bike_accessible() ||
            is_foot_accessible() || is_bus_accessible() ||
            is_bus_accessible_with_penalty() || is_railway_accessible() ||
-           is_railway_accessible_with_penalty() || is_ferry_accessible();
+           is_railway_accessible_with_penalty() || is_ferry_accessible() ||
+           has_hgv_info();
   }
   constexpr bool is_car_accessible() const { return is_car_accessible_; }
   constexpr bool is_bike_accessible() const { return is_bike_accessible_; }
@@ -94,6 +159,7 @@ struct way_properties {
   constexpr bool has_toll() const { return has_toll_; }
   constexpr bool is_sidewalk_separate() const { return is_sidewalk_separate_; }
   constexpr bool in_route() const { return in_route_; }
+  constexpr bool has_hgv_info() const { return has_hgv_info_; }
   constexpr std::uint16_t max_speed_km_per_h() const {
     return to_kmh(static_cast<speed_limit>(speed_limit_));
   }
@@ -106,7 +172,7 @@ struct way_properties {
   template <std::size_t NMaxTypes>
   friend constexpr auto static_type_hash(
       way_properties const*, cista::hash_data<NMaxTypes> h) noexcept {
-    return h.combine(cista::hash("way_properties v1.1"));
+    return h.combine(cista::hash("way_properties v1.2"));
   }
 
   template <typename Ctx>
@@ -145,6 +211,7 @@ struct way_properties {
   std::uint8_t is_bus_accessible_with_penalty_ : 1;
   std::uint8_t is_ferry_accessible_ : 1;
   std::uint8_t is_railway_accessible_with_penalty_ : 1;
+  std::uint8_t has_hgv_info_ : 1;
 };
 
 static_assert(sizeof(way_properties) == 5);
@@ -347,6 +414,20 @@ struct ways {
     static cista::wrapped<routing> read(std::filesystem::path const&);
     void write(std::filesystem::path const&) const;
 
+    hgv_way_info const* get_hgv_info(way_idx_t const way) const {
+      if (!way_properties_[way].has_hgv_info()) {
+        return nullptr;
+      }
+      auto const it = std::lower_bound(begin(way_hgv_info_), end(way_hgv_info_),
+                                       way,
+                                       [](auto const& entry, auto const& key) {
+                                         return entry.first < key;
+                                       });
+      utl::verify(it != end(way_hgv_info_) && it->first == way,
+                  "missing HGV info for way {}", way);
+      return &it->second;
+    }
+
     struct long_distance {
       CISTA_COMPARABLE()
 
@@ -357,6 +438,7 @@ struct ways {
 
     vec_map<node_idx_t, node_properties> node_properties_;
     vec_map<way_idx_t, way_properties> way_properties_;
+  vec<pair<way_idx_t, hgv_way_info>> way_hgv_info_;
 
     vecvec<way_idx_t, node_idx_t> way_nodes_;
     vecvec<way_idx_t, std::uint16_t> way_node_dist_;

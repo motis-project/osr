@@ -33,10 +33,11 @@ boost::json::value to_line_string(std::initializer_list<T>&& line) {
   return to_line_string(line);
 }
 
-inline std::string to_featurecollection(ways const& w,
-                                        std::optional<osr::path> const& p,
-                                        bool const with_properties = true) {
-  return boost::json::serialize(boost::json::object{
+inline boost::json::object to_featurecollection_value(
+    ways const& w,
+    std::optional<osr::path> const& p,
+    bool const with_properties = true) {
+  return boost::json::object{
       {"type", "FeatureCollection"},
       {"metadata", with_properties ? boost::json::value{{"duration", p->cost_},
                                                         {"distance", p->dist_}}
@@ -55,7 +56,14 @@ inline std::string to_featurecollection(ways const& w,
                   {"distance", s.dist_}},
              },
              {"geometry", to_line_string(s.polyline_)}};
-       }) | utl::emplace_back_to<boost::json::array>()}});
+       }) | utl::emplace_back_to<boost::json::array>()}};
+}
+
+inline std::string to_featurecollection(ways const& w,
+                                        std::optional<osr::path> const& p,
+                                        bool const with_properties = true) {
+  return boost::json::serialize(
+      to_featurecollection_value(w, p, with_properties));
 }
 
 inline boost::json::value to_point(point const p) {
@@ -68,6 +76,62 @@ inline std::string platform_names(platforms const& pl, platform_idx_t const i) {
     names << pl.platform_names_.at(i, j).view() << "\n";
   }
   return names.str();
+}
+
+inline char const* to_string(access_value const value) {
+  switch (value) {
+    case access_value::kUnknown: return "unknown";
+    case access_value::kAllowed: return "allowed";
+    case access_value::kForbidden: return "forbidden";
+  }
+  return "unknown";
+}
+
+inline void add_hgv_way_info_properties(boost::json::object& properties,
+                                        ways::routing const& r,
+                                        way_idx_t const way,
+                                        way_properties const& way_props) {
+  properties["has_hgv_info"] = way_props.has_hgv_info();
+  if (!way_props.has_hgv_info()) {
+    return;
+  }
+
+  auto const* hgv_info = r.get_hgv_info(way);
+  if (hgv_info == nullptr) {
+    return;
+  }
+
+  if (hgv_info->has(hgv_info_field::kAccess)) {
+    properties["hgv_access"] = to_string(hgv_info->hgv_access());
+  }
+  if (hgv_info->has(hgv_info_field::kHazmat)) {
+    properties["hazmat_access"] = to_string(hgv_info->hazmat_access());
+  }
+  if (hgv_info->has(hgv_info_field::kMaxSpeed)) {
+    properties["hgv_max_speed_km_h"] = hgv_info->maxspeed_km_h_;
+  }
+  if (hgv_info->has(hgv_info_field::kMaxLength)) {
+    properties["hgv_max_length_dm"] = hgv_info->maxlength_dm_;
+  }
+  if (hgv_info->has(hgv_info_field::kMaxWeightRating)) {
+    properties["hgv_max_weight_rating_100kg"] =
+        hgv_info->maxweightrating_100kg_;
+  }
+  if (hgv_info->has(hgv_info_field::kMaxHeight)) {
+    properties["hgv_max_height_cm"] = hgv_info->maxheight_cm_;
+  }
+  if (hgv_info->has(hgv_info_field::kMaxWidth)) {
+    properties["hgv_max_width_cm"] = hgv_info->maxwidth_cm_;
+  }
+  if (hgv_info->has(hgv_info_field::kMaxWeight)) {
+    properties["hgv_max_weight_100kg"] = hgv_info->maxweight_100kg_;
+  }
+  if (hgv_info->has(hgv_info_field::kMaxAxleLoad)) {
+    properties["hgv_max_axle_load_100kg"] = hgv_info->maxaxleload_100kg_;
+  }
+  if (hgv_info->has(hgv_info_field::kMaxAxles)) {
+    properties["hgv_max_axles"] = hgv_info->maxaxles_;
+  }
 }
 
 struct geojson_writer {
@@ -104,48 +168,12 @@ struct geojson_writer {
       auto const& [from, to] = *way_nodes_it;
       auto const dist =
           w_.r_->get_way_node_distance(i, static_cast<std::uint16_t>(n));
-      features_.emplace_back(boost::json::value{
-          {"type", "Feature"},
-          {"properties",
-           {{"type", "edge"},
-            {"osm_way_id", to_idx(w_.way_osm_idx_[i])},
-            {"internal_id", to_idx(i)},
-            {"component", to_idx(w_.r_->way_component_[i])},
-            {"distance", dist},
-            {"car", p.is_car_accessible()},
-            {"bike", p.is_bike_accessible()},
-            {"foot", p.is_foot_accessible()},
-            {"bus", p.is_bus_accessible()},
-            {"bus_with_penalty", p.is_bus_accessible_with_penalty()},
-            {"railway", p.is_railway_accessible()},
-            {"railway_with_penalty", p.is_railway_accessible_with_penalty()},
-            {"ferry", p.is_ferry_accessible()},
-            {"is_big_street", p.is_big_street()},
-            {"is_destination", p.is_destination()},
-            {"oneway_car", p.is_oneway_car()},
-            {"oneway_bike", p.is_oneway_bike()},
-            {"oneway_bus_psv", p.is_oneway_bus_psv()},
-            {"max_speed", p.max_speed_km_per_h()},
-            {"speed_limit", p.speed_limit_},
-            {"from_level", p.from_level().to_float()},
-            {"to_level", p.to_level().to_float()},
-            {"is_elevator", p.is_elevator()},
-            {"sidewalk_separate", p.is_sidewalk_separate()},
-            {"is_steps", p.is_steps()},
-            {"is_parking", p.is_parking()},
-            {"is_ramp", p.is_ramp()},
-            {"in_route", p.in_route()}}},
-          {"geometry", to_line_string(std::initializer_list<geo::latlng>{
-                           w_.get_node_pos(from), w_.get_node_pos(to)})}});
-    }
-
-    features_.emplace_back(boost::json::value{
-        {"type", "Feature"},
-        {"properties",
-         {{"type", "geometry"},
+      auto properties = boost::json::object{
+          {"type", "edge"},
           {"osm_way_id", to_idx(w_.way_osm_idx_[i])},
           {"internal_id", to_idx(i)},
           {"component", to_idx(w_.r_->way_component_[i])},
+          {"distance", dist},
           {"car", p.is_car_accessible()},
           {"bike", p.is_bike_accessible()},
           {"foot", p.is_foot_accessible()},
@@ -154,8 +182,8 @@ struct geojson_writer {
           {"railway", p.is_railway_accessible()},
           {"railway_with_penalty", p.is_railway_accessible_with_penalty()},
           {"ferry", p.is_ferry_accessible()},
-          {"is_destination", p.is_destination()},
           {"is_big_street", p.is_big_street()},
+          {"is_destination", p.is_destination()},
           {"oneway_car", p.is_oneway_car()},
           {"oneway_bike", p.is_oneway_bike()},
           {"oneway_bus_psv", p.is_oneway_bus_psv()},
@@ -168,8 +196,49 @@ struct geojson_writer {
           {"is_steps", p.is_steps()},
           {"is_parking", p.is_parking()},
           {"is_ramp", p.is_ramp()},
-          {"in_route", p.in_route()}}},
-        {"geometry", to_line_string(w_.way_polylines_[i])}});
+          {"in_route", p.in_route()}};
+      add_hgv_way_info_properties(properties, *w_.r_, i, p);
+      features_.emplace_back(boost::json::value{
+          {"type", "Feature"},
+          {"properties", std::move(properties)},
+          {"geometry", to_line_string(std::initializer_list<geo::latlng>{
+                           w_.get_node_pos(from), w_.get_node_pos(to)})}});
+    }
+
+    auto properties = boost::json::object{
+        {"type", "geometry"},
+        {"osm_way_id", to_idx(w_.way_osm_idx_[i])},
+        {"internal_id", to_idx(i)},
+        {"component", to_idx(w_.r_->way_component_[i])},
+        {"car", p.is_car_accessible()},
+        {"bike", p.is_bike_accessible()},
+        {"foot", p.is_foot_accessible()},
+        {"bus", p.is_bus_accessible()},
+        {"bus_with_penalty", p.is_bus_accessible_with_penalty()},
+        {"railway", p.is_railway_accessible()},
+        {"railway_with_penalty", p.is_railway_accessible_with_penalty()},
+        {"ferry", p.is_ferry_accessible()},
+        {"is_destination", p.is_destination()},
+        {"is_big_street", p.is_big_street()},
+        {"oneway_car", p.is_oneway_car()},
+        {"oneway_bike", p.is_oneway_bike()},
+        {"oneway_bus_psv", p.is_oneway_bus_psv()},
+        {"max_speed", p.max_speed_km_per_h()},
+        {"speed_limit", p.speed_limit_},
+        {"from_level", p.from_level().to_float()},
+        {"to_level", p.to_level().to_float()},
+        {"is_elevator", p.is_elevator()},
+        {"sidewalk_separate", p.is_sidewalk_separate()},
+        {"is_steps", p.is_steps()},
+        {"is_parking", p.is_parking()},
+        {"is_ramp", p.is_ramp()},
+        {"in_route", p.in_route()}};
+    add_hgv_way_info_properties(properties, *w_.r_, i, p);
+
+    features_.emplace_back(
+        boost::json::value{{"type", "Feature"},
+                           {"properties", std::move(properties)},
+                           {"geometry", to_line_string(w_.way_polylines_[i])}});
 
     nodes_.insert(begin(nodes), end(nodes));
     ++n;

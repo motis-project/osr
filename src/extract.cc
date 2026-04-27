@@ -4,6 +4,14 @@
 #include <windows.h>
 #endif
 
+#include <cctype>
+#include <cmath>
+#include <cstdlib>
+#include <algorithm>
+#include <limits>
+#include <optional>
+#include <string>
+
 #include "osr/extract/extract.h"
 
 #include "boost/thread/tss.hpp"
@@ -58,6 +66,221 @@ struct osm_restriction {
 bool is_number(std::string_view s) {
   return !s.empty() &&
          utl::all_of(s, [](char const c) { return std::isdigit(c); });
+}
+
+bool is_space(char const c) {
+  return std::isspace(static_cast<unsigned char>(c)) != 0;
+}
+
+std::string_view trim(std::string_view value) {
+  while (!value.empty() && is_space(value.front())) {
+    value.remove_prefix(1U);
+  }
+  while (!value.empty() && is_space(value.back())) {
+    value.remove_suffix(1U);
+  }
+  return value;
+}
+
+struct osm_measure {
+  double value_{};
+  std::string_view unit_;
+};
+
+std::optional<osm_measure> parse_measure(std::string_view value) {
+  value = trim(value);
+  if (value.empty()) {
+    return std::nullopt;
+  }
+
+  auto* end = static_cast<char*>(nullptr);
+  auto const parsed_value = std::strtod(value.data(), &end);
+  if (end == value.data() || !std::isfinite(parsed_value)) {
+    return std::nullopt;
+  }
+
+  auto const unit_pos = static_cast<std::size_t>(end - value.data());
+  return osm_measure{parsed_value, trim(value.substr(unit_pos))};
+}
+
+std::optional<double> parse_length_m(std::string_view value) {
+  auto const measure = parse_measure(value);
+  if (!measure.has_value()) {
+    return std::nullopt;
+  }
+
+  auto unit = trim(measure->unit_);
+  if (unit.starts_with('\'')) {
+    unit.remove_prefix(1U);
+    if (auto const inches = parse_measure(unit);
+        inches.has_value() && trim(inches->unit_) == "\""sv) {
+      return (measure->value_ * 12.0 + inches->value_) * 0.0254;
+    }
+    if (unit.empty()) {
+      return measure->value_ * 0.3048;
+    }
+  }
+
+  switch (cista::hash(unit)) {
+    case cista::hash(""):
+    case cista::hash("m"):
+    case cista::hash("metre"):
+    case cista::hash("metres"):
+    case cista::hash("meter"):
+    case cista::hash("meters"): return measure->value_;
+    case cista::hash("km"):
+    case cista::hash("kilometre"):
+    case cista::hash("kilometres"):
+    case cista::hash("kilometer"):
+    case cista::hash("kilometers"): return measure->value_ * 1000.0;
+    case cista::hash("mi"):
+    case cista::hash("mile"):
+    case cista::hash("miles"): return measure->value_ * 1609.344;
+    case cista::hash("nmi"): return measure->value_ * 1852.0;
+    case cista::hash("yd"):
+    case cista::hash("yds"): return measure->value_ * 0.9144;
+    case cista::hash("ft"): return measure->value_ * 0.3048;
+    case cista::hash("in"):
+    case cista::hash("\""): return measure->value_ * 0.0254;
+    default: return std::nullopt;
+  }
+}
+
+std::optional<double> parse_weight_t(std::string_view value) {
+  auto const measure = parse_measure(value);
+  if (!measure.has_value()) {
+    return std::nullopt;
+  }
+
+  auto const unit = trim(measure->unit_);
+  switch (cista::hash(unit)) {
+    case cista::hash(""):
+    case cista::hash("t"): return measure->value_;
+    case cista::hash("kg"): return measure->value_ / 1000.0;
+    case cista::hash("st"):
+    case cista::hash("ton"):
+    case cista::hash("tons"): return measure->value_ * 0.9071847;
+    case cista::hash("lt"): return measure->value_ * 1.016047;
+    case cista::hash("lb"):
+    case cista::hash("lbs"): return measure->value_ * 0.00045359237;
+    case cista::hash("cwt"): return measure->value_ * 0.0508;
+    default: return std::nullopt;
+  }
+}
+
+std::optional<double> parse_speed_km_h(std::string_view value) {
+  auto const measure = parse_measure(value);
+  if (!measure.has_value()) {
+    return std::nullopt;
+  }
+
+  switch (cista::hash(measure->unit_)) {
+    case cista::hash(""):
+    case cista::hash("km/h"):
+    case cista::hash("kph"):
+    case cista::hash("kmh"):
+    case cista::hash("kmph"): return measure->value_;
+    case cista::hash("mph"): return measure->value_ * 1.609344;
+    case cista::hash("knots"): return measure->value_ * 1.852;
+    default: return std::nullopt;
+  }
+}
+
+std::optional<double> parse_unitless(std::string_view value) {
+  auto const measure = parse_measure(value);
+  if (!measure.has_value() || !trim(measure->unit_).empty()) {
+    return std::nullopt;
+  }
+  return measure->value_;
+}
+
+template <typename T>
+std::optional<T> to_integer(std::optional<double> const value,
+                            double const factor = 1.0) {
+  if (!value.has_value() || *value < 0.0) {
+    return std::nullopt;
+  }
+  return static_cast<T>(std::min<double>(std::round(*value * factor),
+                                         std::numeric_limits<T>::max()));
+}
+
+template <typename T, typename Value>
+void set_hgv_info_value(hgv_way_info& info,
+                        hgv_info_field const field,
+                        T hgv_way_info::* member,
+                        std::optional<Value> const value) {
+  if (!value.has_value()) {
+    return;
+  }
+  info.fields_ |= to_mask(field);
+  info.*member = *value;
+}
+
+std::string_view pick_hgv_variant(std::string_view base, std::string_view hgv) {
+  return hgv.empty() ? base : hgv;
+}
+
+std::optional<access_value> get_access_value(std::string_view value) {
+  switch (cista::hash(value)) {
+    case cista::hash("yes"):
+    case cista::hash("designated"): return access_value::kAllowed;
+    case cista::hash("no"):
+    case cista::hash("discouraged"): return access_value::kForbidden;
+    default: return std::nullopt;
+  }
+}
+
+std::optional<access_value> get_hazmat_value(std::string_view value) {
+  switch (cista::hash(value)) {
+    case cista::hash("designated"): return access_value::kAllowed;
+    case cista::hash("no"): return access_value::kForbidden;
+    default: return std::nullopt;
+  }
+}
+
+std::optional<hgv_way_info> get_hgv_way_info(tags const& t) {
+  auto info = hgv_way_info{};
+
+  if (auto const access = get_access_value(t.hgv_); access.has_value()) {
+    info.fields_ |= to_mask(hgv_info_field::kAccess);
+    info.hgv_access_ = static_cast<std::uint8_t>(*access);
+  }
+
+  set_hgv_info_value(
+      info, hgv_info_field::kMaxSpeed, &hgv_way_info::maxspeed_km_h_,
+      to_integer<std::uint8_t>(parse_speed_km_h(t.max_speed_hgv_)));
+  set_hgv_info_value(
+      info, hgv_info_field::kMaxLength, &hgv_way_info::maxlength_dm_,
+      to_integer<std::uint16_t>(
+          parse_length_m(pick_hgv_variant(t.max_length_, t.max_length_hgv_)),
+          10.0));
+  set_hgv_info_value(info, hgv_info_field::kMaxWeightRating,
+                     &hgv_way_info::maxweightrating_100kg_,
+                     to_integer<std::uint16_t>(
+                         parse_weight_t(pick_hgv_variant(
+                             t.max_weightrating_, t.max_weightrating_hgv_)),
+                         10.0));
+  set_hgv_info_value(
+      info, hgv_info_field::kMaxHeight, &hgv_way_info::maxheight_cm_,
+      to_integer<std::uint16_t>(parse_length_m(t.max_height_), 100.0));
+  set_hgv_info_value(
+      info, hgv_info_field::kMaxWidth, &hgv_way_info::maxwidth_cm_,
+      to_integer<std::uint16_t>(parse_length_m(t.max_width_), 100.0));
+  set_hgv_info_value(
+      info, hgv_info_field::kMaxWeight, &hgv_way_info::maxweight_100kg_,
+      to_integer<std::uint16_t>(parse_weight_t(t.max_weight_), 10.0));
+  set_hgv_info_value(
+      info, hgv_info_field::kMaxAxleLoad, &hgv_way_info::maxaxleload_100kg_,
+      to_integer<std::uint16_t>(parse_weight_t(t.max_axle_load_), 10.0));
+  set_hgv_info_value(info, hgv_info_field::kMaxAxles, &hgv_way_info::maxaxles_,
+                     to_integer<std::uint8_t>(parse_unitless(t.max_axles_)));
+
+  if (auto const hazmat = get_hazmat_value(t.hazmat_); hazmat.has_value()) {
+    info.fields_ |= to_mask(hgv_info_field::kHazmat);
+    info.hazmat_access_ = static_cast<std::uint8_t>(*hazmat);
+  }
+
+  return info.fields_ == 0U ? std::nullopt : std::optional{info};
 }
 
 bool is_big_street(tags const& t) {
@@ -251,12 +474,14 @@ struct way_handler : public osm::handler::Handler {
     }
 
     auto const in_route = it != end(rel_ways_) && it->second.p_.in_route_;
+    auto const hgv_info = get_hgv_way_info(t);
 
     auto p = (t.is_platform() || t.is_parking_ || !t.highway_.empty() ||
               (!t.railway_.empty() && (in_route || it == end(rel_ways_))) ||
               t.is_ferry_route_)
                  ? get_way_properties(t)
                  : it->second.p_;
+    p.has_hgv_info_ = hgv_info.has_value();
     if (!p.is_accessible()) {
       return;
     }
@@ -307,6 +532,9 @@ struct way_handler : public osm::handler::Handler {
 
     w_.way_osm_idx_.push_back(osm_way_idx_t{w.positive_id()});
     w_.r_->way_properties_.emplace_back(p);
+    if (hgv_info.has_value()) {
+      w_.r_->way_hgv_info_.emplace_back(way_idx, *hgv_info);
+    }
 
     w_.way_polylines_.emplace_back(w.nodes() |
                                    std::views::transform(get_point));
