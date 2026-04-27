@@ -172,6 +172,7 @@ struct tags {
           }
         } break;
         case cista::hash("maxspeed"): max_speed_ = t.value(); break;
+        case cista::hash("lanes"): lanes_ = t.value(); break;
         case cista::hash("toll"): toll_ = t.value() == "yes"sv; break;
         case cista::hash("incline"): {
           auto const value = std::string_view{t.value()};
@@ -234,6 +235,9 @@ struct tags {
 
   // https://wiki.openstreetmap.org/wiki/Key:maxspeed
   std::string_view max_speed_;
+
+  // https://wiki.openstreetmap.org/wiki/Key:lanes
+  std::string_view lanes_;
 
   // https://wiki.openstreetmap.org/wiki/Key:name
   std::string_view name_;

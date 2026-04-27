@@ -68,14 +68,19 @@ struct way_instruction_properties {
 
   constexpr bool is_footway_crossing() const { return is_footway_crossing_ == 1U; }
 
+  constexpr std::uint8_t lanes() const { return lanes_; }
+
+  constexpr bool has_lanes() const { return lanes_ != 0U; }
+
   std::uint8_t highway_ : 3;
   std::uint8_t is_link_ : 1;
   std::uint8_t junction_ : 2;
   std::uint8_t is_footway_crossing_ : 1;
   std::uint8_t reserved_ : 1;
+  std::uint8_t lanes_{0U};
 };
 
-static_assert(sizeof(way_instruction_properties) == 1);
+static_assert(sizeof(way_instruction_properties) == 2);
 
 struct way_properties {
   constexpr bool is_accessible() const {

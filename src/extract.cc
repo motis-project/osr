@@ -177,6 +177,10 @@ way_instruction_properties get_way_instruction_properties(tags const& t) {
   ip.is_link_ = l;
   ip.junction_ = get_junction(t);
   ip.is_footway_crossing_ = ip.highway_ == footish ? is_foot_crossing(t) : false;
+  if (is_number(t.lanes_)) {
+    ip.lanes_ = static_cast<std::uint8_t>(
+        std::min<unsigned>(255U, utl::parse<unsigned>(t.lanes_)));
+  }
   return ip;
 }
 
