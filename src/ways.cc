@@ -8,6 +8,46 @@
 
 namespace osr {
 
+namespace {
+
+template <typename Polyline>
+quantized_angle_t get_prev_bearing(Polyline const& polyline,
+                                   std::size_t const idx) {
+  if (idx == 0U) {
+    return 0U;
+  }
+
+  auto const origin = polyline[idx].as_latlng();
+  for (auto i = idx; i != 0U; --i) {
+    auto const candidate = polyline[i - 1U].as_latlng();
+    if (origin != candidate) {
+      return quantize_angle(geo::bearing(origin, candidate));
+    }
+  }
+
+  return 0U;
+}
+
+template <typename Polyline>
+quantized_angle_t get_next_bearing(Polyline const& polyline,
+                                   std::size_t const idx) {
+  if (idx + 1U >= polyline.size()) {
+    return 0U;
+  }
+
+  auto const origin = polyline[idx].as_latlng();
+  for (auto i = static_cast<std::size_t>(idx) + 1U; i < polyline.size(); ++i) {
+    auto const candidate = polyline[i].as_latlng();
+    if (origin != candidate) {
+      return quantize_angle(geo::bearing(origin, candidate));
+    }
+  }
+
+  return 0U;
+}
+
+}  // namespace
+
 ways::ways(std::filesystem::path p, cista::mmap::protection const mode)
     : p_{std::move(p)},
       mode_{mode},
@@ -79,7 +119,7 @@ void ways::add_restriction(std::vector<resolved_restriction>& rs) {
           if (x.type_ == resolved_restriction::type::kNo) {
             r_->node_restrictions_[x.via_].push_back(
                 restriction{r_->get_way_pos(x.via_, x.from_),
-                            r_->get_way_pos(x.via_, x.to_)});
+                            r_->get_way_pos(x.via_, x.to_), x.applies_to_bus_});
           } else /* kOnly */ {
             for (auto const [i, from] :
                  utl::enumerate(r_->node_ways_[x.via_])) {
@@ -87,7 +127,8 @@ void ways::add_restriction(std::vector<resolved_restriction>& rs) {
                    utl::enumerate(r_->node_ways_[x.via_])) {
                 if (x.from_ == from && x.to_ != to) {
                   r_->node_restrictions_[x.via_].push_back(restriction{
-                      static_cast<way_pos_t>(i), static_cast<way_pos_t>(j)});
+                      static_cast<way_pos_t>(i), static_cast<way_pos_t>(j),
+                      x.applies_to_bus_});
                 }
               }
             }
@@ -238,11 +279,48 @@ void ways::connect_ways() {
     }
   }
 
+  compute_turn_bearings();
+
   auto e = std::error_code{};
   std::filesystem::remove(p_ / "tmp_node_ways_data.bin", e);
   std::filesystem::remove(p_ / "tmp_node_ways_index.bin", e);
   std::filesystem::remove(p_ / "tmp_node_in_way_idx_data.bin", e);
   std::filesystem::remove(p_ / "tmp_node_in_way_idx_index.bin", e);
+}
+
+std::size_t ways::get_polyline_node_idx(
+    way_idx_t const way, std::uint16_t const target_routing_idx) const {
+  auto const& routing_nodes = r_->way_nodes_[way];
+  auto const& polyline_osm_nodes = way_osm_nodes_[way];
+
+  auto current_routing_idx = 0U;
+  for (auto const [poly_idx, osm_node] : utl::enumerate(polyline_osm_nodes)) {
+    auto const expected_osm_node =
+        node_to_osm_[routing_nodes[current_routing_idx]];
+    if (osm_node == expected_osm_node) {
+      if (current_routing_idx == target_routing_idx) {
+        return poly_idx;
+      }
+      ++current_routing_idx;
+    }
+  }
+
+  throw utl::fail("polyline node index not found: way={} idx={}", to_idx(way),
+                  target_routing_idx);
+}
+
+void ways::compute_turn_bearings() {
+  for (auto i = node_idx_t{0U}; i != n_nodes(); ++i) {
+    auto bearings = r_->node_turn_bearings_.add_back_sized(0U);
+    for (auto const [way, node_in_way_idx] :
+         utl::zip(r_->node_ways_[i], r_->node_in_way_idx_[i])) {
+      auto const polyline = way_polylines_[way];
+      auto const polyline_idx = get_polyline_node_idx(way, node_in_way_idx);
+      bearings.push_back(
+          turn_bearing{.to_prev_ = get_prev_bearing(polyline, polyline_idx),
+                       .to_next_ = get_next_bearing(polyline, polyline_idx)});
+    }
+  }
 }
 
 void ways::sync() {

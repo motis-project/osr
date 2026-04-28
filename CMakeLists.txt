@@ -62,6 +62,7 @@ if (OSR_LINT)
     include(cmake/clang-tidy.cmake)
 endif ()
 
+set(CMAKE_COMPILE_WARNING_AS_ERROR ON)
 if ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "Clang")
     set(osr-compile-options
             -Weverything
@@ -92,22 +93,18 @@ if ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "Clang")
             -Wno-nrvo
             -Wno-thread-safety-negative
             -Wno-unused-private-field
-            -Wno-unknown-attributes
-            -Werror)
+            -Wno-unknown-attributes)
 elseif ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "AppleClang")
-    set(osr-compile-options -Wall -Wextra -Werror -Wno-unknown-pragmas)
+    set(osr-compile-options -Wall -Wextra -Wno-unknown-pragmas)
 elseif (MSVC)
     # Will create more than 65,279 sections in debug mode
-    set(osr-compile-options /WX /bigobj)
+    set(osr-compile-options /bigobj)
 else ()
     set(osr-compile-options
             -Wall
             -Wextra
             -Wno-changes-meaning
             -Wno-maybe-uninitialized)
-    if (NOT CMAKE_CROSSCOMPILING)
-        set(osr-compile-options ${osr-compile-options} -Werror)
-    endif ()
 endif ()
 
 # --- LIB ---

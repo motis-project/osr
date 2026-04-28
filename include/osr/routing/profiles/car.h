@@ -12,6 +12,7 @@
 #include "osr/routing/mode.h"
 #include "osr/routing/path.h"
 #include "osr/routing/profiles/common.h"
+#include "osr/routing/turns.h"
 #include "osr/ways.h"
 
 namespace osr {
@@ -29,6 +30,10 @@ struct generic_car {
     using profile_t = generic_car;
     cost_t uturn_penalty_{120U};
     cost_t private_gate_penalty_{60U};
+    quantized_angle_t slow_turn_angle_{quantize_turn_angle(65.0)};
+    quantized_angle_t sharp_turn_angle_{quantize_turn_angle(110.0)};
+    cost_t slow_turn_penalty_{IsBus ? 10U : 0U};
+    cost_t sharp_turn_penalty_{IsBus ? 25U : 0U};
   };
 
   struct node {
@@ -215,7 +220,7 @@ struct generic_car {
           [&](additional_edge const& ae, cost_t const edge_cost,
               direction const edge_dir) {
             if (!additional->is_additional_node(n.n_)) {
-              if (w.is_restricted<SearchDir>(
+              if (w.is_restricted<SearchDir, IsBus>(
                       n.n_, n.way_, w.get_way_pos(n.n_, ae.underlying_way_))) {
                 return;
               }
@@ -225,6 +230,9 @@ struct generic_car {
                 get_adjacent_additional_node<generic_car>(
                     params, w, n, additional, ae, edge_dir, edge_cost,
                     params.uturn_penalty_);
+            if (cost == kInfeasible) {
+              return;
+            }
 
             fn(target, cost, ae.distance_, ae.underlying_way_, 0, 0,
                elevation_storage::elevation{}, false);
@@ -235,7 +243,7 @@ struct generic_car {
       }
     }
 
-    for_each_adjacent_node<generic_car, SearchDir, WithBlocked, true>(
+    for_each_adjacent_node<generic_car, SearchDir, WithBlocked, true, IsBus>(
         params, w, n, blocked, params.uturn_penalty_, fn);
   }
 
@@ -250,7 +258,8 @@ struct generic_car {
       return false;
     }
 
-    if (w.is_restricted(n.n_, n.way_, w.get_way_pos(n.n_, way), search_dir)) {
+    if (w.is_restricted<IsBus>(n.n_, n.way_, w.get_way_pos(n.n_, way),
+                               search_dir)) {
       return false;
     }
 
@@ -265,9 +274,17 @@ struct generic_car {
       auto const accessible = e.is_bus_accessible();
       auto const accessible_with_penalty = e.is_bus_accessible_with_penalty();
       if ((accessible || accessible_with_penalty) &&
-          (dir == direction::kForward || !e.is_oneway_psv())) {
-        auto cost = static_cast<cost_t>((dist / e.max_speed_m_per_s()) *
-                                        (e.in_route() ? 1.0 : 1.2));
+          (dir == direction::kForward || !e.is_oneway_bus_psv())) {
+        auto const in_route = e.in_route();
+        auto const bus_only = !e.is_car_accessible();
+        auto sl = static_cast<speed_limit>(e.speed_limit_);
+        if (in_route && static_cast<std::uint8_t>(sl) <
+                            static_cast<std::uint8_t>(speed_limit::kmh_50)) {
+          sl = speed_limit::kmh_50;
+        }
+        auto cost = static_cast<cost_t>(
+            std::rint(((in_route || bus_only) ? 1.0f : 1.5f) *
+                      static_cast<float>(dist) * to_seconds_per_meter(sl)));
         if (e.is_parking()) {
           cost *= 2U;
         }
@@ -281,7 +298,9 @@ struct generic_car {
     } else {
       if (e.is_car_accessible() &&
           (dir == direction::kForward || !e.is_oneway_car())) {
-        return (dist / e.max_speed_m_per_s()) * (e.is_destination() ? 5U : 1U) +
+        return static_cast<cost_t>(std::rint(
+                   (e.is_destination() ? 5.0f : 1.0f) *
+                   static_cast<float>(dist) * e.max_speed_s_per_m())) +
                (e.is_destination() ? 120U : 0U);
       } else {
         return kInfeasible;
@@ -301,14 +320,26 @@ struct generic_car {
     }
   }
 
+  static constexpr cost_t turn_cost(parameters const& params,
+                                    quantized_angle_t const turn_angle) {
+    auto cost = cost_t{0U};
+    if (turn_angle > params.slow_turn_angle_) {
+      cost += params.slow_turn_penalty_;
+    }
+    if (turn_angle > params.sharp_turn_angle_) {
+      cost += params.sharp_turn_penalty_;
+    }
+    return cost;
+  }
+
   static constexpr double lower_bound_heuristic(parameters const&,
                                                 double const dist) {
-    return dist / (130U / 3.6);
+    return (3.6 / 130U) * dist;
   }
 
   static constexpr double upper_bound_heuristic(parameters const&,
                                                 double const dist) {
-    return dist / (15U / 3.6);
+    return (3.6 / 15U) * dist;
   }
 
   static constexpr node get_reverse(node const n) {

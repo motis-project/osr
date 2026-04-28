@@ -2,6 +2,7 @@
 
 #include <chrono>
 #include <memory>
+#include <optional>
 #include <vector>
 
 #include "geo/latlng.h"
@@ -50,6 +51,7 @@ template <Profile P>
 struct point_data {
   location loc_{};
   std::vector<matched_way<P>> matched_ways_{};
+  double matching_distance_{};
 };
 
 template <Profile P>
@@ -58,9 +60,12 @@ struct segment_data {
   std::unique_ptr<sharing_data> sharing_{};
   cost_t min_cost_{std::numeric_limits<cost_t>::max()};
   cost_t max_cost_{std::numeric_limits<cost_t>::min()};
+  cost_t dijkstra_cost_limit_{};
   bool all_beelined_{false};
   std::size_t beeline_from_{};
   distance_t beeline_dist_{};
+  std::optional<std::size_t> selected_start_match_idx_{};
+  std::optional<std::size_t> selected_dest_match_idx_{};
 
   hash_map<node_idx_t, std::vector<additional_edge>> additional_edges_;
   std::size_t path_segments_{};

@@ -56,3 +56,20 @@ TEST(extract, lanes) {
   ASSERT_FALSE(laerchen_way_instruction_props.has_lanes());
   ASSERT_EQ(laerchen_way_instruction_props.lanes(), 0);
 }
+
+TEST(extract, bus_only_on_highway) {
+  auto p = fs::temp_directory_path() / "osr_test";
+  auto ec = std::error_code{};
+  fs::remove_all(p, ec);
+  fs::create_directories(p, ec);
+
+  extract(false, "test/luisenplatz-darmstadt.osm.pbf", p, {});
+
+  auto w = ways{p, cista::mmap::protection::READ};
+  auto const luisenplatz_outer = w.find_way(osm_way_idx_t{53341306});
+  ASSERT_TRUE(luisenplatz_outer.has_value());
+
+  auto const& wp = w.r_->way_properties_[luisenplatz_outer.value()];
+  ASSERT_FALSE(wp.is_bus_accessible());
+  ASSERT_TRUE(wp.is_foot_accessible());
+}

@@ -4,8 +4,9 @@
 #include <fstream>
 #include <limits>
 #include <sstream>
+#include <string>
 
-#include "boost/iostreams/device/file.hpp"
+#include "boost/iostreams/device/back_inserter.hpp"
 #include "boost/iostreams/filter/gzip.hpp"
 #include "boost/iostreams/filtering_stream.hpp"
 
@@ -94,6 +95,7 @@ boost::json::object to_json_match(debug_match const& dm,
       {"wayIdx", static_cast<std::int64_t>(dm.way_array_idx_)},
       {"projectedPoint", to_json_coord(dm.projected_point_)},
       {"distToWay", dm.dist_to_way_},
+      {"matchPenalty", static_cast<std::int64_t>(dm.match_penalty_)},
       {"waySegmentIdx", dm.way_segment_idx_},
       {"oneway", dm.oneway_},
       {"additionalNodeIdx",
@@ -135,7 +137,7 @@ boost::json::object to_json_match(debug_match const& dm,
 }  // namespace
 
 template <Profile P>
-void write_map_match_debug(
+boost::json::object build_map_match_debug_json(
     ways const& w,
     lookup const& l,
     typename P::parameters const&,
@@ -143,20 +145,94 @@ void write_map_match_debug(
     std::vector<point_data<P>> const& pds,
     std::vector<segment_data<P>> const& segments,
     matched_route const& result,
-    std::function<geo::latlng(node_idx_t)> const& get_node_pos,
-    std::filesystem::path const& debug_path) {
+    std::function<geo::latlng(node_idx_t)> const& get_node_pos) {
   auto dbg_ways = std::vector<boost::json::object>{};
   auto dbg_nodes = std::vector<boost::json::object>{};
   auto dbg_route_segments = std::vector<debug_route_segment>{};
   auto way_to_array_idx = hash_map<way_idx_t, std::size_t>{};
   auto node_to_array_idx = hash_map<node_idx_t, std::size_t>{};
 
+  std::function<std::size_t(node_idx_t, bool, geo::latlng const*, bool)>
+      register_node;
   std::function<std::size_t(way_idx_t, bool, std::optional<way_idx_t>,
                             std::vector<geo::latlng> const*)>
-      register_way =
-          [&](way_idx_t const way_idx, bool is_additional,
-              std::optional<way_idx_t> underlying,
-              std::vector<geo::latlng> const* add_geom) -> std::size_t {
+      register_way;
+
+  auto const populate_way_properties = [&](boost::json::object& way_obj,
+                                           way_idx_t const way_idx) {
+    auto const& p = w.r_->way_properties_[way_idx];
+    way_obj["properties"] = boost::json::object{
+        {"car", p.is_car_accessible()},
+        {"bike", p.is_bike_accessible()},
+        {"foot", p.is_foot_accessible()},
+        {"bus", p.is_bus_accessible()},
+        {"busWithPenalty", p.is_bus_accessible_with_penalty()},
+        {"railway", p.is_railway_accessible()},
+        {"railwayWithPenalty", p.is_railway_accessible_with_penalty()},
+        {"ferry", p.is_ferry_accessible()},
+        {"isBigStreet", p.is_big_street()},
+        {"isDestination", p.is_destination()},
+        {"onewayCar", p.is_oneway_car()},
+        {"onewayBike", p.is_oneway_bike()},
+        {"onewayPsv", p.is_oneway_bus_psv()},
+        {"maxSpeedKmh", p.max_speed_km_per_h()},
+        {"speedLimit", p.speed_limit_},
+        {"fromLevel", p.from_level().to_float()},
+        {"toLevel", p.to_level().to_float()},
+        {"isElevator", p.is_elevator()},
+        {"isSidewalkSeparate", p.is_sidewalk_separate()},
+        {"isSteps", p.is_steps()},
+        {"isParking", p.is_parking()},
+        {"isRamp", p.is_ramp()},
+        {"inRoute", p.in_route()},
+        {"component",
+         static_cast<std::int64_t>(to_idx(w.r_->way_component_[way_idx]))}};
+  };
+
+  std::function<void(boost::json::object&, node_idx_t, bool)>
+      populate_node_fields = [&](boost::json::object& node_obj,
+                                 node_idx_t const node_idx,
+                                 bool const include_way_indices) {
+        node_obj["osmId"] =
+            static_cast<std::int64_t>(to_idx(w.node_to_osm_[node_idx]));
+        auto const pos = w.get_node_pos(node_idx).as_latlng();
+        node_obj["pos"] = boost::json::array{pos.lng(), pos.lat()};
+
+        auto levels = boost::json::array{};
+        foot<true>::for_each_elevator_level(
+            *w.r_, node_idx, [&](level_t const level) {
+              levels.emplace_back(level.to_float());
+            });
+
+        auto const& p = w.r_->node_properties_[node_idx];
+        node_obj["properties"] = boost::json::object{
+            {"car", p.is_car_accessible()},
+            {"bike", p.is_bike_accessible()},
+            {"foot", p.is_walk_accessible()},
+            {"bus", p.is_bus_accessible()},
+            {"busWithPenalty", p.is_bus_accessible_with_penalty()},
+            {"isRestricted", w.r_->node_is_restricted_[node_idx]},
+            {"isEntrance", p.is_entrance()},
+            {"isElevator", p.is_elevator()},
+            {"isParking", p.is_parking()},
+            {"isMultiLevel", p.is_multi_level()},
+            {"fromLevel", p.from_level().to_float()},
+            {"toLevel", p.to_level().to_float()},
+            {"levels", std::move(levels)}};
+
+        if (include_way_indices) {
+          auto way_indices = boost::json::array{};
+          for (auto const& wi : w.r_->node_ways_[node_idx]) {
+            way_indices.emplace_back(static_cast<std::int64_t>(
+                register_way(wi, false, std::nullopt, nullptr)));
+          }
+          node_obj["wayIndices"] = std::move(way_indices);
+        }
+      };
+
+  register_way = [&](way_idx_t const way_idx, bool is_additional,
+                     std::optional<way_idx_t> underlying,
+                     std::vector<geo::latlng> const* add_geom) -> std::size_t {
     if (way_idx == way_idx_t::invalid()) {
       return std::numeric_limits<std::size_t>::max();
     }
@@ -198,6 +274,13 @@ void write_map_match_debug(
             static_cast<std::int64_t>(to_idx(way_nodes.back()));
       }
 
+      auto node_indices = boost::json::array{};
+      for (auto const node_idx : way_nodes) {
+        node_indices.emplace_back(static_cast<std::int64_t>(
+            register_node(node_idx, false, nullptr, false)));
+      }
+      way_obj["nodeIndices"] = std::move(node_indices);
+
       // Node distances
       auto dists = boost::json::array{};
       for (auto i = 0U; i < w.r_->way_node_dist_[way_idx].size(); ++i) {
@@ -206,33 +289,7 @@ void write_map_match_debug(
                 way_idx, static_cast<std::uint16_t>(i))));
       }
       way_obj["nodeDistances"] = std::move(dists);
-
-      // Properties
-      auto const& p = w.r_->way_properties_[way_idx];
-      way_obj["properties"] = boost::json::object{
-          {"car", p.is_car_accessible()},
-          {"bike", p.is_bike_accessible()},
-          {"foot", p.is_foot_accessible()},
-          {"bus", p.is_bus_accessible()},
-          {"busWithPenalty", p.is_bus_accessible_with_penalty()},
-          {"railway", p.is_railway_accessible()},
-          {"isBigStreet", p.is_big_street()},
-          {"isDestination", p.is_destination()},
-          {"onewayCar", p.is_oneway_car()},
-          {"onewayBike", p.is_oneway_bike()},
-          {"onewayPsv", p.is_oneway_psv()},
-          {"maxSpeedKmh", p.max_speed_km_per_h()},
-          {"speedLimit", p.speed_limit_},
-          {"fromLevel", p.from_level().to_float()},
-          {"toLevel", p.to_level().to_float()},
-          {"isElevator", p.is_elevator()},
-          {"isSidewalkSeparate", p.is_sidewalk_separate()},
-          {"isSteps", p.is_steps()},
-          {"isParking", p.is_parking()},
-          {"isRamp", p.is_ramp()},
-          {"inRoute", p.in_route()},
-          {"component",
-           static_cast<std::int64_t>(to_idx(w.r_->way_component_[way_idx]))}};
+      populate_way_properties(way_obj, way_idx);
     } else if (add_geom) {
       auto geom = boost::json::array{};
       for (auto const& pt : *add_geom) {
@@ -245,14 +302,18 @@ void write_map_match_debug(
     return idx;
   };
 
-  auto const register_node =
-      [&](node_idx_t const node_idx, bool is_additional = false,
-          geo::latlng const* add_pos = nullptr) -> std::size_t {
+  register_node = [&](node_idx_t const node_idx, bool is_additional,
+                      geo::latlng const* add_pos,
+                      bool const include_way_indices) -> std::size_t {
     if (node_idx == node_idx_t::invalid()) {
       return std::numeric_limits<std::size_t>::max();
     }
     if (auto const it = node_to_array_idx.find(node_idx);
         it != node_to_array_idx.end()) {
+      if (!is_additional && include_way_indices &&
+          !dbg_nodes[it->second].if_contains("wayIndices")) {
+        populate_node_fields(dbg_nodes[it->second], node_idx, true);
+      }
       return it->second;
     }
     auto const idx = dbg_nodes.size();
@@ -264,32 +325,7 @@ void write_map_match_debug(
     node_obj["isAdditionalNode"] = is_additional;
 
     if (!is_additional) {
-      node_obj["osmId"] =
-          static_cast<std::int64_t>(to_idx(w.node_to_osm_[node_idx]));
-      auto const pos = w.get_node_pos(node_idx).as_latlng();
-      node_obj["pos"] = boost::json::array{pos.lng(), pos.lat()};
-
-      auto const& p = w.r_->node_properties_[node_idx];
-      node_obj["properties"] = boost::json::object{
-          {"car", p.is_car_accessible()},
-          {"bike", p.is_bike_accessible()},
-          {"foot", p.is_walk_accessible()},
-          {"bus", p.is_bus_accessible()},
-          {"busWithPenalty", p.is_bus_accessible_with_penalty()},
-          {"isRestricted", w.r_->node_is_restricted_[node_idx]},
-          {"isEntrance", p.is_entrance()},
-          {"isElevator", p.is_elevator()},
-          {"isParking", p.is_parking()},
-          {"isMultiLevel", p.is_multi_level()},
-          {"fromLevel", p.from_level().to_float()},
-          {"toLevel", p.to_level().to_float()}};
-
-      auto way_indices = boost::json::array{};
-      for (auto const& wi : w.r_->node_ways_[node_idx]) {
-        way_indices.emplace_back(static_cast<std::int64_t>(
-            register_way(wi, false, std::nullopt, nullptr)));
-      }
-      node_obj["wayIndices"] = std::move(way_indices);
+      populate_node_fields(node_obj, node_idx, include_way_indices);
     } else if (add_pos) {
       node_obj["pos"] = boost::json::array{add_pos->lng(), add_pos->lat()};
     }
@@ -317,13 +353,14 @@ void write_map_match_debug(
     dbg_seg.all_beelined_ = seg.all_beelined_;
     dbg_seg.min_cost_ = seg.min_cost_;
     dbg_seg.max_cost_ = seg.max_cost_;
-    dbg_seg.dijkstra_cost_limit_ = static_cast<cost_t>(
-        seg.astar_.pq_.n_buckets() > 0 ? seg.astar_.pq_.n_buckets() - 1 : 0);
+    dbg_seg.dijkstra_cost_limit_ = seg.dijkstra_cost_limit_;
     dbg_seg.max_reached_in_dijkstra_ = seg.astar_.max_reached_;
     dbg_seg.dijkstra_early_termination_max_cost_ =
         seg.astar_.early_termination_max_cost_;
     dbg_seg.dijkstra_terminated_early_max_cost_ =
         seg.astar_.terminated_early_max_cost_;
+    dbg_seg.selected_start_match_idx_ = seg.selected_start_match_idx_;
+    dbg_seg.selected_dest_match_idx_ = seg.selected_dest_match_idx_;
     dbg_seg.dijkstra_remaining_destinations_ =
         seg.astar_.remaining_destinations_;
     dbg_seg.d_dijkstra_ = seg.astar_duration_;
@@ -335,8 +372,8 @@ void write_map_match_debug(
       if (!nc.valid()) {
         return {};
       }
-      auto const node_arr_idx =
-          register_node(nc.node_, w.is_additional_node(nc.node_));
+      auto const node_arr_idx = register_node(
+          nc.node_, w.is_additional_node(nc.node_), nullptr, true);
       return {.valid_ = true,
               .node_array_idx_ = node_arr_idx,
               .dist_to_node_ = nc.dist_to_node_,
@@ -350,10 +387,11 @@ void write_map_match_debug(
       dm.way_array_idx_ = register_way(mw.way_, false, std::nullopt, nullptr);
       dm.projected_point_ = mw.projected_point_;
       dm.dist_to_way_ = mw.dist_to_way_;
+      dm.match_penalty_ = mw.match_penalty_;
       dm.way_segment_idx_ = mw.segment_idx_;
       dm.oneway_ = mw.oneway_;
-      dm.additional_node_array_idx_ =
-          register_node(mw.additional_node_idx_, true, &mw.projected_point_);
+      dm.additional_node_array_idx_ = register_node(
+          mw.additional_node_idx_, true, &mw.projected_point_, false);
 
       if (mw.fwd_node_ != P::node::invalid()) {
         dm.fwd_node_ = debug_node_ref{
@@ -400,10 +438,11 @@ void write_map_match_debug(
       dm.way_array_idx_ = register_way(mw.way_, false, std::nullopt, nullptr);
       dm.projected_point_ = mw.projected_point_;
       dm.dist_to_way_ = mw.dist_to_way_;
+      dm.match_penalty_ = mw.match_penalty_;
       dm.way_segment_idx_ = mw.segment_idx_;
       dm.oneway_ = mw.oneway_;
-      dm.additional_node_array_idx_ =
-          register_node(mw.additional_node_idx_, true, &mw.projected_point_);
+      dm.additional_node_array_idx_ = register_node(
+          mw.additional_node_idx_, true, &mw.projected_point_, false);
 
       if (mw.fwd_node_ != P::node::invalid()) {
         dm.fwd_node_ = debug_node_ref{
@@ -450,7 +489,8 @@ void write_map_match_debug(
           auto const is_add =
               w.is_additional_node(node_idx) ||
               (seg.sharing_ && seg.sharing_->is_additional_node(node_idx));
-          auto const node_arr_idx = register_node(node_idx, is_add);
+          auto const node_arr_idx =
+              register_node(node_idx, is_add, nullptr, true);
           auto step = debug_route_step{
               .node_array_idx_ = node_arr_idx,
               .way_pos_ = way_pos_t{0U},  // simplified
@@ -463,7 +503,7 @@ void write_map_match_debug(
                 (seg.sharing_ &&
                  seg.sharing_->is_additional_node(pred_node_idx));
             step.pred_node_array_idx_ =
-                register_node(pred_node_idx, pred_is_add);
+                register_node(pred_node_idx, pred_is_add, nullptr, true);
           }
           dbg_result.path_.push_back(std::move(step));
           dbg_result.geometry_.push_back(get_node_pos(node_idx));
@@ -510,6 +550,12 @@ void write_map_match_debug(
       } else {
         bee.reason_ = "no_destinations_reached";
       }
+      if (seg.selected_start_match_idx_) {
+        bee.from_match_idx_ = seg.selected_start_match_idx_;
+      }
+      if (seg.selected_dest_match_idx_) {
+        bee.to_match_idx_ = seg.selected_dest_match_idx_;
+      }
       bee.distance_ = seg.beeline_dist_;
       bee.cost_ = seg.min_cost_;
       dbg_seg.beeline_ = bee;
@@ -537,6 +583,19 @@ void write_map_match_debug(
         way_obj["fromNodeId"] = static_cast<std::int64_t>(to_idx(node_idx));
         way_obj["toNodeId"] = static_cast<std::int64_t>(to_idx(edge.to_));
         way_obj["reverse"] = edge.reverse_;
+
+        auto node_indices = boost::json::array{};
+        auto const from_is_additional =
+            w.is_additional_node(node_idx) ||
+            (seg.sharing_ && seg.sharing_->is_additional_node(node_idx));
+        auto const to_is_additional =
+            w.is_additional_node(edge.to_) ||
+            (seg.sharing_ && seg.sharing_->is_additional_node(edge.to_));
+        node_indices.emplace_back(static_cast<std::int64_t>(
+            register_node(node_idx, from_is_additional, nullptr, false)));
+        node_indices.emplace_back(static_cast<std::int64_t>(
+            register_node(edge.to_, to_is_additional, nullptr, false)));
+        way_obj["nodeIndices"] = std::move(node_indices);
 
         auto geom = boost::json::array{};
         for (auto const& pt : edge.polyline_) {
@@ -580,7 +639,7 @@ void write_map_match_debug(
       }
 
       // Register the node if not already registered
-      auto const arr_idx = register_node(node_idx, false);
+      auto const arr_idx = register_node(node_idx, false, nullptr, true);
 
       P::resolve_all(*w.r_, node_idx, kNoLevel, [&](auto const& n) {
         auto const cost = seg.astar_.get_cost(n);
@@ -601,7 +660,8 @@ void write_map_match_debug(
               auto const pred_node_idx = pred->get_node();
               // Register predecessor too if needed
               auto const pred_arr_idx = register_node(
-                  pred_node_idx, w.is_additional_node(pred_node_idx));
+                  pred_node_idx, w.is_additional_node(pred_node_idx), nullptr,
+                  true);
               if (pred_arr_idx != std::numeric_limits<std::size_t>::max()) {
                 label.pred_node_array_idx_ = pred_arr_idx;
               }
@@ -650,7 +710,8 @@ void write_map_match_debug(
                 w.is_additional_node(pred_node_idx) ||
                 (seg.sharing_ &&
                  seg.sharing_->is_additional_node(pred_node_idx));
-            auto const pred_arr_idx = register_node(pred_node_idx, pred_is_add);
+            auto const pred_arr_idx =
+                register_node(pred_node_idx, pred_is_add, nullptr, true);
             if (pred_arr_idx != std::numeric_limits<std::size_t>::max()) {
               label.pred_node_array_idx_ = pred_arr_idx;
             }
@@ -701,7 +762,8 @@ void write_map_match_debug(
                 w.is_additional_node(pred_node_idx) ||
                 (seg.sharing_ &&
                  seg.sharing_->is_additional_node(pred_node_idx));
-            auto const pred_arr_idx = register_node(pred_node_idx, pred_is_add);
+            auto const pred_arr_idx =
+                register_node(pred_node_idx, pred_is_add, nullptr, true);
             if (pred_arr_idx != std::numeric_limits<std::size_t>::max()) {
               label.pred_node_array_idx_ = pred_arr_idx;
             }
@@ -719,11 +781,12 @@ void write_map_match_debug(
   }
 
   auto json_input_points = boost::json::array{};
-  for (auto const& loc : points) {
-    json_input_points.emplace_back(
-        boost::json::object{{"lat", loc.pos_.lat()},
-                            {"lng", loc.pos_.lng()},
-                            {"level", loc.lvl_.to_float()}});
+  for (auto const [idx, loc] : utl::enumerate(points)) {
+    json_input_points.emplace_back(boost::json::object{
+        {"lat", loc.pos_.lat()},
+        {"lng", loc.pos_.lng()},
+        {"level", loc.lvl_.to_float()},
+        {"matchingDistance", pds.at(idx).matching_distance_}});
   }
 
   auto json_ways = boost::json::array{};
@@ -752,6 +815,10 @@ void write_map_match_debug(
         {"maxReachedInDijkstra", seg.max_reached_in_dijkstra_},
         {"dijkstraTerminatedEarlyMaxCost",
          seg.dijkstra_terminated_early_max_cost_},
+        {"selectedStartMatchIdx",
+         to_json_opt_size_t(seg.selected_start_match_idx_)},
+        {"selectedDestMatchIdx",
+         to_json_opt_size_t(seg.selected_dest_match_idx_)},
         {"dijkstraRemainingDestinations", seg.dijkstra_remaining_destinations_},
         {"dijkstraDurationUs", seg.d_dijkstra_.count()}};
 
@@ -816,12 +883,28 @@ void write_map_match_debug(
   auto json_final_route = boost::json::object{
       {"totalCost", static_cast<std::int64_t>(result.path_.cost_)}};
   auto final_geom = boost::json::array{};
+  auto final_segment_offsets = boost::json::array{};
+  auto geometry_offset = std::size_t{0U};
+  auto path_segment_offset = std::size_t{0U};
+
+  for (auto const segment_offset : result.segment_offsets_) {
+    while (path_segment_offset < segment_offset &&
+           path_segment_offset < result.path_.segments_.size()) {
+      geometry_offset +=
+          result.path_.segments_[path_segment_offset].polyline_.size();
+      ++path_segment_offset;
+    }
+    final_segment_offsets.emplace_back(
+        static_cast<std::int64_t>(geometry_offset));
+  }
+
   for (auto const& seg : result.path_.segments_) {
     for (auto const& pt : seg.polyline_) {
       final_geom.emplace_back(to_json_coord(pt));
     }
   }
   json_final_route["geometry"] = std::move(final_geom);
+  json_final_route["segmentOffsets"] = std::move(final_segment_offsets);
 
   // Compute bounding box
   auto min_lng = std::numeric_limits<double>::max();
@@ -865,16 +948,29 @@ void write_map_match_debug(
       {"finalRoute", std::move(json_final_route)},
       {"totalDurationMs", result.total_duration_.count()}};
 
-  auto out_path = debug_path;
-  out_path += ".json.gz";
+  return debug_json;
+}
+
+std::string gzip_json(boost::json::value const& debug_json) {
+  auto gzip = std::string{};
   auto ofs = boost::iostreams::filtering_ostream{};
   ofs.push(boost::iostreams::gzip_compressor(
       boost::iostreams::gzip_params(boost::iostreams::gzip::best_compression)));
-  ofs.push(boost::iostreams::file_sink(out_path.string(), std::ios::binary));
+  ofs.push(boost::iostreams::back_inserter(gzip));
   ofs << boost::json::serialize(debug_json);
+  boost::iostreams::close(ofs);
+  return gzip;
 }
 
-template void write_map_match_debug<foot<false, elevator_tracking>>(
+void write_map_match_debug(boost::json::value const& debug_json,
+                           std::filesystem::path const& filename) {
+  auto const payload = gzip_json(debug_json);
+  auto out = std::ofstream{filename, std::ios::binary};
+  out.write(payload.data(), static_cast<std::streamsize>(payload.size()));
+}
+
+template boost::json::object
+build_map_match_debug_json<foot<false, elevator_tracking>>(
     ways const&,
     lookup const&,
     foot<false, elevator_tracking>::parameters const&,
@@ -882,10 +978,10 @@ template void write_map_match_debug<foot<false, elevator_tracking>>(
     std::vector<point_data<foot<false, elevator_tracking>>> const&,
     std::vector<segment_data<foot<false, elevator_tracking>>> const&,
     matched_route const&,
-    std::function<geo::latlng(node_idx_t)> const&,
-    std::filesystem::path const&);
+    std::function<geo::latlng(node_idx_t)> const&);
 
-template void write_map_match_debug<foot<true, elevator_tracking>>(
+template boost::json::object
+build_map_match_debug_json<foot<true, elevator_tracking>>(
     ways const&,
     lookup const&,
     foot<true, elevator_tracking>::parameters const&,
@@ -893,11 +989,10 @@ template void write_map_match_debug<foot<true, elevator_tracking>>(
     std::vector<point_data<foot<true, elevator_tracking>>> const&,
     std::vector<segment_data<foot<true, elevator_tracking>>> const&,
     matched_route const&,
-    std::function<geo::latlng(node_idx_t)> const&,
-    std::filesystem::path const&);
+    std::function<geo::latlng(node_idx_t)> const&);
 
-template void
-write_map_match_debug<bike<bike_costing::kSafe, kElevationNoCost>>(
+template boost::json::object
+build_map_match_debug_json<bike<bike_costing::kSafe, kElevationNoCost>>(
     ways const&,
     lookup const&,
     bike<bike_costing::kSafe, kElevationNoCost>::parameters const&,
@@ -906,11 +1001,10 @@ write_map_match_debug<bike<bike_costing::kSafe, kElevationNoCost>>(
     std::vector<
         segment_data<bike<bike_costing::kSafe, kElevationNoCost>>> const&,
     matched_route const&,
-    std::function<geo::latlng(node_idx_t)> const&,
-    std::filesystem::path const&);
+    std::function<geo::latlng(node_idx_t)> const&);
 
-template void
-write_map_match_debug<bike<bike_costing::kFast, kElevationNoCost>>(
+template boost::json::object
+build_map_match_debug_json<bike<bike_costing::kFast, kElevationNoCost>>(
     ways const&,
     lookup const&,
     bike<bike_costing::kFast, kElevationNoCost>::parameters const&,
@@ -919,11 +1013,10 @@ write_map_match_debug<bike<bike_costing::kFast, kElevationNoCost>>(
     std::vector<
         segment_data<bike<bike_costing::kFast, kElevationNoCost>>> const&,
     matched_route const&,
-    std::function<geo::latlng(node_idx_t)> const&,
-    std::filesystem::path const&);
+    std::function<geo::latlng(node_idx_t)> const&);
 
-template void
-write_map_match_debug<bike<bike_costing::kSafe, kElevationLowCost>>(
+template boost::json::object
+build_map_match_debug_json<bike<bike_costing::kSafe, kElevationLowCost>>(
     ways const&,
     lookup const&,
     bike<bike_costing::kSafe, kElevationLowCost>::parameters const&,
@@ -933,11 +1026,10 @@ write_map_match_debug<bike<bike_costing::kSafe, kElevationLowCost>>(
     std::vector<
         segment_data<bike<bike_costing::kSafe, kElevationLowCost>>> const&,
     matched_route const&,
-    std::function<geo::latlng(node_idx_t)> const&,
-    std::filesystem::path const&);
+    std::function<geo::latlng(node_idx_t)> const&);
 
-template void
-write_map_match_debug<bike<bike_costing::kSafe, kElevationHighCost>>(
+template boost::json::object
+build_map_match_debug_json<bike<bike_costing::kSafe, kElevationHighCost>>(
     ways const&,
     lookup const&,
     bike<bike_costing::kSafe, kElevationHighCost>::parameters const&,
@@ -947,10 +1039,9 @@ write_map_match_debug<bike<bike_costing::kSafe, kElevationHighCost>>(
     std::vector<
         segment_data<bike<bike_costing::kSafe, kElevationHighCost>>> const&,
     matched_route const&,
-    std::function<geo::latlng(node_idx_t)> const&,
-    std::filesystem::path const&);
+    std::function<geo::latlng(node_idx_t)> const&);
 
-template void write_map_match_debug<car>(
+template boost::json::object build_map_match_debug_json<car>(
     ways const&,
     lookup const&,
     car::parameters const&,
@@ -958,10 +1049,10 @@ template void write_map_match_debug<car>(
     std::vector<point_data<car>> const&,
     std::vector<segment_data<car>> const&,
     matched_route const&,
-    std::function<geo::latlng(node_idx_t)> const&,
-    std::filesystem::path const&);
+    std::function<geo::latlng(node_idx_t)> const&);
 
-template void write_map_match_debug<car_parking<false, false>>(
+template boost::json::object
+build_map_match_debug_json<car_parking<false, false>>(
     ways const&,
     lookup const&,
     car_parking<false, false>::parameters const&,
@@ -969,10 +1060,10 @@ template void write_map_match_debug<car_parking<false, false>>(
     std::vector<point_data<car_parking<false, false>>> const&,
     std::vector<segment_data<car_parking<false, false>>> const&,
     matched_route const&,
-    std::function<geo::latlng(node_idx_t)> const&,
-    std::filesystem::path const&);
+    std::function<geo::latlng(node_idx_t)> const&);
 
-template void write_map_match_debug<car_parking<true, false>>(
+template boost::json::object
+build_map_match_debug_json<car_parking<true, false>>(
     ways const&,
     lookup const&,
     car_parking<true, false>::parameters const&,
@@ -980,10 +1071,10 @@ template void write_map_match_debug<car_parking<true, false>>(
     std::vector<point_data<car_parking<true, false>>> const&,
     std::vector<segment_data<car_parking<true, false>>> const&,
     matched_route const&,
-    std::function<geo::latlng(node_idx_t)> const&,
-    std::filesystem::path const&);
+    std::function<geo::latlng(node_idx_t)> const&);
 
-template void write_map_match_debug<car_parking<false, true>>(
+template boost::json::object
+build_map_match_debug_json<car_parking<false, true>>(
     ways const&,
     lookup const&,
     car_parking<false, true>::parameters const&,
@@ -991,10 +1082,10 @@ template void write_map_match_debug<car_parking<false, true>>(
     std::vector<point_data<car_parking<false, true>>> const&,
     std::vector<segment_data<car_parking<false, true>>> const&,
     matched_route const&,
-    std::function<geo::latlng(node_idx_t)> const&,
-    std::filesystem::path const&);
+    std::function<geo::latlng(node_idx_t)> const&);
 
-template void write_map_match_debug<car_parking<true, true>>(
+template boost::json::object
+build_map_match_debug_json<car_parking<true, true>>(
     ways const&,
     lookup const&,
     car_parking<true, true>::parameters const&,
@@ -1002,10 +1093,9 @@ template void write_map_match_debug<car_parking<true, true>>(
     std::vector<point_data<car_parking<true, true>>> const&,
     std::vector<segment_data<car_parking<true, true>>> const&,
     matched_route const&,
-    std::function<geo::latlng(node_idx_t)> const&,
-    std::filesystem::path const&);
+    std::function<geo::latlng(node_idx_t)> const&);
 
-template void write_map_match_debug<bike_sharing>(
+template boost::json::object build_map_match_debug_json<bike_sharing>(
     ways const&,
     lookup const&,
     bike_sharing::parameters const&,
@@ -1013,10 +1103,10 @@ template void write_map_match_debug<bike_sharing>(
     std::vector<point_data<bike_sharing>> const&,
     std::vector<segment_data<bike_sharing>> const&,
     matched_route const&,
-    std::function<geo::latlng(node_idx_t)> const&,
-    std::filesystem::path const&);
+    std::function<geo::latlng(node_idx_t)> const&);
 
-template void write_map_match_debug<car_sharing<track_node_tracking>>(
+template boost::json::object
+build_map_match_debug_json<car_sharing<track_node_tracking>>(
     ways const&,
     lookup const&,
     car_sharing<track_node_tracking>::parameters const&,
@@ -1024,10 +1114,9 @@ template void write_map_match_debug<car_sharing<track_node_tracking>>(
     std::vector<point_data<car_sharing<track_node_tracking>>> const&,
     std::vector<segment_data<car_sharing<track_node_tracking>>> const&,
     matched_route const&,
-    std::function<geo::latlng(node_idx_t)> const&,
-    std::filesystem::path const&);
+    std::function<geo::latlng(node_idx_t)> const&);
 
-template void write_map_match_debug<bus>(
+template boost::json::object build_map_match_debug_json<bus>(
     ways const&,
     lookup const&,
     bus::parameters const&,
@@ -1035,10 +1124,9 @@ template void write_map_match_debug<bus>(
     std::vector<point_data<bus>> const&,
     std::vector<segment_data<bus>> const&,
     matched_route const&,
-    std::function<geo::latlng(node_idx_t)> const&,
-    std::filesystem::path const&);
+    std::function<geo::latlng(node_idx_t)> const&);
 
-template void write_map_match_debug<railway>(
+template boost::json::object build_map_match_debug_json<railway>(
     ways const&,
     lookup const&,
     railway::parameters const&,
@@ -1046,10 +1134,9 @@ template void write_map_match_debug<railway>(
     std::vector<point_data<railway>> const&,
     std::vector<segment_data<railway>> const&,
     matched_route const&,
-    std::function<geo::latlng(node_idx_t)> const&,
-    std::filesystem::path const&);
+    std::function<geo::latlng(node_idx_t)> const&);
 
-template void write_map_match_debug<ferry>(
+template boost::json::object build_map_match_debug_json<ferry>(
     ways const&,
     lookup const&,
     ferry::parameters const&,
@@ -1057,7 +1144,6 @@ template void write_map_match_debug<ferry>(
     std::vector<point_data<ferry>> const&,
     std::vector<segment_data<ferry>> const&,
     matched_route const&,
-    std::function<geo::latlng(node_idx_t)> const&,
-    std::filesystem::path const&);
+    std::function<geo::latlng(node_idx_t)> const&);
 
 }  // namespace osr

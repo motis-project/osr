@@ -3,6 +3,7 @@
 #include <cassert>
 #include <cstdint>
 #include <algorithm>
+#include <limits>
 #include <vector>
 
 #include "utl/to_vec.h"
@@ -52,7 +53,10 @@ struct astar {
         std::abs(start_loc.pos_.lat()) > std::abs(end_loc.pos_.lat())
             ? start_loc.pos_
             : end_loc.pos_);
+    beeline_distance_ = geo::distance(start_loc.pos_, end_loc.pos_);
   }
+
+  void reset_pq() { pq_.buckets_ = {}; }
 
   void add_start(P::parameters const& params,
                  ways const& w,
@@ -142,7 +146,9 @@ struct astar {
           early_termination_max_cost_ = std::min(
               early_termination_max_cost_,
               static_cast<cost_t>(std::min(
-                  {static_cast<std::uint64_t>(curr_cost) * 2,
+                  {static_cast<std::uint64_t>(curr_cost) * 2 +
+                       static_cast<std::uint64_t>(P::upper_bound_heuristic(
+                           params, std::min(beeline_distance_, 1000.0))),
                    static_cast<std::uint64_t>(
                        curr_cost + P::upper_bound_heuristic(params, 10000U)),
                    static_cast<std::uint64_t>(kInfeasible - 1U)})));
@@ -264,6 +270,7 @@ struct astar {
   geo::latlng dest_centroid_{};
   double dest_radius_{};
   double distance_lon_degrees_{};
+  double beeline_distance_{};
 };
 
 }  // namespace osr

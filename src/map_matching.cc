@@ -25,17 +25,109 @@
 
 namespace osr {
 
+struct mm_match_distance {
+  double initial_{};
+  double expanded_{};
+};
+
 template <Profile P>
-std::vector<matched_way<P>> match_input_point(
-    ways const& w,
-    lookup const& l,
-    typename P::parameters const& params,
-    bitvec<node_idx_t> const* blocked,
-    location const& loc) {
+mm_match_distance get_mm_match_distance(typename P::parameters const&) {
+  return {.initial_ = 150.0, .expanded_ = 300.0};
+}
+
+template <>
+mm_match_distance get_mm_match_distance<railway>(railway::parameters const&) {
+  return {.initial_ = 200.0, .expanded_ = 500.0};
+}
+
+template <>
+mm_match_distance get_mm_match_distance<ferry>(ferry::parameters const&) {
+  return {.initial_ = 500.0, .expanded_ = 1500.0};
+}
+
+template <Profile P>
+bool is_forward_on_way(ways const& w,
+                       matched_way<P> const& from_mw,
+                       matched_way<P> const& to_mw) {
+  if (from_mw.segment_idx_ != to_mw.segment_idx_) {
+    return from_mw.segment_idx_ < to_mw.segment_idx_;
+  }
+
+  auto const& polyline = w.way_polylines_[from_mw.way_];
+  auto const& segment_start = polyline.at(from_mw.segment_idx_);
+  return geo::distance(segment_start, from_mw.projected_point_) <=
+         geo::distance(segment_start, to_mw.projected_point_);
+}
+
+template <Profile P>
+bool has_graph_node_between(ways const& w,
+                            matched_way<P> const& from_mw,
+                            matched_way<P> const& to_mw) {
+  auto const forward = is_forward_on_way(w, from_mw, to_mw);
+  auto const& osm_nodes = w.way_osm_nodes_[from_mw.way_];
+
+  auto const from_idx = from_mw.segment_idx_;
+  auto const to_idx = to_mw.segment_idx_;
+  auto const first_idx = forward ? from_idx + 1U : to_idx + 1U;
+  auto const last_idx = forward ? to_idx : from_idx;
+
+  for (auto idx = first_idx; idx <= last_idx; ++idx) {
+    if (w.find_node_idx(osm_nodes[idx]).has_value()) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+template <Profile P>
+additional_edge make_same_way_additional_edge(ways const& w,
+                                              matched_way<P> const& from_mw,
+                                              matched_way<P> const& to_mw) {
+  auto const forward = is_forward_on_way(w, from_mw, to_mw);
+  auto const& polyline = w.way_polylines_[from_mw.way_];
+
+  auto path = std::vector<geo::latlng>{from_mw.projected_point_};
+  auto prev = from_mw.projected_point_;
+  auto dist = 0.0;
+
+  auto const add_point = [&](geo::latlng const& point) {
+    dist += geo::distance(prev, point);
+    path.push_back(point);
+    prev = point;
+  };
+
+  if (forward) {
+    for (auto idx = from_mw.segment_idx_ + 1U; idx <= to_mw.segment_idx_;
+         ++idx) {
+      add_point(polyline[idx]);
+    }
+  } else {
+    for (auto idx = from_mw.segment_idx_; idx > to_mw.segment_idx_; --idx) {
+      add_point(polyline[idx]);
+    }
+  }
+
+  add_point(to_mw.projected_point_);
+
+  return additional_edge{.to_ = to_mw.additional_node_idx_,
+                         .distance_ = static_cast<distance_t>(dist),
+                         .underlying_way_ = from_mw.way_,
+                         .reverse_ = !forward,
+                         .polyline_ = std::move(path)};
+}
+
+template <Profile P>
+point_data<P> match_input_point(ways const& w,
+                                lookup const& l,
+                                typename P::parameters const& params,
+                                bitvec<node_idx_t> const* blocked,
+                                location const& loc) {
   auto matched_ways = std::vector<matched_way<P>>{};
   auto const approx_distance_lng_degrees =
       geo::approx_distance_lng_degrees(loc.pos_);
-  auto max_match_distance = 100.0;
+  auto const mm_dist = get_mm_match_distance<P>(params);
+  auto max_match_distance = mm_dist.initial_;
 
   auto const find_matches = [&]() {
     auto const squared_max_dist = std::pow(max_match_distance, 2);
@@ -78,12 +170,6 @@ std::vector<matched_way<P>> match_input_point(
             !mw.bwd_out_.valid() && !mw.bwd_in_.valid()) {
           return;
         }
-        // TODO: match penalty is often too small / equal for points that
-        //   are close to each other
-        auto const match_heuristic =
-            P::upper_bound_heuristic(params, mw.dist_to_way_);
-        mw.match_penalty_ =
-            static_cast<cost_t>(match_heuristic * match_heuristic);
         matched_ways.push_back(std::move(mw));
       }
     });
@@ -92,20 +178,35 @@ std::vector<matched_way<P>> match_input_point(
   find_matches();
 
   if (matched_ways.empty()) {
-    max_match_distance = 300.0;
+    max_match_distance = mm_dist.expanded_;
     find_matches();
   }
 
-  return matched_ways;
+  std::sort(begin(matched_ways), end(matched_ways),
+            [](auto const& a, auto const& b) {
+              return a.dist_to_way_ < b.dist_to_way_;
+            });
+  for (auto [idx, mw] : utl::enumerate(matched_ways)) {
+    auto const match_heuristic =
+        P::upper_bound_heuristic(params, mw.dist_to_way_);
+    mw.match_penalty_ = static_cast<cost_t>(match_heuristic * match_heuristic +
+                                            (idx != 0U ? 30 : 0));
+  }
+
+  return point_data<P>{.loc_ = loc,
+                       .matched_ways_ = std::move(matched_ways),
+                       .matching_distance_ = max_match_distance};
 }
 
 template <Profile P>
 double get_dijkstra_limit(typename P::parameters const& params,
                           double const distance) {
   if (distance < 2000) {
-    return P::upper_bound_heuristic(params, distance) * 5.0 + 500.0;
+    return P::upper_bound_heuristic(params, distance) * 5.0 * 4.0 + 1500.0;
+  } else if (distance < 10000) {
+    return P::upper_bound_heuristic(params, distance) * 3.0 * 4.0 + 1500.0;
   } else {
-    return P::upper_bound_heuristic(params, distance) * 3.0 + 500.0;
+    return P::upper_bound_heuristic(params, distance) * 3.0 + 1500.0;
   }
 }
 
@@ -117,8 +218,9 @@ matched_route map_match(
     std::vector<location> const& points,
     bitvec<node_idx_t> const* blocked,
     elevation_storage const* elevations,
-    std::function<std::optional<std::filesystem::path>(matched_route const&)>
-        debug_path_fn) {
+    std::function<void(matched_route const&,
+                       std::function<boost::json::object()> const&)> const&
+        debug_fn) {
   utl::verify(points.size() >= 2, "map_match requires at least 2 points");
   auto const start_time = std::chrono::steady_clock::now();
 
@@ -142,9 +244,7 @@ matched_route map_match(
   };
 
   auto pds = utl::to_vec(points, [&](auto const& mp) {
-    return point_data<P>{
-        .loc_ = mp,
-        .matched_ways_ = match_input_point<P>(w, l, params, blocked, mp)};
+    return match_input_point<P>(w, l, params, blocked, mp);
   });
 
   for (auto& pd : pds) {
@@ -192,31 +292,79 @@ matched_route map_match(
       add_additional_edge(mw, mw.fwd_in_, false, false);
       add_additional_edge(mw, mw.bwd_in_, true, false);
     }
+    for (auto const& from_mw : from_pd.matched_ways_) {
+      for (auto const& to_mw : to_pd.matched_ways_) {
+        if (from_mw.way_ != to_mw.way_ ||
+            has_graph_node_between(w, from_mw, to_mw)) {
+          continue;
+        }
 
-    auto const max_match_penalty_it = std::max_element(
-        begin(from_pd.matched_ways_), end(from_pd.matched_ways_),
-        [](auto const& a, auto const& b) {
-          return a.match_penalty_ < b.match_penalty_;
-        });
-    auto const max_match_penalty =
-        max_match_penalty_it != end(from_pd.matched_ways_)
-            ? max_match_penalty_it->match_penalty_
-            : cost_t{0U};
-    auto dijkstra_max =
+        seg.additional_edges_[from_mw.additional_node_idx_].push_back(
+            make_same_way_additional_edge(w, from_mw, to_mw));
+      }
+    }
+
+    auto const cost_offset =
+        prev_seg != nullptr ? prev_seg->min_cost_ : cost_t{0U};
+    auto const get_start_cost =
+        [&](matched_way<P> const& from_mw,
+            cost_t const node_cost) -> std::optional<cost_t> {
+      if (prev_seg != nullptr && !prev_seg->all_beelined_ &&
+          node_cost == kInfeasible) {
+        return std::nullopt;
+      }
+
+      return static_cast<cost_t>(
+          std::clamp(static_cast<std::int64_t>(
+                         from_mw.match_penalty_ +
+                         (prev_seg != nullptr && node_cost != kInfeasible
+                              ? node_cost - cost_offset
+                              : 0)),
+                     static_cast<std::int64_t>(0LL),
+                     static_cast<std::int64_t>(kInfeasible - 1U)));
+    };
+
+    auto max_start_cost = cost_t{0U};
+    for (auto const& from_mw : from_pd.matched_ways_) {
+      auto const update_max_start_cost = [&](typename P::node node,
+                                             cost_t const node_cost) {
+        if (node == P::node::invalid()) {
+          return;
+        }
+        if (auto const start_cost = get_start_cost(from_mw, node_cost);
+            start_cost.has_value()) {
+          max_start_cost = std::max(max_start_cost, *start_cost);
+        }
+      };
+
+      update_max_start_cost(from_mw.fwd_node_, from_mw.fwd_cost_);
+      update_max_start_cost(from_mw.bwd_node_, from_mw.bwd_cost_);
+    }
+
+    auto const dijkstra_max =
         get_dijkstra_limit<P>(
             params, geo::distance(from_pd.loc_.pos_, to_pd.loc_.pos_)) +
-        max_match_penalty;
-    if (prev_seg != nullptr) {
-      dijkstra_max += prev_seg->max_cost_ - prev_seg->min_cost_;
-    }
+        max_start_cost;
     auto const dijkstra_max_cost = static_cast<cost_t>(
         std::min(static_cast<double>(std::numeric_limits<cost_t>::max() - 1U),
                  dijkstra_max));
 
+    seg.dijkstra_cost_limit_ = dijkstra_max_cost;
     seg.astar_.reset(dijkstra_max_cost, from_pd.loc_, to_pd.loc_);
 
-    auto const cost_offset =
-        prev_seg != nullptr ? prev_seg->min_cost_ : cost_t{0U};
+    auto const get_min_start_cost = [&](matched_way<P> const& from_mw) {
+      auto min_start_cost = kInfeasible;
+      if (auto const start_cost = get_start_cost(from_mw, from_mw.fwd_cost_);
+          start_cost.has_value()) {
+        min_start_cost = std::min(min_start_cost, *start_cost);
+      }
+      if (auto const start_cost = get_start_cost(from_mw, from_mw.bwd_cost_);
+          start_cost.has_value()) {
+        min_start_cost = std::min(min_start_cost, *start_cost);
+      }
+      return min_start_cost;
+    };
+
     seg.sharing_ = std::make_unique<sharing_data>(sharing_data{
         .additional_node_offset_ = additional_node_offset,
         .additional_node_coordinates_ = additional_node_coordinates,
@@ -239,20 +387,12 @@ matched_route map_match(
           if (node == P::node::invalid()) {
             return;
           }
-          if (prev_seg != nullptr && !prev_seg->all_beelined_ &&
-              node_cost == kInfeasible) {
+          auto const cost = get_start_cost(from_mw, node_cost);
+          if (!cost.has_value()) {
             return;
           }
-          auto const cost = static_cast<cost_t>(
-              std::clamp(static_cast<std::int64_t>(
-                             from_mw.match_penalty_ +
-                             (prev_seg != nullptr && node_cost != kInfeasible
-                                  ? node_cost - cost_offset
-                                  : 0)),
-                         static_cast<std::int64_t>(0LL),
-                         static_cast<std::int64_t>(kInfeasible - 1U)));
           seg.astar_.add_start(params, w, seg.sharing_.get(),
-                               typename P::label{node, cost});
+                               typename P::label{node, *cost});
         };
 
         add_start(from_mw.fwd_node_, from_mw.fwd_cost_);
@@ -262,6 +402,7 @@ matched_route map_match(
       auto const dijkstra_start = std::chrono::steady_clock::now();
       seg.astar_.run(params, w, *w.r_, dijkstra_max_cost, blocked,
                      seg.sharing_.get(), elevations, direction::kForward);
+      seg.astar_.reset_pq();
       seg.astar_duration_ =
           std::chrono::duration_cast<std::chrono::microseconds>(
               std::chrono::steady_clock::now() - dijkstra_start);
@@ -300,8 +441,7 @@ matched_route map_match(
         if (prev_seg_routed) {
           for (auto const [i, from_mw] :
                utl::enumerate(from_pd.matched_ways_)) {
-            auto const min_from_cost =
-                std::min(from_mw.fwd_cost_, from_mw.bwd_cost_);
+            auto const min_from_cost = get_min_start_cost(from_mw);
             if (min_from_cost == kInfeasible) {
               continue;
             }
@@ -334,8 +474,7 @@ matched_route map_match(
         if (prev_seg_routed) {
           for (auto const [i, from_mw] :
                utl::enumerate(from_pd.matched_ways_)) {
-            auto const min_from_cost =
-                std::min(from_mw.fwd_cost_, from_mw.bwd_cost_);
+            auto const min_from_cost = get_min_start_cost(from_mw);
             if (min_from_cost == kInfeasible) {
               continue;
             }
@@ -415,13 +554,21 @@ matched_route map_match(
     auto const& to_pd = pds[static_cast<std::size_t>(seg_idx) + 1U];
     auto selected_dest = next_dest;
 
+    seg.selected_start_match_idx_.reset();
+    seg.selected_dest_match_idx_.reset();
+
     if (!selected_dest && !to_pd.matched_ways_.empty()) {
       // select cheapest destination
       auto best_cost = std::numeric_limits<cost_t>::max();
       for (auto const [mw_idx, to_mw] : utl::enumerate(to_pd.matched_ways_)) {
         auto const to_cost = std::min(to_mw.fwd_cost_, to_mw.bwd_cost_);
-        if (to_cost != kInfeasible && to_cost < best_cost) {
-          best_cost = to_cost;
+        auto const selection_cost =
+            to_cost == kInfeasible
+                ? kInfeasible
+                : clamp_cost(static_cast<std::uint64_t>(to_cost) +
+                             static_cast<std::uint64_t>(to_mw.match_penalty_));
+        if (selection_cost != kInfeasible && selection_cost < best_cost) {
+          best_cost = selection_cost;
           selected_dest = node_ref{.matched_way_idx_ = mw_idx,
                                    .dir_ = to_mw.fwd_cost_ <= to_mw.bwd_cost_
                                                ? direction::kForward
@@ -431,6 +578,10 @@ matched_route map_match(
     }
     utl::verify(selected_dest.has_value() || to_pd.matched_ways_.empty(),
                 "[map_match] no selected destination for seg_idx={}", seg_idx);
+
+    if (selected_dest.has_value()) {
+      seg.selected_dest_match_idx_ = selected_dest->matched_way_idx_;
+    }
 
     auto const add_beeline = [&](geo::latlng const& from_pos,
                                  geo::latlng const& to_pos,
@@ -454,6 +605,7 @@ matched_route map_match(
                  to_pd.matched_ways_.empty()) {
         // case 4
         auto const from_mw = from_pd.matched_ways_[seg.beeline_from_];
+        seg.selected_start_match_idx_ = seg.beeline_from_;
         add_beeline(from_mw.projected_point_, to_pd.loc_.pos_,
                     seg.beeline_dist_, seg.min_cost_);
         next_dest = node_ref{.matched_way_idx_ = seg.beeline_from_,
@@ -486,6 +638,7 @@ matched_route map_match(
         }
         auto const to_mw =
             to_pd.matched_ways_.at(selected_dest->matched_way_idx_);
+        seg.selected_start_match_idx_ = to_mw.beeline_from_;
         auto const from_mw = from_pd.matched_ways_.at(to_mw.beeline_from_);
         add_beeline(from_mw.projected_point_, to_mw.projected_point_,
                     to_mw.beeline_dist_, to_mw.get_cost(selected_dest->dir_));
@@ -588,6 +741,7 @@ matched_route map_match(
       utl::verify(next_dest.has_value(),
                   "[map_match] [case 1] did not find next_dest for seg_idx={}",
                   seg_idx);
+      seg.selected_start_match_idx_ = next_dest->matched_way_idx_;
     }
   }
 
@@ -612,11 +766,11 @@ matched_route map_match(
       std::chrono::duration_cast<std::chrono::milliseconds>(end_time -
                                                             start_time);
 
-  if (debug_path_fn) {
-    if (auto const debug_path = debug_path_fn(result); debug_path.has_value()) {
-      write_map_match_debug<P>(w, l, params, points, pds, segments, result,
-                               get_node_pos, *debug_path);
-    }
+  if (debug_fn) {
+    debug_fn(result, [&]() {
+      return build_map_match_debug_json<P>(w, l, params, points, pds, segments,
+                                           result, get_node_pos);
+    });
   }
 
   return result;
@@ -630,11 +784,12 @@ matched_route map_match(
     std::vector<location> const& points,
     bitvec<node_idx_t> const* blocked,
     elevation_storage const* elevations,
-    std::function<std::optional<std::filesystem::path>(matched_route const&)>
-        debug_path_fn) {
+    std::function<void(matched_route const&,
+                       std::function<boost::json::object()> const&)> const&
+        debug_fn) {
   return with_profile(profile, [&]<Profile P>(P&&) {
     return map_match<P>(w, l, std::get<typename P::parameters>(params), points,
-                        blocked, elevations, std::move(debug_path_fn));
+                        blocked, elevations, debug_fn);
   });
 }
 

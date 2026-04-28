@@ -62,6 +62,7 @@ struct debug_match {
   std::size_t way_array_idx_{};
   geo::latlng projected_point_{};
   double dist_to_way_{};
+  cost_t match_penalty_{};
   unsigned way_segment_idx_{};
   bool oneway_{};
   std::size_t additional_node_array_idx_{};
@@ -101,6 +102,8 @@ struct debug_route_segment {
   cost_t dijkstra_early_termination_max_cost_{};
   bool max_reached_in_dijkstra_{false};
   bool dijkstra_terminated_early_max_cost_{false};
+  std::optional<std::size_t> selected_start_match_idx_{};
+  std::optional<std::size_t> selected_dest_match_idx_{};
   std::vector<debug_match> start_matches_{};
   std::vector<debug_match> dest_matches_{};
   std::optional<debug_beeline> beeline_{};
@@ -111,7 +114,7 @@ struct debug_route_segment {
 };
 
 template <Profile P>
-void write_map_match_debug(
+boost::json::object build_map_match_debug_json(
     ways const& w,
     lookup const& l,
     typename P::parameters const& params,
@@ -119,7 +122,11 @@ void write_map_match_debug(
     std::vector<point_data<P>> const& pds,
     std::vector<segment_data<P>> const& segments,
     matched_route const& result,
-    std::function<geo::latlng(node_idx_t)> const& get_node_pos,
-    std::filesystem::path const& debug_path);
+    std::function<geo::latlng(node_idx_t)> const& get_node_pos);
+
+std::string gzip_json(boost::json::value const&);
+
+void write_map_match_debug(boost::json::value const&,
+                           std::filesystem::path const& filename);
 
 }  // namespace osr

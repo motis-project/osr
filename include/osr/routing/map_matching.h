@@ -1,10 +1,10 @@
 #pragma once
 
 #include <chrono>
-#include <filesystem>
 #include <functional>
-#include <optional>
 #include <vector>
+
+#include "boost/json/fwd.hpp"
 
 #include "osr/elevation_storage.h"
 #include "osr/location.h"
@@ -34,7 +34,8 @@ matched_route map_match(
     std::vector<location> const&,
     bitvec<node_idx_t> const* blocked = nullptr,
     elevation_storage const* = nullptr,
-    std::function<std::optional<std::filesystem::path>(matched_route const&)>
-        debug_path_fn = nullptr);
+    std::function<void(matched_route const&,
+                       std::function<boost::json::object()> const&)> const&
+        debug_fn = nullptr);
 
 }  // namespace osr

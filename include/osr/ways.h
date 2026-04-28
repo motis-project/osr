@@ -28,6 +28,7 @@
 #include "utl/zip.h"
 
 #include "osr/point.h"
+#include "osr/routing/turns.h"
 #include "osr/types.h"
 #include "osr/util/multi_counter.h"
 
@@ -37,11 +38,27 @@ struct resolved_restriction {
   enum class type { kNo, kOnly } type_;
   way_idx_t from_, to_;
   node_idx_t via_;
+  bool applies_to_bus_{true};
 };
 
 struct restriction {
   friend bool operator==(restriction, restriction) = default;
-  way_pos_t from_, to_;
+
+  template <std::size_t NMaxTypes>
+  friend constexpr auto static_type_hash(
+      restriction const*, cista::hash_data<NMaxTypes> h) noexcept {
+    return h.combine(cista::hash("restriction v1.1"));
+  }
+
+  template <typename Ctx>
+  friend void serialize(Ctx&, restriction const*, cista::offset_t) {}
+
+  template <typename Ctx>
+  friend void deserialize(Ctx const&, restriction*) {}
+
+  way_pos_t from_ : 4;
+  way_pos_t to_ : 4;
+  way_pos_t applies_to_bus_ : 1;
 };
 
 struct way_instruction_properties {
@@ -87,7 +104,7 @@ struct way_properties {
     return is_car_accessible() || is_bike_accessible() ||
            is_foot_accessible() || is_bus_accessible() ||
            is_bus_accessible_with_penalty() || is_railway_accessible() ||
-           is_ferry_accessible();
+           is_railway_accessible_with_penalty() || is_ferry_accessible();
   }
   constexpr bool is_car_accessible() const { return is_car_accessible_; }
   constexpr bool is_bike_accessible() const { return is_bike_accessible_; }
@@ -99,12 +116,15 @@ struct way_properties {
   constexpr bool is_railway_accessible() const {
     return is_railway_accessible_;
   }
+  constexpr bool is_railway_accessible_with_penalty() const {
+    return is_railway_accessible_with_penalty_;
+  }
   constexpr bool is_ferry_accessible() const { return is_ferry_accessible_; }
   constexpr bool is_big_street() const { return is_big_street_; }
   constexpr bool is_destination() const { return is_destination_; }
   constexpr bool is_oneway_car() const { return is_oneway_car_; }
   constexpr bool is_oneway_bike() const { return is_oneway_bike_; }
-  constexpr bool is_oneway_psv() const { return is_oneway_psv_; }
+  constexpr bool is_oneway_bus_psv() const { return is_oneway_bus_psv_; }
   constexpr bool is_elevator() const { return is_elevator_; }
   constexpr bool is_steps() const { return is_steps_; }
   constexpr bool is_ramp() const { return is_ramp_; }
@@ -112,11 +132,11 @@ struct way_properties {
   constexpr bool has_toll() const { return has_toll_; }
   constexpr bool is_sidewalk_separate() const { return is_sidewalk_separate_; }
   constexpr bool in_route() const { return in_route_; }
-  constexpr std::uint16_t max_speed_m_per_s() const {
-    return to_meters_per_second(static_cast<speed_limit>(speed_limit_));
-  }
   constexpr std::uint16_t max_speed_km_per_h() const {
     return to_kmh(static_cast<speed_limit>(speed_limit_));
+  }
+  constexpr float max_speed_s_per_m() const {
+    return to_seconds_per_meter(static_cast<speed_limit>(speed_limit_));
   }
   constexpr level_t from_level() const { return level_t{from_level_}; }
   constexpr level_t to_level() const { return level_t{to_level_}; }
@@ -158,10 +178,11 @@ struct way_properties {
   std::uint8_t in_route_ : 1;
 
   std::uint8_t is_railway_accessible_ : 1;
-  std::uint8_t is_oneway_psv_ : 1;
+  std::uint8_t is_oneway_bus_psv_ : 1;
   std::uint8_t is_incline_down_ : 1;
   std::uint8_t is_bus_accessible_with_penalty_ : 1;
   std::uint8_t is_ferry_accessible_ : 1;
+  std::uint8_t is_railway_accessible_with_penalty_ : 1;
 };
 
 static_assert(sizeof(way_properties) == 5);
@@ -217,6 +238,7 @@ struct ways {
   void add_restriction(std::vector<resolved_restriction>&);
   void compute_big_street_neighbors();
   void connect_ways();
+  void compute_turn_bearings();
   void build_components();
 
   std::optional<way_idx_t> find_way(osm_way_idx_t const i) const {
@@ -250,6 +272,9 @@ struct ways {
   point get_node_pos(node_idx_t const i) const {
     return r_->node_positions_.at(i);
   }
+
+  std::size_t get_polyline_node_idx(
+      way_idx_t const way, std::uint16_t const target_routing_idx) const;
 
   cista::mmap mm(char const* file) {
     return cista::mmap{(p_ / file).generic_string().c_str(), mode_};
@@ -293,27 +318,37 @@ struct ways {
       return 0U;
     }
 
-    template <direction SearchDir>
+    template <direction SearchDir, bool IsBus = false>
     bool is_restricted(node_idx_t const n,
                        std::uint8_t const from,
                        std::uint8_t const to) const {
       if (!node_is_restricted_[n]) {
         return false;
       }
+
       auto const r = node_restrictions_[n];
-      auto const needle = SearchDir == direction::kForward
-                              ? restriction{from, to}
-                              : restriction{to, from};
-      return utl::find(r, needle) != end(r);
+      auto const from_way =
+          SearchDir == direction::kForward ? way_pos_t{from} : way_pos_t{to};
+      auto const to_way =
+          SearchDir == direction::kForward ? way_pos_t{to} : way_pos_t{from};
+
+      return utl::any_of(r, [&](restriction const& x) {
+        if constexpr (IsBus) {
+          return x.from_ == from_way && x.to_ == to_way && x.applies_to_bus_;
+        } else {
+          return x.from_ == from_way && x.to_ == to_way;
+        }
+      });
     }
 
+    template <bool IsBus = false>
     bool is_restricted(node_idx_t const n,
                        std::uint8_t const from,
                        std::uint8_t const to,
                        direction const search_dir) const {
       return search_dir == direction::kForward
-                 ? is_restricted<direction::kForward>(n, from, to)
-                 : is_restricted<direction::kBackward>(n, from, to);
+                 ? is_restricted<direction::kForward, IsBus>(n, from, to)
+                 : is_restricted<direction::kBackward, IsBus>(n, from, to);
     }
 
     bool is_loop(way_idx_t const w) const {
@@ -338,6 +373,15 @@ struct ways {
       }
     }
 
+    quantized_angle_t get_turn_angle(node_idx_t const n,
+                                     way_pos_t const from,
+                                     direction const from_dir,
+                                     way_pos_t const to,
+                                     direction const to_dir) const {
+      return osr::get_turn_angle(node_turn_bearings_[n][from], from_dir,
+                                 node_turn_bearings_[n][to], to_dir);
+    }
+
     static cista::wrapped<routing> read(std::filesystem::path const&);
     void write(std::filesystem::path const&) const;
 
@@ -358,6 +402,7 @@ struct ways {
 
     vecvec<node_idx_t, way_idx_t> node_ways_;
     vecvec<node_idx_t, std::uint16_t> node_in_way_idx_;
+    vecvec<node_idx_t, turn_bearing> node_turn_bearings_;
 
     bitvec<node_idx_t> node_is_restricted_;
     vecvec<node_idx_t, restriction> node_restrictions_;
