@@ -1,5 +1,6 @@
 #include "osr/routing/instructions/instruction_annotator.h"
 
+#include "osr/debug.h"
 #include "osr/routing/path.h"
 #include "utl/verify.h"
 
@@ -26,11 +27,14 @@ void instruction_annotator::annotate(path& path) {
   preprocess(path, segment_contexts);
 
   const auto context_windows = sliding_window<1>(segment_contexts);
-
   for (const auto cw : context_windows) {
+    trace("Matching context window against modules:\n");
     for (const auto& m : modules_) {
       if (m->process(ways_, path, cw)) {
+        trace("┗ -> SUCCESSFUL ANNOTATION!\n");
         break;
+      } else {
+        trace("┃ -> ANNOTATION FAILED!\n");
       }
     }
   }

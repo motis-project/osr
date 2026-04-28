@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <string>
 
 namespace osr {
 
@@ -31,5 +32,7 @@ enum class instruction_action: std::uint8_t {
   kElevator,
   kStairs
 };
+
+std::string instruction_action_to_string(instruction_action action);
 
 }
