@@ -518,12 +518,12 @@
             start: {
                 lat: query.start[1],
                 lng: query.start[0],
-                lvl: query.start_level || 0
+                lvl: query.start_level || (0).toFixed(2)
             },
             end: {
                 lat: query.destination[1],
                 lng: query.destination[0],
-                lvl: query.destination_level || 0
+                lvl: query.destination_level || (0).toFixed(2)
             },
             profile: query.profile,
             direction: query.direction,
