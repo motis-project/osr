@@ -33,9 +33,12 @@ struct traversed_node_hub {
   };
 
   struct relative_way_segment {
-    double angle_;
+    double angle_with_exit_;
+    double angle_with_arrive_;
+
     bool can_enter_hub_;
     bool can_exit_hub_;
+
     bool is_opposite_of_arrive_;
     way_segment segment_;
   };

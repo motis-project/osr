@@ -119,9 +119,9 @@ void emplace_relative_way_segment(ways const& w,
   bool const can_enter_hub = is_accessible(w, ws.flip_directions(), m);
 
   if (double const relative_diff = normalize(diff); relative_diff < 0) {
-    right.emplace_back(relative_diff, can_enter_hub, can_exit_hub, is_uturn, ws);
+    right.emplace_back(relative_diff, alt_angle, can_enter_hub, can_exit_hub, is_uturn, ws);
   } else {
-    left.emplace_back(relative_diff, can_enter_hub, can_exit_hub, is_uturn, ws);
+    left.emplace_back(relative_diff, alt_angle, can_enter_hub, can_exit_hub, is_uturn, ws);
   }
 }
 
@@ -243,9 +243,9 @@ traversed_node_hub traversed_node_hub::from(ways const& w,
                    node_hub.alts_right_);
 
   std::ranges::sort(node_hub.alts_right_, std::ranges::greater{},
-                    &relative_way_segment::angle_);
+                    &relative_way_segment::angle_with_exit_);
   std::ranges::sort(node_hub.alts_left_, std::ranges::less{},
-                    &relative_way_segment::angle_);
+                    &relative_way_segment::angle_with_exit_);
 
   return node_hub;
 }
@@ -262,7 +262,8 @@ void traversed_node_hub::print(std::ostream& out, ways const& w) const {
     for (auto i = 0U; i < alts.size(); ++i) {
       auto const& alt = alts[i];
       out << "{way=" << w.way_osm_idx_[alt.segment_.way_idx_]
-          << ", angle=" << alt.angle_
+          << ", angle_with_exit=" << alt.angle_with_exit_
+          << ", angle_with_arrive=" << alt.angle_with_arrive_
           << ", can_enter_hub=" << (alt.can_enter_hub_ ? "true" : "false")
           << ", can_exit_hub=" << (alt.can_exit_hub_ ? "true" : "false")
           << "}";
@@ -309,7 +310,8 @@ std::string traversed_node_hub::to_json(ways const& w) const {
       [&way_segment_to_json](relative_way_segment const& rel_way_seg) {
         return boost::json::object{
             {"segment", way_segment_to_json(rel_way_seg.segment_)},
-            {"angle", rel_way_seg.angle_},
+            {"angle_with_exit", rel_way_seg.angle_with_exit_},
+            {"angle_with_arrive", rel_way_seg.angle_with_arrive_},
             {"can_enter_hub", rel_way_seg.can_enter_hub_},
             {"can_exit_hub", rel_way_seg.can_exit_hub_},
             {"is_opposite_of_arrive", rel_way_seg.is_opposite_of_arrive_}};

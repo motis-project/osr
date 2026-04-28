@@ -1253,9 +1253,20 @@
                 hubWayTooltip.style.left = e.pageX + 10 + 'px';
                 hubWayTooltip.style.top = e.pageY + 10 + 'px';
                 const way_id = segment.way_id || segment.segment.way_id;
-                const instruction_properties = await getWayInstructionProperties(way_id);
+                const instruction_properties = await getWayInstructionProperties(way_id)
+
+                const angleWithExit = segment.angle_with_exit !== undefined ? segment.angle_with_exit : undefined;
+                const angleWithArrive = segment.angle_with_arrive !== undefined ? segment.angle_with_arrive : undefined;
                 hubWayTooltip.innerHTML =
                     `<ul class="kv-list">
+                        <li>
+                            <span class="key">Exit angle</span>
+                            <span class="value">${angleWithExit}</span>
+                        </li>
+                        <li>
+                            <span class="key">Arrive angle</span>
+                            <span class="value">${angleWithArrive}</span>
+                        </li>
                         <li>
                             <span class="key">Way</span>
                             <span class="value">${way_id}</span>
@@ -1307,10 +1318,8 @@
             if (alt.is_opposite_of_arrive) {
                 return;
             }
-            // Calculate the absolute angle relative to the arrival path
-            // Absolute = Exit Direction + Relative Offset
-            const absoluteAngle = data.exit_angle + alt.angle;
 
+            const absoluteAngle = alt.angle_with_arrive;
             const pos = getXY(absoluteAngle);
 
             const can_enter_hub = alt.can_enter_hub;

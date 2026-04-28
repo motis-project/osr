@@ -89,30 +89,29 @@ unsigned long number_of_visible_turns(hub_t const& hub) {
   return static_cast<unsigned>(count_left + count_right + 1);
 }
 
-struct continue_candidate {
-  bool is_left_;
-  double angle_;
-  relative_way_segment_t const* segment_;
-};
+std::optional<relative_way_segment_t> get_other_continue(
+    hub_t const& hub, double const cutoff_angle) {
+  std::optional<relative_way_segment_t> best;
 
-std::optional<continue_candidate> get_other_continue(hub_t const& hub) {
-  std::optional<continue_candidate> best;
-
-  auto const consider = [&](relative_way_segment_t const& alt, bool const is_left) {
+  auto const consider = [&](relative_way_segment_t const& alt) {
     if (!alt.can_exit_hub_ || alt.is_opposite_of_arrive_) {
       return;
     }
-    double const abs_angle = std::abs(alt.angle_);
-    if (!best.has_value() || abs_angle < std::abs(best->angle_)) {
-      best = continue_candidate{.is_left_ = is_left, .angle_ = alt.angle_, .segment_ = &alt};
+    double const abs_angle = std::abs(alt.angle_with_arrive_);
+    if (abs_angle > std::abs(cutoff_angle)) {
+      return;
+    }
+
+    if (!best.has_value() || abs_angle < std::abs(best->angle_with_arrive_)) {
+      best = alt;
     }
   };
 
   for (auto const& alt : hub.alts_left_) {
-    consider(alt, true);
+    consider(alt);
   }
   for (auto const& alt : hub.alts_right_) {
-    consider(alt, false);
+    consider(alt);
   }
 
   return best;
@@ -172,105 +171,6 @@ bool same_road_signature(ways const& w, way_idx_t const a, way_idx_t const b) {
          pa.is_link() == pb.is_link();
 }
 
-std::optional<std::uint8_t> lanes_of(ways const& w, way_idx_t const way) {
-  auto const lanes = w.way_instruction_properties_[way].lanes();
-  if (lanes == 0U) {
-    return std::nullopt;
-  }
-  return lanes;
-}
-
-struct merge_split_candidate {
-  way_idx_t way_;
-  bool leaves_hub_;
-};
-
-std::optional<merge_split_candidate> find_unique_other_candidate(
-    ways const& w, hub_t const& hub) {
-  std::optional<merge_split_candidate> out;
-  bool ambiguous = false;
-
-  auto const add_candidate = [&](relative_way_segment_t const& alt) {
-    if (ambiguous || alt.is_opposite_of_arrive_ ||
-        !(alt.can_enter_hub_ || alt.can_exit_hub_)) {
-      return;
-    }
-
-    auto const alt_way = alt.segment_.way_idx_;
-    if (alt_way == hub.arrive_hub_on_.way_idx_ ||
-        alt_way == hub.exit_from_hub_.way_idx_) {
-      return;
-    }
-
-    if (!same_road_signature(w, alt_way, hub.exit_from_hub_.way_idx_)) {
-      return;
-    }
-
-    if (out.has_value()) {
-      ambiguous = true;
-      out = std::nullopt;
-      return;
-    }
-
-    out = merge_split_candidate{.way_ = alt_way,
-                                .leaves_hub_ = alt.segment_.is_way_aligned()};
-  };
-
-  for (auto const& alt : hub.alts_left_) {
-    add_candidate(alt);
-  }
-
-  for (auto const& alt : hub.alts_right_) {
-    add_candidate(alt);
-  }
-
-  if (ambiguous) {
-    return std::nullopt;
-  }
-
-  return out;
-}
-
-bool merged_or_split_way(ways const& w, traversed_node_hub const& hub) {
-  auto const arrive_way = hub.arrive_hub_on_.way_idx_;
-  auto const exit_way = hub.exit_from_hub_.way_idx_;
-  if (!same_road_signature(w, arrive_way, exit_way)) {
-    return false;
-  }
-
-  auto const other = find_unique_other_candidate(w, hub);
-  if (!other.has_value()) {
-    return false;
-  }
-
-  auto const arrive_lanes = lanes_of(w, arrive_way);
-  auto const exit_lanes = lanes_of(w, exit_way);
-  auto const other_lanes = lanes_of(w, other->way_);
-  if (!arrive_lanes.has_value() ||
-      !exit_lanes.has_value() ||
-      !other_lanes.has_value()) {
-    return false;
-  }
-
-  auto const to_int = [](std::uint8_t const v) {
-    return static_cast<int>(v);
-  };
-  auto const delta_merge =
-      std::abs(to_int(*arrive_lanes) + to_int(*other_lanes) -
-               to_int(*exit_lanes));
-  auto const delta_split =
-      std::abs(to_int(*arrive_lanes) -
-               (to_int(*exit_lanes) + to_int(*other_lanes)));
-
-  // If both outgoing branches leave the hub, we interpret this as a split.
-  if (other->leaves_hub_) {
-    return delta_split <= 1;
-  }
-
-  // Otherwise, the other branch enters the hub and we treat this as a merge.
-  return delta_merge <= 1;
-}
-
 bool is_major_road(way_instruction_properties const props) {
   auto const h = props.get_highway();
   return h == motorway || h == trunk || h == primary || h == secondary ||
@@ -319,7 +219,6 @@ bool intersection_module::process(ways const& w,
   const relative_direction next_seg_rel_dir = segment_context.relative_direction_;
   const instruction_action possible_turn_type = turn_action_from(next_seg_rel_dir);
   const bool same_name = ways_have_same_name(segment.way_, next_segment.way_, w);
-  const bool merged_or_split = merged_or_split_way(w, common_node_hub);
 
   if (num_possible_turns <= 1) {
     // GH ignore-equivalent: keep instruction unset.
@@ -334,8 +233,7 @@ bool intersection_module::process(ways const& w,
   }
 
   if (is_real_turn(next_seg_rel_dir)) {
-    if ((same_name && outgoing_edges_are_slower_by_factor(w, common_node_hub, 2.0)) ||
-        merged_or_split) {
+    if (same_name && outgoing_edges_are_slower_by_factor(w, common_node_hub, 2.0)) {
       set_segment_instruction(segment, instruction_action::kNone);
       return true;
     }
@@ -344,7 +242,9 @@ bool intersection_module::process(ways const& w,
     return true;
   }
 
-  auto const other_continue = get_other_continue(common_node_hub);
+  constexpr auto continue_abs_cutoff_angle = 60.;
+  auto const other_continue =
+      get_other_continue(common_node_hub, continue_abs_cutoff_angle);
   auto const outgoing_edges_are_slower =
       outgoing_edges_are_slower_by_factor(w, common_node_hub, 1.0);
   auto const leaving_current_street = !same_name;
@@ -353,7 +253,7 @@ bool intersection_module::process(ways const& w,
     auto const exit_props = w.way_instruction_properties_[next_segment.way_];
     auto const arrive_props = w.way_instruction_properties_[segment.way_];
     auto const other_props =
-        w.way_instruction_properties_[other_continue->segment_->segment_.way_idx_];
+        w.way_instruction_properties_[other_continue->segment_.way_idx_];
     auto const link = exit_props.is_link();
     auto const prev_link = arrive_props.is_link();
     auto const other_link = other_props.is_link();
@@ -368,9 +268,9 @@ bool intersection_module::process(ways const& w,
     }
 
     auto const delta = common_node_hub.exit_angle_;
-    auto const other_delta = other_continue->angle_;
+    auto const other_delta = other_continue->angle_with_arrive_;
 
-    if (std::abs(delta) < .1 && std::abs(other_delta) > .15 && same_name) {
+    if (std::abs(delta) < 6 && std::abs(other_delta) > 10 && same_name) {
       set_segment_instruction(segment, instruction_action::kContinue);
       return true;
     }
@@ -383,8 +283,8 @@ bool intersection_module::process(ways const& w,
     }
   }
 
-  if (!outgoing_edges_are_slower && !merged_or_split &&
-      (std::abs(common_node_hub.exit_angle_) > .6 || leaving_current_street)) {
+  if (!outgoing_edges_are_slower &&
+      (std::abs(common_node_hub.exit_angle_) > 60 || leaving_current_street)) {
     set_segment_instruction(segment, possible_turn_type);
     return true;
   }
