@@ -263,7 +263,8 @@ struct http_server::impl {
               {"junction", get_junction_name(props.get_junction())},
               {"is_link", props.is_link()},
               {"is_footway_crossing", props.is_footway_crossing()},
-              {"lanes", props.lanes()},
+              {"lanes_forward", props.lanes_forward()},
+              {"lanes_backward", props.lanes_backward()}
           };
         };
 

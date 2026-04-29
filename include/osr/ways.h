@@ -85,16 +85,19 @@ struct way_instruction_properties {
 
   constexpr bool is_footway_crossing() const { return is_footway_crossing_ == 1U; }
 
-  constexpr std::uint8_t lanes() const { return lanes_; }
+  constexpr std::uint8_t lanes_forward() const { return lanes_forward_; }
 
-  constexpr bool has_lanes() const { return lanes_ != 0U; }
+  constexpr std::uint8_t lanes_backward() const { return lanes_backward_; }
+
+  constexpr bool has_lanes() const { return lanes_forward_ != 0 || lanes_backward_ != 0; }
 
   std::uint8_t highway_ : 3;
   std::uint8_t is_link_ : 1;
   std::uint8_t junction_ : 2;
   std::uint8_t is_footway_crossing_ : 1;
   std::uint8_t reserved_ : 1;
-  std::uint8_t lanes_{0U};
+  std::uint8_t lanes_forward_ : 4;
+  std::uint8_t lanes_backward_ : 4;
 };
 
 static_assert(sizeof(way_instruction_properties) == 2);

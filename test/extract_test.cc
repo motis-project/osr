@@ -45,16 +45,48 @@ TEST(extract, lanes) {
   const auto linkenheimer_street = w.find_way(osm_way_idx_t{638750467});
   ASSERT_TRUE(linkenheimer_street.has_value());
 
-  const auto linkenheimer_way_instruction_props = w.way_instruction_properties_[linkenheimer_street.value()];
+  const auto linkenheimer_way_instruction_props =
+      w.way_instruction_properties_[linkenheimer_street.value()];
   ASSERT_TRUE(linkenheimer_way_instruction_props.has_lanes());
-  ASSERT_EQ(linkenheimer_way_instruction_props.lanes(), 2);
+  ASSERT_EQ(linkenheimer_way_instruction_props.lanes_forward(), 2);
+  ASSERT_EQ(linkenheimer_way_instruction_props.lanes_backward(), 0);
 
   const auto laerchen_street = w.find_way(osm_way_idx_t{4242890});
   ASSERT_TRUE(laerchen_street.has_value());
 
-  const auto laerchen_way_instruction_props = w.way_instruction_properties_[laerchen_street.value()];
+  const auto laerchen_way_instruction_props =
+      w.way_instruction_properties_[laerchen_street.value()];
   ASSERT_FALSE(laerchen_way_instruction_props.has_lanes());
-  ASSERT_EQ(laerchen_way_instruction_props.lanes(), 0);
+  ASSERT_EQ(laerchen_way_instruction_props.lanes_forward(), 0);
+  ASSERT_EQ(laerchen_way_instruction_props.lanes_backward(), 0);
+
+  const auto forlenweg = w.find_way(osm_way_idx_t{4242887});
+  ASSERT_TRUE(forlenweg.has_value());
+
+  const auto forlwenweg_way_instruction_props =
+      w.way_instruction_properties_[forlenweg.value()];
+  ASSERT_TRUE(forlwenweg_way_instruction_props.has_lanes());
+  ASSERT_EQ(forlwenweg_way_instruction_props.lanes_forward(), 1);
+  ASSERT_EQ(forlwenweg_way_instruction_props.lanes_backward(), 1);
+
+  const auto untere_hardtstrasse = w.find_way(osm_way_idx_t{261412003});
+  ASSERT_TRUE(untere_hardtstrasse.has_value());
+
+  const auto untere_way_instruction_props =
+      w.way_instruction_properties_[untere_hardtstrasse.value()];
+  ASSERT_TRUE(untere_way_instruction_props.has_lanes());
+  ASSERT_EQ(untere_way_instruction_props.lanes_forward(), 2);
+  ASSERT_EQ(untere_way_instruction_props.lanes_backward(), 1);
+
+  const auto neureuter_querallee = w.find_way(osm_way_idx_t{4242628});
+  ASSERT_TRUE(neureuter_querallee.has_value());
+
+  const auto neureuter_way_instruction_props =
+      w.way_instruction_properties_[neureuter_querallee.value()];
+
+  ASSERT_TRUE(neureuter_way_instruction_props.has_lanes());
+  ASSERT_EQ(neureuter_way_instruction_props.lanes_forward(), 3);
+  ASSERT_EQ(neureuter_way_instruction_props.lanes_backward(), 1);
 }
 
 TEST(extract, bus_only_on_highway) {

@@ -183,6 +183,8 @@ struct tags {
         } break;
         case cista::hash("maxspeed"): max_speed_ = t.value(); break;
         case cista::hash("lanes"): lanes_ = t.value(); break;
+        case cista::hash("lanes:forward"): lanes_forward_ = t.value(); break;
+        case cista::hash("lanes:backward"): lanes_backward_ = t.value(); break;
         case cista::hash("toll"): toll_ = t.value() == "yes"sv; break;
         case cista::hash("incline"): {
           auto const value = std::string_view{t.value()};
@@ -270,6 +272,12 @@ struct tags {
 
   // https://wiki.openstreetmap.org/wiki/Key:lanes
   std::string_view lanes_;
+
+  // https://wiki.openstreetmap.org/wiki/Forward_%26_backward,_left_%26_right
+  std::string_view lanes_forward_;
+
+  // https://wiki.openstreetmap.org/wiki/Forward_%26_backward,_left_%26_right
+  std::string_view lanes_backward_;
 
   // https://wiki.openstreetmap.org/wiki/Key:name
   std::string_view name_;

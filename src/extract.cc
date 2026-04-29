@@ -142,6 +142,64 @@ std::pair<highway,bool> get_highway(tags const& t) {
   }
 }
 
+std::pair<std::uint8_t, std::uint8_t> get_lanes(tags const& t) {
+  if (is_number(t.lanes_forward_) && is_number(t.lanes_backward_)) {
+    return {static_cast<std::uint8_t>(std::min<unsigned>(
+                15U, utl::parse<unsigned>(t.lanes_forward_))),
+            static_cast<std::uint8_t>(std::min<unsigned>(
+                15U, utl::parse<unsigned>(t.lanes_backward_)))};
+  }
+
+  if (t.oneway_) {
+    const auto total_lanes = is_number(t.lanes_forward_)
+                                 ? t.lanes_forward_
+                                 : (is_number(t.lanes_) ? t.lanes_ : "0");
+    return {static_cast<std::uint8_t>(
+                std::min<unsigned>(15U, utl::parse<unsigned>(total_lanes))),
+            0U};
+  }
+
+  // Bidirectional way
+
+  if (is_number(t.lanes_) && (is_number(t.lanes_forward_) || is_number(t.lanes_backward_))) {
+    const bool is_forward_lanes_defined = is_number(t.lanes_forward_);
+    const auto total_lanes = utl::parse<unsigned>(t.lanes_);
+
+    const auto lanes_forward =
+        is_forward_lanes_defined
+            ? utl::parse<unsigned>(t.lanes_forward_)
+            : std::max(0U,
+                       total_lanes - utl::parse<unsigned>(t.lanes_backward_));
+
+    const auto lanes_backward =
+        !is_forward_lanes_defined
+            ? utl::parse<unsigned>(t.lanes_backward_)
+            : std::max(0U,
+                       total_lanes - utl::parse<unsigned>(t.lanes_forward_));
+
+    return {static_cast<std::uint8_t>(std::min<unsigned>(15U, lanes_forward)),
+            static_cast<std::uint8_t>(std::min<unsigned>(15U, lanes_backward))};
+  }
+
+  // if not specified further, when way is bidirectional it is assumed that
+  // the total number of lanes split evenly in both directions
+  if (is_number(t.lanes_)) {
+    if (const auto total_lanes = utl::parse<unsigned>(t.lanes_);
+        total_lanes % 2 != 0) {
+      // this is a weird case and mostly due
+      // to wrong tagging, so we return 0 in
+      // both directions
+      return {0U, 0U};
+    }
+    const auto lanes_both = static_cast<std::uint8_t>(
+        std::min<unsigned>(15U, utl::parse<unsigned>(t.lanes_) >> 1));
+
+    return {lanes_both, lanes_both};
+  }
+
+  return {0U, 0U};
+}
+
 junction get_junction(tags const& t) {
   switch (cista::hash(t.junction_)) {
     case cista::hash("roundabout"): return roundabout;
@@ -179,10 +237,10 @@ way_instruction_properties get_way_instruction_properties(tags const& t) {
   ip.is_link_ = l;
   ip.junction_ = get_junction(t);
   ip.is_footway_crossing_ = ip.highway_ == footish ? is_foot_crossing(t) : false;
-  if (is_number(t.lanes_)) {
-    ip.lanes_ = static_cast<std::uint8_t>(
-        std::min<unsigned>(255U, utl::parse<unsigned>(t.lanes_)));
-  }
+
+  const auto [f, b] = get_lanes(t);
+  ip.lanes_forward_ = f;
+  ip.lanes_backward_ = b;
   return ip;
 }
 
