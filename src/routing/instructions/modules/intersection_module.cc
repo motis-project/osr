@@ -90,6 +90,28 @@ unsigned long number_of_visible_turns(hub_t const& hub) {
   return static_cast<unsigned>(count_left + count_right + 1);
 }
 
+bool is_more_important_by(highway const h1,
+                          highway const h2,
+                          unsigned const diff) {
+  return h1 + diff <= h2;
+}
+
+std::optional<traversed_node_hub::relative_way_segment> get_next_alternative(
+    hub_t const& hub, bool const to_left) {
+  const auto& neighbors = to_left ? hub.alts_left_ : hub.alts_right_;
+  return neighbors.empty() ? std::nullopt
+                           : std::make_optional(neighbors.front());
+}
+
+unsigned long number_of_possible_turns_at(hub_t const& hub, bool const left) {
+  constexpr auto is_possible = [](relative_way_segment_t const& rel_seg) {
+    return rel_seg.can_exit_hub_ && !rel_seg.is_opposite_of_arrive_;
+  };
+  const auto count = std::ranges::count_if(
+      left ? hub.alts_left_ : hub.alts_right_, is_possible);
+  return static_cast<unsigned>(count);
+}
+
 std::optional<relative_way_segment_t> get_other_continue(
     hub_t const& hub, double const cutoff_angle) {
   std::optional<relative_way_segment_t> best;
@@ -178,6 +200,161 @@ bool is_major_road(way_instruction_properties const props) {
          h == tertiary;
 }
 
+instruction_action handle_real_turn(ways const& w,
+                                    segment_context const& seg_context,
+                                    segment_context const& next_seg_context) {
+  const relative_direction next_seg_rel_dir = seg_context.relative_direction_;
+  const auto& common_node_hub = seg_context.traversed_node_hub_.value();
+
+  trace("┃ ║ handling real turn (exit_angle={})\n", common_node_hub.exit_angle_);
+  utl::verify(is_real_turn(next_seg_rel_dir), "Not a real turn");
+
+  auto& segment = *seg_context.src_ptr_;
+  const auto& next_segment = *next_seg_context.src_ptr_;
+
+  const instruction_action potential_turn_type = turn_action_from(next_seg_rel_dir);
+
+  trace("┃ ║ trying to check if a turn instruction is not needed\n");
+
+  const auto num_possible_turns = number_of_possible_turns(common_node_hub);
+  const auto num_visible_turns = number_of_visible_turns(common_node_hub);
+  if (num_visible_turns <= 1) {
+    trace("┃ ║ number of visible turns ≤ 1 -> no instruction needed!\n");
+    return instruction_action::kNone;
+  }
+
+  const bool stay_on_same_name =
+      ways_have_same_name(segment.way_, next_segment.way_, w);
+
+  if (num_possible_turns <= 1) {
+    if (stay_on_same_name) {
+      trace(
+          "┃ ║ number of possible turns ≤ 1 and we continue on same street "
+          "-> "
+          "no instruction needed!\n");
+      return instruction_action::kNone;
+    } else {
+      trace(
+          "┃ ║ number of possible turns ≤ 1 and do not continue on same street "
+          "-> "
+          "kContinue is sufficient!\n");
+      return instruction_action::kContinue;
+    }
+  }
+
+  // There are viable alternatives when arriving
+  // at the hub (num_possible_turns > 1)
+  if (stay_on_same_name &&
+      outgoing_edges_are_slower_by_factor(w, common_node_hub, 2.0)) {
+    trace(
+        "┃ ║ number of possible turns > 1, continuing on same "
+        "street, alternatives are less important\n");
+    return instruction_action::kNone;
+  }
+
+  trace("┃ ║ turn requires instruction\n");
+  return potential_turn_type;
+}
+
+instruction_action handle_slight_turn(ways const& w,
+                                      segment_context const& seg_context,
+                                      segment_context const& next_seg_context) {
+  const relative_direction next_seg_rel_dir = seg_context.relative_direction_;
+  const auto& common_node_hub = seg_context.traversed_node_hub_.value();
+
+  trace("┃ ║ handling slight turn (exit_angle={})\n",
+        common_node_hub.exit_angle_);
+  utl::verify(of_slight_type(next_seg_rel_dir), "Not a slight turn");
+
+  auto& segment = *seg_context.src_ptr_;
+  const auto& next_segment = *next_seg_context.src_ptr_;
+
+  const instruction_action potential_turn_type =
+      turn_action_from(next_seg_rel_dir);
+
+  trace("┃ ║ trying to check if a turn instruction is not needed\n");
+  trace("┃ ║ checking alternatives for a possible more natural continuation\n");
+
+  constexpr auto continuation_abs_cutoff_angle = 50.;
+  auto const other_continue =
+      get_other_continue(common_node_hub, continuation_abs_cutoff_angle);
+  auto const leaving_current_street =
+      !ways_have_same_name(segment.way_, next_segment.way_, w);
+
+  if (other_continue.has_value()) {
+    trace(
+        "┃ ║ found the best alternative continuation in way = {} with degree "
+        "= {}\n",
+        other_continue->segment_.way_idx_, other_continue->angle_with_arrive_);
+
+    auto const delta = common_node_hub.exit_angle_;
+    auto const other_delta = other_continue->angle_with_arrive_;
+
+    if (std::abs(delta) < std::abs(other_delta) && !leaving_current_street) {
+      trace(
+          "┃ ║ the exit is a more natural continuation -> no instruction "
+          "required!\n");
+      return instruction_action::kNone;
+    }
+
+    if (ways_have_same_name(other_continue->segment_.way_idx_, segment.way_,
+                            w) &&
+        leaving_current_street) {
+      trace("┃ ║ found a more natural continuation\n");
+      trace("┃ ║ an instruction is needed\n");
+
+      const bool left_of_other_continuation = other_delta < delta;
+      trace("┃ ║ exit is to the {} of other continuation\n",
+            left_of_other_continuation ? "left" : "right");
+      trace("┃ ║ we check if there is another alternative further {}\n",
+            left_of_other_continuation ? "left" : "right");
+
+      const auto next_alternative =
+          get_next_alternative(common_node_hub, left_of_other_continuation);
+
+      bool relevant_alternative_found =
+          next_alternative.has_value() &&
+          !next_alternative->is_opposite_of_arrive_;
+      if (relevant_alternative_found) {
+
+        const auto next_segment_instruction_props =
+            w.way_instruction_properties_[next_segment.way_];
+
+        const auto alternative_instruction_props =
+            w.way_instruction_properties_[next_alternative->segment_.way_idx_];
+
+        if (is_more_important_by(next_segment_instruction_props.get_highway(),
+                                 alternative_instruction_props.get_highway(),
+                                 2)) {
+          relevant_alternative_found = false;
+        }
+      }
+
+      if (!relevant_alternative_found) {
+        trace(
+            "┃ ║ no other relevant possible turn on the {} -> reside with "
+            "stay {} "
+            "instruction\n",
+            left_of_other_continuation ? "left" : "right",
+            left_of_other_continuation ? "left" : "right");
+        return left_of_other_continuation ? instruction_action::kStayLeft
+                                          : instruction_action::kStayRight;
+      }
+      trace("┃ ║ there is another relevant alternative further {}\n",
+            left_of_other_continuation ? "left" : "right");
+
+    }
+  } else {
+    trace(
+        "┃ ║ found no continuation that is more natural than the exit -> no "
+        "instruction required\n");
+    return instruction_action::kNone;
+  }
+
+  trace("┃ ║ turn requires turn instruction\n");
+  return potential_turn_type;
+}
+
 bool intersection_module::process(ways const& w,
                                   path&,
                                   segment_contexts_window const& window) {
@@ -220,129 +397,21 @@ bool intersection_module::process(ways const& w,
     return true;
   }
 
-  const auto num_possible_turns = number_of_possible_turns(common_node_hub);
-  const auto num_visible_turns = number_of_visible_turns(common_node_hub);
-  trace("┃ ║ Number of possible turns at hub = {}\n", num_possible_turns);
-  trace("┃ ║ Number of visible turns at hub  = {}\n", num_visible_turns);
-  const relative_direction next_seg_rel_dir = segment_context.relative_direction_;
-  const instruction_action possible_turn_type = turn_action_from(next_seg_rel_dir);
-  const bool same_name = ways_have_same_name(segment.way_, next_segment.way_, w);
-
-  if (num_possible_turns <= 1) {
-    if (is_real_turn(next_seg_rel_dir) && num_visible_turns > 1) {
-      trace(
-          "┃ ║ real turn, number of visible turns > 1, number of possible "
-          "turns ≤ 1\n");
-      trace("┃ ╚ annotation = {}\n",
-            instruction_action_to_string(possible_turn_type));
-      set_segment_instruction(segment, possible_turn_type);
-      return true;
-    } else if (num_visible_turns <= 1) {
-      trace(
-          "┃ ║ number of visible turns ≤ 1, number of possible "
-          "turns ≤ 1\n");
-    } else {
-      trace(
-          "┃ ║ not a real turn, number of possible "
-          "turns ≤ 1\n");
-    }
-    trace("┃ ╚ annotation = kNone\n");
-    set_segment_instruction(segment, instruction_action::kNone);
-    return true;
-  }
-
+  const relative_direction next_seg_rel_dir =
+      segment_context.relative_direction_;
   if (is_real_turn(next_seg_rel_dir)) {
-    if (same_name && outgoing_edges_are_slower_by_factor(w, common_node_hub, 2.0)) {
-      trace(
-          "┃ ║ real turn, number of possible turns > 1, continuing on same "
-          "street, alternatives are less important\n");
-      trace("┃ ╚ annotation = kNone\n");
-      set_segment_instruction(segment, instruction_action::kNone);
-      return true;
-    } else if (!same_name) {
-      trace(
-          "┃ ║ real turn, number of possible turns > 1, changing street "
-          "name\n");
-    } else {
-      trace(
-          "┃ ║ real turn, number of possible turns > 1, at least one equally "
-          "important alternative\n");
-    }
-
+    const auto instruction = handle_real_turn(w, segment_context, next_segment_context);
     trace("┃ ╚ annotation = {}\n",
-          instruction_action_to_string(possible_turn_type));
-    set_segment_instruction(segment, possible_turn_type);
-    return true;
+      instruction_action_to_string(instruction));
+    set_segment_instruction(segment, instruction);
+  } else if (of_slight_type(next_seg_rel_dir)) {
+    const auto instruction = handle_slight_turn(w, segment_context, next_segment_context);
+    trace("┃ ╚ annotation = {}\n",
+      instruction_action_to_string(instruction));
+    set_segment_instruction(segment, instruction);
   }
 
-  trace(
-      "┃ ║ not a real turn, check alternatives for a possible more natural "
-      "natural continuation\n");
-
-  constexpr auto continue_abs_cutoff_angle = 60.;
-  auto const other_continue =
-      get_other_continue(common_node_hub, continue_abs_cutoff_angle);
-  auto const outgoing_edges_are_slower =
-      outgoing_edges_are_slower_by_factor(w, common_node_hub, 1.0);
-  auto const leaving_current_street = !same_name;
-
-  if (other_continue.has_value()) {
-    trace(
-        "┃ ║ found the best alternative continuation in way = {} with degree "
-        "= {}\n",
-        other_continue->segment_.way_idx_, other_continue->angle_with_arrive_);
-    auto const exit_props = w.way_instruction_properties_[next_segment.way_];
-    auto const arrive_props = w.way_instruction_properties_[segment.way_];
-    auto const other_props =
-        w.way_instruction_properties_[other_continue->segment_.way_idx_];
-    auto const link = exit_props.is_link();
-    auto const prev_link = arrive_props.is_link();
-    auto const other_link = other_props.is_link();
-
-    if (is_major_road(exit_props)) {
-      if ((exit_props.get_highway() == arrive_props.get_highway() && link == prev_link) &&
-          (other_props.get_highway() != arrive_props.get_highway() ||
-           other_link != prev_link)) {
-        set_segment_instruction(segment, instruction_action::kNone);
-        return true;
-      }
-    }
-
-    auto const delta = common_node_hub.exit_angle_;
-    auto const other_delta = other_continue->angle_with_arrive_;
-
-    if (std::abs(delta) < 6 && std::abs(other_delta) > 10 && same_name) {
-      set_segment_instruction(segment, instruction_action::kContinue);
-      return true;
-    }
-
-    if (!same_name || !outgoing_edges_are_slower) {
-      set_segment_instruction(segment, other_delta < delta
-                                           ? instruction_action::kStayLeft
-                                           : instruction_action::kStayRight);
-      return true;
-    }
-  } else {
-    trace("┃ ║ found no continuation that is more natural than the exit\n");
-  }
-  if (!outgoing_edges_are_slower) {
-    if (leaving_current_street) {
-      trace("┃ ║ changing street and alternatives are equal important\n");
-      trace("┃ ╚ annotation = {}\n", instruction_action_to_string(possible_turn_type));
-      set_segment_instruction(segment, possible_turn_type);
-      return true;
-    } else if (std::abs(common_node_hub.exit_angle_) > 35) {
-      trace("┃ ║ staying on same street but exiting at an angle > 35\n");
-      trace("┃ ╚ annotation = {}\n", instruction_action_to_string(possible_turn_type));
-      set_segment_instruction(segment, possible_turn_type);
-      return true;
-    }
-  }
-
-  trace("┃ ║ exit is the natural continuation\n");
-  trace("┃ ╚ annotation = kNone\n");
-  set_segment_instruction(segment, instruction_action::kNone);
-  return true;
+  return false;
 }
 
 } // namespace osr

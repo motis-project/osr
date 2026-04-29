@@ -18,7 +18,7 @@ double normalize(double const angle) {
 relative_direction get_relative_direction(const double angle) {
   bool is_left = angle > 0;
   double abs_angle = std::abs(angle);
-  if (abs_angle <= 20) {
+  if (abs_angle <= 10) {
     return relative_direction::kStraight;
   }
   if (abs_angle <= 45) {
