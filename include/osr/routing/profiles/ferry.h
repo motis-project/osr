@@ -183,14 +183,16 @@ struct ferry {
         }
 
         auto const target_way_prop = w.way_properties_[way];
-        if (way_cost(params, target_way_prop, way_dir, 0U) == kInfeasible) {
+        if (way_cost(params, w, way, target_way_prop, way_dir, 0U) ==
+            kInfeasible) {
           return;
         }
 
         auto const dist = w.get_way_node_distance(way, std::min(from, to));
         auto const target = node{target_node};
-        auto const cost = way_cost(params, target_way_prop, way_dir, dist) +
-                          node_cost(params, target_node_prop);
+        auto const cost =
+            way_cost(params, w, way, target_way_prop, way_dir, dist) +
+            node_cost(params, target_node_prop);
         fn(target, cost, dist, way, from, to, elevation_storage::elevation{},
            false);
       };
@@ -211,7 +213,7 @@ struct ferry {
                                 direction const way_dir,
                                 direction const) {
     auto const target_way_prop = w.way_properties_[way];
-    if (way_cost(params, target_way_prop, way_dir, 0U) == kInfeasible) {
+    if (way_cost(params, w, way, target_way_prop, way_dir, 0U) == kInfeasible) {
       return false;
     }
 
@@ -219,6 +221,8 @@ struct ferry {
   }
 
   static constexpr cost_t way_cost(parameters const&,
+                                   ways::routing const&,
+                                   way_idx_t const,
                                    way_properties const& e,
                                    direction const,
                                    distance_t const dist) {

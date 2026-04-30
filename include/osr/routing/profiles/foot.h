@@ -204,7 +204,8 @@ struct foot {
         }
 
         auto const target_way_prop = w.way_properties_[way];
-        if (way_cost(params, target_way_prop, way_dir, 0U) == kInfeasible) {
+        if (way_cost(params, w, way, target_way_prop, way_dir, 0U) ==
+            kInfeasible) {
           return;
         }
 
@@ -214,7 +215,7 @@ struct foot {
                 auto const dist =
                     w.get_way_node_distance(way, std::min(from, to));
                 auto const cost =
-                    way_cost(params, target_way_prop, way_dir, dist) +
+                    way_cost(params, w, way, target_way_prop, way_dir, dist) +
                     node_cost(params, target_node_prop);
                 fn(node{target_node, target_lvl},
                    static_cast<std::uint32_t>(cost), dist, way, from, to,
@@ -227,8 +228,9 @@ struct foot {
           }
 
           auto const dist = w.get_way_node_distance(way, std::min(from, to));
-          auto const cost = way_cost(params, target_way_prop, way_dir, dist) +
-                            node_cost(params, target_node_prop);
+          auto const cost =
+              way_cost(params, w, way, target_way_prop, way_dir, dist) +
+              node_cost(params, target_node_prop);
           fn(node{target_node, *target_lvl}, static_cast<std::uint32_t>(cost),
              dist, way, from, to, elevation_storage::elevation{}, false);
         }
@@ -250,7 +252,7 @@ struct foot {
                                 direction const way_dir,
                                 direction) {
     auto const target_way_prop = w.way_properties_[way];
-    if (way_cost(params, target_way_prop, way_dir, 0U) == kInfeasible) {
+    if (way_cost(params, w, way, target_way_prop, way_dir, 0U) == kInfeasible) {
       return false;
     }
 
@@ -347,6 +349,8 @@ struct foot {
   }
 
   static constexpr cost_t way_cost(parameters const& params,
+                                   ways::routing const&,
+                                   way_idx_t const,
                                    way_properties const e,
                                    direction,
                                    distance_t const dist) {

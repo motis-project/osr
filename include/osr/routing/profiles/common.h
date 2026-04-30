@@ -59,8 +59,8 @@ void for_each_additional_edge(typename P::parameters const& params,
       assert(ae.underlying_way_ != way_idx_t::invalid());
       auto const way_props = w.way_properties_[ae.underlying_way_];
 
-      auto const edge_cost =
-          P::way_cost(params, way_props, edge_dir, ae.distance_);
+      auto const edge_cost = P::way_cost(params, w, ae.underlying_way_,
+                                         way_props, edge_dir, ae.distance_);
       if (edge_cost == kInfeasible) {
         continue;
       }
@@ -144,7 +144,8 @@ void for_each_adjacent_node(typename P::parameters const& params,
       }
 
       auto const target_way_prop = w.way_properties_[way];
-      if (P::way_cost(params, target_way_prop, way_dir, 0U) == kInfeasible) {
+      if (P::way_cost(params, w, way, target_way_prop, way_dir, 0U) ==
+          kInfeasible) {
         return;
       }
 
@@ -164,7 +165,8 @@ void for_each_adjacent_node(typename P::parameters const& params,
       auto const dist = w.get_way_node_distance(way, std::min(from, to));
       auto const target = typename P::node{
           target_node, w.get_way_pos(target_node, way, to), way_dir};
-      auto const wc = P::way_cost(params, target_way_prop, way_dir, dist);
+      auto const wc =
+          P::way_cost(params, w, way, target_way_prop, way_dir, dist);
       auto const cost =
           wc == kInfeasible
               ? kInfeasible

@@ -418,11 +418,9 @@ struct ways {
       if (!way_properties_[way].has_hgv_info()) {
         return nullptr;
       }
-      auto const it = std::lower_bound(begin(way_hgv_info_), end(way_hgv_info_),
-                                       way,
-                                       [](auto const& entry, auto const& key) {
-                                         return entry.first < key;
-                                       });
+      auto const it = std::lower_bound(
+          begin(way_hgv_info_), end(way_hgv_info_), way,
+          [](auto const& entry, auto const& key) { return entry.first < key; });
       utl::verify(it != end(way_hgv_info_) && it->first == way,
                   "missing HGV info for way {}", way);
       return &it->second;
@@ -438,7 +436,7 @@ struct ways {
 
     vec_map<node_idx_t, node_properties> node_properties_;
     vec_map<way_idx_t, way_properties> way_properties_;
-  vec<pair<way_idx_t, hgv_way_info>> way_hgv_info_;
+    vec<pair<way_idx_t, hgv_way_info>> way_hgv_info_;
 
     vecvec<way_idx_t, node_idx_t> way_nodes_;
     vecvec<way_idx_t, std::uint16_t> way_node_dist_;

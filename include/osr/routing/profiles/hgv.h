@@ -1,39 +1,49 @@
 #pragma once
 
-#include <bitset>
-#include <optional>
-#include <tuple>
+#include <cmath>
 
 #include "boost/json/object.hpp"
 
-#include "utl/helpers/algorithm.h"
+#include <algorithm>
+#include <bitset>
+#include <optional>
+#include <tuple>
 
 #include "osr/elevation_storage.h"
 #include "osr/routing/mode.h"
 #include "osr/routing/path.h"
 #include "osr/routing/profiles/common.h"
+#include "osr/routing/sharing_data.h"
 #include "osr/routing/turns.h"
 #include "osr/ways.h"
+#include "utl/helpers/algorithm.h"
 
 namespace osr {
 
 struct sharing_data;
 
-template <bool IsBus>
-struct generic_car {
-  static constexpr auto const kName = "car";
+struct hgv {
+  static constexpr auto const kName = "hgv";
   static constexpr auto const kMaxMatchDistance = 200U;
+  static constexpr auto const kExactBidirectional = true;
 
   using key = node_idx_t;
 
   struct parameters {
-    using profile_t = generic_car;
+    using profile_t = hgv;
     cost_t uturn_penalty_{120U};
-    cost_t private_gate_penalty_{60U};
     quantized_angle_t slow_turn_angle_{quantize_turn_angle(65.0)};
     quantized_angle_t sharp_turn_angle_{quantize_turn_angle(110.0)};
-    cost_t slow_turn_penalty_{IsBus ? 10U : 0U};
-    cost_t sharp_turn_penalty_{IsBus ? 25U : 0U};
+    cost_t slow_turn_penalty_{10U};
+    cost_t sharp_turn_penalty_{25U};
+    std::uint16_t height_cm_{400U};
+    std::uint16_t width_cm_{255U};
+    std::uint16_t length_dm_{188U};
+    std::uint16_t weight_100kg_{400U};
+    bool hazmat_{false};
+    std::uint8_t axle_count_{5U};
+    std::uint16_t axle_load_100kg_{115U};
+    std::uint8_t top_speed_km_h_{80U};
   };
 
   struct node {
@@ -49,14 +59,13 @@ struct generic_car {
     }
 
     boost::json::object geojson_properties(ways const&) const {
-      return boost::json::object{{"node_id", n_.v_},
-                                 {"type", IsBus ? "bus" : "car"}};
+      return boost::json::object{{"node_id", n_.v_}, {"type", "hgv"}};
     }
 
     constexpr node_idx_t get_node() const noexcept { return n_; }
     constexpr node_idx_t get_key() const noexcept { return n_; }
 
-    static constexpr mode get_mode() noexcept { return mode::kCar; }
+    static constexpr mode get_mode() noexcept { return mode::kHgv; }
 
     constexpr std::optional<direction> get_direction() const noexcept {
       return dir_;
@@ -95,8 +104,8 @@ struct generic_car {
     constexpr node get_node() const noexcept { return {n_, way_, dir_}; }
     constexpr cost_t cost() const noexcept { return cost_; }
 
-    void track(
-        label const&, ways::routing const&, way_idx_t, node_idx_t, bool) {}
+    void track(label const&, ways::routing const&, way_idx_t, node_idx_t,
+               bool) {}
 
     node_idx_t n_;
     way_pos_t way_;
@@ -108,11 +117,7 @@ struct generic_car {
     static constexpr auto const kMaxWays = way_pos_t{16U};
     static constexpr auto const kN = kMaxWays * 2U /* FWD+BWD */;
 
-    entry() {
-      utl::fill(cost_, kInfeasible);
-      utl::fill(pred_, node_idx_t::invalid());
-      utl::fill(pred_way_, way_pos_t{0});
-    }
+    entry() { utl::fill(cost_, kInfeasible); }
 
     constexpr std::optional<node> pred(node const n) const noexcept {
       auto const idx = get_index(n);
@@ -126,9 +131,7 @@ struct generic_car {
       return cost_[get_index(n)];
     }
 
-    constexpr bool update(label const&,
-                          node const n,
-                          cost_t const c,
+    constexpr bool update(label const&, node const n, cost_t const c,
                           node const pred) noexcept {
       auto const idx = get_index(n);
       if (c < cost_[idx]) {
@@ -175,19 +178,14 @@ struct generic_car {
     }
   };
 
-  static node create_node(node_idx_t const n,
-                          level_t const,
-                          way_pos_t const way,
-                          direction const dir) {
+  static node create_node(node_idx_t const n, level_t const,
+                          way_pos_t const way, direction const dir) {
     return node{n, way, dir};
   }
 
   template <typename Fn>
-  static void resolve_start_node(ways::routing const& w,
-                                 way_idx_t const way,
-                                 node_idx_t const n,
-                                 level_t,
-                                 direction,
+  static void resolve_start_node(ways::routing const& w, way_idx_t const way,
+                                 node_idx_t const n, level_t, direction,
                                  Fn&& f) {
     auto const ways = w.node_ways_[n];
     for (auto i = way_pos_t{0U}; i != ways.size(); ++i) {
@@ -199,9 +197,7 @@ struct generic_car {
   }
 
   template <typename Fn>
-  static void resolve_all(ways::routing const& w,
-                          node_idx_t const n,
-                          level_t,
+  static void resolve_all(ways::routing const& w, node_idx_t const n, level_t,
                           Fn&& f) {
     auto const ways = w.node_ways_[n];
     for (auto i = way_pos_t{0U}; i != ways.size(); ++i) {
@@ -211,29 +207,25 @@ struct generic_car {
   }
 
   template <direction SearchDir, bool WithBlocked, typename Fn>
-  static void adjacent(parameters const& params,
-                       ways::routing const& w,
-                       node const n,
-                       bitvec<node_idx_t> const* blocked,
-                       sharing_data const* additional,
-                       elevation_storage const*,
+  static void adjacent(parameters const& params, ways::routing const& w,
+                       node const n, bitvec<node_idx_t> const* blocked,
+                       sharing_data const* additional, elevation_storage const*,
                        Fn&& fn) {
     if (additional != nullptr) {
-      for_each_additional_edge<generic_car>(
+      for_each_additional_edge<hgv>(
           params, w, n, additional,
           [&](additional_edge const& ae, cost_t const edge_cost,
               direction const edge_dir) {
             if (!additional->is_additional_node(n.n_)) {
-              if (w.is_restricted<SearchDir, IsBus>(
+              if (w.is_restricted<SearchDir>(
                       n.n_, n.way_, w.get_way_pos(n.n_, ae.underlying_way_))) {
                 return;
               }
             }
 
-            auto const [target, cost] =
-                get_adjacent_additional_node<generic_car>(
-                    params, w, n, additional, ae, edge_dir, edge_cost,
-                    params.uturn_penalty_);
+            auto const [target, cost] = get_adjacent_additional_node<hgv>(
+                params, w, n, additional, ae, edge_dir, edge_cost,
+                params.uturn_penalty_);
             if (cost == kInfeasible) {
               return;
             }
@@ -247,83 +239,56 @@ struct generic_car {
       }
     }
 
-    for_each_adjacent_node<generic_car, SearchDir, WithBlocked, true, IsBus>(
+    for_each_adjacent_node<hgv, SearchDir, WithBlocked, true>(
         params, w, n, blocked, params.uturn_penalty_, fn);
   }
 
   static bool is_dest_reachable(parameters const& params,
-                                ways::routing const& w,
-                                node const n,
-                                way_idx_t const way,
-                                direction const way_dir,
+                                ways::routing const& w, node const n,
+                                way_idx_t const way, direction const way_dir,
                                 direction const search_dir) {
     auto const target_way_prop = w.way_properties_[way];
     if (way_cost(params, w, way, target_way_prop, way_dir, 0U) == kInfeasible) {
       return false;
     }
 
-    if (w.is_restricted<IsBus>(n.n_, n.way_, w.get_way_pos(n.n_, way),
-                               search_dir)) {
+    if (w.is_restricted(n.n_, n.way_, w.get_way_pos(n.n_, way), search_dir)) {
       return false;
     }
 
     return true;
   }
 
-  static constexpr cost_t way_cost(parameters const&,
-                                   ways::routing const&,
-                                   way_idx_t const,
-                                   way_properties const& e,
-                                   direction const dir,
-                                   distance_t const dist) {
-    if constexpr (IsBus) {
-      auto const accessible = e.is_bus_accessible();
-      auto const accessible_with_penalty = e.is_bus_accessible_with_penalty();
-      if ((accessible || accessible_with_penalty) &&
-          (dir == direction::kForward || !e.is_oneway_bus_psv())) {
-        auto const in_route = e.in_route();
-        auto const bus_only = !e.is_car_accessible();
-        auto sl = static_cast<speed_limit>(e.speed_limit_);
-        if (in_route && static_cast<std::uint8_t>(sl) <
-                            static_cast<std::uint8_t>(speed_limit::kmh_50)) {
-          sl = speed_limit::kmh_50;
-        }
-        auto cost = static_cast<cost_t>(
-            std::rint(((in_route || bus_only) ? 1.0f : 1.5f) *
-                      static_cast<float>(dist) * to_seconds_per_meter(sl)));
-        if (e.is_parking()) {
-          cost *= 2U;
-        }
-        if (accessible_with_penalty) {
-          cost *= e.in_route() ? 2U : 4U;
-        }
-        return cost;
-      } else {
-        return kInfeasible;
-      }
-    } else {
-      if (e.is_car_accessible() &&
-          (dir == direction::kForward || !e.is_oneway_car())) {
-        return static_cast<cost_t>(std::rint(
-                   (e.is_destination() ? 5.0f : 1.0f) *
-                   static_cast<float>(dist) * e.max_speed_s_per_m())) +
-               (e.is_destination() ? 120U : 0U);
-      } else {
-        return kInfeasible;
-      }
+  static cost_t way_cost(parameters const& params, ways::routing const& w,
+                         way_idx_t const way, way_properties const& e,
+                         direction const dir, distance_t const dist) {
+    if (dir == direction::kBackward && e.is_oneway_car()) {
+      return kInfeasible;
     }
+
+    auto accessible = e.is_car_accessible();
+    auto destination_penalty = e.is_destination();
+
+    if (auto const* info = w.get_hgv_info(way); info != nullptr) {
+      if (info->has(hgv_info_field::kAccess)) {
+        accessible = info->hgv_access() == access_value::kAllowed;
+        destination_penalty = false;
+      }
+      if (!accessible || !fits_vehicle(params, *info)) {
+        return kInfeasible;
+      }
+      return distance_cost(params, e, info, dist, destination_penalty);
+    }
+
+    if (!accessible) {
+      return kInfeasible;
+    }
+    return distance_cost(params, e, nullptr, dist, destination_penalty);
   }
 
-  static constexpr cost_t node_cost(parameters const& params,
+  static constexpr cost_t node_cost(parameters const&,
                                     node_properties const& n) {
-    if constexpr (IsBus) {
-      return n.is_bus_accessible() ? 0U
-                                   : (n.is_bus_accessible_with_penalty()
-                                          ? params.private_gate_penalty_
-                                          : kInfeasible);
-    } else {
-      return n.is_car_accessible() ? 0U : kInfeasible;
-    }
+    return n.is_car_accessible() ? 0U : kInfeasible;
   }
 
   static constexpr cost_t turn_cost(parameters const& params,
@@ -338,9 +303,9 @@ struct generic_car {
     return cost;
   }
 
-  static constexpr double lower_bound_heuristic(parameters const&,
-                                                double const dist) {
-    return (3.6 / 130U) * dist;
+  static double lower_bound_heuristic(parameters const& params,
+                                      double const dist) {
+    return (3.6 / static_cast<double>(params.top_speed_km_h_)) * dist;
   }
 
   static constexpr double upper_bound_heuristic(parameters const&,
@@ -351,9 +316,62 @@ struct generic_car {
   static constexpr node get_reverse(node const n) {
     return {n.n_, n.way_, opposite(n.dir_)};
   }
-};
 
-using car = generic_car<false>;
-using bus = generic_car<true>;
+private:
+  static constexpr bool fits_vehicle(parameters const& params,
+                                     hgv_way_info const& info) {
+    if (info.has(hgv_info_field::kHazmat) && params.hazmat_ &&
+        info.hazmat_access() == access_value::kForbidden) {
+      return false;
+    }
+    if (info.has(hgv_info_field::kMaxLength) &&
+        params.length_dm_ > info.maxlength_dm_) {
+      return false;
+    }
+    if (info.has(hgv_info_field::kMaxWeightRating) &&
+        params.weight_100kg_ > info.maxweightrating_100kg_) {
+      return false;
+    }
+    if (info.has(hgv_info_field::kMaxHeight) &&
+        params.height_cm_ > info.maxheight_cm_) {
+      return false;
+    }
+    if (info.has(hgv_info_field::kMaxWidth) &&
+        params.width_cm_ > info.maxwidth_cm_) {
+      return false;
+    }
+    if (info.has(hgv_info_field::kMaxWeight) &&
+        params.weight_100kg_ > info.maxweight_100kg_) {
+      return false;
+    }
+    if (info.has(hgv_info_field::kMaxAxleLoad) &&
+        params.axle_load_100kg_ > info.maxaxleload_100kg_) {
+      return false;
+    }
+    if (info.has(hgv_info_field::kMaxAxles) &&
+        params.axle_count_ > info.maxaxles_) {
+      return false;
+    }
+    return true;
+  }
+
+  static constexpr cost_t distance_cost(parameters const& params,
+                                        way_properties const& e,
+                                        hgv_way_info const* info,
+                                        distance_t const dist,
+                                        bool const destination_penalty) {
+    auto speed =
+        std::min<std::uint16_t>(params.top_speed_km_h_, e.max_speed_km_per_h());
+    if (info != nullptr && info->has(hgv_info_field::kMaxSpeed)) {
+      speed = std::min<std::uint16_t>(speed, info->maxspeed_km_h_);
+    }
+    speed = std::max<std::uint16_t>(speed, 1U);
+
+    return static_cast<cost_t>(std::rint((destination_penalty ? 5.0F : 1.0F) *
+                                         static_cast<float>(dist) *
+                                         (3.6F / static_cast<float>(speed)))) +
+           (destination_penalty ? 120U : 0U);
+  }
+};
 
 }  // namespace osr

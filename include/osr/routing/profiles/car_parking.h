@@ -348,10 +348,12 @@ struct car_parking {
   }
 
   static constexpr cost_t way_cost(parameters const& params,
+                                   ways::routing const& w,
+                                   way_idx_t const way,
                                    way_properties const& e,
                                    direction const dir,
                                    distance_t const dist) {
-    return footp::way_cost(params.foot_, e, dir, dist);
+    return footp::way_cost(params.foot_, w, way, e, dir, dist);
   }
 
   static constexpr cost_t node_cost(parameters const& params,

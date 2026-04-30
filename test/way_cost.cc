@@ -3,7 +3,9 @@
 #include "osr/routing/profiles/foot.h"
 
 osr::cost_t cost(const osr::way_properties p) {
-  return osr::foot<false>::way_cost({}, p, osr::direction::kForward, 1);
+  return osr::foot<false>::way_cost({}, osr::ways::routing{},
+                                    osr::way_idx_t::invalid(), p,
+                                    osr::direction::kForward, 1);
 }
 
 TEST(way_cost_foot, combinations) {

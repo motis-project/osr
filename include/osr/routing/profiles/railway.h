@@ -250,7 +250,7 @@ struct railway {
                                 direction const way_dir,
                                 direction const) {
     auto const target_way_prop = w.way_properties_[way];
-    if (way_cost(params, target_way_prop, way_dir, 0U) == kInfeasible) {
+    if (way_cost(params, w, way, target_way_prop, way_dir, 0U) == kInfeasible) {
       return false;
     }
 
@@ -258,6 +258,8 @@ struct railway {
   }
 
   static constexpr cost_t way_cost(parameters const&,
+                                   ways::routing const&,
+                                   way_idx_t const,
                                    way_properties const& e,
                                    direction const dir,
                                    distance_t const dist) {

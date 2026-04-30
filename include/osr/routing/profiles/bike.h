@@ -174,7 +174,8 @@ struct bike {
                                 way_idx_t const way,
                                 direction const way_dir,
                                 direction) {
-    return way_cost(params, w.way_properties_[way], way_dir, 0U) != kInfeasible;
+    return way_cost(params, w, way, w.way_properties_[way], way_dir, 0U) !=
+           kInfeasible;
   }
 
   template <direction SearchDir, bool WithBlocked, typename Fn>
@@ -202,7 +203,8 @@ struct bike {
         }
 
         auto const target_way_prop = w.way_properties_[way];
-        if (way_cost(params, target_way_prop, way_dir, 0U) == kInfeasible) {
+        if (way_cost(params, w, way, target_way_prop, way_dir, 0U) ==
+            kInfeasible) {
           return;
         }
 
@@ -224,8 +226,9 @@ struct bike {
                                  ElevationExponentThousandth / 1000.0)
                        : ElevationUpCost * to_idx(elevation.up_) / dist)
                 : 0);
-        auto const cost = way_cost(params, target_way_prop, way_dir, dist) +
-                          node_cost(params, target_node_prop) + elevation_cost;
+        auto const cost =
+            way_cost(params, w, way, target_way_prop, way_dir, dist) +
+            node_cost(params, target_node_prop) + elevation_cost;
         fn(node{target_node, way_dir}, static_cast<std::uint32_t>(cost), dist,
            way, from, to, elevation, false);
       };
@@ -240,6 +243,8 @@ struct bike {
   }
 
   static constexpr cost_t way_cost(parameters const& params,
+                                   ways::routing const&,
+                                   way_idx_t const,
                                    way_properties const e,
                                    direction const dir,
                                    distance_t const dist) {

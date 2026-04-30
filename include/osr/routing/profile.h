@@ -110,7 +110,7 @@ concept Profile =
         P::is_dest_reachable(params, r, node, w, dir, dir)
       } -> std::same_as<bool>;
       {
-        P::way_cost(params, w_props, dir, std::declval<distance_t>())
+        P::way_cost(params, r, w, w_props, dir, std::declval<distance_t>())
       } -> std::same_as<cost_t>;
       { P::node_cost(params, n_props) } -> std::same_as<cost_t>;
       { P::lower_bound_heuristic(params, dist) } -> std::same_as<double>;
@@ -167,6 +167,7 @@ enum class search_profile : std::uint8_t {
   kBikeElevationLow,
   kBikeElevationHigh,
   kCar,
+  kHgv,
   kCarDropOff,
   kCarDropOffWheelchair,
   kCarParking,
@@ -179,7 +180,7 @@ enum class search_profile : std::uint8_t {
 };
 
 constexpr auto const kNumProfiles =
-    static_cast<std::underlying_type_t<search_profile>>(16U);
+    static_cast<std::underlying_type_t<search_profile>>(17U);
 
 search_profile to_profile(std::string_view);
 

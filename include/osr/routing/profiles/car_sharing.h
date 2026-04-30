@@ -56,7 +56,8 @@ struct car_sharing {
                      .is_incline_down_ = false,
                      .is_bus_accessible_with_penalty_ = false,
                      .is_ferry_accessible_ = false,
-                     .is_railway_accessible_with_penalty_ = false};
+                     .is_railway_accessible_with_penalty_ = false,
+                     .has_hgv_info_ = false};
 
   static constexpr auto const kAdditionalNodeProperties =
       node_properties{.from_level_ = 0,
@@ -398,8 +399,9 @@ struct car_sharing {
           for (auto const& ae : it->second) {
             handle_additional_edge(
                 ae, nt,
-                footp::way_cost(params.foot_, kAdditionalWayProperties,
-                                direction::kForward, ae.distance_) +
+                footp::way_cost(params.foot_, w, way_idx_t::invalid(),
+                                kAdditionalWayProperties, direction::kForward,
+                                ae.distance_) +
                     switch_penalty);
           }
         }
@@ -426,8 +428,9 @@ struct car_sharing {
           for (auto const& ae : it->second) {
             handle_additional_edge(
                 ae, node_type::kRental,
-                car::way_cost(params.car_, kAdditionalWayProperties,
-                              direction::kForward, ae.distance_) +
+                car::way_cost(params.car_, w, way_idx_t::invalid(),
+                              kAdditionalWayProperties, direction::kForward,
+                              ae.distance_) +
                     switch_penalty);
           }
         }
@@ -446,15 +449,17 @@ struct car_sharing {
                 is_allowed(sharing->start_allowed_, n.n_)) {
               handle_additional_edge(
                   ae, node_type::kRental,
-                  car::way_cost(params.car_, kAdditionalWayProperties,
-                                direction::kForward, ae.distance_) +
+                  car::way_cost(params.car_, w, way_idx_t::invalid(),
+                                kAdditionalWayProperties, direction::kForward,
+                                ae.distance_) +
                       kStartSwitchPenalty);
             } else if (n.is_rental_node() &&
                        is_allowed(sharing->end_allowed_, n.n_)) {
               handle_additional_edge(
                   ae, node_type::kTrailingFoot,
-                  footp::way_cost(params.foot_, kAdditionalWayProperties,
-                                  direction::kForward, ae.distance_) +
+                  footp::way_cost(params.foot_, w, way_idx_t::invalid(),
+                                  kAdditionalWayProperties, direction::kForward,
+                                  ae.distance_) +
                       kEndSwitchPenalty);
             }
           }
@@ -489,15 +494,17 @@ struct car_sharing {
                 is_allowed(sharing->end_allowed_, n.n_)) {
               handle_additional_edge(
                   ae, node_type::kRental,
-                  car::way_cost(params.car_, kAdditionalWayProperties,
-                                direction::kForward, ae.distance_) +
+                  car::way_cost(params.car_, w, way_idx_t::invalid(),
+                                kAdditionalWayProperties, direction::kForward,
+                                ae.distance_) +
                       kEndSwitchPenalty);
             } else if (n.is_rental_node() &&
                        is_allowed(sharing->start_allowed_, n.n_)) {
               handle_additional_edge(
                   ae, node_type::kInitialFoot,
-                  footp::way_cost(params.foot_, kAdditionalWayProperties,
-                                  direction::kForward, ae.distance_) +
+                  footp::way_cost(params.foot_, w, way_idx_t::invalid(),
+                                  kAdditionalWayProperties, direction::kForward,
+                                  ae.distance_) +
                       kStartSwitchPenalty);
             }
           }
@@ -533,10 +540,12 @@ struct car_sharing {
   }
 
   static constexpr cost_t way_cost(parameters const& params,
+                                   ways::routing const& w,
+                                   way_idx_t const way,
                                    way_properties const& e,
                                    direction const dir,
                                    distance_t const dist) {
-    return footp::way_cost(params.foot_, e, dir, dist);
+    return footp::way_cost(params.foot_, w, way, e, dir, dist);
   }
 
   static constexpr cost_t node_cost(parameters const& params,

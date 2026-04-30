@@ -20,6 +20,7 @@
 #include "osr/routing/profiles/car_sharing.h"
 #include "osr/routing/profiles/ferry.h"
 #include "osr/routing/profiles/foot.h"
+#include "osr/routing/profiles/hgv.h"
 #include "osr/routing/profiles/railway.h"
 
 namespace osr {
@@ -1048,6 +1049,16 @@ template boost::json::object build_map_match_debug_json<car>(
     std::vector<location> const&,
     std::vector<point_data<car>> const&,
     std::vector<segment_data<car>> const&,
+    matched_route const&,
+    std::function<geo::latlng(node_idx_t)> const&);
+
+template boost::json::object build_map_match_debug_json<hgv>(
+    ways const&,
+    lookup const&,
+    hgv::parameters const&,
+    std::vector<location> const&,
+    std::vector<point_data<hgv>> const&,
+    std::vector<segment_data<hgv>> const&,
     matched_route const&,
     std::function<geo::latlng(node_idx_t)> const&);
 

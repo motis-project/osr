@@ -10,6 +10,7 @@
 #include "osr/routing/profiles/car_sharing.h"
 #include "osr/routing/profiles/ferry.h"
 #include "osr/routing/profiles/foot.h"
+#include "osr/routing/profiles/hgv.h"
 #include "osr/routing/profiles/railway.h"
 
 namespace osr {
@@ -24,6 +25,7 @@ using profile_parameters =
                  bike<bike_costing::kSafe, kElevationLowCost>::parameters,
                  bike<bike_costing::kSafe, kElevationHighCost>::parameters,
                  car::parameters,
+                 hgv::parameters,
                  car_parking<false, false>::parameters,
                  car_parking<true, false>::parameters,
                  car_parking<false, true>::parameters,
