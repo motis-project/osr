@@ -7,6 +7,7 @@
 #include "boost/beast/core/string.hpp"
 #include "boost/beast/version.hpp"
 #include "boost/json.hpp"
+#include "boost/url/parse.hpp"
 
 #include "fmt/core.h"
 
@@ -21,6 +22,7 @@
 #include "osr/geojson.h"
 #include "osr/lookup.h"
 #include "osr/routing/algorithms.h"
+#include "osr/routing/instructions/instruction_annotator.h"
 #include "osr/routing/parameters.h"
 #include "osr/routing/profiles/bike.h"
 #include "osr/routing/profiles/bike_sharing.h"
@@ -39,6 +41,9 @@ namespace fs = std::filesystem;
 namespace json = boost::json;
 
 namespace osr::backend {
+
+const std::filesystem::path test_data_dir = TEST_DATA_DIR;
+const std::filesystem::path test_cases_path = test_data_dir / "test-cases.json";
 
 template <typename Body>
 void set_cors_headers(http::response<Body>& res) {
@@ -82,14 +87,16 @@ struct http_server::impl {
        lookup const& l,
        platforms const* pl,
        elevation_storage const* elevations,
-       std::string const& static_file_path)
+       std::string const& static_file_path,
+       bool const provide_test_features)
       : ioc_{ios},
         thread_pool_{thread_pool},
         w_{g},
         l_{l},
         pl_{pl},
         elevations_{elevations},
-        server_{ioc_} {
+        server_{ioc_},
+        provide_test_features_(provide_test_features) {
     try {
       if (!static_file_path.empty() && fs::is_directory(static_file_path)) {
         static_file_path_ = fs::canonical(static_file_path).string();
@@ -140,8 +147,8 @@ struct http_server::impl {
                                                       foot_speed_result.value()}
             : get_parameters(profile);
 
-    auto const p = route(params, w_, l_, profile, from, to, max, dir, 100,
-                         nullptr, nullptr, elevations_, routing_algo);
+    auto p = route(params, w_, l_, profile, from, to, max, dir, 100,
+                   nullptr, nullptr, elevations_, routing_algo);
 
     auto const p1 = route(params, w_, l_, profile, from, std::vector{to}, max,
                           dir, 100, nullptr, nullptr, elevations_);
@@ -161,7 +168,221 @@ struct http_server::impl {
                        http::status::not_found));
       return;
     }
-    cb(json_response(req, to_featurecollection(w_, p)));
+
+    auto annotator = instruction_annotator{w_};
+    annotator.annotate(*p);
+
+    cb(json_response(req, to_featurecollection(w_, p, true, true, true)));
+  }
+
+  static void handle_post_test_case(web_server::http_req_t const& req,
+                                    web_server::http_res_cb_t const& cb) {
+    try {
+      auto const test_case = json::parse(req.body()).as_object();
+      json::array all_tests;
+      auto const new_name = test_case.at("name").as_string();
+
+      std::ifstream ifs(test_cases_path);
+      if (ifs.is_open()) {
+        std::string content((std::istreambuf_iterator<char>(ifs)),
+                            std::istreambuf_iterator<char>());
+        if (!content.empty()) {
+          all_tests = json::parse(content).as_array();
+        }
+        ifs.close();
+      }
+
+      bool found = false;
+      for (auto& existing_test : all_tests) {
+        if (existing_test.as_object().at("name").as_string() == new_name) {
+          existing_test = test_case; // Replace existing entry
+          found = true;
+          break;
+        }
+      }
+      if (!found) {
+        all_tests.push_back(test_case);
+      }
+
+      std::ofstream ofs(test_cases_path);
+      ofs << boost::json::serialize(all_tests);
+      ofs.close();
+      return cb(json_response(req, "Saved", http::status::ok));
+    } catch (std::exception const& e) {
+      return cb(
+          json_response(req, e.what(), http::status::internal_server_error));
+    }
+  }
+
+  static void handle_get_test_cases(web_server::http_req_t const& req,
+                                    web_server::http_res_cb_t const& cb) {
+    try {
+      std::ifstream ifs(test_cases_path);
+      if (ifs.is_open()) {
+        std::string content((std::istreambuf_iterator<char>(ifs)),
+                            std::istreambuf_iterator<char>());
+        ifs.close();
+        if (!content.empty()) {
+          return cb(json_response(req, content, http::status::ok));
+        }
+      }
+    } catch (std::exception const& e) {
+      return cb(
+          json_response(req, e.what(), http::status::internal_server_error));
+    }
+  }
+
+  static void handle_get_available_feeds(web_server::http_req_t const& req,
+                                         web_server::http_res_cb_t const& cb) {
+    try {
+      json::array feeds;
+
+      if (fs::exists(test_data_dir) && fs::is_directory(test_data_dir)) {
+        for (auto const& entry : fs::directory_iterator(test_data_dir)) {
+          if (entry.is_regular_file() && entry.path().extension() == ".pbf") {
+            feeds.push_back(entry.path().filename().c_str());
+          }
+        }
+      }
+
+      return cb(
+          json_response(req, boost::json::serialize(feeds), http::status::ok));
+    } catch (std::exception const& e) {
+      return cb(
+          json_response(req, e.what(), http::status::internal_server_error));
+    }
+  }
+
+  void handle_get_way_instruction_properties(
+      web_server::http_req_t const& req, web_server::http_res_cb_t const& cb) {
+
+    constexpr auto instruction_properties_to_json =
+        [](way_instruction_properties const& props) {
+          return boost::json::object{
+              {"highway", get_highway_name(props.get_highway())},
+              {"junction", get_junction_name(props.get_junction())},
+              {"is_link", props.is_link()},
+              {"is_footway_crossing", props.is_footway_crossing()},
+              {"lanes_forward", props.lanes_forward()},
+              {"lanes_backward", props.lanes_backward()}
+          };
+        };
+
+    try {
+      auto target = req.target();
+      auto view = boost::urls::parse_origin_form(target);
+      if (view.has_value()) {
+        auto const params = view->params();
+
+        auto const way_param_iter = params.find("way");
+        if (way_param_iter == params.end() || !(*way_param_iter).has_value) {
+          return cb(json_response(req, "Parameter mode is missing",
+                                  http::status::bad_request));
+        }
+
+        const auto osm_way_idx =
+            osm_way_idx_t{std::stoll((*way_param_iter).value)};
+        const auto way_idx = w_.find_way(osm_way_idx);
+        if (!way_idx.has_value()) {
+          return cb(json_response(req, "no mapping for given way",
+                                  http::status::bad_request));
+        }
+        return cb(
+            json_response(req,
+                          boost::json::serialize(instruction_properties_to_json(
+                              w_.way_instruction_properties_[*way_idx])),
+                          http::status::ok));
+      }
+
+      return cb(
+          json_response(req, "Parameters missing", http::status::bad_request));
+
+    } catch (std::exception const& e) {
+      return cb(
+          json_response(req, e.what(), http::status::internal_server_error));
+    }
+  }
+
+  void handle_get_traversed_node_hub(web_server::http_req_t const& req,
+                                     web_server::http_res_cb_t const& cb) {
+
+    try {
+      auto target = req.target();
+      auto view = boost::urls::parse_origin_form(target);
+
+      std::array<node_idx_t, 3> nodes_indices;
+      nodes_indices.fill(node_idx_t::invalid());
+      std::array<way_idx_t, 2> way_indices;
+      way_indices.fill(way_idx_t::invalid());
+
+      if (view.has_value()) {
+        auto const params = view->params();
+        auto const mode_param_iter = params.find("mode");
+        if (mode_param_iter == params.end() || !(*mode_param_iter).has_value) {
+          return cb(json_response(req, "Parameter mode is missing",
+                                  http::status::bad_request));
+        }
+
+        const auto m = static_cast<mode>(std::stol((*mode_param_iter).value));
+
+        for (const auto [i, node_param] :
+             utl::enumerate<std::vector<std::string>>(
+                 {"osm_prev_node", "osm_hub_node", "osm_next_node"})) {
+          const auto node_param_iter = params.find(node_param);
+          if (node_param_iter != params.end() && (*node_param_iter).has_value) {
+            osm_node_idx_t const osm_node_idx(
+                std::stoll((*node_param_iter).value));
+            if (osm_node_idx != 0U) {
+              nodes_indices[i] = w_.get_node_idx(osm_node_idx);
+            }
+          }
+        }
+
+        for (const auto [i, way_param] :
+             utl::enumerate<std::vector<std::string>>(
+                 {"osm_arrive_way", "osm_exit_way"})) {
+          const auto way_param_iter = params.find(way_param);
+          if (way_param_iter != params.end() && (*way_param_iter).has_value) {
+            osm_way_idx_t const osm_way_idx(
+                std::stoll((*way_param_iter).value));
+            if (osm_way_idx != 0U) {
+              if (const auto opt_way_idx = w_.find_way(osm_way_idx);
+                  opt_way_idx.has_value()) {
+                way_indices[i] = *opt_way_idx;
+              }
+            }
+          }
+        }
+
+        if (std::ranges::any_of(nodes_indices, [](node_idx_t const idx) {
+              return idx == node_idx_t::invalid();
+            })) {
+          return cb(json_response(req, "At least one node idx is invalid",
+                                  http::status::bad_request));
+        }
+
+        if (std::ranges::any_of(way_indices, [](way_idx_t const idx) {
+              return idx == way_idx_t::invalid();
+            })) {
+          return cb(json_response(req, "At least one way idx is invalid",
+                                  http::status::bad_request));
+        }
+
+        const auto hub = traversed_node_hub::from(
+            w_, nodes_indices[0], way_indices[0], nodes_indices[1],
+            way_indices[1], nodes_indices[2], m);
+
+        return cb(json_response(req,
+                                hub.to_json(w_),
+                                http::status::ok));
+      }
+
+      return cb(
+          json_response(req, "Parameters missing", http::status::bad_request));
+    } catch (std::exception const& e) {
+      return cb(
+          json_response(req, e.what(), http::status::internal_server_error));
+    }
   }
 
   void handle_levels(web_server::http_req_t const& req,
@@ -256,6 +477,10 @@ struct http_server::impl {
       case http::verb::options: return cb(json_response(req, {}));
       case http::verb::post: {
         auto const& target = req.target();
+        if (provide_test_features_ &&
+            target.starts_with("/api/test-framework/test-case")) {
+          return handle_post_test_case(req, cb);
+        }
         if (target.starts_with("/api/route")) {
           return run_parallel(
               [this](web_server::http_req_t const& req1,
@@ -289,7 +514,36 @@ struct http_server::impl {
                                   http::status::not_found));
         }
       }
-      case http::verb::get:
+      case http::verb::get: {
+        auto const& target = req.target();
+        if (provide_test_features_) {
+          if (target.starts_with("/api/test-framework/test-cases")) {
+            return run_parallel(
+                [this](web_server::http_req_t const& req1,
+                       web_server::http_res_cb_t const& cb1) {
+                  handle_get_test_cases(req1, cb1);
+                },
+                req, cb);
+          } else if (target.starts_with("/api/test-framework/feeds")) {
+            return handle_get_available_feeds(req, cb);
+          } else if (target.starts_with("/api/test-framework/hub")) {
+            return run_parallel(
+                [this](web_server::http_req_t const& req1,
+                       web_server::http_res_cb_t const& cb1) {
+                  handle_get_traversed_node_hub(req1, cb1);
+                },
+                req, cb);
+          } else if (target.starts_with(
+                         "/api/test-framework/instruction-properties")) {
+            return run_parallel(
+                [this](web_server::http_req_t const& req1,
+                       web_server::http_res_cb_t const& cb1) {
+                  handle_get_way_instruction_properties(req1, cb1);
+                },
+                req, cb);
+          }
+        }
+      }
       case http::verb::head: return handle_static(req, cb);
       default:
         return cb(json_response(req,
@@ -358,6 +612,7 @@ private:
   web_server server_;
   bool serve_static_files_{false};
   std::string static_file_path_;
+  bool provide_test_features_{false};
 };
 
 http_server::http_server(boost::asio::io_context& ioc,
@@ -366,8 +621,9 @@ http_server::http_server(boost::asio::io_context& ioc,
                          lookup const& l,
                          platforms const* pl,
                          elevation_storage const* elevation,
-                         std::string const& static_file_path)
-    : impl_{new impl(ioc, thread_pool, w, l, pl, elevation, static_file_path)} {
+                         std::string const& static_file_path,
+                         bool const provide_test_features)
+    : impl_{new impl(ioc, thread_pool, w, l, pl, elevation, static_file_path, provide_test_features)} {
 }
 
 http_server::~http_server() = default;
