@@ -369,6 +369,13 @@ bool intersection_module::process(ways const& w,
 
   auto& segment = *segment_context.src_ptr_;
   const auto& next_segment = *next_segment_context.src_ptr_;
+
+  if (is_roundabout_way(w, segment.way_) ||
+      is_roundabout_way(w, next_segment.way_)) {
+    trace("┃ ╚ is roundabout -> not my responsibility\n");
+    return false;
+  }
+
   trace("┃ ║  -> looking at the next two segments\n");
   if (segment.to_ != next_segment.from_) {
     trace("┃ ║ segments do not share common node\n");

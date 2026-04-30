@@ -8,6 +8,7 @@
 #include "osr/routing/instructions/directions.h"
 #include "osr/routing/instructions/modules/intersection_module.h"
 #include "osr/routing/instructions/modules/destination_module.h"
+#include "osr/routing/instructions/modules/roundabout_module.h"
 
 namespace osr {
 
@@ -15,6 +16,7 @@ instruction_annotator::instruction_annotator(ways const& w)
   : ways_(w)
   {
     add_module(std::make_unique<destination_module>());
+    add_module(std::make_unique<roundabout_module>());
     add_module(std::make_unique<intersection_module>());
   }
 

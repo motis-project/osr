@@ -16,4 +16,13 @@ bool ways_have_same_name(way_idx_t const w1, way_idx_t const w2, ways const& w) 
   return s1 == s2;
 }
 
+bool is_roundabout_way(ways const& w, way_idx_t const way) {
+  if (way == way_idx_t::invalid()) {
+    return false;
+  }
+  const auto junction = w.way_instruction_properties_[way].get_junction();
+  return junction == junction::roundabout ||
+         junction == junction::circular;
+}
+
 } // namespace osr
