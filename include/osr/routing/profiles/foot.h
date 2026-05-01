@@ -17,7 +17,6 @@ struct sharing_data;
 template <bool IsWheelchair, typename Tracking = noop_tracking>
 struct foot {
   static constexpr auto const kMaxMatchDistance = 100U;
-  static constexpr auto const kMaxWheelchairGradient = 0.0833F;
 
   struct parameters {
     using profile_t = foot<IsWheelchair, Tracking>;
@@ -244,7 +243,6 @@ struct foot {
           auto const grad =
               dist > 0U ? static_cast<float>(dx) / static_cast<float>(dist)
                         : 0.F;
-          if (IsWheelchair && std::abs(grad) > kMaxWheelchairGradient) return;
 
           // tobler's hiking function
           auto const tobler_speed =
