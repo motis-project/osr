@@ -4,18 +4,16 @@
 #include "osr/types.h"
 
 using namespace osr;
-
-static float factor(float dist, elevation_storage::elevation e = {}, bool  exist = true) {
-  auto const dx = std::max(to_idx(e.up_), to_idx(e.down_));
-  auto const grad = dist > 0U ? static_cast<float>(dx) / static_cast<float>(dist) : 0.F;
-  return  std::exp(-3.5F * std::abs(grad + (!exist ? 0 : 0.05F)));
-}
-
-// tobler_speed = speed * exp(-3.5 * |grad + (0.05 ? has_elevation : 0)|)
-// formula: penalty = dist/tobler_speed - dist/base_speed
-
 using elevation = elevation_storage::elevation;
 using mono = elevation_monotonic_t;
+
+
+// tobler_speed = speed * exp(-3.5 * |grad + (0.05 ? has_elevation : 0)|)
+static float factor(float dist, elevation e = {}, bool  exist = true) {
+  auto const dx = std::max(to_idx(e.up_), to_idx(e.down_));
+  auto const grad = dist > 0U ? static_cast<float>(dx) / static_cast<float>(dist) : 0.F;
+  return std::exp(-3.5F * std::abs(grad + (!exist ? 0 : 0.05F)));
+}
 
 TEST(elevation_cost, no_storage_zero_cost) {
   auto f = factor(100.F, {}, false);
