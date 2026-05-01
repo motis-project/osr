@@ -236,9 +236,7 @@ struct foot {
           }();
 
           // assumes elevation is dominated in one direction
-          auto const dx = to_idx(elevation.up_) > to_idx(elevation.down_)
-                              ? static_cast<int>(to_idx(elevation.up_))
-                              : -static_cast<int>(to_idx(elevation.down_));
+          auto const dx = std::max(to_idx(elevation.up_), to_idx(elevation.down_));
 
           auto const grad =
               dist > 0U ? static_cast<float>(dx) / static_cast<float>(dist)
