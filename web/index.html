@@ -1308,13 +1308,8 @@
         const arrivalPath = drawLineInSvg(svg, cx, cy + len, cx, cy, pathColor, 6);
         addWaySegmentTooltip(data.arrive_hub_on, arrivalPath);
 
-        // // 2. Draw Main Exit
-        const exitPos = getXY(data.exit_angle);
-        const exitPath = drawLineInSvg(svg, cx, cy, exitPos.x, exitPos.y, pathColor, 6);
-        addWaySegmentTooltip(data.exit_from_hub, exitPath);
-
         // 3. Draw Alternatives (Relative to the Exit Angle)
-        const drawAlt = (alt, color) => {
+        const drawAlt = (alt, color, isExit) => {
             if (alt.is_opposite_of_arrive) {
                 return;
             }
@@ -1325,13 +1320,15 @@
             const can_enter_hub = alt.can_enter_hub;
             const can_exit_hub = alt.can_exit_hub;
 
-            const strokeColor = can_exit_hub ? color : (can_enter_hub ? '#d78b13' : '#ef4444');
-            const altPath = drawLineInSvg(svg, cx, cy, pos.x, pos.y, strokeColor, 3);
+            const strokeColor = isExit ? pathColor : (can_exit_hub ? color : (can_enter_hub ? '#d78b13' : '#ef4444'));
+            const altPath = drawLineInSvg(svg, cx, cy, pos.x, pos.y, strokeColor, isExit ? 6 : 3);
             addWaySegmentTooltip(alt, altPath);
         };
+        console.log(data.alternatives.entries());
 
-        data.alts_left.forEach(a => drawAlt(a, '#000000'));
-        data.alts_right.forEach(a => drawAlt(a, '#000000'));
+        for (const [index, alternative] of data.alternatives.entries()) {
+            drawAlt(alternative, '#000000', index === data.exit_from_hub_idx);
+        }
 
         let centerDot = svg.querySelector('.center-dot');
         if (!centerDot) {

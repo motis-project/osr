@@ -63,7 +63,7 @@ void set_segment_instruction(path::segment& seg,
 
 bool is_simple_u_turn(hub_t const& hub) {
   const auto& arrive_on = hub.arrive_hub_on_;
-  const auto& exit_on = hub.exit_from_hub_;
+  const auto& exit_on = hub.get_exit().segment_;
 
   return arrive_on.way_idx_ == exit_on.way_idx_ &&
          (arrive_on.is_way_aligned() ^ exit_on.is_way_aligned());
@@ -71,23 +71,18 @@ bool is_simple_u_turn(hub_t const& hub) {
 
 unsigned long number_of_possible_turns(hub_t const& hub) {
   constexpr auto is_possible = [](relative_way_segment_t const& rel_seg) {
-    return rel_seg.can_exit_hub_ && !rel_seg.is_opposite_of_arrive_;
+    return rel_seg.can_exit_hub_;
   };
-  const auto count_left = std::ranges::count_if(hub.alts_left_, is_possible);
-  const auto count_right = std::ranges::count_if(hub.alts_right_, is_possible);
-  return static_cast<unsigned>(count_left + count_right + 1); // +1 because of the actual exit
+  // drop because we omit the u-turn
+  const auto count = std::ranges::count_if(
+      hub.alternatives_ | std::views::drop(1), is_possible);
+  return static_cast<unsigned>(count);
 }
 
 unsigned long number_of_visible_turns(hub_t const& hub) {
   // This is simply #alternatives + 1, and eventually -1 if the
   // u-turn alternative is possible
-  // TODO This count can be combined with number_of_possible_turns
-  constexpr auto is_visible = [](relative_way_segment_t const& rel_seg) {
-    return !rel_seg.is_opposite_of_arrive_;
-  };
-  const auto count_left = std::ranges::count_if(hub.alts_left_, is_visible);
-  const auto count_right = std::ranges::count_if(hub.alts_right_, is_visible);
-  return static_cast<unsigned>(count_left + count_right + 1);
+  return static_cast<unsigned>(hub.alternatives_.size() - 1);
 }
 
 bool is_more_important_by(highway const h1,
@@ -98,17 +93,21 @@ bool is_more_important_by(highway const h1,
 
 std::optional<traversed_node_hub::relative_way_segment> get_next_alternative(
     hub_t const& hub, bool const to_left) {
-  const auto& neighbors = to_left ? hub.alts_left_ : hub.alts_right_;
-  return neighbors.empty() ? std::nullopt
-                           : std::make_optional(neighbors.front());
+  const auto neighbors = hub.get_exit_neighbors(to_left);
+  if (neighbors.empty()) {
+    return std::nullopt;
+  }
+
+  return to_left ? neighbors.back() : neighbors.front();
 }
 
 unsigned long number_of_possible_turns_at(hub_t const& hub, bool const left) {
   constexpr auto is_possible = [](relative_way_segment_t const& rel_seg) {
-    return rel_seg.can_exit_hub_ && !rel_seg.is_opposite_of_arrive_;
+    return rel_seg.can_exit_hub_;
   };
-  const auto count = std::ranges::count_if(
-      left ? hub.alts_left_ : hub.alts_right_, is_possible);
+
+  const auto count =
+      std::ranges::count_if(hub.get_exit_neighbors(left), is_possible);
   return static_cast<unsigned>(count);
 }
 
@@ -130,10 +129,10 @@ std::optional<relative_way_segment_t> get_other_continue(
     }
   };
 
-  for (auto const& alt : hub.alts_left_) {
+  for (auto const& alt : hub.get_exit_neighbors(true)) {
     consider(alt);
   }
-  for (auto const& alt : hub.alts_right_) {
+  for (auto const& alt : hub.get_exit_neighbors(false)) {
     consider(alt);
   }
 
@@ -143,9 +142,9 @@ std::optional<relative_way_segment_t> get_other_continue(
 bool outgoing_edges_are_slower_by_factor(ways const& w,
                                          hub_t const& hub,
                                          double const factor) {
-  auto const chosen_speed =
-      static_cast<double>(w.r_->way_properties_[hub.exit_from_hub_.way_idx_]
-                              .max_speed_km_per_h());
+  auto const chosen_speed = static_cast<double>(
+      w.r_->way_properties_[hub.get_exit().segment_.way_idx_]
+          .max_speed_km_per_h());
   if (chosen_speed <= 0.0) {
     return false;
   }
@@ -154,7 +153,7 @@ bool outgoing_edges_are_slower_by_factor(ways const& w,
     return alt.can_exit_hub_ && !alt.is_opposite_of_arrive_;
   };
 
-  for (auto const& alt : hub.alts_left_) {
+  for (auto const& alt : hub.get_exit_neighbors(true)) {
     if (!is_relevant(alt)) {
       continue;
     }
@@ -165,7 +164,7 @@ bool outgoing_edges_are_slower_by_factor(ways const& w,
     }
   }
 
-  for (auto const& alt : hub.alts_right_) {
+  for (auto const& alt : hub.get_exit_neighbors(true)) {
     if (!is_relevant(alt)) {
       continue;
     }
@@ -206,7 +205,8 @@ instruction_action handle_real_turn(ways const& w,
   const relative_direction next_seg_rel_dir = seg_context.relative_direction_;
   const auto& common_node_hub = seg_context.traversed_node_hub_.value();
 
-  trace("┃ ║ handling real turn (exit_angle={})\n", common_node_hub.exit_angle_);
+  trace("┃ ║ handling real turn (exit_angle={})\n",
+        common_node_hub.get_exit().angle_with_arrive_);
   utl::verify(is_real_turn(next_seg_rel_dir), "Not a real turn");
 
   auto& segment = *seg_context.src_ptr_;
@@ -263,7 +263,7 @@ instruction_action handle_slight_turn(ways const& w,
   const auto& common_node_hub = seg_context.traversed_node_hub_.value();
 
   trace("┃ ║ handling slight turn (exit_angle={})\n",
-        common_node_hub.exit_angle_);
+        common_node_hub.get_exit().angle_with_arrive_);
   utl::verify(of_slight_type(next_seg_rel_dir), "Not a slight turn");
 
   auto& segment = *seg_context.src_ptr_;
@@ -287,7 +287,7 @@ instruction_action handle_slight_turn(ways const& w,
         "= {}\n",
         other_continue->segment_.way_idx_, other_continue->angle_with_arrive_);
 
-    auto const delta = common_node_hub.exit_angle_;
+    auto const delta = common_node_hub.get_exit().angle_with_arrive_;
     auto const other_delta = other_continue->angle_with_arrive_;
 
     if (std::abs(delta) < std::abs(other_delta) && !leaving_current_street) {

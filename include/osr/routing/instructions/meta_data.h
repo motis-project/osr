@@ -48,7 +48,25 @@ struct traversed_node_hub {
                                  way_idx_t depart_way, node_idx_t next_node,
                                  mode m);
 
+
+
   void print(std::ostream& out, ways const& w) const;
+
+  relative_way_segment get_exit() const;
+
+  auto get_exit_neighbors(bool left) const {
+    if (left) {
+      // From index 1 (omit u-turn) to exit_from_hub_idx_ (exclusive)
+      return std::ranges::subrange(
+          alternatives_.begin() + 1,
+          alternatives_.begin() + static_cast<long>(exit_from_hub_idx_));
+    } else {
+      // From index exit_from_hub_idx_ + 1 to the end
+      return std::ranges::subrange(
+          alternatives_.begin() + static_cast<long>(exit_from_hub_idx_) + 1,
+          alternatives_.end());
+    }
+  }
 
   bool is_exit_natural_choice(ways const& w) const;
 
@@ -56,12 +74,8 @@ struct traversed_node_hub {
 
   way_segment arrive_hub_on_;
   node_idx_t hub_node_;
-
-  double exit_angle_;
-  way_segment exit_from_hub_;
-
-  std::vector<relative_way_segment> alts_left_{};
-  std::vector<relative_way_segment> alts_right_{};
+  std::vector<relative_way_segment> alternatives_{};
+  size_t exit_from_hub_idx_;
 };
 
 struct segment_context {
