@@ -23,18 +23,16 @@ namespace fs = std::filesystem;
 using namespace osr;
 
 TEST(extract, wa) {
-  auto p = fs::path{"/tmp/osr_test"};
+  auto p = fs::temp_directory_path() / "osr_test";
   auto ec = std::error_code{};
   fs::remove_all(p, ec);
   fs::create_directories(p, ec);
 
-  constexpr auto const kTestDir = "/tmp/osr_test";
-  osr::extract(false, "test/map.osm", kTestDir,
-               "test/restriction_test_elevation/");
+  osr::extract(false, "test/map.osm", p, "test/restriction_test_elevation/");
 
-  auto w = osr::ways{"/tmp/osr_test", cista::mmap::protection::READ};
-  auto l = osr::lookup{w, "/tmp/osr_test", cista::mmap::protection::READ};
-  auto const elevations = elevation_storage::try_open(kTestDir);
+  auto w = osr::ways{p, cista::mmap::protection::READ};
+  auto l = osr::lookup{w, p, cista::mmap::protection::READ};
+  auto const elevations = elevation_storage::try_open(p);
   ASSERT_TRUE(elevations);
 
   auto const n = w.find_node_idx(osm_node_idx_t{528944});
@@ -49,13 +47,18 @@ TEST(extract, wa) {
   auto const to = location{w.get_node_pos(*n_dst), kNoLevel};
   constexpr auto const kMaxCost = cost_t{3600};
   constexpr auto const kMaxMatchDistance = 100;
-  auto const route_no_costs = route(
-      w, l, search_profile::kBike, from, to, kMaxCost, direction::kForward,
-      kMaxMatchDistance, nullptr, nullptr, elevations.get());
-  auto const route_high_costs =
-      route(w, l, search_profile::kBikeElevationHigh, from, to, kMaxCost,
+  constexpr auto const kParamsNoCosts =
+      bike<bike_costing::kSafe, kElevationNoCost>::parameters{};
+  constexpr auto const kParamsHighCosts =
+      bike<bike_costing::kSafe, kElevationHighCost>::parameters{};
+  auto const route_no_costs =
+      route(kParamsNoCosts, w, l, search_profile::kBike, from, to, kMaxCost,
             direction::kForward, kMaxMatchDistance, nullptr, nullptr,
             elevations.get());
+  auto const route_high_costs =
+      route(kParamsHighCosts, w, l, search_profile::kBikeElevationHigh, from,
+            to, kMaxCost, direction::kForward, kMaxMatchDistance, nullptr,
+            nullptr, elevations.get());
 
   auto const is_restricted = w.r_->is_restricted<osr::direction::kForward>(
       n.value(), w.r_->get_way_pos(n.value(), rhoenring.value()),

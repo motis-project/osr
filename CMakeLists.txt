@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.10)
-project(osr)
+project(osr LANGUAGES C CXX ASM)
 
 cmake_policy(SET CMP0079 NEW)
 
@@ -62,6 +62,7 @@ if (OSR_LINT)
     include(cmake/clang-tidy.cmake)
 endif ()
 
+set(CMAKE_COMPILE_WARNING_AS_ERROR ON)
 if ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "Clang")
     set(osr-compile-options
             -Weverything
@@ -89,20 +90,21 @@ if ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "Clang")
             -Wno-ctad-maybe-unsupported
             -Wno-unknown-pragmas
             -Wno-switch-default
-            -Werror)
+            -Wno-nrvo
+            -Wno-thread-safety-negative
+            -Wno-unused-private-field
+            -Wno-unknown-attributes)
 elseif ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "AppleClang")
-    set(osr-compile-options -Wall -Wextra -Werror -Wno-unknown-pragmas)
+    set(osr-compile-options -Wall -Wextra -Wno-unknown-pragmas)
 elseif (MSVC)
-    set(osr-compile-options /WX)
+    # Will create more than 65,279 sections in debug mode
+    set(osr-compile-options /bigobj)
 else ()
     set(osr-compile-options
             -Wall
             -Wextra
             -Wno-changes-meaning
             -Wno-maybe-uninitialized)
-    if (NOT CMAKE_CROSSCOMPILING)
-        set(osr-compile-options ${osr-compile-options} -Werror)
-    endif ()
 endif ()
 
 # --- LIB ---
@@ -123,6 +125,7 @@ target_link_libraries(osr
         rtree
         unordered_dense
         boost-thread
+        boost-iostreams
 )
 
 # --- MAIN ---
@@ -145,12 +148,13 @@ configure_file(
 file(GLOB_RECURSE osr-test-files test/*cc)
 add_executable(osr-test ${osr-test-files})
 target_include_directories(osr-test PRIVATE ${CMAKE_CURRENT_BINARY_DIR}/generated)
-target_link_libraries(osr-test gtest osr boost-json)
+target_link_libraries(osr-test gmock osr boost-json)
 
 # --- MIMALLOC ---
 if (OSR_MIMALLOC)
     target_link_libraries(osr-extract ${osr-mimalloc-lib})
     target_link_libraries(osr-backend ${osr-mimalloc-lib})
+    target_link_libraries(osr-test ${osr-mimalloc-lib})
     if (WIN32)
         add_custom_command(
                 TARGET osr-extract POST_BUILD

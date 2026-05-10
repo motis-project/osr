@@ -20,4 +20,11 @@ TEST(osr, level) {
 
   auto const lvl_minus_3 = level_t{-3.0F}.to_float();
   EXPECT_EQ(-3.0F, lvl_minus_3);
+
+  // Test if level has actual level
+  EXPECT_TRUE(level_t{0.0F}.has_level());
+
+  auto const lvl_no_level = level_t{kNoLevel};
+  EXPECT_FALSE(lvl_no_level.has_level());
+  EXPECT_EQ(0.0F, lvl_no_level.to_float());  // Special case
 }

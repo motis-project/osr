@@ -17,6 +17,7 @@
 #include "osmium/osm/way.hpp"
 
 #include "cista/memory_holder.h"
+#include "cista/reflection/comparable.h"
 
 #include "utl/enumerate.h"
 #include "utl/equal_ranges_linear.h"
@@ -27,6 +28,7 @@
 #include "utl/zip.h"
 
 #include "osr/point.h"
+#include "osr/routing/turns.h"
 #include "osr/types.h"
 #include "osr/util/multi_counter.h"
 
@@ -36,35 +38,67 @@ struct resolved_restriction {
   enum class type { kNo, kOnly } type_;
   way_idx_t from_, to_;
   node_idx_t via_;
+  bool applies_to_bus_{true};
 };
 
 struct restriction {
   friend bool operator==(restriction, restriction) = default;
-  way_pos_t from_, to_;
+
+  template <std::size_t NMaxTypes>
+  friend constexpr auto static_type_hash(
+      restriction const*, cista::hash_data<NMaxTypes> h) noexcept {
+    return h.combine(cista::hash("restriction v1.1"));
+  }
+
+  template <typename Ctx>
+  friend void serialize(Ctx&, restriction const*, cista::offset_t) {}
+
+  template <typename Ctx>
+  friend void deserialize(Ctx const&, restriction*) {}
+
+  way_pos_t from_ : 4;
+  way_pos_t to_ : 4;
+  way_pos_t applies_to_bus_ : 1;
 };
 
 struct way_properties {
   constexpr bool is_accessible() const {
-    return is_car_accessible() || is_bike_accessible() || is_foot_accessible();
+    return is_car_accessible() || is_bike_accessible() ||
+           is_foot_accessible() || is_bus_accessible() ||
+           is_bus_accessible_with_penalty() || is_railway_accessible() ||
+           is_railway_accessible_with_penalty() || is_ferry_accessible();
   }
   constexpr bool is_car_accessible() const { return is_car_accessible_; }
   constexpr bool is_bike_accessible() const { return is_bike_accessible_; }
   constexpr bool is_foot_accessible() const { return is_foot_accessible_; }
+  constexpr bool is_bus_accessible() const { return is_bus_accessible_; }
+  constexpr bool is_bus_accessible_with_penalty() const {
+    return is_bus_accessible_with_penalty_;
+  }
+  constexpr bool is_railway_accessible() const {
+    return is_railway_accessible_;
+  }
+  constexpr bool is_railway_accessible_with_penalty() const {
+    return is_railway_accessible_with_penalty_;
+  }
+  constexpr bool is_ferry_accessible() const { return is_ferry_accessible_; }
   constexpr bool is_big_street() const { return is_big_street_; }
   constexpr bool is_destination() const { return is_destination_; }
   constexpr bool is_oneway_car() const { return is_oneway_car_; }
   constexpr bool is_oneway_bike() const { return is_oneway_bike_; }
+  constexpr bool is_oneway_bus_psv() const { return is_oneway_bus_psv_; }
   constexpr bool is_elevator() const { return is_elevator_; }
   constexpr bool is_steps() const { return is_steps_; }
   constexpr bool is_ramp() const { return is_ramp_; }
   constexpr bool is_parking() const { return is_parking_; }
   constexpr bool has_toll() const { return has_toll_; }
   constexpr bool is_sidewalk_separate() const { return is_sidewalk_separate_; }
-  constexpr std::uint16_t max_speed_m_per_s() const {
-    return to_meters_per_second(static_cast<speed_limit>(speed_limit_));
-  }
+  constexpr bool in_route() const { return in_route_; }
   constexpr std::uint16_t max_speed_km_per_h() const {
     return to_kmh(static_cast<speed_limit>(speed_limit_));
+  }
+  constexpr float max_speed_s_per_m() const {
+    return to_seconds_per_meter(static_cast<speed_limit>(speed_limit_));
   }
   constexpr level_t from_level() const { return level_t{from_level_}; }
   constexpr level_t to_level() const { return level_t{to_level_}; }
@@ -72,7 +106,7 @@ struct way_properties {
   template <std::size_t NMaxTypes>
   friend constexpr auto static_type_hash(
       way_properties const*, cista::hash_data<NMaxTypes> h) noexcept {
-    return h.combine(cista::hash("way_properties v1"));
+    return h.combine(cista::hash("way_properties v1.1"));
   }
 
   template <typename Ctx>
@@ -81,37 +115,49 @@ struct way_properties {
   template <typename Ctx>
   friend void deserialize(Ctx const&, way_properties*) {}
 
-  bool is_foot_accessible_ : 1;
-  bool is_bike_accessible_ : 1;
-  bool is_car_accessible_ : 1;
-  bool is_destination_ : 1;
-  bool is_oneway_car_ : 1;
-  bool is_oneway_bike_ : 1;
-  bool is_elevator_ : 1;
-  bool is_steps_ : 1;
+  std::uint8_t is_foot_accessible_ : 1;
+  std::uint8_t is_bike_accessible_ : 1;
+  std::uint8_t is_car_accessible_ : 1;
+  std::uint8_t is_destination_ : 1;
+  std::uint8_t is_oneway_car_ : 1;
+  std::uint8_t is_oneway_bike_ : 1;
+  std::uint8_t is_elevator_ : 1;
+  std::uint8_t is_steps_ : 1;
 
   std::uint8_t speed_limit_ : 3;
-
-  std::uint8_t from_level_ : 5;
-  std::uint8_t to_level_ : 5;
-
   std::uint8_t is_platform_ : 1;  // only used during extract
-  bool is_parking_ : 1;
+  std::uint8_t is_parking_ : 1;
+  std::uint8_t is_ramp_ : 1;
+  std::uint8_t is_sidewalk_separate_ : 1;
+  std::uint8_t motor_vehicle_no_ : 1;
 
-  bool is_ramp_ : 1;
-  bool is_sidewalk_separate_ : 1;
-  bool motor_vehicle_no_ : 1;
-  bool has_toll_ : 1;
-  bool is_big_street_ : 1;
+  std::uint8_t from_level_ : 6;
+  std::uint8_t has_toll_ : 1;
+  std::uint8_t is_big_street_ : 1;
+
+  std::uint8_t to_level_ : 6;
+  std::uint8_t is_bus_accessible_ : 1;
+  std::uint8_t in_route_ : 1;
+
+  std::uint8_t is_railway_accessible_ : 1;
+  std::uint8_t is_oneway_bus_psv_ : 1;
+  std::uint8_t is_incline_down_ : 1;
+  std::uint8_t is_bus_accessible_with_penalty_ : 1;
+  std::uint8_t is_ferry_accessible_ : 1;
+  std::uint8_t is_railway_accessible_with_penalty_ : 1;
   std::uint8_t importance_ : 3;  // only used during extract
 };
 
-static_assert(sizeof(way_properties) == 4);
+static_assert(sizeof(way_properties) == 6);
 
 struct node_properties {
   constexpr bool is_car_accessible() const { return is_car_accessible_; }
   constexpr bool is_bike_accessible() const { return is_bike_accessible_; }
   constexpr bool is_walk_accessible() const { return is_foot_accessible_; }
+  constexpr bool is_bus_accessible() const { return is_bus_accessible_; }
+  constexpr bool is_bus_accessible_with_penalty() const {
+    return is_bus_accessible_with_penalty_;
+  }
   constexpr bool is_elevator() const { return is_elevator_; }
   constexpr bool is_multi_level() const { return is_multi_level_; }
   constexpr bool is_entrance() const { return is_entrance_; }
@@ -133,21 +179,23 @@ struct node_properties {
   template <typename Ctx>
   friend void deserialize(Ctx const&, node_properties*) {}
 
-  std::uint8_t from_level_ : 5;
+  std::uint8_t from_level_ : 6;
+  std::uint8_t is_foot_accessible_ : 1;
+  std::uint8_t is_bike_accessible_ : 1;
 
-  bool is_foot_accessible_ : 1;
-  bool is_bike_accessible_ : 1;
-  bool is_car_accessible_ : 1;
-  bool is_elevator_ : 1;
-  bool is_entrance_ : 1;
-  bool is_multi_level_ : 1;
-  bool is_parking_ : 1;
+  std::uint8_t is_car_accessible_ : 1;
+  std::uint8_t is_bus_accessible_ : 1;
+  std::uint8_t is_elevator_ : 1;
+  std::uint8_t is_entrance_ : 1;
+  std::uint8_t is_multi_level_ : 1;
+  std::uint8_t is_parking_ : 1;
 
-  std::uint8_t to_level_ : 5;
+  std::uint8_t to_level_ : 6;
+  std::uint8_t is_bus_accessible_with_penalty_ : 1;
   std::uint8_t importance_ : 3;
 };
 
-static_assert(sizeof(node_properties) == 3);
+static_assert(sizeof(node_properties) == 4);
 
 struct ways {
   ways(std::filesystem::path, cista::mmap::protection);
@@ -155,6 +203,7 @@ struct ways {
   void add_restriction(std::vector<resolved_restriction>&);
   void compute_big_street_neighbors();
   void connect_ways();
+  void compute_turn_bearings();
   void build_components_and_importance();
 
   std::optional<way_idx_t> find_way(osm_way_idx_t const i) {
@@ -188,6 +237,9 @@ struct ways {
   point get_node_pos(node_idx_t const i) const {
     return r_->node_positions_.at(i);
   }
+
+  std::size_t get_polyline_node_idx(
+      way_idx_t const way, std::uint16_t const target_routing_idx) const;
 
   cista::mmap mm(char const* file) {
     return cista::mmap{(p_ / file).generic_string().c_str(), mode_};
@@ -231,44 +283,91 @@ struct ways {
       return 0U;
     }
 
-    template <direction SearchDir>
+    template <direction SearchDir, bool IsBus = false>
     bool is_restricted(node_idx_t const n,
                        std::uint8_t const from,
                        std::uint8_t const to) const {
       if (!node_is_restricted_[n]) {
         return false;
       }
+
       auto const r = node_restrictions_[n];
-      auto const needle = SearchDir == direction::kForward
-                              ? restriction{from, to}
-                              : restriction{to, from};
-      return utl::find(r, needle) != end(r);
+      auto const from_way =
+          SearchDir == direction::kForward ? way_pos_t{from} : way_pos_t{to};
+      auto const to_way =
+          SearchDir == direction::kForward ? way_pos_t{to} : way_pos_t{from};
+
+      return utl::any_of(r, [&](restriction const& x) {
+        if constexpr (IsBus) {
+          return x.from_ == from_way && x.to_ == to_way && x.applies_to_bus_;
+        } else {
+          return x.from_ == from_way && x.to_ == to_way;
+        }
+      });
     }
 
+    template <bool IsBus = false>
     bool is_restricted(node_idx_t const n,
                        std::uint8_t const from,
                        std::uint8_t const to,
                        direction const search_dir) const {
       return search_dir == direction::kForward
-                 ? is_restricted<direction::kForward>(n, from, to)
-                 : is_restricted<direction::kBackward>(n, from, to);
+                 ? is_restricted<direction::kForward, IsBus>(n, from, to)
+                 : is_restricted<direction::kBackward, IsBus>(n, from, to);
     }
 
     bool is_loop(way_idx_t const w) const {
       return way_nodes_[w].back() == way_nodes_[w].front();
     }
 
+    distance_t get_way_node_distance(way_idx_t const way,
+                                     std::uint16_t const node) const {
+      auto const v = way_node_dist_[way][node];
+      if (v != std::numeric_limits<std::uint16_t>::max()) {
+        [[likely]] return distance_t{v};
+      } else {
+        auto const it = std::lower_bound(begin(long_way_node_dist_),
+                                         end(long_way_node_dist_),
+                                         long_distance{way, node, 0U});
+        if (it != end(long_way_node_dist_) && it->way_ == way &&
+            it->node_ == node) {
+          return it->distance_;
+        }
+        throw utl::fail("long distance not found for way {} node {}",
+                        to_idx(way), node);
+      }
+    }
+
+    quantized_angle_t get_turn_angle(node_idx_t const n,
+                                     way_pos_t const from,
+                                     direction const from_dir,
+                                     way_pos_t const to,
+                                     direction const to_dir) const {
+      return osr::get_turn_angle(node_turn_bearings_[n][from], from_dir,
+                                 node_turn_bearings_[n][to], to_dir);
+    }
+
     static cista::wrapped<routing> read(std::filesystem::path const&);
     void write(std::filesystem::path const&) const;
+
+    struct long_distance {
+      CISTA_COMPARABLE()
+
+      way_idx_t way_{};
+      std::uint16_t node_{};
+      distance_t distance_{};
+    };
 
     vec_map<node_idx_t, node_properties> node_properties_;
     vec_map<way_idx_t, way_properties> way_properties_;
 
     vecvec<way_idx_t, node_idx_t> way_nodes_;
     vecvec<way_idx_t, std::uint16_t> way_node_dist_;
+    vec<long_distance> long_way_node_dist_;
 
     vecvec<node_idx_t, way_idx_t> node_ways_;
     vecvec<node_idx_t, std::uint16_t> node_in_way_idx_;
+    vecvec<node_idx_t, turn_bearing> node_turn_bearings_;
 
     bitvec<node_idx_t> node_is_restricted_;
     vecvec<node_idx_t, restriction> node_restrictions_;

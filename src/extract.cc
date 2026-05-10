@@ -98,7 +98,7 @@ speed_limit get_speed_limit(tags const& t) {
         static_cast<unsigned>(utl::parse<unsigned>(t.max_speed_) * 0.9));
   } else {
     switch (cista::hash(t.highway_)) {
-      case cista::hash("motorway"): return get_speed_limit(90);
+      case cista::hash("motorway"): return get_speed_limit(100);
       case cista::hash("motorway_link"): return get_speed_limit(45);
       case cista::hash("trunk"): return get_speed_limit(85);
       case cista::hash("trunk_link"): return get_speed_limit(40);
@@ -109,15 +109,25 @@ speed_limit get_speed_limit(tags const& t) {
         return t.name_.empty() ? get_speed_limit(80) : get_speed_limit(60);
       case cista::hash("secondary_link"): return get_speed_limit(25);
       case cista::hash("tertiary"):
-        return t.name_.empty() ? get_speed_limit(70) : get_speed_limit(40);
+        return t.name_.empty() ? get_speed_limit(60) : get_speed_limit(40);
       case cista::hash("tertiary_link"): return get_speed_limit(20);
       case cista::hash("unclassified"): return get_speed_limit(40);
-      case cista::hash("residential"): return get_speed_limit(30);
+      case cista::hash("residential"): return get_speed_limit(20);
       case cista::hash("living_street"): return get_speed_limit(10);
-      case cista::hash("service"): return get_speed_limit(15);
+      case cista::hash("service"): return get_speed_limit(20);
       case cista::hash("track"): return get_speed_limit(12);
       case cista::hash("path"): return get_speed_limit(13);
-      default: return speed_limit::kmh_10;
+      case cista::hash("bus_guideway"):
+      case cista::hash("busway"): return get_speed_limit(50);
+      default:
+        switch (cista::hash(t.railway_)) {
+          case cista::hash("rail"):
+          case cista::hash("narrow_gauge"): return get_speed_limit(80);
+          case cista::hash("light_rail"): return get_speed_limit(50);
+          case cista::hash("subway"): return get_speed_limit(50);
+          case cista::hash("tram"): return get_speed_limit(30);
+          default: return speed_limit::kmh_10;
+        }
     }
   }
 }
@@ -133,23 +143,28 @@ std::tuple<level_t, level_t, bool> get_levels(tags const& t) {
   return get_levels(t.has_level_, t.level_bits_);
 }
 
-way_properties get_way_properties(tags const& t) {
+way_properties get_way_properties(
+    tags const& t, osm_obj_type const obj_type = osm_obj_type::kWay) {
   auto const [from, to, _] = get_levels(t);
   auto p = way_properties{};
   std::memset(&p, 0, sizeof(way_properties));
-  p.is_foot_accessible_ = is_accessible<foot_profile>(t, osm_obj_type::kWay);
-  p.is_bike_accessible_ = is_accessible<bike_profile>(t, osm_obj_type::kWay);
-  p.is_car_accessible_ = is_accessible<car_profile>(t, osm_obj_type::kWay);
+  p.is_foot_accessible_ = is_accessible<foot_profile>(t, obj_type);
+  p.is_bike_accessible_ = is_accessible<bike_profile>(t, obj_type);
+  p.is_car_accessible_ = is_accessible<car_profile>(t, obj_type);
+  p.is_bus_accessible_ = is_accessible<bus_profile>(t, obj_type);
+  p.is_railway_accessible_ = is_accessible<railway_profile>(t, obj_type);
   p.is_destination_ = t.is_destination_;
   p.is_oneway_car_ = t.oneway_;
   p.is_oneway_bike_ = t.oneway_ && !t.not_oneway_bike_;
+  p.is_oneway_bus_psv_ = t.oneway_ && !t.not_oneway_bus_psv_;
   p.is_elevator_ = t.is_elevator_;
   p.is_steps_ = (t.highway_ == "steps"sv);
   p.is_parking_ = t.is_parking_;
   p.speed_limit_ = get_speed_limit(t);
   p.from_level_ = to_idx(from);
   p.to_level_ = to_idx(to);
-  p.is_platform_ = t.is_platform_;
+  p.is_incline_down_ = t.is_incline_down_;
+  p.is_platform_ = t.is_platform();
   p.is_ramp_ = t.is_ramp_;
   p.is_sidewalk_separate_ = t.sidewalk_separate_;
   p.motor_vehicle_no_ =
@@ -157,6 +172,12 @@ way_properties get_way_properties(tags const& t) {
   p.has_toll_ = t.toll_;
   p.importance_ = get_importance(t);
   p.is_big_street_ = is_big_street(p.importance_);
+  p.in_route_ = t.is_route_ && t.is_public_transport_route();
+  p.is_bus_accessible_with_penalty_ =
+      is_accessible_with_penalty<bus_profile>(t, obj_type);
+  p.is_ferry_accessible_ = is_accessible<ferry_profile>(t, obj_type);
+  p.is_railway_accessible_with_penalty_ =
+      is_accessible_with_penalty<railway_profile>(t, obj_type);
   return p;
 }
 
@@ -168,11 +189,14 @@ std::pair<node_properties, level_bits_t> get_node_properties(tags const& t) {
   p.is_foot_accessible_ = is_accessible<foot_profile>(t, osm_obj_type::kNode);
   p.is_bike_accessible_ = is_accessible<bike_profile>(t, osm_obj_type::kNode);
   p.is_car_accessible_ = is_accessible<car_profile>(t, osm_obj_type::kNode);
+  p.is_bus_accessible_ = is_accessible<bus_profile>(t, osm_obj_type::kNode);
   p.is_elevator_ = t.is_elevator_;
   p.is_entrance_ = t.is_entrance_;
   p.is_multi_level_ = is_multi;
   p.is_parking_ = t.is_parking_;
   p.to_level_ = to_idx(to);
+  p.is_bus_accessible_with_penalty_ =
+      is_accessible_with_penalty<bus_profile>(t, osm_obj_type::kNode);
   p.importance_ = 0;
   return {p, t.level_bits_};
 }
@@ -236,13 +260,18 @@ struct way_handler : public osm::handler::Handler {
 
     if (!t.is_elevator_ &&  // elevators tagged as building would be landuse
         !t.is_parking_ &&
-        ((it == end(rel_ways_) && t.highway_.empty() && !t.is_platform_) ||
-         (t.highway_.empty() && !t.is_platform_ && it != end(rel_ways_) &&
+        ((it == end(rel_ways_) && t.highway_.empty() && t.railway_.empty() &&
+          !t.is_ferry_route_ && !t.is_platform()) ||
+         (t.highway_.empty() && !t.is_platform() && it != end(rel_ways_) &&
           t.landuse_))) {
       return;
     }
 
-    auto p = (t.is_platform_ || t.is_parking_ || !t.highway_.empty())
+    auto const in_route = it != end(rel_ways_) && it->second.p_.in_route_;
+
+    auto p = (t.is_platform() || t.is_parking_ || !t.highway_.empty() ||
+              (!t.railway_.empty() && (in_route || it == end(rel_ways_))) ||
+              t.is_ferry_route_)
                  ? get_way_properties(t)
                  : it->second.p_;
     if (!p.is_accessible()) {
@@ -252,6 +281,10 @@ struct way_handler : public osm::handler::Handler {
     if (!t.has_level_ && it != end(rel_ways_)) {
       p.from_level_ = it->second.p_.from_level_;
       p.to_level_ = it->second.p_.to_level_;
+    }
+
+    if (in_route) {
+      p.in_route_ = true;
     }
 
     auto const get_point = [](osmium::NodeRef const& n) {
@@ -271,6 +304,7 @@ struct way_handler : public osm::handler::Handler {
       } else {
         str_idx = string_idx_t{w_.strings_.size()};
         w_.strings_.emplace_back(s);
+        strings_set_.insert(str_idx);
       }
       return str_idx;
     };
@@ -279,7 +313,7 @@ struct way_handler : public osm::handler::Handler {
     auto const way_idx = way_idx_t{w_.way_osm_idx_.size()};
 
     if (platforms_ != nullptr &&
-        (t.is_platform_ || p.is_platform_ ||
+        (t.is_platform() || p.is_platform_ ||
          (it != end(rel_ways_) && it->second.p_.is_platform_))) {
       platforms_->way(way_idx, w);
     }
@@ -289,11 +323,12 @@ struct way_handler : public osm::handler::Handler {
     }
 
     w_.way_osm_idx_.push_back(osm_way_idx_t{w.positive_id()});
+    w_.r_->way_properties_.emplace_back(p);
+
     w_.way_polylines_.emplace_back(w.nodes() |
                                    std::views::transform(get_point));
     w_.way_osm_nodes_.emplace_back(w.nodes() |
                                    std::views::transform(get_node_id));
-    w_.r_->way_properties_.emplace_back(p);
 
     auto const name = t.name_.empty() ? t.ref_ : t.name_;
     if (!name.empty()) {
@@ -349,7 +384,7 @@ struct node_handler : public osm::handler::Handler {
       w_.r_->node_properties_[*node_idx] = p;
       w_.r_->node_positions_[*node_idx] = point::from_location(n.location());
 
-      if (platforms_ != nullptr && t.is_platform_) {
+      if (platforms_ != nullptr && t.is_platform()) {
         auto const l = std::lock_guard{platforms_mutex_};
         platforms_->node(*node_idx, n);
       }
@@ -400,6 +435,22 @@ struct node_handler : public osm::handler::Handler {
       return;
     }
 
+    auto applies_to_bus = true;
+    if (auto const except_ptr = r.tags()["except"]; except_ptr != nullptr) {
+      auto val = std::string_view{except_ptr};
+      while (!val.empty()) {
+        auto const sep = val.find(';');
+        auto const token =
+            sep == std::string_view::npos ? val : val.substr(0, sep);
+        if (token == "bus"sv || token == "psv"sv) {
+          applies_to_bus = false;
+          break;
+        }
+        val.remove_prefix(sep == std::string_view::npos ? val.size()
+                                                        : sep + 1U);
+      }
+    }
+
     auto via = node_idx_t::invalid();
     for (auto const& m : r.members()) {
       switch (cista::hash(std::string_view{m.role()})) {
@@ -437,7 +488,8 @@ struct node_handler : public osm::handler::Handler {
     auto const l = std::scoped_lock{r_mutex_};
     for (auto const& from : c->from_) {
       for (auto const& to : c->to_) {
-        r_.emplace_back(resolved_restriction{restriction_type, from, to, via});
+        r_.emplace_back(resolved_restriction{restriction_type, from, to, via,
+                                             applies_to_bus});
       }
     }
   }
@@ -465,11 +517,11 @@ struct mark_inaccessible_handler : public osm::handler::Handler {
         is_accessible<car_profile>(t, osm_obj_type::kNode) &&
         is_accessible<bike_profile>(t, osm_obj_type::kNode) &&
         is_accessible<foot_profile>(t, osm_obj_type::kNode);
-    if (!accessible || t.is_elevator_ || t.is_platform_) {
+    if (!accessible || t.is_elevator_ || t.is_platform()) {
       w_.node_way_counter_.increment(n.positive_id());
     }
 
-    if (track_platforms_ && t.is_platform_) {
+    if (track_platforms_ && t.is_platform()) {
       // Wnsure nodes are created even if they are not part of a routable way.
       w_.node_way_counter_.increment(n.positive_id());
     }
@@ -484,8 +536,8 @@ struct rel_ways_handler : public osm::handler::Handler {
       : pl_{pl}, rel_ways_{rel_ways} {}
 
   void relation(osm::Relation const& r) {
-    auto const p = get_way_properties(tags{r});
-    if (!p.is_accessible()) {
+    auto const p = get_way_properties(tags{r}, osm_obj_type::kRelation);
+    if (!p.is_accessible() && !p.in_route()) {
       return;
     }
 
@@ -495,8 +547,11 @@ struct rel_ways_handler : public osm::handler::Handler {
 
     for (auto const& m : r.members()) {
       if (m.type() == osm::item_type::way) {
-        rel_ways_.emplace(osm_way_idx_t{m.positive_ref()},
-                          rel_way{p, platform});
+        auto rw = rel_ways_.emplace(osm_way_idx_t{m.positive_ref()},
+                                    rel_way{p, platform});
+        if (!rw.second) {
+          rw.first->second.p_.in_route_ |= p.in_route_;
+        }
       }
     }
   }

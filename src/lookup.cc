@@ -1,5 +1,6 @@
 #include "osr/lookup.h"
 
+#include "osr/routing/parameters.h"
 #include "osr/routing/profiles/bike.h"
 #include "osr/routing/profiles/bike_sharing.h"
 #include "osr/routing/profiles/car.h"
@@ -45,7 +46,8 @@ std::vector<raw_way_candidate> lookup::get_raw_way_candidates(
             std::tuple<double, geo::latlng, size_t>>(
             query.pos_, ways_.way_polylines_[way], approx_distance_lng_degrees);
     if (squared_dist < squared_max_dist) {
-      auto raw_wc = raw_way_candidate{std::sqrt(squared_dist), way};
+      auto raw_wc =
+          raw_way_candidate{static_cast<float>(std::sqrt(squared_dist)), way};
       raw_wc.left_ =
           find_raw_next_node(raw_wc, direction::kBackward,
                              approx_distance_lng_degrees, best, segment_idx);
@@ -90,7 +92,7 @@ raw_node_candidate lookup::find_raw_next_node(
                  auto const segment_dist =
                      std::sqrt(geo::approx_squared_distance(
                          last_path_pos, pos, approx_distance_lng_degrees));
-                 c.dist_to_node_ += segment_dist;
+                 c.dist_to_node_ += static_cast<float>(segment_dist);
                  last_path_pos = pos;
 
                  auto const way_node = ways_.find_node_idx(osm_node_idx);
@@ -103,7 +105,8 @@ raw_node_candidate lookup::find_raw_next_node(
   return c;
 }
 
-match_t lookup::match(location const& query,
+match_t lookup::match(profile_parameters const& params,
+                      location const& query,
                       bool const reverse,
                       direction const search_dir,
                       double const max_match_distance,
@@ -111,9 +114,10 @@ match_t lookup::match(location const& query,
                       search_profile const p,
                       std::optional<std::span<raw_way_candidate const>>
                           raw_way_candidates) const {
-  return with_profile(p, [&]<typename Profile>(Profile&&) {
-    return match<Profile>(query, reverse, search_dir, max_match_distance,
-                          blocked, raw_way_candidates);
+  return with_profile(p, [&]<Profile P>(P&&) {
+    return match<P>(std::get<typename P::parameters>(params), query, reverse,
+                    search_dir, max_match_distance, blocked,
+                    raw_way_candidates);
   });
 }
 
