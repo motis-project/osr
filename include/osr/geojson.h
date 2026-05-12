@@ -107,6 +107,10 @@ inline void add_hgv_way_info_properties(boost::json::object& properties,
   if (hgv_info->has(hgv_info_field::kHazmat)) {
     properties["hazmat_access"] = to_string(hgv_info->hazmat_access());
   }
+  if (hgv_info->has(hgv_info_field::kHazmatWater)) {
+    properties["hazmat_water_access"] =
+        to_string(hgv_info->hazmat_water_access());
+  }
   if (hgv_info->has(hgv_info_field::kMaxSpeed)) {
     properties["hgv_max_speed_km_h"] = hgv_info->maxspeed_km_h_;
   }
@@ -131,6 +135,9 @@ inline void add_hgv_way_info_properties(boost::json::object& properties,
   }
   if (hgv_info->has(hgv_info_field::kMaxAxles)) {
     properties["hgv_max_axles"] = hgv_info->maxaxles_;
+  }
+  if (hgv_info->has(hgv_info_field::kTrailer)) {
+    properties["hgv_trailer_access"] = to_string(hgv_info->trailer_access());
   }
 }
 

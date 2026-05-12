@@ -76,7 +76,9 @@ struct tags {
           is_destination_ |= motor_vehicle_ == "destination"sv;
           break;
         case cista::hash("hgv"): hgv_ = t.value(); break;
+        case cista::hash("hgv:trailer"): hgv_trailer_ = t.value(); break;
         case cista::hash("hazmat"): hazmat_ = t.value(); break;
+        case cista::hash("hazmat:water"): hazmat_water_ = t.value(); break;
         case cista::hash("foot"): foot_ = t.value(); break;
         case cista::hash("bicycle"): bicycle_ = t.value(); break;
         case cista::hash("highway"):
@@ -259,8 +261,14 @@ struct tags {
   // https://wiki.openstreetmap.org/wiki/Key:hgv
   std::string_view hgv_;
 
+  // https://wiki.openstreetmap.org/wiki/Key:hgv:trailer
+  std::string_view hgv_trailer_;
+
   // https://wiki.openstreetmap.org/wiki/Key:hazmat
   std::string_view hazmat_;
+
+  // https://wiki.openstreetmap.org/wiki/Key:hazmat:water
+  std::string_view hazmat_water_;
 
   // https://wiki.openstreetmap.org/wiki/Key:foot
   std::string_view foot_;

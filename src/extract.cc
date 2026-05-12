@@ -232,8 +232,11 @@ std::optional<access_value> get_access_value(std::string_view value) {
 
 std::optional<access_value> get_hazmat_value(std::string_view value) {
   switch (cista::hash(value)) {
+    case cista::hash("yes"):
+    case cista::hash("permissive"):
     case cista::hash("designated"): return access_value::kAllowed;
-    case cista::hash("no"): return access_value::kForbidden;
+    case cista::hash("no"):
+    case cista::hash("discouraged"): return access_value::kForbidden;
     default: return std::nullopt;
   }
 }
@@ -278,6 +281,18 @@ std::optional<hgv_way_info> get_hgv_way_info(tags const& t) {
   if (auto const hazmat = get_hazmat_value(t.hazmat_); hazmat.has_value()) {
     info.fields_ |= to_mask(hgv_info_field::kHazmat);
     info.hazmat_access_ = static_cast<std::uint8_t>(*hazmat);
+  }
+
+  if (auto const hazmat_water = get_hazmat_value(t.hazmat_water_);
+      hazmat_water.has_value()) {
+    info.fields_ |= to_mask(hgv_info_field::kHazmatWater);
+    info.hazmat_water_access_ = static_cast<std::uint8_t>(*hazmat_water);
+  }
+
+  if (auto const trailer = get_access_value(t.hgv_trailer_);
+      trailer.has_value()) {
+    info.fields_ |= to_mask(hgv_info_field::kTrailer);
+    info.trailer_access_ = static_cast<std::uint8_t>(*trailer);
   }
 
   return info.fields_ == 0U ? std::nullopt : std::optional{info};

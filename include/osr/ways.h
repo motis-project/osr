@@ -78,6 +78,8 @@ enum class hgv_info_field : std::uint16_t {
   kMaxAxleLoad = 1U << 7U,
   kMaxAxles = 1U << 8U,
   kHazmat = 1U << 9U,
+  kHazmatWater = 1U << 10U,
+  kTrailer = 1U << 11U,
 };
 
 constexpr std::uint16_t to_mask(hgv_info_field const field) {
@@ -111,9 +113,21 @@ struct hgv_way_info {
     return static_cast<access_value>(hazmat_access_);
   }
 
+  constexpr access_value hazmat_water_access() const {
+    return static_cast<access_value>(hazmat_water_access_);
+  }
+
+  constexpr access_value trailer_access() const {
+    return static_cast<access_value>(trailer_access_);
+  }
+
   std::uint16_t fields_{0U};
   std::uint8_t hgv_access_{static_cast<std::uint8_t>(access_value::kUnknown)};
   std::uint8_t hazmat_access_{
+      static_cast<std::uint8_t>(access_value::kUnknown)};
+  std::uint8_t hazmat_water_access_{
+      static_cast<std::uint8_t>(access_value::kUnknown)};
+  std::uint8_t trailer_access_{
       static_cast<std::uint8_t>(access_value::kUnknown)};
   std::uint8_t maxspeed_km_h_{0U};
   std::uint8_t maxaxles_{0U};

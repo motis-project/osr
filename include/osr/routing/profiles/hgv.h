@@ -1,13 +1,14 @@
 #pragma once
 
+#include <algorithm>
+#include <bitset>
 #include <cmath>
+#include <optional>
+#include <tuple>
 
 #include "boost/json/object.hpp"
 
-#include <algorithm>
-#include <bitset>
-#include <optional>
-#include <tuple>
+#include "utl/helpers/algorithm.h"
 
 #include "osr/elevation_storage.h"
 #include "osr/routing/mode.h"
@@ -16,7 +17,6 @@
 #include "osr/routing/sharing_data.h"
 #include "osr/routing/turns.h"
 #include "osr/ways.h"
-#include "utl/helpers/algorithm.h"
 
 namespace osr {
 
@@ -41,8 +41,10 @@ struct hgv {
     std::uint16_t length_dm_{188U};
     std::uint16_t weight_100kg_{400U};
     bool hazmat_{false};
+    bool hazmat_water_{false};
     std::uint8_t axle_count_{5U};
     std::uint16_t axle_load_100kg_{115U};
+    bool trailer_{true};
     std::uint8_t top_speed_km_h_{80U};
   };
 
@@ -104,8 +106,8 @@ struct hgv {
     constexpr node get_node() const noexcept { return {n_, way_, dir_}; }
     constexpr cost_t cost() const noexcept { return cost_; }
 
-    void track(label const&, ways::routing const&, way_idx_t, node_idx_t,
-               bool) {}
+    void track(
+        label const&, ways::routing const&, way_idx_t, node_idx_t, bool) {}
 
     node_idx_t n_;
     way_pos_t way_;
@@ -178,14 +180,19 @@ struct hgv {
     }
   };
 
-  static node create_node(node_idx_t const n, level_t const,
-                          way_pos_t const way, direction const dir) {
+  static node create_node(node_idx_t const n,
+                          level_t const,
+                          way_pos_t const way,
+                          direction const dir) {
     return node{n, way, dir};
   }
 
   template <typename Fn>
-  static void resolve_start_node(ways::routing const& w, way_idx_t const way,
-                                 node_idx_t const n, level_t, direction,
+  static void resolve_start_node(ways::routing const& w,
+                                 way_idx_t const way,
+                                 node_idx_t const n,
+                                 level_t,
+                                 direction,
                                  Fn&& f) {
     auto const ways = w.node_ways_[n];
     for (auto i = way_pos_t{0U}; i != ways.size(); ++i) {
@@ -197,7 +204,9 @@ struct hgv {
   }
 
   template <typename Fn>
-  static void resolve_all(ways::routing const& w, node_idx_t const n, level_t,
+  static void resolve_all(ways::routing const& w,
+                          node_idx_t const n,
+                          level_t,
                           Fn&& f) {
     auto const ways = w.node_ways_[n];
     for (auto i = way_pos_t{0U}; i != ways.size(); ++i) {
@@ -207,9 +216,12 @@ struct hgv {
   }
 
   template <direction SearchDir, bool WithBlocked, typename Fn>
-  static void adjacent(parameters const& params, ways::routing const& w,
-                       node const n, bitvec<node_idx_t> const* blocked,
-                       sharing_data const* additional, elevation_storage const*,
+  static void adjacent(parameters const& params,
+                       ways::routing const& w,
+                       node const n,
+                       bitvec<node_idx_t> const* blocked,
+                       sharing_data const* additional,
+                       elevation_storage const*,
                        Fn&& fn) {
     if (additional != nullptr) {
       for_each_additional_edge<hgv>(
@@ -244,8 +256,10 @@ struct hgv {
   }
 
   static bool is_dest_reachable(parameters const& params,
-                                ways::routing const& w, node const n,
-                                way_idx_t const way, direction const way_dir,
+                                ways::routing const& w,
+                                node const n,
+                                way_idx_t const way,
+                                direction const way_dir,
                                 direction const search_dir) {
     auto const target_way_prop = w.way_properties_[way];
     if (way_cost(params, w, way, target_way_prop, way_dir, 0U) == kInfeasible) {
@@ -259,9 +273,12 @@ struct hgv {
     return true;
   }
 
-  static cost_t way_cost(parameters const& params, ways::routing const& w,
-                         way_idx_t const way, way_properties const& e,
-                         direction const dir, distance_t const dist) {
+  static cost_t way_cost(parameters const& params,
+                         ways::routing const& w,
+                         way_idx_t const way,
+                         way_properties const& e,
+                         direction const dir,
+                         distance_t const dist) {
     if (dir == direction::kBackward && e.is_oneway_car()) {
       return kInfeasible;
     }
@@ -320,8 +337,13 @@ struct hgv {
 private:
   static constexpr bool fits_vehicle(parameters const& params,
                                      hgv_way_info const& info) {
-    if (info.has(hgv_info_field::kHazmat) && params.hazmat_ &&
+    if (info.has(hgv_info_field::kHazmat) &&
+        (params.hazmat_ || params.hazmat_water_) &&
         info.hazmat_access() == access_value::kForbidden) {
+      return false;
+    }
+    if (info.has(hgv_info_field::kHazmatWater) && params.hazmat_water_ &&
+        info.hazmat_water_access() == access_value::kForbidden) {
       return false;
     }
     if (info.has(hgv_info_field::kMaxLength) &&
@@ -350,6 +372,10 @@ private:
     }
     if (info.has(hgv_info_field::kMaxAxles) &&
         params.axle_count_ > info.maxaxles_) {
+      return false;
+    }
+    if (info.has(hgv_info_field::kTrailer) && params.trailer_ &&
+        info.trailer_access() == access_value::kForbidden) {
       return false;
     }
     return true;
