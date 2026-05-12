@@ -68,6 +68,7 @@ ways::ways(std::filesystem::path p, cista::mmap::protection const mode)
       way_conditional_access_no_{mm("way_conditional_access_no")} {}
 
 void ways::build_components_and_importance() {
+  r_->node_importance_.resize(n_nodes());
   auto q = hash_set<way_idx_t>{};
   auto flood_fill = [&](way_idx_t const way_idx, component_idx_t const c) {
     assert(q.empty());
@@ -76,9 +77,9 @@ void ways::build_components_and_importance() {
       auto const next = *q.begin();
       q.erase(q.begin());
       for (auto const n : r_->way_nodes_[next]) {
-        r_->node_properties_[n].importance_ =
-            std::max(r_->node_properties_[n].importance_,
-                     r_->way_properties_[next].importance_);
+        r_->node_importance_[n] =
+            std::max(r_->node_importance_[n],
+                     static_cast<std::uint32_t>(r_->way_importance_[next]));
         for (auto const w : r_->node_ways_[n]) {
           auto& wc = r_->way_component_[w];
           if (wc == component_idx_t::invalid()) {
@@ -107,6 +108,7 @@ void ways::build_components_and_importance() {
     flood_fill(way_idx, c);
     pt->increment();
   }
+  r_->way_importance_.clear();
 }
 
 void ways::add_restriction(std::vector<resolved_restriction>& rs) {

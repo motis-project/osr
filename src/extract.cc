@@ -170,8 +170,7 @@ way_properties get_way_properties(
   p.motor_vehicle_no_ =
       (t.motor_vehicle_ == "no"sv) || (t.vehicle_ == override::kBlacklist);
   p.has_toll_ = t.toll_;
-  p.importance_ = get_importance(t);
-  p.is_big_street_ = is_big_street(p.importance_);
+  p.is_big_street_ = is_big_street(get_importance(t));
   p.in_route_ = t.is_route_ && t.is_public_transport_route();
   p.is_bus_accessible_with_penalty_ =
       is_accessible_with_penalty<bus_profile>(t, obj_type);
@@ -197,7 +196,6 @@ std::pair<node_properties, level_bits_t> get_node_properties(tags const& t) {
   p.to_level_ = to_idx(to);
   p.is_bus_accessible_with_penalty_ =
       is_accessible_with_penalty<bus_profile>(t, osm_obj_type::kNode);
-  p.importance_ = 0;
   return {p, t.level_bits_};
 }
 
@@ -324,6 +322,7 @@ struct way_handler : public osm::handler::Handler {
 
     w_.way_osm_idx_.push_back(osm_way_idx_t{w.positive_id()});
     w_.r_->way_properties_.emplace_back(p);
+    w_.r_->way_importance_.emplace_back(get_importance(t));
 
     w_.way_polylines_.emplace_back(w.nodes() |
                                    std::views::transform(get_point));

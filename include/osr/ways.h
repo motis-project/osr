@@ -145,10 +145,9 @@ struct way_properties {
   std::uint8_t is_bus_accessible_with_penalty_ : 1;
   std::uint8_t is_ferry_accessible_ : 1;
   std::uint8_t is_railway_accessible_with_penalty_ : 1;
-  std::uint8_t importance_ : 3;  // only used during extract
 };
 
-static_assert(sizeof(way_properties) == 6);
+static_assert(sizeof(way_properties) == 5);
 
 struct node_properties {
   constexpr bool is_car_accessible() const { return is_car_accessible_; }
@@ -162,7 +161,6 @@ struct node_properties {
   constexpr bool is_multi_level() const { return is_multi_level_; }
   constexpr bool is_entrance() const { return is_entrance_; }
   constexpr bool is_parking() const { return is_parking_; }
-  constexpr std::uint8_t importance() const { return importance_; }
 
   constexpr level_t from_level() const { return level_t{from_level_}; }
   constexpr level_t to_level() const { return level_t{to_level_}; }
@@ -192,10 +190,9 @@ struct node_properties {
 
   std::uint8_t to_level_ : 6;
   std::uint8_t is_bus_accessible_with_penalty_ : 1;
-  std::uint8_t importance_ : 3;
 };
 
-static_assert(sizeof(node_properties) == 4);
+static_assert(sizeof(node_properties) == 3);
 
 struct ways {
   ways(std::filesystem::path, cista::mmap::protection);
@@ -373,10 +370,12 @@ struct ways {
     vecvec<node_idx_t, restriction> node_restrictions_;
 
     vec_map<node_idx_t, point> node_positions_;
+    vec_map<node_idx_t, std::uint32_t> node_importance_;
 
     vec<pair<node_idx_t, level_bits_t>> multi_level_elevators_;
 
     vec_map<way_idx_t, component_idx_t> way_component_;
+    vec_map<way_idx_t, std::uint8_t> way_importance_;
   };
 
   cista::wrapped<routing> r_;

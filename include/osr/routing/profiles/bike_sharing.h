@@ -56,8 +56,7 @@ struct bike_sharing {
                      .is_incline_down_ = false,
                      .is_bus_accessible_with_penalty_ = false,
                      .is_ferry_accessible_ = false,
-                     .is_railway_accessible_with_penalty_ = false,
-                     .importance_ = 0};
+                     .is_railway_accessible_with_penalty_ = false};
 
   static constexpr auto const kAdditionalNodeProperties =
       node_properties{.from_level_ = 0,
@@ -70,8 +69,7 @@ struct bike_sharing {
                       .is_multi_level_ = false,
                       .is_parking_ = false,
                       .to_level_ = 0,
-                      .is_bus_accessible_with_penalty_ = false,
-                      .importance_ = 0};
+                      .is_bus_accessible_with_penalty_ = false};
 
   enum class node_type : std::uint8_t {
     kInitialFoot,
