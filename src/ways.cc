@@ -2,9 +2,15 @@
 
 #include <algorithm>
 
+#include "utl/pairwise.h"
 #include "utl/parallel_for.h"
 
 #include "cista/io.h"
+
+#define USE_INERTIAL_FLOW_CUT
+#ifdef USE_INERTIAL_FLOW_CUT
+#include "inertialflowcutter/run.h"
+#endif
 
 namespace osr {
 
@@ -109,6 +115,30 @@ void ways::build_components_and_importance() {
     pt->increment();
   }
   r_->way_importance_.clear();
+
+#ifdef USE_INERTIAL_FLOW_CUT
+  pt->status("Run inertial flow cutter").in_high(n_ways()).out_bounds(90, 91);
+
+  auto v_tail = std::vector<unsigned>{};
+  auto v_head = std::vector<unsigned>{};
+
+  for (auto const nodes : r_->way_nodes_) {
+    for (auto const [a, b] : utl::pairwise(nodes)) {
+      v_tail.push_back(a.v_);
+      v_head.push_back(b.v_);
+    }
+  }
+  run_inertial_flow_cutter(
+      static_cast<int>(n_nodes()), v_head, v_tail,
+      [&](int i) {
+        auto const p = get_node_pos(node_idx_t{i});
+        return std::pair<double, double>{p.lng(), p.lat()};
+      },
+      [&](int node_idx, int level) {
+        r_->node_importance_[node_idx_t{node_idx}] =
+            static_cast<std::uint32_t>(level);
+      });
+#endif
 }
 
 void ways::add_restriction(std::vector<resolved_restriction>& rs) {

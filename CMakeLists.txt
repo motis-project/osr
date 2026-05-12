@@ -126,6 +126,7 @@ target_link_libraries(osr
         unordered_dense
         boost-thread
         boost-iostreams
+        inertialflowcutter
 )
 
 # --- MAIN ---

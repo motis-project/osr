@@ -66,3 +66,7 @@
   url=git@github.com:motis-project/net.git
   branch=master
   commit=c2599102dcffa4babfdcf5320a6bd6f5c6e9b731
+[inertialflowcutter]
+  url=git@github.com:motis-project/InertialFlowCutter.git
+  branch=master
+  commit=8163095365f4812337290dcbe8bd65df531e0398
