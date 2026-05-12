@@ -69,4 +69,4 @@
 [inertialflowcutter]
   url=git@github.com:motis-project/InertialFlowCutter.git
   branch=master
-  commit=8163095365f4812337290dcbe8bd65df531e0398
+  commit=9dc89671c2b54fc7557c9eb472c90429726ba717
