@@ -1,6 +1,10 @@
 cmake_minimum_required(VERSION 3.10)
 project(osr LANGUAGES C CXX ASM)
 
+set(BUILD_SHARED_LIBS OFF)
+option(TBB_BUILD_SHARED          "Build TBB shared library" OFF)
+option(TBB_BUILD_STATIC          "Build TBB static library" ON)
+
 cmake_policy(SET CMP0079 NEW)
 
 if (MSVC)
