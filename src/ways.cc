@@ -7,7 +7,8 @@
 
 #include "cista/io.h"
 
-#define USE_INERTIAL_FLOW_CUT
+// uncomment the following line to enable IFC
+// #define USE_INERTIAL_FLOW_CUT
 #ifdef USE_INERTIAL_FLOW_CUT
 #include "inertialflowcutter/run.h"
 #endif
@@ -128,8 +129,9 @@ void ways::build_components_and_importance() {
       v_head.push_back(b.v_);
     }
   }
+  auto const thread_count = 4;
   run_inertial_flow_cutter(
-      static_cast<int>(n_nodes()), v_head, v_tail,
+      thread_count, static_cast<int>(n_nodes()), v_head, v_tail,
       [&](int i) {
         auto const p = get_node_pos(node_idx_t{i});
         return std::pair<double, double>{p.lng(), p.lat()};
