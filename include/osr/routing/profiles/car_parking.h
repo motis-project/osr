@@ -139,7 +139,12 @@ struct car_parking {
     static constexpr auto const kMaxWays = way_pos_t{16U};
     static constexpr auto const kN = kMaxWays * 2U + 1 /* FWD+BWD + foot */;
 
-    entry() { utl::fill(cost_, kInfeasible); }
+    entry() {
+      utl::fill(cost_, kInfeasible);
+      utl::fill(pred_, node_idx_t::invalid());
+      utl::fill(pred_way_, way_pos_t{0});
+      utl::fill(pred_lvl_, kNoLevel);
+    }
 
     constexpr std::optional<node> pred(node const n) const noexcept {
       auto const idx = get_index(n);

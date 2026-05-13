@@ -95,7 +95,10 @@ struct bike {
   };
 
   struct entry {
-    entry() { utl::fill(cost_, kInfeasible); }
+    entry() {
+      utl::fill(cost_, kInfeasible);
+      utl::fill(pred_, node_idx_t::invalid());
+    }
 
     constexpr std::optional<node> pred(node const n) const noexcept {
       auto const idx = get_index(n);
