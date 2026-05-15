@@ -201,7 +201,7 @@ struct ways {
   void compute_big_street_neighbors();
   void connect_ways();
   void compute_turn_bearings();
-  void build_components();
+  void build_components_and_importance();
 
   std::optional<way_idx_t> find_way(osm_way_idx_t const i) {
     auto const it = std::lower_bound(begin(way_osm_idx_), end(way_osm_idx_), i);
@@ -370,10 +370,12 @@ struct ways {
     vecvec<node_idx_t, restriction> node_restrictions_;
 
     vec_map<node_idx_t, point> node_positions_;
+    vec_map<node_idx_t, std::uint32_t> node_importance_;
 
     vec<pair<node_idx_t, level_bits_t>> multi_level_elevators_;
 
     vec_map<way_idx_t, component_idx_t> way_component_;
+    vec_map<way_idx_t, std::uint8_t> way_importance_;
   };
 
   cista::wrapped<routing> r_;
