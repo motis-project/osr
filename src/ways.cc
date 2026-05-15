@@ -8,7 +8,7 @@
 #include "cista/io.h"
 
 // uncomment the following line to enable IFC
-#define USE_INERTIAL_FLOW_CUT
+// #define USE_INERTIAL_FLOW_CUT
 #ifdef USE_INERTIAL_FLOW_CUT
 #include "inertialflowcutter/run.h"
 #endif
