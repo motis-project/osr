@@ -130,7 +130,7 @@ void ways::build_components_and_importance() {
     }
   }
   auto const thread_count = 4;
-  run_inertial_flow_cutter(
+  ifc::run_inertial_flow_cutter(
       thread_count, static_cast<int>(n_nodes()), v_head, v_tail,
       [&](int i) {
         auto const p = get_node_pos(node_idx_t{i});
