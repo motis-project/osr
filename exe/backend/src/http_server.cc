@@ -1,5 +1,7 @@
 #include "osr/backend/http_server.h"
+#include <charconv>
 
+#include <boost/url/parse.hpp>
 #include <utility>
 
 #include "boost/algorithm/string.hpp"
@@ -10,6 +12,8 @@
 
 #include "fmt/core.h"
 
+#include "osr/backend/osrm.h"
+#include "osr/types.h"
 #include "utl/enumerate.h"
 #include "utl/pipes.h"
 #include "utl/to_vec.h"
@@ -62,7 +66,7 @@ web_server::string_res_t json_response(
 
 location parse_location(json::value const& v) {
   auto const& obj = v.as_object();
-  return {obj.at("lat").as_double(), obj.at("lng").as_double(),
+  return {{obj.at("lat").as_double(), obj.at("lng").as_double()},
           obj.contains("level") ? level_t{obj.at("level").to_number<float>()}
                                 : kNoLevel};
 }
@@ -249,6 +253,23 @@ struct http_server::impl {
     cb(json_response(req, gj.string()));
   }
 
+  void handle_osrm_route(web_server::http_req_t const& req,
+                         web_server::http_res_cb_t const& cb) {
+
+    osrm_request osrm_req = parse_request(req);
+
+    auto params = get_parameters(osrm_req.profile_);
+    auto const from = osrm_req.coords_[0];
+    auto const to = osrm_req.coords_[1];
+
+    auto const p = route(params, w_, l_, osrm_req.profile_, from, to, 100,
+                         direction::kForward, 3600, nullptr, nullptr,
+                         elevations_, routing_algorithm::kDijkstra);
+
+    const auto res = osrm_route_response(p); 
+    cb(json_response(req, json::serialize(res)));
+  }
+
   void handle_request(web_server::http_req_t const& req,
                       web_server::http_res_cb_t const& cb) {
     std::cout << "[" << req.method_string() << "] " << req.target() << '\n';
@@ -289,7 +310,17 @@ struct http_server::impl {
                                   http::status::not_found));
         }
       }
-      case http::verb::get:
+      case http::verb::get: {
+        auto const& target = req.target();
+        if (target.starts_with("/route/v1/")) {
+          return run_parallel(
+              [this](web_server::http_req_t const& req1,
+                     web_server::http_res_cb_t const& cb1) {
+                handle_osrm_route(req1, cb1);
+              },
+              req, cb);
+        }
+      }
       case http::verb::head: return handle_static(req, cb);
       default:
         return cb(json_response(req,
