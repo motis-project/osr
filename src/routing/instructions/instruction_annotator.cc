@@ -4,11 +4,12 @@
 #include "osr/routing/path.h"
 #include "utl/verify.h"
 
-#include "osr/util/sliding_window.h"
 #include "osr/routing/instructions/directions.h"
-#include "osr/routing/instructions/modules/intersection_module.h"
 #include "osr/routing/instructions/modules/destination_module.h"
+#include "osr/routing/instructions/modules/intersection_module.h"
+#include "osr/routing/instructions/modules/motorway_module.h"
 #include "osr/routing/instructions/modules/roundabout_module.h"
+#include "osr/util/sliding_window.h"
 
 namespace osr {
 
@@ -17,6 +18,8 @@ instruction_annotator::instruction_annotator(ways const& w)
   {
     add_module(std::make_unique<destination_module>());
     add_module(std::make_unique<roundabout_module>());
+    add_module(std::make_unique<motorway_module>());
+    // Fallback
     add_module(std::make_unique<intersection_module>());
   }
 
@@ -32,11 +35,12 @@ void instruction_annotator::annotate(path& path) {
   for (const auto cw : context_windows) {
     trace("Matching context window against modules:\n");
     for (const auto& m : modules_) {
-      if (m->process(ways_, path, cw)) {
+      if (m->can_process(ways_, path, cw)) {
+        m->process(ways_, path, cw);
         trace("┗ -> SUCCESSFUL ANNOTATION!\n");
         break;
       } else {
-        trace("┃ -> ANNOTATION FAILED!\n");
+        trace("┃ -> MODULE CANNOT ANNOTATE, SKIPPING!\n");
       }
     }
   }

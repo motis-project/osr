@@ -26,7 +26,9 @@ std::string instruction_action_to_string(instruction_action const action) {
     case instruction_action::kExitLeft: return "kExitLeft";
     case instruction_action::kStayStraight: return "kStayStraight";
     case instruction_action::kStayLeft: return "kStayLeft";
+    case instruction_action::kStaySlightLeft: return "kStaySlightLeft";
     case instruction_action::kStayRight: return "kStayRight";
+    case instruction_action::kStaySlightRight: return "kStaySlightRight";
     case instruction_action::kEnterRoundabout: return "kEnterRoundabout";
     case instruction_action::kExitRoundabout: return "kExitRoundabout";
     case instruction_action::kElevator: return "kElevator";

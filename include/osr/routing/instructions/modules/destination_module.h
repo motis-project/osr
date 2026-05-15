@@ -5,7 +5,8 @@
 namespace osr {
 
 struct destination_module : instruction_module {
-  bool process(ways const& w, path& p, segment_contexts_window const& window) override;
+  bool can_process(ways const&, path&, segment_contexts_window const& window) override;
+  void process(ways const& w, path& p, segment_contexts_window const& window) override;
 };
 
 } // namespace osr

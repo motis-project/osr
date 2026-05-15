@@ -5,7 +5,9 @@
 namespace osr {
 
 struct intersection_module : instruction_module {
-  bool process(ways const& w, path& p, segment_contexts_window const& meta) override;
+  bool can_process(ways const& way, path& p, segment_contexts_window const& meta) override;
+  void process(ways const& w, path& p, segment_contexts_window const& meta) override;
+
 };
 
 } // namespace osr

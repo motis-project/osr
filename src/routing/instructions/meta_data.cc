@@ -56,6 +56,14 @@ way_segment_t way_segment_t::flip_directions() const {
   return {.way_idx_ = way_idx_, .osm_node_range_ = osm_node_range_.flip()};
 }
 
+node_idx_t way_segment_t::get_from_idx(ways const& w) const {
+  return w.r_->way_nodes_[way_idx_][osm_node_range_.from_];
+}
+
+node_idx_t way_segment_t::get_to_idx(ways const& w) const {
+  return w.r_->way_nodes_[way_idx_][osm_node_range_.to_];
+}
+
 namespace {
 
 bool is_accessible(ways const& w,
@@ -274,6 +282,42 @@ traversed_node_hub::relative_way_segment traversed_node_hub::get_exit() const {
   return alternatives_[exit_from_hub_idx_];
 }
 
+unsigned long traversed_node_hub::number_of_possible_turns(
+    bool const consider_uturn) const {
+  constexpr auto is_possible = [](relative_way_segment_t const& rel_seg) {
+    return rel_seg.can_exit_hub_;
+  };
+  // drop because we omit the u-turn
+  const auto count = std::ranges::count_if(
+      alternatives_ | std::views::drop(consider_uturn ? 0 : 1), is_possible);
+  return static_cast<unsigned>(count);
+}
+
+unsigned long traversed_node_hub::number_of_visible_turns(
+    bool const consider_uturn) const {
+  return static_cast<unsigned>(alternatives_.size() - (consider_uturn ? 0 : 1));
+}
+
+double traversed_node_hub::angle_with_exit_from(
+    ways const& w, std::size_t const alt_idx) const {
+  utl::verify(alt_idx < alternatives_.size(), "Alternative out of bounds");
+  if (alt_idx == exit_from_hub_idx_) {
+    return 0.0;
+  }
+
+  const auto& from = alternatives_[alt_idx];
+  const auto& exit = get_exit();
+
+  // This must be get_to_idx because the direction
+  // of alternative way segment at a hub is always from
+  // hub
+  const auto from_node_p = w.get_node_pos(from.segment_.get_to_idx(w));
+  const auto hub_node_p = w.get_node_pos(exit.segment_.get_from_idx(w));
+  const auto exit_node_p = w.get_node_pos(exit.segment_.get_to_idx(w));
+  return get_angle(from_node_p.as_latlng(), hub_node_p.as_latlng(),
+                   exit_node_p.as_latlng());
+}
+
 void traversed_node_hub::print(std::ostream& out, ways const& w) const {
   out << "hub_node=" << w.node_to_osm_[hub_node_]
       << ", arrive_on=" << w.way_osm_idx_[arrive_hub_on_.way_idx_];
@@ -356,6 +400,18 @@ std::string traversed_node_hub::to_json(ways const& w) const {
     {"alternatives", rel_segments_to_json_array(alternatives_)},
     {"exit_from_hub_idx", exit_from_hub_idx_}
   });
+}
+
+bool relative_way_segment_t::can_enter_hub() const {
+  return can_enter_hub_;
+}
+
+bool relative_way_segment_t::can_exit_hub() const {
+  return can_exit_hub_;
+}
+
+bool relative_way_segment_t::is_opposite_of_arrive() const {
+  return is_opposite_of_arrive_;
 }
 
 }  // namespace osr

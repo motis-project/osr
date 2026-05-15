@@ -69,28 +69,6 @@ bool is_simple_u_turn(hub_t const& hub) {
          (arrive_on.is_way_aligned() ^ exit_on.is_way_aligned());
 }
 
-unsigned long number_of_possible_turns(hub_t const& hub) {
-  constexpr auto is_possible = [](relative_way_segment_t const& rel_seg) {
-    return rel_seg.can_exit_hub_;
-  };
-  // drop because we omit the u-turn
-  const auto count = std::ranges::count_if(
-      hub.alternatives_ | std::views::drop(1), is_possible);
-  return static_cast<unsigned>(count);
-}
-
-unsigned long number_of_visible_turns(hub_t const& hub) {
-  // This is simply #alternatives + 1, and eventually -1 if the
-  // u-turn alternative is possible
-  return static_cast<unsigned>(hub.alternatives_.size() - 1);
-}
-
-bool is_more_important_by(highway const h1,
-                          highway const h2,
-                          unsigned const diff) {
-  return h1 + diff <= h2;
-}
-
 std::optional<traversed_node_hub::relative_way_segment> get_next_alternative(
     hub_t const& hub, bool const to_left) {
   const auto neighbors = hub.get_exit_neighbors(to_left);
@@ -216,8 +194,9 @@ instruction_action handle_real_turn(ways const& w,
 
   trace("┃ ║ trying to check if a turn instruction is not needed\n");
 
-  const auto num_possible_turns = number_of_possible_turns(common_node_hub);
-  const auto num_visible_turns = number_of_visible_turns(common_node_hub);
+  const auto num_possible_turns =
+      common_node_hub.number_of_possible_turns(false);
+  const auto num_visible_turns = common_node_hub.number_of_visible_turns(false);
   if (num_visible_turns <= 1) {
     trace("┃ ║ number of visible turns ≤ 1 -> no instruction needed!\n");
     return instruction_action::kNone;
@@ -355,12 +334,11 @@ instruction_action handle_slight_turn(ways const& w,
   return potential_turn_type;
 }
 
-bool intersection_module::process(ways const& w,
-                                  path&,
-                                  segment_contexts_window const& window) {
-  trace("┃ ╔ INTERSECTION MODULE\n");
-  if (const auto next_seg_exists = window.has(1); ! next_seg_exists) {
-    trace("┃ ╚ this is the last segment -> not my responsibility!\n");
+bool intersection_module::can_process(ways const& w,
+                                      path&,
+                                      segment_contexts_window const& window) {
+  const auto next_seg_exists = window.has(1);
+  if (!next_seg_exists) {
     return false;
   }
 
@@ -372,14 +350,10 @@ bool intersection_module::process(ways const& w,
 
   if (is_roundabout_way(w, segment.way_) ||
       is_roundabout_way(w, next_segment.way_)) {
-    trace("┃ ╚ is roundabout -> not my responsibility\n");
     return false;
   }
 
-  trace("┃ ║  -> looking at the next two segments\n");
   if (segment.to_ != next_segment.from_) {
-    trace("┃ ║ segments do not share common node\n");
-    trace("┃ ╚ no annotation possible!\n");
     return false;
   }
 
@@ -387,11 +361,24 @@ bool intersection_module::process(ways const& w,
       next_segment.from_ == node_idx_t::invalid() ||
       segment.way_ == way_idx_t::invalid() ||
       next_segment.way_ == way_idx_t::invalid() ||
-      ! segment_context.traversed_node_hub_.has_value()) {
-    trace("┃ ║ could not infer enough information to make a educated decision\n");
-    trace("┃ ╚ no annotation possible!\n");
+      !segment_context.traversed_node_hub_.has_value()) {
     return false;
   }
+
+  return true;
+}
+
+void intersection_module::process(ways const& w,
+                                  path&,
+                                  segment_contexts_window const& window) {
+  trace("┃ ╔ INTERSECTION MODULE\n");
+  const auto& segment_context = *window.focus();
+  const auto& next_segment_context = *window[1];
+
+  auto& segment = *segment_context.src_ptr_;
+  const auto& next_segment = *next_segment_context.src_ptr_;
+
+  trace("┃ ║  -> looking at the next two segments\n");
   trace("┃ ║ Analysing <{}> -- way: {} -> <{}> -- way: {} -> <{}>\n", segment.from_,
         segment.way_, segment.to_, next_segment.way_, next_segment.to_);
 
@@ -401,7 +388,7 @@ bool intersection_module::process(ways const& w,
     trace("┃ ║ Detected simple u-turn\n");
     trace("┃ ╚ annotation = kTurnAround\n");
     set_segment_instruction(segment, instruction_action::kTurnAround);
-    return true;
+    return;
   }
 
   const relative_direction next_seg_rel_dir =
@@ -417,8 +404,6 @@ bool intersection_module::process(ways const& w,
       instruction_action_to_string(instruction));
     set_segment_instruction(segment, instruction);
   }
-
-  return false;
 }
 
 } // namespace osr

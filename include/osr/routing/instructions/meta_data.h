@@ -28,18 +28,28 @@ struct traversed_node_hub {
 
     way_segment flip_directions() const;
 
+    node_idx_t get_from_idx(ways const& w) const;
+    node_idx_t get_to_idx(ways const& w) const;
+
     way_idx_t way_idx_;
     way_osm_nodes_idx_range osm_node_range_;
   };
 
   struct relative_way_segment {
+
+    bool can_enter_hub() const;
+
+    bool can_exit_hub() const;
+
+    bool is_opposite_of_arrive() const;
+
     double angle_with_exit_;
     double angle_with_arrive_;
 
     bool can_enter_hub_;
     bool can_exit_hub_;
-
     bool is_opposite_of_arrive_;
+
     way_segment segment_;
   };
 
@@ -47,6 +57,12 @@ struct traversed_node_hub {
                                  way_idx_t arrive_way, node_idx_t hub_node,
                                  way_idx_t depart_way, node_idx_t next_node,
                                  mode m);
+
+  unsigned long number_of_possible_turns(bool consider_uturn) const;
+
+  unsigned long number_of_visible_turns(bool consider_uturn) const;
+
+  double angle_with_exit_from(ways const& w, std::size_t alt_idx) const;
 
 
 
