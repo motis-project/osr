@@ -1,0 +1,344 @@
+[
+  {
+    "name": "intersection_right_turn",
+    "osm_file": "komponistenviertel-darmstadt-pbf.osm.pbf",
+    "start": {
+      "lat": 4.9883621E1,
+      "lng": 8.677029E0,
+      "lvl": 0E0
+    },
+    "end": {
+      "lat": 4.9885453E1,
+      "lng": 8.67891E0,
+      "lvl": 0E0
+    },
+    "profile": "foot",
+    "direction": "forward",
+    "routing_algo": "dijkstra",
+    "expected_actions": [
+      "kNone",
+      "kTurnRight",
+      "kNone",
+      "kDestination"
+    ]
+  },
+  {
+    "name": "intersection_left_turn",
+    "osm_file": "komponistenviertel-darmstadt-pbf.osm.pbf",
+    "start": {
+      "lat": 4.988452E1,
+      "lng": 8.675994E0,
+      "lvl": 0E0
+    },
+    "end": {
+      "lat": 4.9884308E1,
+      "lng": 8.674567E0,
+      "lvl": 0E0
+    },
+    "profile": "foot",
+    "direction": "forward",
+    "routing_algo": "dijkstra",
+    "expected_actions": [
+      "kNone",
+      "kTurnLeft",
+      "kNone",
+      "kDestination"
+    ]
+  },
+  {
+    "name": "intersection_continue",
+    "osm_file": "komponistenviertel-darmstadt-pbf.osm.pbf",
+    "start": {
+      "lat": 4.9883621E1,
+      "lng": 8.677029E0,
+      "lvl": 0E0
+    },
+    "end": {
+      "lat": 4.9884755E1,
+      "lng": 8.675667E0,
+      "lvl": 0E0
+    },
+    "profile": "foot",
+    "direction": "forward",
+    "routing_algo": "dijkstra",
+    "expected_actions": [
+      "kNone",
+      "kNone",
+      "kNone",
+      "kDestination"
+    ]
+  },
+  {
+    "name": "intersection_composition_1",
+    "osm_file": "komponistenviertel-darmstadt-pbf.osm.pbf",
+    "start": {
+      "lat": 4.9882061E1,
+      "lng": 8.679368E0,
+      "lvl": 0E0
+    },
+    "end": {
+      "lat": 4.9883765E1,
+      "lng": 8.679143E0,
+      "lvl": 0E0
+    },
+    "profile": "car",
+    "direction": "forward",
+    "routing_algo": "dijkstra",
+    "expected_actions": [
+      "kNone",
+      "kNone",
+      "kNone",
+      "kTurnLeft",
+      "kNone",
+      "kNone",
+      "kTurnLeft",
+      "kNone",
+      "kTurnLeft",
+      "kNone",
+      "kNone",
+      "kNone",
+      "kDestination"
+    ]
+  },
+  {
+    "name": "intersection_composition_2",
+    "osm_file": "komponistenviertel-darmstadt-pbf.osm.pbf",
+    "start": {
+      "lat": 4.9880222E1,
+      "lng": 8.67336E0,
+      "lvl": 0E0
+    },
+    "end": {
+      "lat": 4.9886988E1,
+      "lng": 8.677882E0,
+      "lvl": 0E0
+    },
+    "profile": "car",
+    "direction": "forward",
+    "routing_algo": "dijkstra",
+    "expected_actions": [
+      "kNone",
+      "kTurnLeft",
+      "kNone",
+      "kNone",
+      "kNone",
+      "kNone",
+      "kTurnRight",
+      "kNone",
+      "kNone",
+      "kNone",
+      "kNone",
+      "kNone",
+      "kTurnLeft",
+      "kNone",
+      "kNone",
+      "kNone",
+      "kNone",
+      "kDestination"
+    ]
+  },
+  {
+    "name": "turning_at_crossing_islands_1",
+    "osm_file": "spessartring-fiedlerweg-darmstadt-pbf.osm.pbf",
+    "start": {
+      "lat": 4.9879340086605566E1,
+      "lng": 8.670534089302151E0,
+      "lvl": 0E0
+    },
+    "end": {
+      "lat": 4.987437815260495E1,
+      "lng": 8.669649757714751E0,
+      "lvl": 0E0
+    },
+    "profile": "car",
+    "direction": "forward",
+    "routing_algo": "dijkstra",
+    "expected_actions": [
+      "kNone",
+      "kNone",
+      "kNone",
+      "kTurnLeft",
+      "kNone",
+      "kNone",
+      "kNone",
+      "kNone",
+      "kNone",
+      "kNone",
+      "kNone",
+      "kNone",
+      "kNone",
+      "kNone",
+      "kNone",
+      "kNone",
+      "kNone",
+      "kNone",
+      "kNone",
+      "kNone",
+      "kTurnRight",
+      "kNone",
+      "kNone",
+      "kDestination"
+    ]
+  },
+  {
+    "name": "turning_at_crossing_islands_2",
+    "osm_file": "spessartring-fiedlerweg-darmstadt-pbf.osm.pbf",
+    "start": {
+      "lat": 4.9879340086605566E1,
+      "lng": 8.670534089302151E0,
+      "lvl": 0E0
+    },
+    "end": {
+      "lat": 4.987560632642536E1,
+      "lng": 8.671821524609669E0,
+      "lvl": 0E0
+    },
+    "profile": "car",
+    "direction": "forward",
+    "routing_algo": "dijkstra",
+    "expected_actions": [
+      "kNone",
+      "kNone",
+      "kNone",
+      "kTurnLeft",
+      "kNone",
+      "kNone",
+      "kNone",
+      "kNone",
+      "kNone",
+      "kNone",
+      "kNone",
+      "kNone",
+      "kNone",
+      "kNone",
+      "kNone",
+      "kTurnLeft",
+      "kNone",
+      "kNone",
+      "kNone",
+      "kNone",
+      "kDestination"
+    ]
+  },
+  {
+    "name": "turning_at_crossing_islands_3",
+    "osm_file": "spessartring-fiedlerweg-darmstadt-pbf.osm.pbf",
+    "start": {
+      "lat": 4.9877715328501154E1,
+      "lng": 8.67073281287631E0,
+      "lvl": 0E0
+    },
+    "end": {
+      "lat": 4.987669864589475E1,
+      "lng": 8.671015668239875E0,
+      "lvl": 0E0
+    },
+    "profile": "car",
+    "direction": "forward",
+    "routing_algo": "dijkstra",
+    "expected_actions": [
+      "kNone",
+      "kNone",
+      "kTurnLeft",
+      "kNone",
+      "kNone",
+      "kNone",
+      "kDestination"
+    ]
+  },
+  {
+    "name": "intersection_with_turn_lanes_1",
+    "osm_file": "darmstadt-schloß-pbf.osm.pbf",
+    "start": {
+      "lat": 4.9873222391166394E1,
+      "lng": 8.657688853205684E0,
+      "lvl": 0E0
+    },
+    "end": {
+      "lat": 4.987455729158083E1,
+      "lng": 8.65503993885622E0,
+      "lvl": 0E0
+    },
+    "profile": "car",
+    "direction": "forward",
+    "routing_algo": "dijkstra",
+    "expected_actions": [
+      "kNone",
+      "kNone",
+      "kNone",
+      "kNone",
+      "kNone",
+      "kNone",
+      "kNone",
+      "kNone",
+      "kNone",
+      "kNone",
+      "kTurnSlightLeft",
+      "kNone",
+      "kNone",
+      "kNone",
+      "kDestination"
+    ]
+  },
+  {
+    "name": "intersection_with_turn_lanes_2",
+    "osm_file": "darmstadt-schloß-pbf.osm.pbf",
+    "start": {
+      "lat": 4.9873222391166394E1,
+      "lng": 8.657688853205684E0,
+      "lvl": 0E0
+    },
+    "end": {
+      "lat": 4.9874871763009025E1,
+      "lng": 8.657660442236391E0,
+      "lvl": 0E0
+    },
+    "profile": "car",
+    "direction": "forward",
+    "routing_algo": "dijkstra",
+    "expected_actions": [
+      "kNone",
+      "kNone",
+      "kNone",
+      "kNone",
+      "kNone",
+      "kNone",
+      "kNone",
+      "kStayRight",
+      "kNone",
+      "kNone",
+      "kNone",
+      "kNone",
+      "kNone",
+      "kNone",
+      "kDestination"
+    ]
+  },
+  {
+    "name": "intersection_with_turn_lanes_3",
+    "osm_file": "darmstadt-schloß-pbf.osm.pbf",
+    "start": {
+      "lat": 4.987239907237583E1,
+      "lng": 8.657115581934875E0,
+      "lvl": 0E0
+    },
+    "end": {
+      "lat": 4.9873198674651206E1,
+      "lng": 8.658650183543898E0,
+      "lvl": 0E0
+    },
+    "profile": "car",
+    "direction": "forward",
+    "routing_algo": "dijkstra",
+    "expected_actions": [
+      "kNone",
+      "kNone",
+      "kStayRight",
+      "kNone",
+      "kNone",
+      "kNone",
+      "kNone",
+      "kDestination"
+    ]
+  }
+]

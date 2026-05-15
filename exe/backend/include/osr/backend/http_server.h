@@ -19,7 +19,8 @@ struct http_server {
               lookup const&,
               platforms const*,
               elevation_storage const*,
-              std::string const& static_file_path);
+              std::string const& static_file_path,
+              bool provide_test_features);
   ~http_server();
   http_server(http_server const&) = delete;
   http_server& operator=(http_server const&) = delete;
