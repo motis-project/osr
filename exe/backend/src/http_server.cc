@@ -267,7 +267,14 @@ struct http_server::impl {
                          elevations_, routing_algorithm::kDijkstra);
 
     const auto res = osrm_route_response(osrm_req, p);
-    cb(json_response(req, json::serialize(res)));
+    cb(json_response(req, res));
+  }
+
+  void handle_osrm_nearest(web_server::http_req_t const& req,
+                           web_server::http_res_cb_t const& cb) {
+    osrm_request osrm_req = parse_request(req);
+    const auto res = osrm_nearest_response(osrm_req, l_, w_);
+    cb(json_response(req, res));
   }
 
   void handle_request(web_server::http_req_t const& req,
@@ -317,6 +324,13 @@ struct http_server::impl {
               [this](web_server::http_req_t const& req1,
                      web_server::http_res_cb_t const& cb1) {
                 handle_osrm_route(req1, cb1);
+              },
+              req, cb);
+        } else if (target.starts_with("/nearest/v1/")) {
+          return run_parallel(
+              [this](web_server::http_req_t const& req1,
+                     web_server::http_res_cb_t const& cb1) {
+                handle_osrm_nearest(req1, cb1);
               },
               req, cb);
         }

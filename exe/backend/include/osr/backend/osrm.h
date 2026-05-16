@@ -1,13 +1,12 @@
 #pragma once
 
-#include <net/web_server/web_server.h>
-#include <boost/json/array.hpp>
-#include <boost/json/object.hpp>
-#include <boost/json/value.hpp>
-#include <boost/url/parse.hpp>
+#include "boost/url/parse.hpp"
 
-#include "osr/location.h"
-#include "osr/routing/profile.h"
+#include "net/web_server/web_server.h"
+
+#include "osr/lookup.h"
+#include "osr/routing/parameters.h"
+#include "osr/routing/with_profile.h"
 
 namespace osr::backend {
 
@@ -20,9 +19,10 @@ struct osrm_request {
   geometry geom_{polyline};
   bool steps_{false};
   bool annotations_{false};
+  unsigned number_{1};
 };
 
-inline unsigned parse_alt(std::string_view const& c) {
+inline unsigned parse_alternative(std::string_view const& c) {
   if (c != "true" && c != "false") {
     unsigned n;
     std::from_chars(c.data(), c.data() + c.size(), n);
@@ -61,12 +61,47 @@ inline boost::json::value to_line_string(path const& p) {
   return {{"type", "LineString"}, {"coordinates", x}};
 }
 
-inline boost::json::object osrm_route_response(const osrm_request& req,
-                                               std::optional<path> const& p) {
+inline std::string osrm_nearest_response(const osrm_request& req,
+                                         lookup const& l,
+                                         ways const& w) {
+  const auto from = req.coords_[0];
+  boost::json::object r;
+  const auto candidates = with_profile(req.profile_, [&]<Profile P>(P&&) {
+    double dist = 100;
+    match_t match;
+    while (match.size() < req.number_) {
+      match = l.get_way_candidates<P>(
+          std::get<typename P::parameters>(get_parameters(req.profile_)), from,
+          false, direction::kForward, dist, nullptr);
+      dist *= 2;
+    }
+    return match;
+  });
+  boost::json::array waypoints;
+  for (std::size_t i = 0; i < req.number_; ++i) {
+    const auto& c = candidates[i];
+    boost::json::object wp;
+    auto id = [&](const auto& n) {
+      return n.valid() ? w.node_to_osm_[n.node_] : osm_node_idx_t{0};
+    };
+    wp["nodes"] = boost::json::array{to_idx(id(c.left_)), to_idx(id(c.right_))};
+    wp["distance"] = geo::distance(c.closest_point_on_way_, from.pos_);
+    wp["name"] = w.get_way_name(c.way_);
+    wp["location"] = boost::json::array{c.closest_point_on_way_.lng(),
+                                        c.closest_point_on_way_.lat()};
+    waypoints.emplace_back(wp);
+  }
+  r["waypoints"] = waypoints;
+  r["code"] = "Ok";
+  return boost::json::serialize(r);
+}
+
+inline std::string osrm_route_response(const osrm_request& req,
+                                       std::optional<path> const& p) {
   boost::json::object r;
   if (!p.has_value()) {
     r["code"] = "NoRoute";
-    return r;
+    return boost::json::serialize(r);
   }
 
   r["code"] = "Ok";
@@ -107,7 +142,7 @@ inline boost::json::object osrm_route_response(const osrm_request& req,
   routes.emplace_back(route);
   r["routes"] = routes;
 
-  return r;
+  return boost::json::serialize(r);
 }
 
 inline osrm_request parse_request(net::web_server::http_req_t const& r) {
@@ -122,15 +157,34 @@ inline osrm_request parse_request(net::web_server::http_req_t const& r) {
   req.profile_ = to_profile(profile);
   req.coords_ = parse_locations(coords);
 
-  if (auto const alt = params.find("alternatives"); alt != params.end()) {
-    req.alt_ = parse_alt((*alt).value);
-  }
+  auto get = [&](const auto& str) {
+    std::optional<std::string> value;
+    auto const v = params.find(str);
+    if (v != params.end()) value = (*v).value;
+    return value;
+  };
 
-  if (auto const geom = params.find("geometries"); geom != params.end()) {
-    req.geom_ =
-        (*geom).value == "geojson" ? geometry::geojson : geometry::polyline;
-  }
+  const auto alt = get("alternatives");
+  const auto g = get("geometries");
+  const auto s = get("steps");
+  const auto a = get("annotations");
+  const auto n = get("number");
 
+  if (alt) {
+    req.alt_ = parse_alternative(*alt);
+  }
+  if (g) {
+    req.geom_ = g == "geojson" ? geometry::geojson : geometry::polyline;
+  }
+  if (s) {
+    req.steps_ = s == "true";
+  }
+  if (a) {
+    req.annotations_ = a == "true";
+  }
+  if (n) {
+    std::from_chars(n->data(), n->data() + n->size(), req.number_);
+  }
   return req;
 }
 
