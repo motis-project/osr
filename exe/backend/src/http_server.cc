@@ -258,15 +258,15 @@ struct http_server::impl {
 
     osrm_request osrm_req = parse_request(req);
 
-    auto params = get_parameters(osrm_req.profile_);
+    auto const params = get_parameters(osrm_req.profile_);
     auto const from = osrm_req.coords_[0];
     auto const to = osrm_req.coords_[1];
 
-    auto const p = route(params, w_, l_, osrm_req.profile_, from, to, 100,
-                         direction::kForward, 3600, nullptr, nullptr,
+    auto const p = route(params, w_, l_, osrm_req.profile_, from, to, 3600,
+                         direction::kForward, 100, nullptr, nullptr,
                          elevations_, routing_algorithm::kDijkstra);
 
-    const auto res = osrm_route_response(p); 
+    const auto res = osrm_route_response(osrm_req, p);
     cb(json_response(req, json::serialize(res)));
   }
 
