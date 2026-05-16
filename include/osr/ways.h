@@ -242,6 +242,12 @@ struct ways {
     return cista::mmap{(p_ / file).generic_string().c_str(), mode_};
   }
 
+  std::string_view get_way_name(way_idx_t const way) const {
+    auto const id = way_names_[way];
+    return (id != string_idx_t::invalid()) ? strings_[id].view()
+                                           : std::string_view{};
+  }
+
   void sync();
 
   way_idx_t::value_t n_ways() const { return way_osm_idx_.size(); }
