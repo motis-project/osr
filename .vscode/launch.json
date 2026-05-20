@@ -1,0 +1,32 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "dijkstra/astar — Debug (full stepping, slow)",
+      "type": "lldb",
+      "request": "launch",
+      "program": "${workspaceFolder}/build/macos-arm64-debug/osr-test",
+      "args": ["--gtest_filter=*dijkstra*"],
+      "cwd": "${workspaceFolder}",
+      "preLaunchTask": "build osr-test (Debug)"
+    },
+    {
+      "name": "dijkstra/astar — RelWithDebInfo (optimized, basic breakpoints)",
+      "type": "lldb",
+      "request": "launch",
+      "program": "${workspaceFolder}/build/macos-arm64-relwithdebinfo/osr-test",
+      "args": ["--gtest_filter=*dijkstra*"],
+      "cwd": "${workspaceFolder}",
+      "preLaunchTask": "build osr-test (RelWithDebInfo)"
+    },
+    {
+      "name": "all tests — Debug",
+      "type": "lldb",
+      "request": "launch",
+      "program": "${workspaceFolder}/build/macos-arm64-debug/osr-test",
+      "args": [],
+      "cwd": "${workspaceFolder}",
+      "preLaunchTask": "build osr-test (Debug)"
+    }
+  ]
+}
