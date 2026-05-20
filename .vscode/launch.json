@@ -2,31 +2,39 @@
   "version": "0.2.0",
   "configurations": [
     {
-      "name": "dijkstra/astar — Debug (full stepping, slow)",
+      "name": "Prompt for filter — Debug (full stepping, slow)",
       "type": "lldb",
       "request": "launch",
       "program": "${workspaceFolder}/build/macos-arm64-debug/osr-test",
-      "args": ["--gtest_filter=*dijkstra*"],
+      "args": ["--gtest_filter=${input:gtestFilter}"],
       "cwd": "${workspaceFolder}",
       "preLaunchTask": "build osr-test (Debug)"
     },
     {
-      "name": "dijkstra/astar — RelWithDebInfo (optimized, basic breakpoints)",
+      "name": "Prompt for filter — RelWithDebInfo (optimized, basic breakpoints)",
       "type": "lldb",
       "request": "launch",
       "program": "${workspaceFolder}/build/macos-arm64-relwithdebinfo/osr-test",
-      "args": ["--gtest_filter=*dijkstra*"],
+      "args": ["--gtest_filter=${input:gtestFilter}"],
       "cwd": "${workspaceFolder}",
       "preLaunchTask": "build osr-test (RelWithDebInfo)"
     },
     {
-      "name": "all tests — Debug",
+      "name": "All tests — Debug",
       "type": "lldb",
       "request": "launch",
       "program": "${workspaceFolder}/build/macos-arm64-debug/osr-test",
       "args": [],
       "cwd": "${workspaceFolder}",
       "preLaunchTask": "build osr-test (Debug)"
+    }
+  ],
+  "inputs": [
+    {
+      "id": "gtestFilter",
+      "type": "promptString",
+      "description": "gtest filter (e.g. dijkstra_astarbidir.* or dijkstra_astarbidir.monaco_fwd). Filename of open file is pre-filled — strip _test suffix.",
+      "default": "${fileBasenameNoExtension}.*"
     }
   ]
 }

@@ -1,0 +1,11 @@
+{
+  "testMate.cpp.test.executables": "build/macos-arm64-{debug,relwithdebinfo}/osr-test",
+  "testMate.cpp.debug.configTemplate": {
+    "type": "lldb",
+    "request": "launch",
+    "program": "${exec}",
+    "args": "${argsArray}",
+    "cwd": "${cwd}",
+    "env": "${envObj}"
+  }
+}
