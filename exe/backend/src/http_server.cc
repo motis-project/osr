@@ -277,6 +277,20 @@ struct http_server::impl {
     cb(json_response(req, res));
   }
 
+  void handle_osrm_table(web_server::http_req_t const& req,
+                         web_server::http_res_cb_t const& cb) {
+    osrm_request osrm_req = parse_request(req);
+    const auto res = osrm_table_response(osrm_req, l_, w_);
+    cb(json_response(req, res));
+  }
+
+  void handle_osrm_match(web_server::http_req_t const& req,
+                         web_server::http_res_cb_t const& cb) {
+    osrm_request osrm_req = parse_request(req);
+    const auto res = osrm_match_response(osrm_req, l_, w_);
+    cb(json_response(req, res));
+  }
+
   void handle_request(web_server::http_req_t const& req,
                       web_server::http_res_cb_t const& cb) {
     std::cout << "[" << req.method_string() << "] " << req.target() << '\n';
@@ -331,6 +345,20 @@ struct http_server::impl {
               [this](web_server::http_req_t const& req1,
                      web_server::http_res_cb_t const& cb1) {
                 handle_osrm_nearest(req1, cb1);
+              },
+              req, cb);
+        } else if (target.starts_with("/match/v1/")) {
+          return run_parallel(
+              [this](web_server::http_req_t const& req1,
+                     web_server::http_res_cb_t const& cb1) {
+                handle_osrm_match(req1, cb1);
+              },
+              req, cb);
+        } else if (target.starts_with("/table/v1/")) {
+          return run_parallel(
+              [this](web_server::http_req_t const& req1,
+                     web_server::http_res_cb_t const& cb1) {
+                handle_osrm_table(req1, cb1);
               },
               req, cb);
         }

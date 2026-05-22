@@ -1,10 +1,13 @@
 #pragma once
 
 #include "boost/url/parse.hpp"
+#include <boost/json/array.hpp>
+#include <boost/json/impl/serialize.ipp>
 
 #include "net/web_server/web_server.h"
 
 #include "osr/lookup.h"
+#include "osr/routing/map_matching.h"
 #include "osr/routing/parameters.h"
 #include "osr/routing/with_profile.h"
 
@@ -50,7 +53,7 @@ inline std::vector<location> parse_locations(std::string_view c) {
   return locs;
 }
 
-inline boost::json::value to_line_string(path const& p) {
+inline boost::json::value polyline_to_json(path const& p) {
   auto x = boost::json::array{};
   for (auto const& s : p.segments_) {
     x.emplace_back(
@@ -58,7 +61,100 @@ inline boost::json::value to_line_string(path const& p) {
   }
   auto const last = p.segments_.front().polyline_.front();
   x.emplace_back(boost::json::array{last.lng(), last.lat()});
-  return {{"type", "LineString"}, {"coordinates", x}};
+  return x;
+}
+
+inline boost::json::value to_line_string(path const& p) {
+  return {{"type", "LineString"}, {"coordinates", polyline_to_json(p)}};
+}
+
+inline std::string osrm_match_response(const osrm_request& req,
+                                       lookup const& l,
+                                       ways const& w) {
+  const auto match = map_match(w, l, req.profile_, get_parameters(req.profile_),
+                               req.coords_, nullptr, nullptr, nullptr);
+
+  boost::json::object r;
+
+  if (match.path_.segments_.empty()) {
+    r["code"] = "NoMatch";
+    r["matchings"] = boost::json::array{};
+    r["tracepoints"] = boost::json::array{};
+    return boost::json::serialize(r);
+  }
+
+  r["code"] = "Ok";
+
+  auto const n_points = req.coords_.size();
+  auto const n_segments = n_points - 1U;
+
+  boost::json::array tracepoints;
+  tracepoints.reserve(n_points);
+  for (auto i = 0U; i < n_points; ++i) {
+    boost::json::object tp;
+    tp["matchings_index"] = 0;
+    tp["waypoint_index"] = i;
+    tp["alternatives_count"] = 0;
+    tp["name"] = "";
+    tp["hint"] = "";
+    tp["location"] = boost::json::array{req.coords_[i].pos_.lng(),
+                                        req.coords_[i].pos_.lat()};
+    tracepoints.emplace_back(tp);
+  }
+  r["tracepoints"] = tracepoints;
+
+  boost::json::object matching;
+
+  matching["confidence"] =
+      static_cast<double>(match.n_routed_) / static_cast<double>(n_segments);
+
+  matching["distance"] = match.path_.dist_;
+  matching["duration"] = match.path_.cost_;
+  matching["weight"] = match.path_.cost_;
+  matching["weight_name"] = "duration";
+  matching["geometry"] = req.geom_ == geometry::geojson
+                             ? to_line_string(match.path_)
+                             : "polyline"; // TODO
+
+  boost::json::array legs;
+  legs.reserve(n_segments);
+
+  for (std::size_t seg_idx = 0U; seg_idx < n_segments; ++seg_idx) {
+    auto const seg_begin = match.segment_offsets_[seg_idx];
+    auto const seg_end = match.segment_offsets_[seg_idx + 1U];
+
+    auto leg_dist = 0;
+    auto leg_cost = 0;
+    for (auto s = seg_begin; s < seg_end; ++s) {
+      leg_dist += match.path_.segments_[s].dist_;
+      leg_cost += match.path_.segments_[s].cost_;
+    }
+
+    boost::json::object leg;
+    leg["distance"] = leg_dist;
+    leg["duration"] = leg_cost;
+    leg["weight"] = leg_cost;
+    leg["summary"] = "";
+
+    boost::json::array steps;
+
+    if (req.steps_) {
+      // TODO: turn-by-turn steps
+    }
+    leg["steps"] = steps;
+
+    if (req.annotations_) {
+      // TODO: node / duration / distance annotation arrays
+    }
+
+    legs.emplace_back(leg);
+  }
+  matching["legs"] = legs;
+
+  boost::json::array matchings;
+  matchings.emplace_back(matching);
+  r["matchings"] = matchings;
+  return boost::json::serialize(r);
 }
 
 inline std::string osrm_nearest_response(const osrm_request& req,
@@ -96,6 +192,56 @@ inline std::string osrm_nearest_response(const osrm_request& req,
   return boost::json::serialize(r);
 }
 
+inline std::string osrm_table_response(const osrm_request& req,
+                                       std::optional<path> const& p) {
+  boost::json::object r;
+  if (!p.has_value()) {
+    r["code"] = "NoRoute";
+    return boost::json::serialize(r);
+  }
+
+  r["code"] = "Ok";
+
+  boost::json::object route;
+  route["distance"] = p->dist_;
+  route["duration"] = p->cost_;
+  route["geometry"] = req.geom_ == geometry::geojson
+                          ? to_line_string(p.value())
+                          : to_json(p.value());  // TODO:
+  route["weight"] = p->cost_;
+  route["weight_name"] = "duration";
+
+  boost::json::array legs;
+  for (auto const& s : p->segments_) {
+    boost::json::object leg;
+    leg["distance"] = s.dist_;
+    leg["duration"] = s.cost_;
+    leg["weight"] = s.cost_;
+
+    // turn by turn instructions
+    boost::json::array steps;
+    std::string summary;
+    if (req.steps_) {
+      // TODO:: summary, steps
+    }
+
+    leg["steps"] = steps;
+    leg["summary"] = summary;
+    if (req.annotations_) {
+      // TODO
+    }
+    legs.emplace_back(leg);
+  }
+
+  route["legs"] = legs;
+
+  boost::json::array routes;
+  routes.emplace_back(route);
+  r["routes"] = routes;
+
+  return boost::json::serialize(r);
+}
+
 inline std::string osrm_route_response(const osrm_request& req,
                                        std::optional<path> const& p) {
   boost::json::object r;
@@ -109,8 +255,8 @@ inline std::string osrm_route_response(const osrm_request& req,
   boost::json::object route;
   route["distance"] = p->dist_;
   route["duration"] = p->cost_;
-  route["geometry"] =
-      req.geom_ == geometry::geojson ? to_line_string(p.value()) : "polyline";
+  route["geometry"] = req.geom_ == geometry::geojson ? to_line_string(p.value())
+                                                     : "polyline";  // TODO:
   route["weight"] = p->cost_;
   route["weight_name"] = "duration";
 
