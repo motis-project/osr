@@ -114,7 +114,7 @@ inline std::string osrm_match_response(const osrm_request& req,
   matching["weight_name"] = "duration";
   matching["geometry"] = req.geom_ == geometry::geojson
                              ? to_line_string(match.path_)
-                             : "polyline"; // TODO
+                             : "polyline";  // TODO
 
   boost::json::array legs;
   legs.reserve(n_segments);
@@ -205,9 +205,8 @@ inline std::string osrm_table_response(const osrm_request& req,
   boost::json::object route;
   route["distance"] = p->dist_;
   route["duration"] = p->cost_;
-  route["geometry"] = req.geom_ == geometry::geojson
-                          ? to_line_string(p.value())
-                          : to_json(p.value());  // TODO:
+  route["geometry"] =
+      req.geom_ == geometry::geojson ? to_line_string(p.value()) : "";  // TODO:
   route["weight"] = p->cost_;
   route["weight_name"] = "duration";
 
