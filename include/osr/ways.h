@@ -187,6 +187,7 @@ struct node_properties {
   std::uint8_t is_entrance_ : 1;
   std::uint8_t is_multi_level_ : 1;
   std::uint8_t is_parking_ : 1;
+  std::uint8_t is_bike_parking_ : 1;
 
   std::uint8_t to_level_ : 6;
   std::uint8_t is_bus_accessible_with_penalty_ : 1;

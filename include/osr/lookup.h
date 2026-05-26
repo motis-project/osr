@@ -222,6 +222,7 @@ struct lookup {
   }
 
   hash_set<node_idx_t> find_elevators(geo::box const& b) const;
+  hash_set<node_idx_t> find_bike_parkings(geo::box const& b) const;
 
   void insert(way_idx_t);
 

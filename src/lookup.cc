@@ -133,4 +133,16 @@ hash_set<node_idx_t> lookup::find_elevators(geo::box const& b) const {
   return elevators;
 }
 
+hash_set<node_idx_t> lookup::find_bike_parkings(geo::box const& b) const {
+  auto parkings = hash_set<node_idx_t>{};
+  find(b, [&](way_idx_t const way) {
+    for (auto const n : ways_.r_->way_nodes_[way]) {
+      if (ways_.r_->node_properties_[n].is_bike_parking_) {
+        parkings.emplace(n);
+      }
+    }
+  });
+  return parkings;
+}
+
 }  // namespace osr
