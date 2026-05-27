@@ -466,7 +466,7 @@ struct way_handler : public osm::handler::Handler {
   }
 
   void way(osm::Way const& w) {
-    auto const osm_way_idx = osm_way_idx_t{w.positive_id()};
+    auto const osm_way_idx = to_osm_way_idx(w.id());
     auto const it = rel_ways_.find(osm_way_idx);
     auto t = tags{w};
 
@@ -474,7 +474,7 @@ struct way_handler : public osm::handler::Handler {
       if (w.nodes().front() != w.nodes().back()) {
         return;  // way elevators have to be loops
       }
-      auto const first_node = osm_node_idx_t{w.nodes().front().positive_ref()};
+      auto const first_node = to_osm_node_idx(w.nodes().front().ref());
       auto const l = std::scoped_lock{elevator_nodes_mutex_};
       elevator_nodes_.emplace(first_node, t.level_bits_);
     }
@@ -515,8 +515,9 @@ struct way_handler : public osm::handler::Handler {
     };
 
     auto const get_node_id = [&](osmium::NodeRef const& n) {
-      w_.node_way_counter_.increment(n.positive_ref());
-      return osm_node_idx_t{n.positive_ref()};
+      auto const idx = to_osm_node_idx(n.ref());
+      w_.node_way_counter_.increment(to_idx(idx));
+      return idx;
     };
 
     auto const register_string = [&](std::string_view s) {
@@ -545,7 +546,7 @@ struct way_handler : public osm::handler::Handler {
       platforms_->platform_ref_[it->second.pl_].push_back(to_value(way_idx));
     }
 
-    w_.way_osm_idx_.push_back(osm_way_idx_t{w.positive_id()});
+    w_.way_osm_idx_.push_back(to_osm_way_idx(w.id()));
     w_.r_->way_properties_.emplace_back(p);
     if (hgv_info.has_value()) {
       w_.r_->way_hgv_info_.emplace_back(way_idx, *hgv_info);
@@ -602,7 +603,7 @@ struct node_handler : public osm::handler::Handler {
   }
 
   void node(osm::Node const& n) {
-    auto const osm_node_idx = osm_node_idx_t{n.id()};
+    auto const osm_node_idx = to_osm_node_idx(n.id());
     if (auto const node_idx = w_.find_node_idx(osm_node_idx);
         node_idx.has_value()) {
       auto const t = tags{n};
@@ -681,7 +682,7 @@ struct node_handler : public osm::handler::Handler {
     for (auto const& m : r.members()) {
       switch (cista::hash(std::string_view{m.role()})) {
         case cista::hash("to"): {
-          auto const to = w_.find_way(osm_way_idx_t{m.positive_ref()});
+          auto const to = w_.find_way(to_osm_way_idx(m.ref()));
           if (to.has_value()) {
             c->to_.emplace_back(*to);
           }
@@ -689,7 +690,7 @@ struct node_handler : public osm::handler::Handler {
         }
 
         case cista::hash("from"): {
-          auto const from = w_.find_way(osm_way_idx_t{m.positive_ref()});
+          auto const from = w_.find_way(to_osm_way_idx(m.ref()));
           if (from.has_value()) {
             c->from_.emplace_back(*from);
           }
@@ -698,7 +699,7 @@ struct node_handler : public osm::handler::Handler {
 
         case cista::hash("via"):
           if (m.type() == osmium::item_type::node) {
-            auto const v = w_.find_node_idx(osm_node_idx_t{m.positive_ref()});
+            auto const v = w_.find_node_idx(to_osm_node_idx(m.ref()));
             if (v.has_value()) {
               via = *v;
             }
@@ -744,12 +745,12 @@ struct mark_inaccessible_handler : public osm::handler::Handler {
         is_accessible<bike_profile>(t, osm_obj_type::kNode) &&
         is_accessible<foot_profile>(t, osm_obj_type::kNode);
     if (!accessible || t.is_elevator_ || t.is_platform()) {
-      w_.node_way_counter_.increment(n.positive_id());
+      w_.node_way_counter_.increment(to_idx(to_osm_node_idx(n.id())));
     }
 
     if (track_platforms_ && t.is_platform()) {
-      // Wnsure nodes are created even if they are not part of a routable way.
-      w_.node_way_counter_.increment(n.positive_id());
+      // Ensure nodes are created even if they are not part of a routable way.
+      w_.node_way_counter_.increment(to_idx(to_osm_node_idx(n.id())));
     }
   }
 

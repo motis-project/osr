@@ -285,7 +285,9 @@ struct ways {
   void build_components();
 
   std::optional<way_idx_t> find_way(osm_way_idx_t const i) {
-    auto const it = std::lower_bound(begin(way_osm_idx_), end(way_osm_idx_), i);
+    auto const it = std::lower_bound(
+        begin(way_osm_idx_), end(way_osm_idx_), i,
+        [](auto const a, auto const b) { return osm_id_less(a, b); });
     return it != end(way_osm_idx_) && *it == i
                ? std::optional{way_idx_t{
                      std::distance(begin(way_osm_idx_), it)}}
@@ -482,7 +484,7 @@ struct ways {
   mm_bitvec<way_idx_t> way_has_conditional_access_no_;
   mm_vec<pair<way_idx_t, string_idx_t>> way_conditional_access_no_;
 
-  multi_counter node_way_counter_;
+  multi_counter<> node_way_counter_;
 };
 
 }  // namespace osr

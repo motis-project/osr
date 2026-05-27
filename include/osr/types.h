@@ -81,6 +81,48 @@ using string_idx_t = cista::strong<std::uint32_t, struct string_idx_>;
 using osm_node_idx_t = cista::strong<std::uint64_t, struct osm_node_idx_>;
 using osm_way_idx_t = cista::strong<std::uint64_t, struct osm_way_idx_>;
 
+constexpr auto const kEncodedNegativeOsmIdBit = std::uint64_t{1U} << 63U;
+
+constexpr bool is_negative_encoded_osm_id(std::uint64_t const id) {
+  return (id & kEncodedNegativeOsmIdBit) != 0U;
+}
+
+constexpr std::uint64_t encode_osm_id(std::int64_t const id) {
+  return id >= 0 ? static_cast<std::uint64_t>(id)
+                 : (kEncodedNegativeOsmIdBit |
+                    static_cast<std::uint64_t>(-(id + 1)));
+}
+
+constexpr osm_node_idx_t to_osm_node_idx(std::int64_t const id) {
+  return osm_node_idx_t{encode_osm_id(id)};
+}
+
+constexpr osm_way_idx_t to_osm_way_idx(std::int64_t const id) {
+  return osm_way_idx_t{encode_osm_id(id)};
+}
+
+constexpr bool encoded_osm_id_less(std::uint64_t const lhs,
+                                   std::uint64_t const rhs) {
+  // Negative OSM ids are stored in the upper half of the uint64_t range but
+  // still need to compare before positive ids in their original signed order.
+  auto const lhs_negative = is_negative_encoded_osm_id(lhs);
+  auto const rhs_negative = is_negative_encoded_osm_id(rhs);
+  if (lhs_negative != rhs_negative) {
+    return lhs_negative;
+  }
+
+  if (!lhs_negative) {
+    return lhs < rhs;
+  }
+
+  return (lhs & ~kEncodedNegativeOsmIdBit) > (rhs & ~kEncodedNegativeOsmIdBit);
+}
+
+template <typename OsmIdx>
+constexpr bool osm_id_less(OsmIdx const lhs, OsmIdx const rhs) {
+  return encoded_osm_id_less(to_idx(lhs), to_idx(rhs));
+}
+
 using way_idx_t = cista::strong<std::uint32_t, struct way_idx_>;
 using node_idx_t = cista::strong<std::uint32_t, struct node_idx_>;
 
