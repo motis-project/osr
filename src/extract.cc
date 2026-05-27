@@ -145,6 +145,7 @@ way_properties get_way_properties(
   p.is_elevator_ = t.is_elevator_;
   p.is_steps_ = (t.highway_ == "steps"sv);
   p.is_parking_ = t.is_parking_;
+  p.is_parking_ = t.is_bike_parking_;
   p.speed_limit_ = get_speed_limit(t);
   p.from_level_ = to_idx(from);
   p.to_level_ = to_idx(to);
