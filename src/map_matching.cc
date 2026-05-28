@@ -144,7 +144,9 @@ point_data<P> match_input_point(ways const& w,
             .projected_point_ = best,
             .segment_idx_ = static_cast<unsigned>(segment_idx),
             .oneway_ = P::way_cost(params, *w.r_, way, way_prop,
-                                   direction::kBackward, 0U) == kInfeasible};
+                                   direction::kBackward, 0U, std::nullopt,
+                                   duration_t{0}, direction::kForward)
+                           .cost_ == kInfeasible};
         auto const wc = way_candidate{.dist_to_way_ = mw.dist_to_way_,
                                       .way_ = way,
                                       .closest_point_on_way_ = best,

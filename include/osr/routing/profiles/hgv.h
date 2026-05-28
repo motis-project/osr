@@ -3,8 +3,10 @@
 #include <algorithm>
 #include <bitset>
 #include <cmath>
+#include <limits>
 #include <optional>
 #include <tuple>
+#include <utility>
 
 #include "boost/json/object.hpp"
 
@@ -31,7 +33,7 @@ struct hgv {
 
   struct parameters {
     using profile_t = hgv;
-    cost_t uturn_penalty_{120U};
+    cost_t uturn_penalty_{2000U};
     quantized_angle_t slow_turn_angle_{quantize_turn_angle(65.0)};
     quantized_angle_t sharp_turn_angle_{quantize_turn_angle(110.0)};
     cost_t slow_turn_penalty_{10U};
@@ -119,7 +121,11 @@ struct hgv {
     static constexpr auto const kMaxWays = way_pos_t{16U};
     static constexpr auto const kN = kMaxWays * 2U /* FWD+BWD */;
 
-    entry() { utl::fill(cost_, kInfeasible); }
+    entry() {
+      utl::fill(pred_, node_idx_t::invalid());
+      utl::fill(cost_, kInfeasible);
+      utl::fill(duration_, kMaxDuration);
+    }
 
     constexpr std::optional<node> pred(node const n) const noexcept {
       auto const idx = get_index(n);
@@ -133,11 +139,27 @@ struct hgv {
       return cost_[get_index(n)];
     }
 
-    constexpr bool update(label const&, node const n, cost_t const c,
+    constexpr duration_t duration(node const n) const noexcept {
+      return duration_[get_index(n)];
+    }
+
+    constexpr bool update(label const& l,
+                          node const n,
+                          cost_t const c,
                           node const pred) noexcept {
+      return update(l, n, c, pred, duration_from_cost(c));
+    }
+
+    constexpr bool update(label const&,
+                          node const n,
+                          cost_t const c,
+                          node const pred,
+                          duration_t const duration) noexcept {
+      n_ = n.n_;
       auto const idx = get_index(n);
-      if (c < cost_[idx]) {
+      if (c < cost_[idx] || (c == cost_[idx] && duration < duration_[idx])) {
         cost_[idx] = c;
+        duration_[idx] = duration;
         pred_[idx] = pred.n_;
         pred_way_[idx] = pred.way_;
         pred_dir_[idx] = to_bool(pred.dir_);
@@ -170,6 +192,8 @@ struct hgv {
     std::array<way_pos_t, kN> pred_way_;
     std::bitset<kN> pred_dir_;
     std::array<cost_t, kN> cost_;
+    std::array<duration_t, kN> duration_;
+    node_idx_t n_{node_idx_t::invalid()};
   };
 
   struct hash {
@@ -178,6 +202,13 @@ struct hgv {
       using namespace ankerl::unordered_dense::detail;
       return wyhash::hash(static_cast<std::uint64_t>(to_idx(n)));
     }
+  };
+
+  struct way_state {
+    bool accessible_{};
+    bool destination_penalty_{};
+    hgv_way_info const* info_{};
+    std::optional<std::uint16_t> max_speed_km_h_{};
   };
 
   static node create_node(node_idx_t const n,

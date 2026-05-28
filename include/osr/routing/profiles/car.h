@@ -126,10 +126,15 @@ struct generic_car {
       return cost_[get_index(n)];
     }
 
+    constexpr duration_t duration(node const n) const noexcept {
+      return duration_from_cost(cost(n));
+    }
+
     constexpr bool update(label const&,
                           node const n,
                           cost_t const c,
-                          node const pred) noexcept {
+                          node const pred,
+                          duration_t const) noexcept {
       auto const idx = get_index(n);
       if (c < cost_[idx]) {
         cost_[idx] = c;
@@ -214,13 +219,15 @@ struct generic_car {
   static void adjacent(parameters const& params,
                        ways::routing const& w,
                        node const n,
+                       duration_t const current_duration,
+                       std::optional<routing_time_t> const start_time,
                        bitvec<node_idx_t> const* blocked,
                        sharing_data const* additional,
                        elevation_storage const*,
                        Fn&& fn) {
     if (additional != nullptr) {
       for_each_additional_edge<generic_car>(
-          params, w, n, additional,
+          params, w, n, additional, start_time, current_duration, SearchDir,
           [&](additional_edge const& ae, cost_t const edge_cost,
               direction const edge_dir) {
             if (!additional->is_additional_node(n.n_)) {
@@ -230,7 +237,7 @@ struct generic_car {
               }
             }
 
-            auto const [target, cost] =
+            auto const [target, cost, duration] =
                 get_adjacent_additional_node<generic_car>(
                     params, w, n, additional, ae, edge_dir, edge_cost,
                     params.uturn_penalty_);
@@ -238,7 +245,7 @@ struct generic_car {
               return;
             }
 
-            fn(target, cost, ae.distance_, ae.underlying_way_, 0, 0,
+            fn(target, cost, duration, ae.distance_, ae.underlying_way_, 0, 0,
                elevation_storage::elevation{}, false);
           });
 
@@ -248,7 +255,8 @@ struct generic_car {
     }
 
     for_each_adjacent_node<generic_car, SearchDir, WithBlocked, true, IsBus>(
-        params, w, n, blocked, params.uturn_penalty_, fn);
+        params, w, n, blocked, params.uturn_penalty_, start_time,
+        current_duration, SearchDir, fn);
   }
 
   static bool is_dest_reachable(parameters const& params,
@@ -256,9 +264,12 @@ struct generic_car {
                                 node const n,
                                 way_idx_t const way,
                                 direction const way_dir,
-                                direction const search_dir) {
+                                direction const search_dir,
+                                std::optional<routing_time_t> const start_time,
+                                duration_t const current_duration) {
     auto const target_way_prop = w.way_properties_[way];
-    if (way_cost(params, w, way, target_way_prop, way_dir, 0U) == kInfeasible) {
+    if (way_cost(params, w, way, target_way_prop, way_dir, 0U, start_time,
+                 current_duration, search_dir) == kInfeasible) {
       return false;
     }
 
@@ -275,7 +286,10 @@ struct generic_car {
                                    way_idx_t const,
                                    way_properties const& e,
                                    direction const dir,
-                                   distance_t const dist) {
+                                   distance_t const dist,
+                                   std::optional<routing_time_t> const,
+                                   duration_t const,
+                                   direction const) {
     if constexpr (IsBus) {
       auto const accessible = e.is_bus_accessible();
       auto const accessible_with_penalty = e.is_bus_accessible_with_penalty();

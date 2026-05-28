@@ -14,6 +14,7 @@
 
 #include "osr/elevation_storage.h"
 #include "osr/lookup.h"
+#include "osr/routing/astar.h"
 #include "osr/routing/bidirectional.h"
 #include "osr/routing/dijkstra.h"
 #include "osr/routing/path_reconstruction.h"
@@ -51,6 +52,23 @@ dijkstra<P>& get_dijkstra() {
   return *s.get();
 }
 
+template <Profile P>
+astar<P>& get_astar() {
+  static auto s = boost::thread_specific_ptr<astar<P>>{};
+  if (s.get() == nullptr) {
+    s.reset(new astar<P>{});
+  }
+  return *s.get();
+}
+
+duration_t sum_segment_durations(std::vector<path::segment> const& segments,
+                                 duration_t total = duration_t{0}) {
+  for (auto const& segment : segments) {
+    total = clamp_add_duration(total, segment.duration_);
+  }
+  return total;
+}
+
 routing_algorithm to_algorithm(std::string_view s) {
   switch (cista::hash(s)) {
     case cista::hash("dijkstra"): return routing_algorithm::kDijkstra;
@@ -72,7 +90,8 @@ path reconstruct_bi(typename P::parameters const& params,
                     way_candidate const& start,
                     way_candidate const& dest,
                     cost_t const cost,
-                    direction const dir) {
+                    direction const dir,
+                    std::optional<routing_time_t> const start_time) {
   auto forward_n = b.meet_point_1_;
 
   // TODO subtract meetpoint node cost?
@@ -84,11 +103,14 @@ path reconstruct_bi(typename P::parameters const& params,
     auto const& e = b.cost1_.at(forward_n.get_key());
     auto const pred = e.pred(forward_n);
     if (pred.has_value()) {
+      auto const pred_duration = b.cost1_.at(pred->get_key()).duration(*pred);
       auto const expected_cost = static_cast<cost_t>(
           e.cost(forward_n) - b.template get_cost<direction::kForward>(*pred));
       forward_dist +=
           add_path<P>(params, w, *w.r_, blocked, sharing, elevations, *pred,
-                      forward_n, expected_cost, forward_segments, dir);
+                      forward_n, pred_duration, start_time, expected_cost,
+                      clamp_sub_duration(e.duration(forward_n), pred_duration),
+                      forward_segments, dir);
     } else {
       break;
     }
@@ -110,6 +132,7 @@ path reconstruct_bi(typename P::parameters const& params,
 
        .way_ = way_idx_t::invalid(),
        .cost_ = start_node_candidate.cost_,
+       .duration_ = duration_from_cost(start_node_candidate.cost_),
        .dist_ = static_cast<distance_t>(start_node_candidate.dist_to_node_),
        .mode_ = forward_n.get_mode()});
 
@@ -148,6 +171,7 @@ path reconstruct_bi(typename P::parameters const& params,
                                           : node_idx_t::invalid(),
        .way_ = way_idx_t::invalid(),
        .cost_ = dest_node_candidate.cost_,
+       .duration_ = duration_from_cost(dest_node_candidate.cost_),
        .dist_ = static_cast<distance_t>(dest_node_candidate.dist_to_node_),
        .mode_ = backward_n.get_mode()});
 
@@ -167,6 +191,8 @@ path reconstruct_bi(typename P::parameters const& params,
     path_elevation += segment.elevation_;
   }
   auto p = path{.cost_ = cost,
+                .duration_ = sum_segment_durations(
+                    forward_segments, duration_from_cost(b.meet_extra_cost_)),
                 .dist_ = total_dist,
                 .elevation_ = path_elevation,
                 .segments_ = forward_segments};
@@ -175,14 +201,14 @@ path reconstruct_bi(typename P::parameters const& params,
   return p;
 }
 
-template <Profile P>
+template <Profile P, typename Search>
 path reconstruct(typename P::parameters const& params,
                  ways const& w,
                  lookup const& l,
                  bitvec<node_idx_t> const* blocked,
                  sharing_data const* sharing,
                  elevation_storage const* elevations,
-                 dijkstra<P> const& d,
+                 Search const& search,
                  location const& from,
                  location const& to,
                  way_candidate const& start,
@@ -190,7 +216,8 @@ path reconstruct(typename P::parameters const& params,
                  node_candidate const& dest_nc,
                  typename P::node const dest_node,
                  cost_t const cost,
-                 direction const dir) {
+                 direction const dir,
+                 std::optional<routing_time_t> const start_time) {
 
   auto n = dest_node;
   auto segments = std::vector<path::segment>{
@@ -204,17 +231,22 @@ path reconstruct(typename P::parameters const& params,
            dir == direction::kBackward ? n.get_node() : node_idx_t::invalid(),
        .way_ = way_idx_t::invalid(),
        .cost_ = dest_nc.cost_,
+       .duration_ = duration_from_cost(dest_nc.cost_),
        .dist_ = static_cast<distance_t>(dest_nc.dist_to_node_),
        .mode_ = dest_node.get_mode()}};
   auto dist = 0.0;
   while (true) {
-    auto const& e = d.cost_.at(n.get_key());
+    auto const& e = search.cost_.at(n.get_key());
     auto const pred = e.pred(n);
     if (pred.has_value()) {
+      auto const pred_duration =
+          search.cost_.at(pred->get_key()).duration(*pred);
       auto const expected_cost =
-          static_cast<cost_t>(e.cost(n) - d.get_cost(*pred));
+          static_cast<cost_t>(e.cost(n) - search.get_cost(*pred));
       dist += add_path<P>(params, w, *w.r_, blocked, sharing, elevations, *pred,
-                          n, expected_cost, segments, dir);
+                          n, pred_duration, start_time, expected_cost,
+                          clamp_sub_duration(e.duration(n), pred_duration),
+                          segments, dir);
     } else {
       break;
     }
@@ -233,6 +265,7 @@ path reconstruct(typename P::parameters const& params,
        .to_ = dir == direction::kForward ? n.get_node() : node_idx_t::invalid(),
        .way_ = way_idx_t::invalid(),
        .cost_ = start_nc.cost_,
+       .duration_ = duration_from_cost(start_nc.cost_),
        .dist_ = static_cast<distance_t>(start_nc.dist_to_node_),
        .mode_ = n.get_mode()});
   if (dir == direction::kForward) {
@@ -243,10 +276,11 @@ path reconstruct(typename P::parameters const& params,
     path_elevation += segment.elevation_;
   }
   auto p = path{.cost_ = cost,
+                .duration_ = sum_segment_durations(segments),
                 .dist_ = start_nc.dist_to_node_ + dist + dest_nc.dist_to_node_,
                 .elevation_ = path_elevation,
                 .segments_ = segments};
-  d.cost_.at(dest_node.get_key()).write(dest_node, p);
+  search.cost_.at(dest_node.get_key()).write(dest_node, p);
   return p;
 }
 
@@ -345,6 +379,7 @@ std::optional<path> try_direct(osr::location const& from,
   if (dist < 8.0) {
     return std::optional{path{
         .cost_ = 60U,
+        .duration_ = duration_from_cost(60U),
         .dist_ = dist,
         .segments_ = {path::segment{.polyline_ = {from.pos_, to.pos_},
                                     .from_level_ = from.lvl_,
@@ -353,6 +388,7 @@ std::optional<path> try_direct(osr::location const& from,
                                     .to_ = node_idx_t::invalid(),
                                     .way_ = way_idx_t::invalid(),
                                     .cost_ = 60U,
+                                    .duration_ = duration_from_cost(60U),
                                     .dist_ = static_cast<distance_t>(dist)}},
         .uses_elevator_ = false}};
   } else {
@@ -445,7 +481,7 @@ std::optional<path> route_bidirectional(typename P::parameters const& params,
       auto const cost = b.get_cost_to_mp(b.meet_point_1_, b.meet_point_2_);
 
       return reconstruct_bi(params, w, l, blocked, sharing, elevations, b, from,
-                            to, start, end, cost, dir);
+                            to, start, end, cost, dir, start_time);
     }
     b.pq1_.clear();
     b.pq2_.clear();

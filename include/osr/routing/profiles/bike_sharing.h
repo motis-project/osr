@@ -220,10 +220,15 @@ struct bike_sharing {
       return cost_[get_index(n)];
     }
 
+    constexpr duration_t duration(node const n) const noexcept {
+      return duration_from_cost(cost(n));
+    }
+
     constexpr bool update(label const,
                           node const n,
                           cost_t const c,
-                          node const pred) noexcept {
+                          node const pred,
+                          duration_t const) noexcept {
       auto const idx = get_index(n);
       if (c < cost_[idx]) {
         cost_[idx] = c;
@@ -301,6 +306,8 @@ struct bike_sharing {
   static void adjacent(parameters const& params,
                        ways::routing const& w,
                        node const n,
+                       duration_t const current_duration,
+                       std::optional<routing_time_t> const start_time,
                        bitvec<node_idx_t> const* blocked,
                        sharing_data const* sharing,
                        elevation_storage const* elevations,
@@ -312,22 +319,26 @@ struct bike_sharing {
           fn(node{.n_ = ae.to_,
                   .type_ = nt,
                   .lvl_ = nt == node_type::kBike ? kNoLevel : n.lvl_},
-             cost, ae.distance_, way_idx_t::invalid(), 0, 1,
-             elevation_storage::elevation{}, false);
+             cost, duration_from_cost(cost), ae.distance_, way_idx_t::invalid(),
+             0, 1, elevation_storage::elevation{}, false);
         };
 
     auto const& continue_on_foot = [&](node_type const nt,
                                        bool const include_additional_edges,
                                        cost_t const switch_penalty = 0) {
       footp::template adjacent<SearchDir, WithBlocked>(
-          params.foot_, w, to_foot(n), blocked, nullptr, elevations,
+          params.foot_, w, to_foot(n), current_duration, start_time, blocked,
+          nullptr, elevations,
           [&](footp::node const neighbor, std::uint32_t const cost,
-              distance_t const dist, way_idx_t const way,
-              std::uint16_t const from, std::uint16_t const to,
+              duration_t const duration, distance_t const dist,
+              way_idx_t const way, std::uint16_t const from,
+              std::uint16_t const to,
               elevation_storage::elevation const elevation, bool) {
             if (is_allowed(sharing->through_allowed_, neighbor.n_)) {
-              fn(to_node(neighbor, nt), cost + switch_penalty, dist, way, from,
-                 to, elevation, false);
+              fn(to_node(neighbor, nt), cost + switch_penalty,
+                 clamp_add_duration(duration,
+                                    duration_from_cost(switch_penalty)),
+                 dist, way, from, to, elevation, false);
             }
           });
       if (include_additional_edges) {
@@ -339,7 +350,8 @@ struct bike_sharing {
                 ae, nt,
                 footp::way_cost(params.foot_, w, way_idx_t::invalid(),
                                 kAdditionalWayProperties, direction::kForward,
-                                ae.distance_) +
+                                ae.distance_, start_time, current_duration,
+                                SearchDir) +
                     switch_penalty);
           }
         }
@@ -349,14 +361,18 @@ struct bike_sharing {
     auto const& continue_on_bike = [&](bool const include_additional_edges,
                                        cost_t const switch_penalty = 0) {
       bikep::adjacent<SearchDir, WithBlocked>(
-          params.bike_, w, to_bike(n), blocked, nullptr, elevations,
+          params.bike_, w, to_bike(n), current_duration, start_time, blocked,
+          nullptr, elevations,
           [&](bikep::node const neighbor, std::uint32_t const cost,
-              distance_t const dist, way_idx_t const way,
-              std::uint16_t const from, std::uint16_t const to,
+              duration_t const duration, distance_t const dist,
+              way_idx_t const way, std::uint16_t const from,
+              std::uint16_t const to,
               elevation_storage::elevation const elevation, bool) {
             if (is_allowed(sharing->through_allowed_, neighbor.n_)) {
-              fn(to_node(neighbor, kNoLevel), cost + switch_penalty, dist, way,
-                 from, to, elevation, false);
+              fn(to_node(neighbor, kNoLevel), cost + switch_penalty,
+                 clamp_add_duration(duration,
+                                    duration_from_cost(switch_penalty)),
+                 dist, way, from, to, elevation, false);
             }
           });
       if (include_additional_edges) {
@@ -368,7 +384,8 @@ struct bike_sharing {
                 ae, node_type::kBike,
                 bikep::way_cost(params.bike_, w, way_idx_t::invalid(),
                                 kAdditionalWayProperties, direction::kForward,
-                                ae.distance_) +
+                                ae.distance_, start_time, current_duration,
+                                SearchDir) +
                     switch_penalty);
           }
         }
@@ -389,7 +406,8 @@ struct bike_sharing {
                   ae, node_type::kBike,
                   bikep::way_cost(params.bike_, w, way_idx_t::invalid(),
                                   kAdditionalWayProperties, direction::kForward,
-                                  ae.distance_) +
+                                  ae.distance_, start_time, current_duration,
+                                  SearchDir) +
                       kStartSwitchPenalty);
             } else if (n.is_bike_node() &&
                        is_allowed(sharing->end_allowed_, n.n_)) {
@@ -397,7 +415,8 @@ struct bike_sharing {
                   ae, node_type::kTrailingFoot,
                   footp::way_cost(params.foot_, w, way_idx_t::invalid(),
                                   kAdditionalWayProperties, direction::kForward,
-                                  ae.distance_) +
+                                  ae.distance_, start_time, current_duration,
+                                  SearchDir) +
                       kEndSwitchPenalty);
             }
           }
@@ -429,7 +448,8 @@ struct bike_sharing {
                   ae, node_type::kBike,
                   bikep::way_cost(params.bike_, w, way_idx_t::invalid(),
                                   kAdditionalWayProperties, direction::kForward,
-                                  ae.distance_) +
+                                  ae.distance_, start_time, current_duration,
+                                  SearchDir) +
                       kEndSwitchPenalty);
             } else if (n.is_bike_node() &&
                        is_allowed(sharing->start_allowed_, n.n_)) {
@@ -437,7 +457,8 @@ struct bike_sharing {
                   ae, node_type::kInitialFoot,
                   footp::way_cost(params.foot_, w, way_idx_t::invalid(),
                                   kAdditionalWayProperties, direction::kForward,
-                                  ae.distance_) +
+                                  ae.distance_, start_time, current_duration,
+                                  SearchDir) +
                       kStartSwitchPenalty);
             }
           }
@@ -462,19 +483,26 @@ struct bike_sharing {
                                 node const n,
                                 way_idx_t const way,
                                 direction const way_dir,
-                                direction const search_dir) {
+                                direction const search_dir,
+                                std::optional<routing_time_t> const start_time,
+                                duration_t const current_duration) {
     return !n.is_bike_node() &&
            footp::is_dest_reachable(params.foot_, w, to_foot(n), way, way_dir,
-                                    search_dir);
+                                    search_dir, start_time, current_duration);
   }
 
-  static constexpr cost_t way_cost(parameters const& params,
-                                   ways::routing const& w,
-                                   way_idx_t const way,
-                                   way_properties const& e,
-                                   direction const dir,
-                                   distance_t const dist) {
-    return footp::way_cost(params.foot_, w, way, e, dir, dist);
+  static constexpr cost_t way_cost(
+      parameters const& params,
+      ways::routing const& w,
+      way_idx_t const way,
+      way_properties const& e,
+      direction const dir,
+      distance_t const dist,
+      std::optional<routing_time_t> const start_time,
+      duration_t const current_duration,
+      direction const search_dir) {
+    return footp::way_cost(params.foot_, w, way, e, dir, dist, start_time,
+                           current_duration, search_dir);
   }
 
   static constexpr cost_t node_cost(parameters const& params,

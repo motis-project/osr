@@ -92,10 +92,16 @@ struct foot {
                  : std::optional{node{pred_, pred_lvl_}};
     }
     constexpr cost_t cost(node) const noexcept { return cost_; }
+
+    constexpr duration_t duration(node const n) const noexcept {
+      return duration_from_cost(cost(n));
+    }
+
     constexpr bool update(label const& l,
                           node,
                           cost_t const c,
-                          node const pred) noexcept {
+                          node const pred,
+                          duration_t const) noexcept {
       if (c < cost_) {
         tracking_ = l.tracking_;
         cost_ = c;
@@ -182,6 +188,8 @@ struct foot {
   static void adjacent(parameters const& params,
                        ways::routing const& w,
                        node const n,
+                       duration_t const current_duration,
+                       std::optional<routing_time_t> const start_time,
                        bitvec<node_idx_t> const* blocked,
                        sharing_data const*,
                        elevation_storage const*,
@@ -204,8 +212,8 @@ struct foot {
         }
 
         auto const target_way_prop = w.way_properties_[way];
-        if (way_cost(params, w, way, target_way_prop, way_dir, 0U) ==
-            kInfeasible) {
+        if (way_cost(params, w, way, target_way_prop, way_dir, 0U, start_time,
+                     current_duration, SearchDir) == kInfeasible) {
           return;
         }
 
@@ -215,11 +223,13 @@ struct foot {
                 auto const dist =
                     w.get_way_node_distance(way, std::min(from, to));
                 auto const cost =
-                    way_cost(params, w, way, target_way_prop, way_dir, dist) +
+                    way_cost(params, w, way, target_way_prop, way_dir, dist,
+                             start_time, current_duration, SearchDir) +
                     node_cost(params, target_node_prop);
                 fn(node{target_node, target_lvl},
-                   static_cast<std::uint32_t>(cost), dist, way, from, to,
-                   elevation_storage::elevation{}, false);
+                   static_cast<std::uint32_t>(cost),
+                   duration_from_cost(static_cast<std::uint32_t>(cost)), dist,
+                   way, from, to, elevation_storage::elevation{}, false);
               });
         } else {
           auto const target_lvl = get_target_level(w, n.n_, n.lvl_, way);
@@ -229,10 +239,12 @@ struct foot {
 
           auto const dist = w.get_way_node_distance(way, std::min(from, to));
           auto const cost =
-              way_cost(params, w, way, target_way_prop, way_dir, dist) +
+              way_cost(params, w, way, target_way_prop, way_dir, dist,
+                       start_time, current_duration, SearchDir) +
               node_cost(params, target_node_prop);
           fn(node{target_node, *target_lvl}, static_cast<std::uint32_t>(cost),
-             dist, way, from, to, elevation_storage::elevation{}, false);
+             duration_from_cost(static_cast<std::uint32_t>(cost)), dist, way,
+             from, to, elevation_storage::elevation{}, false);
         }
       };
 
@@ -250,9 +262,12 @@ struct foot {
                                 node const n,
                                 way_idx_t const way,
                                 direction const way_dir,
-                                direction) {
+                                direction const search_dir,
+                                std::optional<routing_time_t> const start_time,
+                                duration_t const current_duration) {
     auto const target_way_prop = w.way_properties_[way];
-    if (way_cost(params, w, way, target_way_prop, way_dir, 0U) == kInfeasible) {
+    if (way_cost(params, w, way, target_way_prop, way_dir, 0U, start_time,
+                 current_duration, search_dir) == kInfeasible) {
       return false;
     }
 
@@ -353,7 +368,10 @@ struct foot {
                                    way_idx_t const,
                                    way_properties const e,
                                    direction,
-                                   distance_t const dist) {
+                                   distance_t const dist,
+                                   std::optional<routing_time_t> const,
+                                   duration_t const,
+                                   direction const) {
     if (IsWheelchair && e.is_steps()) {
       return kInfeasible;
     }

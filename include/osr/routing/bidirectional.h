@@ -84,7 +84,8 @@ struct bidirectional {
     auto const heur = heuristic(params, w, l.n_, dir, sharing);
     if (l.cost() + heur < d.n_buckets() - 1U &&
         cost_map[l.get_node().get_key()].update(l, l.get_node(), l.cost(),
-                                                node::invalid())) {
+                                                node::invalid(),
+                                                duration_from_cost(l.cost()))) {
       auto const total = static_cast<cost_t>(l.cost() + heur);
       d.push(label{l.get_node(), total});
     }
