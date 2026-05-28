@@ -27,6 +27,7 @@
 #include "utl/verify.h"
 #include "utl/zip.h"
 
+#include "osr/conditional.h"
 #include "osr/point.h"
 #include "osr/routing/turns.h"
 #include "osr/types.h"
@@ -38,7 +39,11 @@ struct resolved_restriction {
   enum class type { kNo, kOnly } type_;
   way_idx_t from_, to_;
   node_idx_t via_;
+  bool applies_to_default_{true};
   bool applies_to_bus_{true};
+  bool applies_to_hgv_{true};
+  conditional_condition_set_idx_t condition_set_{
+      conditional_condition_set_idx_t::invalid()};
 };
 
 struct restriction {
@@ -58,7 +63,11 @@ struct restriction {
 
   way_pos_t from_ : 4;
   way_pos_t to_ : 4;
+  way_pos_t applies_to_default_ : 1;
   way_pos_t applies_to_bus_ : 1;
+  way_pos_t applies_to_hgv_ : 1;
+  conditional_condition_set_idx_t condition_set_{
+      conditional_condition_set_idx_t::invalid()};
 };
 
 enum class access_value : std::uint8_t {
@@ -131,7 +140,7 @@ struct hgv_way_info {
       static_cast<std::uint8_t>(access_value::kUnknown)};
   std::uint8_t maxspeed_km_h_{0U};
   std::uint8_t maxaxles_{0U};
-  std::uint16_t maxlength_dm_{0U};
+  std::uint16_t maxlength_cm_{0U};
   std::uint16_t maxweightrating_100kg_{0U};
   std::uint16_t maxheight_cm_{0U};
   std::uint16_t maxwidth_cm_{0U};
@@ -145,7 +154,7 @@ struct way_properties {
            is_foot_accessible() || is_bus_accessible() ||
            is_bus_accessible_with_penalty() || is_railway_accessible() ||
            is_railway_accessible_with_penalty() || is_ferry_accessible() ||
-           has_hgv_info();
+           has_hgv_info() || has_conditionals();
   }
   constexpr bool is_car_accessible() const { return is_car_accessible_; }
   constexpr bool is_bike_accessible() const { return is_bike_accessible_; }
@@ -174,6 +183,7 @@ struct way_properties {
   constexpr bool is_sidewalk_separate() const { return is_sidewalk_separate_; }
   constexpr bool in_route() const { return in_route_; }
   constexpr bool has_hgv_info() const { return has_hgv_info_; }
+  constexpr bool has_conditionals() const { return has_conditionals_; }
   constexpr std::uint16_t max_speed_km_per_h() const {
     return to_kmh(static_cast<speed_limit>(speed_limit_));
   }
@@ -226,6 +236,7 @@ struct way_properties {
   std::uint8_t is_ferry_accessible_ : 1;
   std::uint8_t is_railway_accessible_with_penalty_ : 1;
   std::uint8_t has_hgv_info_ : 1;
+  std::uint8_t has_conditionals_ : 1;
 };
 
 static_assert(sizeof(way_properties) == 5);
@@ -363,7 +374,7 @@ struct ways {
       return 0U;
     }
 
-    template <direction SearchDir, bool IsBus = false>
+    template <direction SearchDir, bool IsBus = false, bool IsHgv = false>
     bool is_restricted(node_idx_t const n,
                        std::uint8_t const from,
                        std::uint8_t const to) const {
@@ -379,21 +390,28 @@ struct ways {
 
       return utl::any_of(r, [&](restriction const& x) {
         if constexpr (IsBus) {
-          return x.from_ == from_way && x.to_ == to_way && x.applies_to_bus_;
+          return x.from_ == from_way && x.to_ == to_way && x.applies_to_bus_ &&
+                 x.condition_set_ == conditional_condition_set_idx_t::invalid();
+        } else if constexpr (IsHgv) {
+          return x.from_ == from_way && x.to_ == to_way && x.applies_to_hgv_ &&
+                 x.condition_set_ == conditional_condition_set_idx_t::invalid();
         } else {
-          return x.from_ == from_way && x.to_ == to_way;
+          return x.from_ == from_way && x.to_ == to_way &&
+                 x.applies_to_default_ &&
+                 x.condition_set_ == conditional_condition_set_idx_t::invalid();
         }
       });
     }
 
-    template <bool IsBus = false>
+    template <bool IsBus = false, bool IsHgv = false>
     bool is_restricted(node_idx_t const n,
                        std::uint8_t const from,
                        std::uint8_t const to,
                        direction const search_dir) const {
       return search_dir == direction::kForward
-                 ? is_restricted<direction::kForward, IsBus>(n, from, to)
-                 : is_restricted<direction::kBackward, IsBus>(n, from, to);
+                 ? is_restricted<direction::kForward, IsBus, IsHgv>(n, from, to)
+                 : is_restricted<direction::kBackward, IsBus, IsHgv>(n, from,
+                                                                     to);
     }
 
     bool is_loop(way_idx_t const w) const {
@@ -442,6 +460,19 @@ struct ways {
       return &it->second;
     }
 
+    way_conditional_restrictions const* get_conditional_restrictions(
+        way_idx_t const way) const {
+      if (!way_properties_[way].has_conditionals()) {
+        return nullptr;
+      }
+      auto const it = std::lower_bound(
+          begin(way_conditionals_), end(way_conditionals_), way,
+          [](auto const& entry, auto const& key) { return entry.first < key; });
+      utl::verify(it != end(way_conditionals_) && it->first == way,
+                  "missing conditional restrictions for way {}", way);
+      return &it->second;
+    }
+
     struct long_distance {
       CISTA_COMPARABLE()
 
@@ -453,6 +484,22 @@ struct ways {
     vec_map<node_idx_t, node_properties> node_properties_;
     vec_map<way_idx_t, way_properties> way_properties_;
     vec<pair<way_idx_t, hgv_way_info>> way_hgv_info_;
+
+    vec<pair<way_idx_t, way_conditional_restrictions>> way_conditionals_;
+    vec<conditional_access_restriction> conditional_access_;
+    vec<conditional_oneway_restriction> conditional_oneway_;
+    vec<conditional_numeric_restriction> conditional_numeric_;
+
+    vec<conditional_condition_set> conditional_condition_sets_;
+    vec<conditional_condition> conditional_conditions_;
+    vec<opening_hours> opening_hours_;
+    vec<opening_hours_rule> opening_hours_rules_;
+    vec<opening_hours_year_range> opening_hours_year_ranges_;
+    vec<opening_hours_week_range> opening_hours_week_ranges_;
+    vec<opening_hours_monthday_range> opening_hours_monthday_ranges_;
+    vec<opening_hours_weekday_range> opening_hours_weekday_ranges_;
+    vec<opening_hours_time_span> opening_hours_time_spans_;
+    vec<pair<conditional_timezone_idx_t, string_idx_t>> timezones_;
 
     vecvec<way_idx_t, node_idx_t> way_nodes_;
     vecvec<way_idx_t, std::uint16_t> way_node_dist_;

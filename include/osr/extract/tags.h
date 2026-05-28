@@ -1,7 +1,13 @@
 #pragma once
 
+#include <string_view>
+#include <vector>
+
 #include "cista/hash.h"
+
 #include "osmium/osm/object.hpp"
+
+#include "osr/conditional.h"
 #include "osr/types.h"
 
 namespace osr {
@@ -28,7 +34,12 @@ struct tags {
     auto circular = false;
     auto oneway_defined = false;
     for (auto const& t : o.tags()) {
-      switch (cista::hash(std::string_view{t.key()})) {
+      auto const key = std::string_view{t.key()};
+      if (is_supported_conditional_restriction_key(key)) {
+        conditional_tags_.emplace_back(key, std::string_view{t.value()});
+      }
+
+      switch (cista::hash(key)) {
         using namespace std::string_view_literals;
         case cista::hash("ramp"): is_ramp_ |= t.value() != "no"sv; break;
         case cista::hash("type"):
@@ -372,6 +383,7 @@ struct tags {
 
   // https://wiki.openstreetmap.org/wiki/Conditional_restrictions
   std::string_view access_conditional_no_;
+  std::vector<std::pair<std::string_view, std::string_view>> conditional_tags_;
 
   // https://wiki.openstreetmap.org/wiki/Key:service
   std::string_view service_;
