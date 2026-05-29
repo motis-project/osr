@@ -1,8 +1,9 @@
 #pragma once
 
+#include <cmath>
+
 #include <algorithm>
 #include <bitset>
-#include <cmath>
 #include <limits>
 #include <optional>
 #include <tuple>
@@ -13,6 +14,7 @@
 #include "utl/helpers/algorithm.h"
 
 #include "osr/elevation_storage.h"
+#include "osr/routing/conditional.h"
 #include "osr/routing/mode.h"
 #include "osr/routing/path.h"
 #include "osr/routing/profiles/common.h"
@@ -40,7 +42,7 @@ struct hgv {
     cost_t sharp_turn_penalty_{25U};
     std::uint16_t height_cm_{400U};
     std::uint16_t width_cm_{255U};
-    std::uint16_t length_dm_{188U};
+    std::uint16_t length_cm_{1880U};
     std::uint16_t weight_100kg_{400U};
     bool hazmat_{false};
     bool hazmat_water_{false};
@@ -250,30 +252,49 @@ struct hgv {
   static void adjacent(parameters const& params,
                        ways::routing const& w,
                        node const n,
+                       duration_t const current_duration,
+                       bitvec<node_idx_t> const* blocked,
+                       sharing_data const* additional,
+                       elevation_storage const*,
+                       Fn&& fn) {
+    adjacent<SearchDir, WithBlocked>(params, w, n, current_duration,
+                                     std::nullopt, blocked, additional, nullptr,
+                                     std::forward<Fn>(fn));
+  }
+
+  template <direction SearchDir, bool WithBlocked, typename Fn>
+  static void adjacent(parameters const& params,
+                       ways::routing const& w,
+                       node const n,
+                       duration_t const current_duration,
+                       std::optional<routing_time_t> const start_time,
                        bitvec<node_idx_t> const* blocked,
                        sharing_data const* additional,
                        elevation_storage const*,
                        Fn&& fn) {
     if (additional != nullptr) {
       for_each_additional_edge<hgv>(
-          params, w, n, additional,
-          [&](additional_edge const& ae, cost_t const edge_cost,
+          params, w, n, additional, start_time, current_duration, SearchDir,
+          [&](additional_edge const& ae, cost_and_duration const edge_cost,
               direction const edge_dir) {
             if (!additional->is_additional_node(n.n_)) {
-              if (w.is_restricted<SearchDir>(
-                      n.n_, n.way_, w.get_way_pos(n.n_, ae.underlying_way_))) {
+              if (is_restricted<SearchDir>(
+                      params, w, n.n_, n.way_,
+                      w.get_way_pos(n.n_, ae.underlying_way_), start_time,
+                      current_duration, SearchDir)) {
                 return;
               }
             }
 
-            auto const [target, cost] = get_adjacent_additional_node<hgv>(
-                params, w, n, additional, ae, edge_dir, edge_cost,
-                params.uturn_penalty_);
+            auto const [target, cost, duration] =
+                get_adjacent_additional_node<hgv>(params, w, n, additional, ae,
+                                                  edge_dir, edge_cost,
+                                                  params.uturn_penalty_);
             if (cost == kInfeasible) {
               return;
             }
 
-            fn(target, cost, ae.distance_, ae.underlying_way_, 0, 0,
+            fn(target, cost, duration, ae.distance_, ae.underlying_way_, 0, 0,
                elevation_storage::elevation{}, false);
           });
 
@@ -283,7 +304,52 @@ struct hgv {
     }
 
     for_each_adjacent_node<hgv, SearchDir, WithBlocked, true>(
-        params, w, n, blocked, params.uturn_penalty_, fn);
+        params, w, n, blocked, params.uturn_penalty_, start_time,
+        current_duration, SearchDir, fn);
+  }
+
+  template <direction SearchDir>
+  static bool is_restricted(parameters const& params,
+                            ways::routing const& w,
+                            node_idx_t const n,
+                            std::uint8_t const from,
+                            std::uint8_t const to,
+                            std::optional<routing_time_t> const start_time,
+                            duration_t const current_duration,
+                            direction const search_dir) {
+    return is_restricted(params, w, n, from, to, SearchDir, start_time,
+                         current_duration, search_dir);
+  }
+
+  static bool is_restricted(parameters const& params,
+                            ways::routing const& w,
+                            node_idx_t const n,
+                            std::uint8_t const from,
+                            std::uint8_t const to,
+                            direction const restriction_dir,
+                            std::optional<routing_time_t> const start_time,
+                            duration_t const current_duration,
+                            direction const search_dir) {
+    if (!w.node_is_restricted_[n]) {
+      return false;
+    }
+
+    auto const from_way = restriction_dir == direction::kForward
+                              ? way_pos_t{from}
+                              : way_pos_t{to};
+    auto const to_way = restriction_dir == direction::kForward
+                            ? way_pos_t{to}
+                            : way_pos_t{from};
+    auto const wall_time = to_conditional_wall_time(
+        current_routing_time(start_time, search_dir, current_duration));
+    return utl::any_of(w.node_restrictions_[n], [&](restriction const& x) {
+      if (x.from_ != from_way || x.to_ != to_way || !x.applies_to_hgv_) {
+        return false;
+      }
+      return x.condition_set_ == conditional_condition_set_idx_t::invalid() ||
+             matches_profile_condition_set(params, w, x.condition_set_,
+                                           wall_time);
+    });
   }
 
   static bool is_dest_reachable(parameters const& params,
@@ -291,52 +357,72 @@ struct hgv {
                                 node const n,
                                 way_idx_t const way,
                                 direction const way_dir,
-                                direction const search_dir) {
+                                direction const search_dir,
+                                std::optional<routing_time_t> const start_time,
+                                duration_t const current_duration) {
     auto const target_way_prop = w.way_properties_[way];
-    if (way_cost(params, w, way, target_way_prop, way_dir, 0U) == kInfeasible) {
+    if (way_cost(params, w, way, target_way_prop, way_dir, 0U, start_time,
+                 current_duration, search_dir)
+            .cost_ == kInfeasible) {
       return false;
     }
 
-    if (w.is_restricted(n.n_, n.way_, w.get_way_pos(n.n_, way), search_dir)) {
+    if (is_restricted(params, w, n.n_, n.way_, w.get_way_pos(n.n_, way),
+                      search_dir, start_time, current_duration, search_dir)) {
       return false;
     }
 
     return true;
   }
 
-  static cost_t way_cost(parameters const& params,
-                         ways::routing const& w,
-                         way_idx_t const way,
-                         way_properties const& e,
-                         direction const dir,
-                         distance_t const dist) {
+  static cost_and_duration way_cost(
+      parameters const& params,
+      ways::routing const& w,
+      way_idx_t const way,
+      way_properties const& e,
+      direction const dir,
+      distance_t const dist,
+      std::optional<routing_time_t> const start_time,
+      duration_t const current_duration,
+      direction const search_dir) {
     if (dir == direction::kBackward && e.is_oneway_car()) {
-      return kInfeasible;
+      return infeasible_cost_and_duration();
     }
 
     auto accessible = e.is_car_accessible();
     auto destination_penalty = e.is_destination();
+    auto state = way_state{.accessible_ = accessible,
+                           .destination_penalty_ = destination_penalty,
+                           .info_ = w.get_hgv_info(way)};
 
-    if (auto const* info = w.get_hgv_info(way); info != nullptr) {
+    if (auto const* info = state.info_; info != nullptr) {
       if (info->has(hgv_info_field::kAccess)) {
-        accessible = info->hgv_access() == access_value::kAllowed;
-        destination_penalty = false;
+        state.accessible_ = info->hgv_access() == access_value::kAllowed;
+        state.destination_penalty_ = false;
       }
-      if (!accessible || !fits_vehicle(params, *info)) {
-        return kInfeasible;
+      if (!fits_vehicle(params, *info)) {
+        return infeasible_cost_and_duration();
       }
-      return distance_cost(params, e, info, dist, destination_penalty);
     }
 
-    if (!accessible) {
-      return kInfeasible;
+    apply_conditional_restrictions(
+        params, w, way, dir,
+        current_routing_time(start_time, search_dir, current_duration), state);
+
+    if (!state.accessible_) {
+      return infeasible_cost_and_duration();
     }
-    return distance_cost(params, e, nullptr, dist, destination_penalty);
+    return {.cost_ = distance_cost(params, e, state.info_, dist,
+                                   state.destination_penalty_,
+                                   state.max_speed_km_h_),
+            .duration_ = distance_duration(params, e, state.info_, dist,
+                                           state.max_speed_km_h_)};
   }
 
-  static constexpr cost_t node_cost(parameters const&,
-                                    node_properties const& n) {
-    return n.is_car_accessible() ? 0U : kInfeasible;
+  static constexpr cost_and_duration node_cost(parameters const&,
+                                               node_properties const& n) {
+    return n.is_car_accessible() ? cost_and_duration_from_cost(0U)
+                                 : infeasible_cost_and_duration();
   }
 
   static constexpr cost_t turn_cost(parameters const& params,
@@ -366,6 +452,215 @@ struct hgv {
   }
 
 private:
+  static std::uint32_t vehicle_property(parameters const& params,
+                                        conditional_vehicle_property const p) {
+    switch (p) {
+      case conditional_vehicle_property::kWeight: return params.weight_100kg_;
+      case conditional_vehicle_property::kWeightRating:
+        return params.weight_100kg_;
+      case conditional_vehicle_property::kLength: return params.length_cm_;
+      case conditional_vehicle_property::kWidth: return params.width_cm_;
+      case conditional_vehicle_property::kHeight: return params.height_cm_;
+      case conditional_vehicle_property::kAxleLoad:
+        return params.axle_load_100kg_;
+      case conditional_vehicle_property::kAxles: return params.axle_count_;
+    }
+    return 0U;
+  }
+
+  static bool matches_profile_condition(parameters const& params,
+                                        conditional_condition const& c) {
+    switch (c.type_) {
+      case conditional_condition_type::kOpeningHours: return false;
+      case conditional_condition_type::kVehicleProperty:
+        return compare_conditional_value(
+            vehicle_property(
+                params, static_cast<conditional_vehicle_property>(c.selector_)),
+            c.comparison_, c.value_.value_);
+      case conditional_condition_type::kAccessPurpose: return false;
+      case conditional_condition_type::kVehicleUsage: {
+        auto const value =
+            static_cast<conditional_symbolic_condition>(c.selector_);
+        return (value == conditional_symbolic_condition::kHazmat &&
+                (params.hazmat_ || params.hazmat_water_)) ||
+               (value == conditional_symbolic_condition::kHazmatWater &&
+                params.hazmat_water_) ||
+               (value == conditional_symbolic_condition::kTrailer &&
+                params.trailer_);
+      }
+    }
+    return false;
+  }
+
+  static bool matches_profile_condition_set(
+      parameters const& params,
+      ways::routing const& w,
+      conditional_condition_set_idx_t const idx,
+      std::optional<conditional_wall_time> const& t) {
+    return matches_conditional_condition_set(
+        w, idx, t, [&](conditional_condition const& c) {
+          return matches_profile_condition(params, c);
+        });
+  }
+
+  static bool mode_applies(conditional_transport_mode const mode) {
+    switch (mode) {
+      case conditional_transport_mode::kUnspecified: [[fallthrough]];
+      case conditional_transport_mode::kAccess: [[fallthrough]];
+      case conditional_transport_mode::kVehicle: [[fallthrough]];
+      case conditional_transport_mode::kMotorVehicle: [[fallthrough]];
+      case conditional_transport_mode::kHgv: return true;
+      default: return false;
+    }
+  }
+
+  static bool is_forbidden(conditional_access_value const value) {
+    switch (value) {
+      case conditional_access_value::kNo: [[fallthrough]];
+      case conditional_access_value::kPrivate: [[fallthrough]];
+      case conditional_access_value::kDiscouraged: return true;
+      default: return false;
+    }
+  }
+
+  static bool is_destination_like(conditional_access_value const value) {
+    switch (value) {
+      case conditional_access_value::kDestination: [[fallthrough]];
+      case conditional_access_value::kDelivery: return true;
+      default: return false;
+    }
+  }
+
+  static bool exceeds_limit(parameters const& params,
+                            conditional_restriction_field const field,
+                            conditional_numeric_value const& value) {
+    if (value.state_ != conditional_numeric_state::kValue) {
+      return false;
+    }
+    switch (field) {
+      case conditional_restriction_field::kMaxLength:
+        return params.length_cm_ > value.value_;
+      case conditional_restriction_field::kMaxWeightRating:
+        return params.weight_100kg_ > value.value_;
+      case conditional_restriction_field::kMaxHeight:
+        return params.height_cm_ > value.value_;
+      case conditional_restriction_field::kMaxWidth:
+        return params.width_cm_ > value.value_;
+      case conditional_restriction_field::kMaxWeight:
+        return params.weight_100kg_ > value.value_;
+      case conditional_restriction_field::kMaxAxleLoad:
+        return params.axle_load_100kg_ > value.value_;
+      case conditional_restriction_field::kMaxAxles:
+        return params.axle_count_ > value.value_;
+      default: return false;
+    }
+  }
+
+  static void apply_access_condition(conditional_access_restriction const& r,
+                                     parameters const& params,
+                                     direction const dir,
+                                     way_state& state) {
+    if (!conditional_direction_applies(r.direction_, dir)) {
+      return;
+    }
+    switch (r.field_) {
+      case conditional_restriction_field::kAccess:
+        if (!mode_applies(r.mode_)) {
+          return;
+        }
+        if (is_forbidden(r.value_)) {
+          state.accessible_ = false;
+        } else {
+          state.accessible_ = true;
+          state.destination_penalty_ = is_destination_like(r.value_);
+        }
+        return;
+      case conditional_restriction_field::kHazmat:
+        if ((params.hazmat_ || params.hazmat_water_) &&
+            is_forbidden(r.value_)) {
+          state.accessible_ = false;
+        }
+        return;
+      case conditional_restriction_field::kHazmatWater:
+        if (params.hazmat_water_ && is_forbidden(r.value_)) {
+          state.accessible_ = false;
+        }
+        return;
+      case conditional_restriction_field::kTrailer:
+        if (params.trailer_ && is_forbidden(r.value_)) {
+          state.accessible_ = false;
+        }
+        return;
+      default: return;
+    }
+  }
+
+  static void apply_numeric_condition(conditional_numeric_restriction const& r,
+                                      parameters const& params,
+                                      direction const dir,
+                                      way_state& state) {
+    if (!conditional_direction_applies(r.direction_, dir) ||
+        !mode_applies(r.mode_)) {
+      return;
+    }
+    if (r.field_ == conditional_restriction_field::kMaxSpeed &&
+        r.value_.state_ == conditional_numeric_state::kValue) {
+      state.max_speed_km_h_ =
+          static_cast<std::uint16_t>(std::min<std::uint32_t>(
+              r.value_.value_, std::numeric_limits<std::uint16_t>::max()));
+      return;
+    }
+    if (exceeds_limit(params, r.field_, r.value_)) {
+      state.accessible_ = false;
+    }
+  }
+
+  static void apply_conditional_restrictions(
+      parameters const& params,
+      ways::routing const& w,
+      way_idx_t const way,
+      direction const dir,
+      std::optional<routing_time_t> const current_time,
+      way_state& state) {
+    auto const* conditionals = w.get_conditional_restrictions(way);
+    if (conditionals == nullptr) {
+      return;
+    }
+    auto const wall_time = to_conditional_wall_time(current_time);
+    for (auto i = conditionals->access_.begin_; i != conditionals->access_.end_;
+         ++i) {
+      auto const& r = w.conditional_access_[i];
+      if (matches_profile_condition_set(params, w, r.condition_set_,
+                                        wall_time)) {
+        apply_access_condition(r, params, dir, state);
+      }
+    }
+    for (auto i = conditionals->numeric_.begin_;
+         i != conditionals->numeric_.end_; ++i) {
+      auto const& r = w.conditional_numeric_[i];
+      if (matches_profile_condition_set(params, w, r.condition_set_,
+                                        wall_time)) {
+        apply_numeric_condition(r, params, dir, state);
+      }
+    }
+  }
+
+  static constexpr std::uint16_t get_speed(
+      parameters const& params,
+      way_properties const& e,
+      hgv_way_info const* info,
+      std::optional<std::uint16_t> const max_speed = std::nullopt) {
+    auto speed =
+        std::min<std::uint16_t>(params.top_speed_km_h_, e.max_speed_km_per_h());
+    if (info != nullptr && info->has(hgv_info_field::kMaxSpeed)) {
+      speed = std::min<std::uint16_t>(speed, info->maxspeed_km_h_);
+    }
+    if (max_speed.has_value()) {
+      speed = std::min<std::uint16_t>(speed, *max_speed);
+    }
+    return std::max<std::uint16_t>(speed, 1U);
+  }
+
   static constexpr bool fits_vehicle(parameters const& params,
                                      hgv_way_info const& info) {
     if (info.has(hgv_info_field::kHazmat) &&
@@ -378,7 +673,7 @@ private:
       return false;
     }
     if (info.has(hgv_info_field::kMaxLength) &&
-        params.length_dm_ > info.maxlength_dm_) {
+        params.length_cm_ > info.maxlength_cm_) {
       return false;
     }
     if (info.has(hgv_info_field::kMaxWeightRating) &&
@@ -412,22 +707,29 @@ private:
     return true;
   }
 
-  static constexpr cost_t distance_cost(parameters const& params,
-                                        way_properties const& e,
-                                        hgv_way_info const* info,
-                                        distance_t const dist,
-                                        bool const destination_penalty) {
-    auto speed =
-        std::min<std::uint16_t>(params.top_speed_km_h_, e.max_speed_km_per_h());
-    if (info != nullptr && info->has(hgv_info_field::kMaxSpeed)) {
-      speed = std::min<std::uint16_t>(speed, info->maxspeed_km_h_);
-    }
-    speed = std::max<std::uint16_t>(speed, 1U);
-
+  static constexpr cost_t distance_cost(
+      parameters const& params,
+      way_properties const& e,
+      hgv_way_info const* info,
+      distance_t const dist,
+      bool const destination_penalty,
+      std::optional<std::uint16_t> const max_speed = std::nullopt) {
+    auto const speed = get_speed(params, e, info, max_speed);
     return static_cast<cost_t>(std::rint((destination_penalty ? 5.0F : 1.0F) *
                                          static_cast<float>(dist) *
                                          (3.6F / static_cast<float>(speed)))) +
            (destination_penalty ? 120U : 0U);
+  }
+
+  static constexpr duration_t distance_duration(
+      parameters const& params,
+      way_properties const& e,
+      hgv_way_info const* info,
+      distance_t const dist,
+      std::optional<std::uint16_t> const max_speed = std::nullopt) {
+    auto const speed = get_speed(params, e, info, max_speed);
+    return duration_from_cost(static_cast<cost_t>(std::rint(
+        static_cast<float>(dist) * (3.6F / static_cast<float>(speed)))));
   }
 };
 
