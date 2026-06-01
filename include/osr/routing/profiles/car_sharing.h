@@ -57,7 +57,8 @@ struct car_sharing {
                      .is_bus_accessible_with_penalty_ = false,
                      .is_ferry_accessible_ = false,
                      .is_railway_accessible_with_penalty_ = false,
-                     .has_hgv_info_ = false};
+                     .has_hgv_info_ = false,
+                     .has_conditionals_ = false};
 
   static constexpr auto const kAdditionalNodeProperties =
       node_properties{.from_level_ = 0,
@@ -376,14 +377,15 @@ struct car_sharing {
                        Fn&& fn) {
     assert(sharing != nullptr);
 
-    auto const& handle_additional_edge =
-        [&](additional_edge const& ae, node_type const nt, cost_t const cost) {
-          fn(node{.n_ = ae.to_,
-                  .type_ = nt,
-                  .lvl_ = nt == node_type::kRental ? kNoLevel : n.lvl_},
-             cost, duration_from_cost(cost), ae.distance_, way_idx_t::invalid(),
-             0, 1, elevation_storage::elevation{}, false);
-        };
+    auto const& handle_additional_edge = [&](additional_edge const& ae,
+                                             node_type const nt,
+                                             cost_and_duration const edge) {
+      fn(node{.n_ = ae.to_,
+              .type_ = nt,
+              .lvl_ = nt == node_type::kRental ? kNoLevel : n.lvl_},
+         edge.cost_, edge.duration_, ae.distance_, way_idx_t::invalid(), 0, 1,
+         elevation_storage::elevation{}, false);
+    };
 
     auto const& continue_on_foot = [&](node_type const nt,
                                        bool const include_additional_edges,
@@ -410,11 +412,12 @@ struct car_sharing {
           for (auto const& ae : it->second) {
             handle_additional_edge(
                 ae, nt,
-                footp::way_cost(params.foot_, w, way_idx_t::invalid(),
-                                kAdditionalWayProperties, direction::kForward,
-                                ae.distance_, start_time, current_duration,
-                                SearchDir) +
-                    switch_penalty);
+                clamp_add(
+                    footp::way_cost(params.foot_, w, way_idx_t::invalid(),
+                                    kAdditionalWayProperties,
+                                    direction::kForward, ae.distance_,
+                                    start_time, current_duration, SearchDir),
+                    switch_penalty));
           }
         }
       }
@@ -444,11 +447,12 @@ struct car_sharing {
           for (auto const& ae : it->second) {
             handle_additional_edge(
                 ae, node_type::kRental,
-                car::way_cost(params.car_, w, way_idx_t::invalid(),
-                              kAdditionalWayProperties, direction::kForward,
-                              ae.distance_, start_time, current_duration,
-                              SearchDir) +
-                    switch_penalty);
+                clamp_add(
+                    car::way_cost(params.car_, w, way_idx_t::invalid(),
+                                  kAdditionalWayProperties, direction::kForward,
+                                  ae.distance_, start_time, current_duration,
+                                  SearchDir),
+                    switch_penalty));
           }
         }
       }
@@ -466,20 +470,22 @@ struct car_sharing {
                 is_allowed(sharing->start_allowed_, n.n_)) {
               handle_additional_edge(
                   ae, node_type::kRental,
-                  car::way_cost(params.car_, w, way_idx_t::invalid(),
-                                kAdditionalWayProperties, direction::kForward,
-                                ae.distance_, start_time, current_duration,
-                                SearchDir) +
-                      kStartSwitchPenalty);
+                  clamp_add(
+                      car::way_cost(params.car_, w, way_idx_t::invalid(),
+                                    kAdditionalWayProperties,
+                                    direction::kForward, ae.distance_,
+                                    start_time, current_duration, SearchDir),
+                      kStartSwitchPenalty));
             } else if (n.is_rental_node() &&
                        is_allowed(sharing->end_allowed_, n.n_)) {
               handle_additional_edge(
                   ae, node_type::kTrailingFoot,
-                  footp::way_cost(params.foot_, w, way_idx_t::invalid(),
-                                  kAdditionalWayProperties, direction::kForward,
-                                  ae.distance_, start_time, current_duration,
-                                  SearchDir) +
-                      kEndSwitchPenalty);
+                  clamp_add(
+                      footp::way_cost(params.foot_, w, way_idx_t::invalid(),
+                                      kAdditionalWayProperties,
+                                      direction::kForward, ae.distance_,
+                                      start_time, current_duration, SearchDir),
+                      kEndSwitchPenalty));
             }
           }
         }
@@ -513,20 +519,22 @@ struct car_sharing {
                 is_allowed(sharing->end_allowed_, n.n_)) {
               handle_additional_edge(
                   ae, node_type::kRental,
-                  car::way_cost(params.car_, w, way_idx_t::invalid(),
-                                kAdditionalWayProperties, direction::kForward,
-                                ae.distance_, start_time, current_duration,
-                                SearchDir) +
-                      kEndSwitchPenalty);
+                  clamp_add(
+                      car::way_cost(params.car_, w, way_idx_t::invalid(),
+                                    kAdditionalWayProperties,
+                                    direction::kForward, ae.distance_,
+                                    start_time, current_duration, SearchDir),
+                      kEndSwitchPenalty));
             } else if (n.is_rental_node() &&
                        is_allowed(sharing->start_allowed_, n.n_)) {
               handle_additional_edge(
                   ae, node_type::kInitialFoot,
-                  footp::way_cost(params.foot_, w, way_idx_t::invalid(),
-                                  kAdditionalWayProperties, direction::kForward,
-                                  ae.distance_, start_time, current_duration,
-                                  SearchDir) +
-                      kStartSwitchPenalty);
+                  clamp_add(
+                      footp::way_cost(params.foot_, w, way_idx_t::invalid(),
+                                      kAdditionalWayProperties,
+                                      direction::kForward, ae.distance_,
+                                      start_time, current_duration, SearchDir),
+                      kStartSwitchPenalty));
             }
           }
         }
@@ -562,7 +570,7 @@ struct car_sharing {
                                     search_dir, start_time, current_duration);
   }
 
-  static constexpr cost_t way_cost(
+  static constexpr cost_and_duration way_cost(
       parameters const& params,
       ways::routing const& w,
       way_idx_t const way,
@@ -576,8 +584,8 @@ struct car_sharing {
                            current_duration, search_dir);
   }
 
-  static constexpr cost_t node_cost(parameters const& params,
-                                    node_properties const n) {
+  static constexpr cost_and_duration node_cost(parameters const& params,
+                                               node_properties const n) {
     return footp::node_cost(params.foot_, n);
   }
 

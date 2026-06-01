@@ -370,7 +370,7 @@ struct car_parking {
                                              current_duration));
   }
 
-  static constexpr cost_t way_cost(
+  static constexpr cost_and_duration way_cost(
       parameters const& params,
       ways::routing const& w,
       way_idx_t const way,
@@ -384,8 +384,8 @@ struct car_parking {
                            current_duration, search_dir);
   }
 
-  static constexpr cost_t node_cost(parameters const& params,
-                                    node_properties const n) {
+  static constexpr cost_and_duration node_cost(parameters const& params,
+                                               node_properties const n) {
     return footp::node_cost(params.foot_, n);
   }
 

@@ -71,33 +71,24 @@ constexpr cost_t get_profile_additional_turn_cost(
       edge_dir, is_u_turn);
 }
 
-template <WayAwareProfile P>
-constexpr duration_t get_profile_edge_duration(
-    typename P::parameters const& params,
-    ways::routing const& w,
-    typename P::node const from,
-    typename P::node const to,
-    way_idx_t const way,
-    way_properties const& way_props,
-    direction const way_dir,
-    distance_t const dist,
-    cost_t const way_cost,
-    cost_t const node_cost,
-    cost_t const turn_cost,
-    bool const is_u_turn,
-    cost_t const uturn_penalty) {
+template <WayAwareProfile P, direction SearchDir, bool IsBus>
+bool is_profile_turn_restricted(typename P::parameters const& params,
+                                ways::routing const& w,
+                                node_idx_t const n,
+                                std::uint8_t const from,
+                                std::uint8_t const to,
+                                std::optional<routing_time_t> const start_time,
+                                duration_t const current_duration,
+                                direction const search_dir) {
   if constexpr (requires {
-                  P::edge_duration(params, w, from, to, way, way_props, way_dir,
-                                   dist, way_cost, node_cost, turn_cost,
-                                   is_u_turn, uturn_penalty);
+                  P::template is_restricted<SearchDir>(
+                      params, w, n, from, to, start_time, current_duration,
+                      search_dir);
                 }) {
-    return P::edge_duration(params, w, from, to, way, way_props, way_dir, dist,
-                            way_cost, node_cost, turn_cost, is_u_turn,
-                            uturn_penalty);
+    return P::template is_restricted<SearchDir>(
+        params, w, n, from, to, start_time, current_duration, search_dir);
   } else {
-    return duration_from_cost(clamp_cost(
-        static_cast<std::uint64_t>(way_cost) + node_cost + turn_cost +
-        (is_u_turn ? static_cast<std::uint64_t>(uturn_penalty) : 0U)));
+    return w.template is_restricted<SearchDir, IsBus>(n, from, to);
   }
 }
 
@@ -133,13 +124,13 @@ void for_each_additional_edge(typename P::parameters const& params,
       auto const edge_cost =
           P::way_cost(params, w, ae.underlying_way_, way_props, edge_dir,
                       ae.distance_, start_time, current_duration, search_dir);
-      if (edge_cost == kInfeasible) {
+      if (edge_cost.cost_ == kInfeasible) {
         continue;
       }
 
       if (!additional->is_additional_node(ae.to_)) {
         auto const target_node_prop = w.node_properties_[ae.to_];
-        if (P::node_cost(params, target_node_prop) == kInfeasible) {
+        if (P::node_cost(params, target_node_prop).cost_ == kInfeasible) {
           continue;
         }
       }
@@ -157,7 +148,7 @@ std::tuple<typename P::node, cost_t, duration_t> get_adjacent_additional_node(
     sharing_data const* additional,
     additional_edge const& ae,
     direction const edge_dir,
-    cost_t const edge_cost,
+    cost_and_duration const edge_cost,
     cost_t const uturn_penalty) {
   auto const prev_way = n.get_way(w, additional);
 
@@ -170,25 +161,17 @@ std::tuple<typename P::node, cost_t, duration_t> get_adjacent_additional_node(
 
   auto const target = typename P::node{
       ae.to_, additional->get_way_pos(w, ae.to_, ae.underlying_way_), edge_dir};
-  auto cost = clamp_cost(static_cast<std::uint64_t>(edge_cost) + turn_cost);
+  auto total = clamp_add(edge_cost, turn_cost);
 
   if (is_u_turn) {
-    cost = clamp_cost(static_cast<std::uint64_t>(cost) + uturn_penalty);
+    total = clamp_add(total, uturn_penalty);
   }
 
   if (!additional->is_additional_node(ae.to_)) {
-    cost = clamp_cost(static_cast<std::uint64_t>(cost) +
-                      P::node_cost(params, w.node_properties_[ae.to_]));
+    total = clamp_add(total, P::node_cost(params, w.node_properties_[ae.to_]));
   }
 
-  auto const node_cost = additional->is_additional_node(ae.to_)
-                             ? cost_t{0U}
-                             : P::node_cost(params, w.node_properties_[ae.to_]);
-  return {target, cost,
-          get_profile_edge_duration<P>(
-              params, w, n, target, ae.underlying_way_,
-              w.way_properties_[ae.underlying_way_], edge_dir, ae.distance_,
-              edge_cost, node_cost, turn_cost, is_u_turn, uturn_penalty)};
+  return {target, total.cost_, total.duration_};
 }
 
 template <WayAwareProfile P,
@@ -238,13 +221,14 @@ void for_each_adjacent_node(typename P::parameters const& params,
 
       auto const target_node_prop = w.node_properties_[target_node];
       auto const nc = P::node_cost(params, target_node_prop);
-      if (nc == kInfeasible) {
+      if (nc.cost_ == kInfeasible) {
         return;
       }
 
       auto const target_way_prop = w.way_properties_[way];
       if (P::way_cost(params, w, way, target_way_prop, way_dir, 0U, start_time,
-                      current_duration, search_dir) == kInfeasible) {
+                      current_duration, search_dir)
+              .cost_ == kInfeasible) {
         return;
       }
 
@@ -269,15 +253,15 @@ void for_each_adjacent_node(typename P::parameters const& params,
       auto const wc =
           P::way_cost(params, w, way, target_way_prop, way_dir, dist,
                       start_time, current_duration, search_dir);
-      auto const cost =
-          wc == kInfeasible
-              ? kInfeasible
-              : clamp_cost(static_cast<std::uint64_t>(wc) + nc +
-                           (is_u_turn ? uturn_penalty : 0U) + turn_cost);
-      auto const duration = get_profile_edge_duration<P>(
-          params, w, n, target, way, target_way_prop, way_dir, dist, wc, nc,
-          turn_cost, is_u_turn, uturn_penalty);
-      fn(target, cost, duration, dist, way, from, to,
+      if (wc.cost_ == kInfeasible) {
+        return;
+      }
+
+      auto total = clamp_add(clamp_add(wc, nc), turn_cost);
+      if (is_u_turn) {
+        total = clamp_add(total, uturn_penalty);
+      }
+      fn(target, total.cost_, total.duration_, dist, way, from, to,
          elevation_storage::elevation{}, false);
     };
 

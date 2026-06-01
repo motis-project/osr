@@ -228,7 +228,7 @@ struct railway {
     if (additional != nullptr) {
       for_each_additional_edge<railway>(
           params, w, n, additional, start_time, duration_t{0}, SearchDir,
-          [&](additional_edge const& ae, cost_t const edge_cost,
+          [&](additional_edge const& ae, cost_and_duration const edge_cost,
               direction const edge_dir) {
             auto const [target, cost, duration] =
                 get_adjacent_additional_node<railway>(params, w, n, additional,
@@ -262,22 +262,24 @@ struct railway {
                                 duration_t const current_duration) {
     auto const target_way_prop = w.way_properties_[way];
     if (way_cost(params, w, way, target_way_prop, way_dir, 0U, start_time,
-                 current_duration, search_dir) == kInfeasible) {
+                 current_duration, search_dir)
+            .cost_ == kInfeasible) {
       return false;
     }
 
     return true;
   }
 
-  static constexpr cost_t way_cost(parameters const&,
-                                   ways::routing const&,
-                                   way_idx_t const,
-                                   way_properties const& e,
-                                   direction const dir,
-                                   distance_t const dist,
-                                   std::optional<routing_time_t> const,
-                                   duration_t const,
-                                   direction const) {
+  static constexpr cost_and_duration way_cost(
+      parameters const&,
+      ways::routing const&,
+      way_idx_t const,
+      way_properties const& e,
+      direction const dir,
+      distance_t const dist,
+      std::optional<routing_time_t> const,
+      duration_t const,
+      direction const) {
     auto const accessible = e.is_railway_accessible();
     auto const accessible_with_penalty = e.is_railway_accessible_with_penalty();
     if ((accessible || accessible_with_penalty) &&
@@ -286,14 +288,16 @@ struct railway {
       if (accessible_with_penalty) {
         cost *= e.in_route() ? 2U : 4U;
       }
-      return cost;
+      return {.cost_ = cost,
+              .duration_ = duration_from_cost(static_cast<cost_t>(dist))};
     } else {
-      return kInfeasible;
+      return infeasible_cost_and_duration();
     }
   }
 
-  static constexpr cost_t node_cost(parameters const&, node_properties const&) {
-    return 0U;
+  static constexpr cost_and_duration node_cost(parameters const&,
+                                               node_properties const&) {
+    return cost_and_duration_from_cost(0U);
   }
 
   static constexpr cost_t turn_cost(parameters const& params,

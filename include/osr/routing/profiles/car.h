@@ -228,7 +228,7 @@ struct generic_car {
     if (additional != nullptr) {
       for_each_additional_edge<generic_car>(
           params, w, n, additional, start_time, current_duration, SearchDir,
-          [&](additional_edge const& ae, cost_t const edge_cost,
+          [&](additional_edge const& ae, cost_and_duration const edge_cost,
               direction const edge_dir) {
             if (!additional->is_additional_node(n.n_)) {
               if (w.is_restricted<SearchDir, IsBus>(
@@ -269,7 +269,8 @@ struct generic_car {
                                 duration_t const current_duration) {
     auto const target_way_prop = w.way_properties_[way];
     if (way_cost(params, w, way, target_way_prop, way_dir, 0U, start_time,
-                 current_duration, search_dir) == kInfeasible) {
+                 current_duration, search_dir)
+            .cost_ == kInfeasible) {
       return false;
     }
 
@@ -281,15 +282,16 @@ struct generic_car {
     return true;
   }
 
-  static constexpr cost_t way_cost(parameters const&,
-                                   ways::routing const&,
-                                   way_idx_t const,
-                                   way_properties const& e,
-                                   direction const dir,
-                                   distance_t const dist,
-                                   std::optional<routing_time_t> const,
-                                   duration_t const,
-                                   direction const) {
+  static constexpr cost_and_duration way_cost(
+      parameters const&,
+      ways::routing const&,
+      way_idx_t const,
+      way_properties const& e,
+      direction const dir,
+      distance_t const dist,
+      std::optional<routing_time_t> const,
+      duration_t const,
+      direction const) {
     if constexpr (IsBus) {
       auto const accessible = e.is_bus_accessible();
       auto const accessible_with_penalty = e.is_bus_accessible_with_penalty();
@@ -302,6 +304,8 @@ struct generic_car {
                             static_cast<std::uint8_t>(speed_limit::kmh_50)) {
           sl = speed_limit::kmh_50;
         }
+        auto const base_cost = static_cast<cost_t>(
+            std::rint(static_cast<float>(dist) * to_seconds_per_meter(sl)));
         auto cost = static_cast<cost_t>(
             std::rint(((in_route || bus_only) ? 1.0f : 1.5f) *
                       static_cast<float>(dist) * to_seconds_per_meter(sl)));
@@ -311,32 +315,36 @@ struct generic_car {
         if (accessible_with_penalty) {
           cost *= e.in_route() ? 2U : 4U;
         }
-        return cost;
+        return {.cost_ = cost, .duration_ = duration_from_cost(base_cost)};
       } else {
-        return kInfeasible;
+        return infeasible_cost_and_duration();
       }
     } else {
       if (e.is_car_accessible() &&
           (dir == direction::kForward || !e.is_oneway_car())) {
-        return static_cast<cost_t>(std::rint(
-                   (e.is_destination() ? 5.0f : 1.0f) *
-                   static_cast<float>(dist) * e.max_speed_s_per_m())) +
-               (e.is_destination() ? 120U : 0U);
+        auto const base_cost = static_cast<cost_t>(
+            std::rint(static_cast<float>(dist) * e.max_speed_s_per_m()));
+        return {.cost_ = clamp_cost(static_cast<std::uint64_t>(base_cost) *
+                                        (e.is_destination() ? 5U : 1U) +
+                                    (e.is_destination() ? 120U : 0U)),
+                .duration_ = duration_from_cost(base_cost)};
       } else {
-        return kInfeasible;
+        return infeasible_cost_and_duration();
       }
     }
   }
 
-  static constexpr cost_t node_cost(parameters const& params,
-                                    node_properties const& n) {
+  static constexpr cost_and_duration node_cost(parameters const& params,
+                                               node_properties const& n) {
     if constexpr (IsBus) {
-      return n.is_bus_accessible() ? 0U
+      return n.is_bus_accessible() ? cost_and_duration_from_cost(0U)
                                    : (n.is_bus_accessible_with_penalty()
-                                          ? params.private_gate_penalty_
-                                          : kInfeasible);
+                                          ? cost_and_duration_from_cost(
+                                                params.private_gate_penalty_)
+                                          : infeasible_cost_and_duration());
     } else {
-      return n.is_car_accessible() ? 0U : kInfeasible;
+      return n.is_car_accessible() ? cost_and_duration_from_cost(0U)
+                                   : infeasible_cost_and_duration();
     }
   }
 
