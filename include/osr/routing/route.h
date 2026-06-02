@@ -83,8 +83,7 @@ std::optional<path> route_bidirectional(
     double max_match_distance,
     bitvec<node_idx_t> const* blocked = nullptr,
     sharing_data const* sharing = nullptr,
-    elevation_storage const* = nullptr,
-    std::optional<routing_time_t> = std::nullopt);
+    elevation_storage const* = nullptr);
 
 std::optional<path> route_dijkstra(
     profile_parameters const&,
