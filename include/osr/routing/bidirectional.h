@@ -80,12 +80,12 @@ struct bidirectional {
            direction const dir,
            cost_map& cost_map,
            dial<label, get_bucket>& d,
-           sharing_data const* sharing) {
+           sharing_data const* sharing,
+           duration_t const duration) {
     auto const heur = heuristic(params, w, l.n_, dir, sharing);
     if (l.cost() + heur < d.n_buckets() - 1U &&
         cost_map[l.get_node().get_key()].update(l, l.get_node(), l.cost(),
-                                                node::invalid(),
-                                                duration_from_cost(l.cost()))) {
+                                                node::invalid(), duration)) {
       auto const total = static_cast<cost_t>(l.cost() + heur);
       d.push(label{l.get_node(), total});
     }
@@ -95,22 +95,38 @@ struct bidirectional {
                  ways const& w,
                  label const l,
                  sharing_data const* sharing) {
+    add_start(params, w, l, sharing, duration_from_cost(l.cost()));
+  }
+
+  void add_start(P::parameters const& params,
+                 ways const& w,
+                 label const l,
+                 sharing_data const* sharing,
+                 duration_t const duration) {
     if (kDebug) {
       l.get_node().print(std::cout, w);
       std::cout << "starting" << l.get_node().n_ << std::endl;
     }
-    add(params, w, l, direction::kForward, cost1_, pq1_, sharing);
+    add(params, w, l, direction::kForward, cost1_, pq1_, sharing, duration);
   }
 
   void add_end(P::parameters const& params,
                ways const& w,
                label const l,
                sharing_data const* sharing) {
+    add_end(params, w, l, sharing, duration_from_cost(l.cost()));
+  }
+
+  void add_end(P::parameters const& params,
+               ways const& w,
+               label const l,
+               sharing_data const* sharing,
+               duration_t const duration) {
     if (kDebug) {
       l.get_node().print(std::cout, w);
       std::cout << "ending" << l.get_node().n_ << std::endl;
     }
-    add(params, w, l, direction::kBackward, cost2_, pq2_, sharing);
+    add(params, w, l, direction::kBackward, cost2_, pq2_, sharing, duration);
   }
 
   template <direction SearchDir>

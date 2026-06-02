@@ -39,9 +39,10 @@ inline boost::json::object to_featurecollection_value(
     bool const with_properties = true) {
   return boost::json::object{
       {"type", "FeatureCollection"},
-      {"metadata", with_properties ? boost::json::value{{"duration", p->cost_},
-                                                        {"distance", p->dist_}}
-                                   : boost::json::value{{}}},
+      {"metadata", with_properties
+                       ? boost::json::value{{"duration", p->duration_.count()},
+                                            {"distance", p->dist_}}
+                       : boost::json::value{{}}},
       {"features",
        utl::all(p->segments_) | utl::transform([&](const path::segment& s) {
          return boost::json::object{
@@ -115,7 +116,7 @@ inline void add_hgv_way_info_properties(boost::json::object& properties,
     properties["hgv_max_speed_km_h"] = hgv_info->maxspeed_km_h_;
   }
   if (hgv_info->has(hgv_info_field::kMaxLength)) {
-    properties["hgv_max_length_dm"] = hgv_info->maxlength_dm_;
+    properties["hgv_max_length_cm"] = hgv_info->maxlength_cm_;
   }
   if (hgv_info->has(hgv_info_field::kMaxWeightRating)) {
     properties["hgv_max_weight_rating_100kg"] =
