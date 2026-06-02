@@ -90,8 +90,7 @@ path reconstruct_bi(typename P::parameters const& params,
                     way_candidate const& start,
                     way_candidate const& dest,
                     cost_t const cost,
-                    direction const dir,
-                    std::optional<routing_time_t> const start_time) {
+                    direction const dir) {
   auto forward_n = b.meet_point_1_;
 
   // TODO subtract meetpoint node cost?
@@ -108,7 +107,7 @@ path reconstruct_bi(typename P::parameters const& params,
           e.cost(forward_n) - b.template get_cost<direction::kForward>(*pred));
       forward_dist +=
           add_path<P>(params, w, *w.r_, blocked, sharing, elevations, *pred,
-                      forward_n, pred_duration, start_time, expected_cost,
+                      forward_n, pred_duration, {}, expected_cost,
                       clamp_sub_duration(e.duration(forward_n), pred_duration),
                       forward_segments, dir);
     } else {
@@ -153,7 +152,7 @@ path reconstruct_bi(typename P::parameters const& params,
           clamp_sub_duration(curr_duration, pred_duration);
       backward_dist +=
           add_path<P>(params, w, *w.r_, blocked, sharing, elevations, *pred,
-                      backward_n, pred_duration, start_time, expected_cost,
+                      backward_n, pred_duration, {}, expected_cost,
                       expected_duration, backward_segments, opposite(dir));
     } else {
       break;
@@ -196,7 +195,7 @@ path reconstruct_bi(typename P::parameters const& params,
   }
   auto p = path{.cost_ = cost,
                 .duration_ = sum_segment_durations(
-                    forward_segments, duration_from_cost(b.meet_extra_cost_)),
+                    forward_segments, duration_t{0}),
                 .dist_ = total_dist,
                 .elevation_ = path_elevation,
                 .segments_ = forward_segments};
@@ -420,21 +419,19 @@ std::optional<path> try_direct(osr::location const& from,
 }
 
 template <Profile P>
-std::optional<path> route_bidirectional(
-    typename P::parameters const& params,
-    ways const& w,
-    lookup const& l,
-    bidirectional<P>& b,
-    location const& from,
-    location const& to,
-    match_view_t from_match,
-    match_view_t to_match,
-    cost_t const max,
-    direction const dir,
-    std::optional<routing_time_t> const start_time,
-    bitvec<node_idx_t> const* blocked,
-    sharing_data const* sharing,
-    elevation_storage const* elevations) {
+std::optional<path> route_bidirectional(typename P::parameters const& params,
+                                        ways const& w,
+                                        lookup const& l,
+                                        bidirectional<P>& b,
+                                        location const& from,
+                                        location const& to,
+                                        match_view_t from_match,
+                                        match_view_t to_match,
+                                        cost_t const max,
+                                        direction const dir,
+                                        bitvec<node_idx_t> const* blocked,
+                                        sharing_data const* sharing,
+                                        elevation_storage const* elevations) {
   if (auto const direct = try_direct(from, to); direct.has_value()) {
     return *direct;
   }
@@ -459,7 +456,7 @@ std::optional<path> route_bidirectional(
         auto const start_cost = P::way_cost(
             params, *w.r_, start.way_, w.r_->way_properties_[start.way_],
             flip(dir, nc->way_dir_), static_cast<distance_t>(nc->dist_to_node_),
-            start_time, duration_t{0}, dir);
+            {}, duration_t{0}, dir);
         if (start_cost.cost_ == kInfeasible || start_cost.cost_ >= max) {
           continue;
         }
@@ -500,8 +497,8 @@ std::optional<path> route_bidirectional(
       if (b.pq2_.empty()) {
         continue;
       }
-      auto const should_continue = b.run(params, w, *w.r_, max, start_time,
-                                         blocked, sharing, elevations, dir);
+      auto const should_continue =
+          b.run(params, w, *w.r_, max, blocked, sharing, elevations, dir);
 
       if (b.meet_point_1_.get_node() == node_idx_t::invalid()) {
         if (should_continue) {
@@ -513,7 +510,7 @@ std::optional<path> route_bidirectional(
       auto const cost = b.get_cost_to_mp(b.meet_point_1_, b.meet_point_2_);
 
       return reconstruct_bi(params, w, l, blocked, sharing, elevations, b, from,
-                            to, start, end, cost, dir, start_time);
+                            to, start, end, cost, dir);
     }
     b.pq1_.clear();
     b.pq2_.clear();
@@ -798,34 +795,32 @@ std::vector<std::optional<path>> route(
   return result;
 }
 
-std::optional<path> route_bidirectional(
-    profile_parameters const& params,
-    ways const& w,
-    lookup const& l,
-    search_profile const profile,
-    location const& from,
-    location const& to,
-    cost_t const max,
-    direction const dir,
-    double const max_match_distance,
-    bitvec<node_idx_t> const* blocked,
-    sharing_data const* sharing,
-    elevation_storage const* elevations,
-    std::optional<routing_time_t> const start_time) {
+std::optional<path> route_bidirectional(profile_parameters const& params,
+                                        ways const& w,
+                                        lookup const& l,
+                                        search_profile const profile,
+                                        location const& from,
+                                        location const& to,
+                                        cost_t const max,
+                                        direction const dir,
+                                        double const max_match_distance,
+                                        bitvec<node_idx_t> const* blocked,
+                                        sharing_data const* sharing,
+                                        elevation_storage const* elevations) {
   return with_profile(profile, [&]<Profile P>(P&&) -> std::optional<path> {
     auto const& pp = std::get<typename P::parameters>(params);
-    auto const from_match = l.match<P>(pp, from, false, dir, max_match_distance,
-                                       blocked, start_time);
+    auto const from_match =
+        l.match<P>(pp, from, false, dir, max_match_distance, blocked);
     auto const to_match =
-        l.match<P>(pp, to, true, dir, max_match_distance, blocked, start_time);
+        l.match<P>(pp, to, true, dir, max_match_distance, blocked);
 
     if (from_match.empty() || to_match.empty()) {
       return std::nullopt;
     }
 
     return route_bidirectional(pp, w, l, get_bidirectional<P>(), from, to,
-                               from_match, to_match, max, dir, start_time,
-                               blocked, sharing, elevations);
+                               from_match, to_match, max, dir, blocked, sharing,
+                               elevations);
   });
 }
 
@@ -992,9 +987,9 @@ std::optional<path> route(profile_parameters const& params,
                                elevations);
           }
         }
-        auto result = route_bidirectional(
-            pp, w, l, get_bidirectional<P>(), from, to, from_match, to_match,
-            max, dir, start_time, blocked, sharing, elevations);
+        auto result = route_bidirectional(pp, w, l, get_bidirectional<P>(),
+                                          from, to, from_match, to_match, max,
+                                          dir, blocked, sharing, elevations);
         if constexpr (requires(typename P::node const n) {
                         P::bidirectional_meet_cost(pp, *w.r_, n, n);
                       }) {
