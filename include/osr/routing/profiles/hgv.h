@@ -10,6 +10,7 @@
 #include <utility>
 
 #include "boost/json/object.hpp"
+#include "boost/math/ccmath/ccmath.hpp"
 
 #include "utl/helpers/algorithm.h"
 
@@ -715,9 +716,9 @@ private:
       bool const destination_penalty,
       std::optional<std::uint16_t> const max_speed = std::nullopt) {
     auto const speed = get_speed(params, e, info, max_speed);
-    return static_cast<cost_t>(std::rint((destination_penalty ? 5.0F : 1.0F) *
-                                         static_cast<float>(dist) *
-                                         (3.6F / static_cast<float>(speed)))) +
+    return static_cast<cost_t>(boost::math::ccmath::round(
+               (destination_penalty ? 5.0F : 1.0F) * static_cast<float>(dist) *
+               (3.6F / static_cast<float>(speed)))) +
            (destination_penalty ? 120U : 0U);
   }
 
@@ -728,7 +729,7 @@ private:
       distance_t const dist,
       std::optional<std::uint16_t> const max_speed = std::nullopt) {
     auto const speed = get_speed(params, e, info, max_speed);
-    return duration_from_cost(static_cast<cost_t>(std::rint(
+    return duration_from_cost(static_cast<cost_t>(boost::math::ccmath::round(
         static_cast<float>(dist) * (3.6F / static_cast<float>(speed)))));
   }
 };
