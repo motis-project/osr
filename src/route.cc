@@ -1,6 +1,7 @@
 #include "osr/routing/route.h"
 
 #include <cstdint>
+
 #include <algorithm>
 #include <optional>
 
@@ -193,12 +194,12 @@ path reconstruct_bi(typename P::parameters const& params,
   for (auto const& segment : forward_segments) {
     path_elevation += segment.elevation_;
   }
-  auto p = path{.cost_ = cost,
-                .duration_ = sum_segment_durations(
-                    forward_segments, duration_t{0}),
-                .dist_ = total_dist,
-                .elevation_ = path_elevation,
-                .segments_ = forward_segments};
+  auto p =
+      path{.cost_ = cost,
+           .duration_ = sum_segment_durations(forward_segments, duration_t{0}),
+           .dist_ = total_dist,
+           .elevation_ = path_elevation,
+           .segments_ = forward_segments};
 
   b.cost2_.at(backward_n.get_key()).write(backward_n, p);
   return p;

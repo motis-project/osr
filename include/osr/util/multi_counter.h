@@ -1,7 +1,8 @@
 #pragma once
 
-#include <algorithm>
 #include <cinttypes>
+
+#include <algorithm>
 #include <vector>
 
 #include "osr/types.h"

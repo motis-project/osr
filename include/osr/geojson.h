@@ -210,13 +210,11 @@ inline std::string to_string(conditional_numeric_value const& value) {
     case conditional_numeric_unit::kUnitless:
       return fmt::format("{}", value.value_);
     case conditional_numeric_unit::kCentimeter:
-      return fmt::format("{} m",
-                         value.value_ / static_cast<double>(100U));
+      return fmt::format("{} m", value.value_ / static_cast<double>(100U));
     case conditional_numeric_unit::kKilometerPerHour:
       return fmt::format("{} km/h", value.value_);
     case conditional_numeric_unit::kWeight100Kg:
-      return fmt::format("{} t",
-                         value.value_ / static_cast<double>(10U));
+      return fmt::format("{} t", value.value_ / static_cast<double>(10U));
   }
   return fmt::format("{}", value.value_);
 }

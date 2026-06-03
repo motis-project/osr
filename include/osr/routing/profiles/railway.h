@@ -1,7 +1,7 @@
 #pragma once
 
-#include <bitset>
 #include <chrono>
+#include <bitset>
 #include <optional>
 
 #include "boost/json/object.hpp"

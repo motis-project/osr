@@ -2,8 +2,8 @@
 
 #include <cinttypes>
 
-#include <algorithm>
 #include <chrono>
+#include <algorithm>
 #include <filesystem>
 #include <limits>
 #include <optional>

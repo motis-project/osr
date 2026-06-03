@@ -4,8 +4,8 @@
 #include <cmath>
 #include <cstdint>
 
-#include <algorithm>
 #include <charconv>
+#include <algorithm>
 #include <limits>
 #include <optional>
 #include <string>
