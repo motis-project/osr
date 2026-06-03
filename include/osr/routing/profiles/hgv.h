@@ -452,7 +452,6 @@ struct hgv {
     return {n.n_, n.way_, opposite(n.dir_)};
   }
 
-private:
   static std::uint32_t vehicle_property(parameters const& params,
                                         conditional_vehicle_property const p) {
     switch (p) {
