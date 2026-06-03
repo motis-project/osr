@@ -14,6 +14,8 @@
 
 #include "cista/hash.h"
 
+#include "utl/parser/arg_parser.h"
+
 namespace osr {
 
 namespace {
@@ -153,26 +155,38 @@ std::optional<std::uint32_t> parse_u32(std::string_view s) {
   return value;
 }
 
-std::optional<double> parse_double(std::string_view s) {
-  s = trim(s);
-  auto value = 0.0;
-  auto const [ptr, ec] = std::from_chars(s.data(), s.data() + s.size(), value);
-  if (ec != std::errc{} || ptr == s.data() || !std::isfinite(value)) {
+struct parsed_double {
+  double value_;
+  std::size_t consumed_;
+};
+
+std::optional<parsed_double> parse_double_prefix(std::string_view s) {
+  if (s.empty()) {
     return std::nullopt;
   }
-  return value;
+  auto cs = utl::cstr{s};
+  auto const* const start = cs.str;
+  auto value = 0.0;
+  utl::parse_fp(cs, value);
+  if (cs.str == start || !std::isfinite(value)) {
+    return std::nullopt;
+  }
+  return parsed_double{value, static_cast<std::size_t>(cs.str - s.data())};
+}
+
+std::optional<double> parse_double(std::string_view s) {
+  s = trim(s);
+  auto const result = parse_double_prefix(s);
+  return result ? std::optional{result->value_} : std::nullopt;
 }
 
 std::optional<measure> parse_measure(std::string_view value) {
   value = trim(value);
-  auto parsed = 0.0;
-  auto const [ptr, ec] =
-      std::from_chars(value.data(), value.data() + value.size(), parsed);
-  if (ec != std::errc{} || ptr == value.data() || !std::isfinite(parsed)) {
+  auto const result = parse_double_prefix(value);
+  if (!result.has_value()) {
     return std::nullopt;
   }
-  auto const unit_pos = static_cast<std::size_t>(ptr - value.data());
-  return measure{parsed, trim(value.substr(unit_pos))};
+  return measure{result->value_, trim(value.substr(result->consumed_))};
 }
 
 std::optional<double> parse_length_m(std::string_view value) {
