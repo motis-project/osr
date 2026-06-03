@@ -150,8 +150,8 @@
 <script type="module">
     import {style} from "./style.js";
 
-    const start = [8.65749737, 50.10416625]
-    const destination = [8.65750757, 50.10417645];
+    const start = [7.423440329846727, 43.729952584237395]
+    const destination = [7.4261553024191755, 43.73175634804065];
     const query = {
         start, destination,
         max: 14400,
@@ -181,7 +181,7 @@
             sources: {},
             layers: [],
         },
-        zoom: 18,
+        zoom: 15,
         transformRequest: (url, resourceType) => {
             if (url.startsWith('/')) {
                 return {url: `https://europe.motis-project.de/tiles${url}`}
