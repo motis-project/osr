@@ -49,8 +49,8 @@ TEST(elevation_cost, alpspitze) {
   auto const param2 = get_parameters(osr::search_profile::kFootNoElevation);
 
   auto const path_no_elevation =
-      route(param2, w, l, search_profile::kFootNoElevation, from, to,
-            21600, direction::kForward, 400, nullptr, nullptr, nullptr);
+      route(param2, w, l, search_profile::kFootNoElevation, from, to, 21600,
+            direction::kForward, 400, nullptr, nullptr, nullptr);
   auto const path_uphill =
       route(param1, w, l, search_profile::kFoot, from, to, 21600,
             direction::kForward, 400, nullptr, nullptr, elevations.get());
