@@ -4,7 +4,6 @@
 #include <ostream>
 
 #include "cista/containers/rtree.h"
-#include "cista/reflection/printable.h"
 
 #include "geo/box.h"
 #include "geo/latlng.h"
@@ -341,6 +340,8 @@ struct lookup {
     }
     return c;
   }
+
+  void write();
 
 private:
   std::vector<raw_way_candidate> get_raw_way_candidates(

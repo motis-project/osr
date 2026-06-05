@@ -1,3 +1,4 @@
+#include "osr/types.h"
 #ifdef _WIN_32
 // Otherwise
 // winnt.h(169): fatal error C1189: #error:  "No Target Architecture"
@@ -218,10 +219,12 @@ struct way_handler : public osm::handler::Handler {
   way_handler(ways& w,
               platforms* platforms,
               rel_ways_t const& rel_ways,
+              osm_way_idx_t& max_osm_way_id,
               hash_map<osm_node_idx_t, level_bits_t>& elevator_nodes)
       : w_{w},
         platforms_{platforms},
         rel_ways_{rel_ways},
+        max_osm_way_id_{max_osm_way_id},
         elevator_nodes_{elevator_nodes} {
     strings_set_.hash_function().strings_ = &w_.strings_;
     strings_set_.key_eq().strings_ = &w_.strings_;
@@ -229,6 +232,7 @@ struct way_handler : public osm::handler::Handler {
 
   void way(osm::Way const& w) {
     auto const osm_way_idx = osm_way_idx_t{w.positive_id()};
+    max_osm_way_id_ = std::max(max_osm_way_id_, osm_way_idx);
     auto const it = rel_ways_.find(osm_way_idx);
     auto t = tags{w};
 
@@ -335,6 +339,7 @@ struct way_handler : public osm::handler::Handler {
   ways& w_;
   platforms* platforms_;
   rel_ways_t const& rel_ways_;
+  osm_way_idx_t& max_osm_way_id_;
 
   std::mutex elevator_nodes_mutex_;
   hash_map<osm_node_idx_t, level_bits_t>& elevator_nodes_;
@@ -491,8 +496,14 @@ struct node_handler : public osm::handler::Handler {
 };
 
 struct mark_inaccessible_handler : public osm::handler::Handler {
-  explicit mark_inaccessible_handler(bool track_platforms, ways& w)
-      : track_platforms_{track_platforms}, w_{w} {}
+  explicit mark_inaccessible_handler(bool track_platforms,
+                                     ways& w,
+                                     std::vector<uint64_t>& bike_parkings,
+                                     osm_node_idx_t& max_osm_node_id)
+      : track_platforms_{track_platforms},
+        w_{w},
+        bike_parkings_(bike_parkings),
+        max_osm_node_id_{max_osm_node_id} {}
 
   void node(osm::Node const& n) {
     auto const t = tags{n};
@@ -508,10 +519,17 @@ struct mark_inaccessible_handler : public osm::handler::Handler {
       // Wnsure nodes are created even if they are not part of a routable way.
       w_.node_way_counter_.increment(n.positive_id());
     }
+    if (t.is_bike_parking_) {
+      w_.node_way_counter_.increment(n.positive_id());
+      w_.node_way_counter_.increment(n.positive_id());
+      bike_parkings_.emplace_back(n.positive_id());
+    }
   }
 
   bool track_platforms_;
   ways& w_;
+  std::vector<uint64_t>& bike_parkings_;
+  osm_node_idx_t& max_osm_node_id_;
 };
 
 struct rel_ways_handler : public osm::handler::Handler {
@@ -580,13 +598,16 @@ void extract(bool const with_platforms,
     pl = std::make_unique<platforms>(out, cista::mmap::protection::WRITE);
   }
 
+  std::vector<uint64_t> bike_parkings;
+  osm_node_idx_t max_osm_node_id{0};
   w.node_way_counter_.reserve(12000000000);
   {  // Collect node coordinates.
     pt->status("Load OSM / Coordinates").in_high(file_size).out_bounds(0, 15);
 
     auto node_idx_builder = tiles::hybrid_node_idx_builder{node_idx};
 
-    auto inaccessible_handler = mark_inaccessible_handler{pl != nullptr, w};
+    auto inaccessible_handler = mark_inaccessible_handler{
+        pl != nullptr, w, bike_parkings, max_osm_node_id};
     auto rel_ways_h = rel_ways_handler{pl.get(), rel_ways};
     auto reader = osm_io::Reader{input_file, osm_eb::node | osm_eb::relation,
                                  osmium::io::read_meta::no};
@@ -598,11 +619,12 @@ void extract(bool const with_platforms,
     node_idx_builder.finish();
   }
 
+  osm_way_idx_t max_osm_way_id{0};
   auto elevator_nodes = hash_map<osm_node_idx_t, level_bits_t>{};
   {  // Extract streets, places, and areas.
     pt->status("Load OSM / Ways").in_high(file_size).out_bounds(15, 40);
 
-    auto h = way_handler{w, pl.get(), rel_ways, elevator_nodes};
+    auto h = way_handler{w, pl.get(), rel_ways, max_osm_way_id, elevator_nodes};
     auto reader =
         osm_io::Reader{input_file, osm_eb::way, osmium::io::read_meta::no};
 
@@ -634,6 +656,57 @@ void extract(bool const with_platforms,
 
   w.r_->write(out);
   w.sync();
+
+  auto insert = [](auto&& vec, const auto& n, const auto pos) {
+    vec.push_back(n);
+    for (auto i = vec.size() - 1; i > pos; --i) {
+      vec[i] = vec[i - 1];
+    }
+    vec[pos] = n;
+  };
+
+  {
+    auto tmp = lookup{w, out, cista::mmap::protection::WRITE};
+    tmp.build_rtree();
+
+    for (const auto& p : bike_parkings) {
+      auto parking_osm_id = osm_node_idx_t{p};
+      auto const parking_node_opt = w.find_node_idx(parking_osm_id);
+      if (!parking_node_opt.has_value()) continue;
+      auto parking_node_id = *parking_node_opt;
+      const auto parking_point = w.get_node_pos(parking_node_id);
+      const auto loc = location{parking_point.as_latlng(), kNoLevel};
+      auto const proj =
+          tmp.match(get_parameters(search_profile::kBike), loc, false,
+                    direction::kForward, 500, nullptr, search_profile::kBike);
+      if (proj.empty()) continue;
+
+      const auto way = proj[0].way_;
+      const auto s = proj[0].segment_idx_;
+      const auto projection_point =
+          point::from_latlng(proj[0].closest_point_on_way_);
+
+      // register projection node
+      auto projection_osm_id = osm_node_idx_t{to_idx(++max_osm_node_id)};
+      w.node_to_osm_.emplace_back(projection_osm_id);
+      insert(w.way_osm_nodes_[way], projection_osm_id, s + 1);
+      insert(w.way_polylines_[way], projection_point, s + 1);
+
+      // register additional way: projection -> parking
+      w.way_osm_idx_.emplace_back(++max_osm_way_id);
+      way_properties additional_prop{};
+      additional_prop.is_bike_accessible_ = true;
+      additional_prop.is_foot_accessible_ = true;
+      w.r_->way_properties_.emplace_back(additional_prop);
+      w.way_polylines_.emplace_back(
+          std::initializer_list<point>{projection_point, parking_point});
+      w.way_osm_nodes_.emplace_back(std::initializer_list<osm_node_idx_t>{
+          projection_osm_id, parking_osm_id});
+      w.way_names_.emplace_back(string_idx_t::invalid());
+      const auto new_way_id = way_idx_t{w.way_osm_idx_.size() - 1U};
+      w.way_has_conditional_access_no_.resize(to_idx(new_way_id) + 1U);
+    }
+  }
 
   w.connect_ways();
   w.build_components();

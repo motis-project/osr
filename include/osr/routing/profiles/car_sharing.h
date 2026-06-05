@@ -68,6 +68,7 @@ struct car_sharing {
                       .is_entrance_ = false,
                       .is_multi_level_ = false,
                       .is_parking_ = false,
+                      .is_bike_parking_ = false,
                       .to_level_ = 0,
                       .is_bus_accessible_with_penalty_ = false};
 
