@@ -2,7 +2,6 @@
 
 #include <optional>
 
-#include "osr/types.h"
 #include "utl/for_each_bit_set.h"
 
 #include "osr/elevation_storage.h"
