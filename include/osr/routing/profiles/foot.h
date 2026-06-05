@@ -16,12 +16,12 @@ struct sharing_data;
 
 template <bool IsWheelchair,
           typename Tracking = noop_tracking,
-          bool WithElevation = false>
+          bool WithElevation = true>
 struct foot {
   static constexpr auto const kMaxMatchDistance = 100U;
 
   struct parameters {
-    using profile_t = foot<IsWheelchair, Tracking>;
+    using profile_t = foot<IsWheelchair, Tracking, WithElevation>;
     float const speed_meters_per_second_{IsWheelchair ? 0.8F : 1.2F};
   };
 
@@ -248,11 +248,8 @@ struct foot {
                           : 0.F;
 
             // tobler's hiking function
-            auto const tobler_speed =
-                params.speed_meters_per_second_ *
-                std::exp(
-                    -3.5F *
-                    std::abs(grad + ((elevations == nullptr) ? 0 : 0.05F)));
+            auto const tobler_speed = params.speed_meters_per_second_ *
+                                      std::exp(-3.5F * std::abs(grad + 0.05F));
             elevation_cost = static_cast<cost_t>(
                 std::max(0.F, static_cast<float>(dist) / tobler_speed -
                                   static_cast<float>(dist) /
