@@ -2,6 +2,7 @@
 
 #include <optional>
 
+#include "osr/types.h"
 #include "utl/for_each_bit_set.h"
 
 #include "osr/elevation_storage.h"
@@ -14,7 +15,9 @@ namespace osr {
 
 struct sharing_data;
 
-template <bool IsWheelchair, typename Tracking = noop_tracking>
+template <bool IsWheelchair,
+          typename Tracking = noop_tracking,
+          bool WithElevation = false>
 struct foot {
   static constexpr auto const kMaxMatchDistance = 100U;
 
@@ -235,22 +238,27 @@ struct foot {
             return in_direction ? e : e.swapped();
           }();
 
-          // assumes elevation is dominated in one direction
-          auto const dx = std::max(to_idx(elevation.up_), to_idx(elevation.down_));
+          cost_t elevation_cost = 0U;
+          if (WithElevation) {
+            // assumes elevation is dominated in one direction
+            auto const dx =
+                std::max(to_idx(elevation.up_), to_idx(elevation.down_));
 
-          auto const grad =
-              dist > 0U ? static_cast<float>(dx) / static_cast<float>(dist)
-                        : 0.F;
+            auto const grad =
+                dist > 0U ? static_cast<float>(dx) / static_cast<float>(dist)
+                          : 0.F;
 
-          // tobler's hiking function
-          auto const tobler_speed =
-              params.speed_meters_per_second_ *
-              std::exp(-3.5F *
-                       std::abs(grad + ((elevations == nullptr) ? 0 : 0.05F)));
-          auto elevation_cost = static_cast<cost_t>(std::max(
-              0.F,
-              static_cast<float>(dist) / tobler_speed -
-                  static_cast<float>(dist) / params.speed_meters_per_second_));
+            // tobler's hiking function
+            auto const tobler_speed =
+                params.speed_meters_per_second_ *
+                std::exp(
+                    -3.5F *
+                    std::abs(grad + ((elevations == nullptr) ? 0 : 0.05F)));
+            elevation_cost = static_cast<cost_t>(
+                std::max(0.F, static_cast<float>(dist) / tobler_speed -
+                                  static_cast<float>(dist) /
+                                      params.speed_meters_per_second_));
+          }
 
           auto const cost = way_cost(params, target_way_prop, way_dir, dist) +
                             node_cost(params, target_node_prop) +
