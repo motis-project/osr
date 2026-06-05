@@ -50,12 +50,12 @@ TEST(elevation_cost, alpspitze) {
 
   auto const path_no_elevation =
       route(param2, w, l, search_profile::kFootNoElevation, from, to,
-            360000 * 5, direction::kForward, 400, nullptr, nullptr, nullptr);
+            21600, direction::kForward, 400, nullptr, nullptr, nullptr);
   auto const path_uphill =
-      route(param1, w, l, search_profile::kFoot, from, to, 360000 * 5,
+      route(param1, w, l, search_profile::kFoot, from, to, 21600,
             direction::kForward, 400, nullptr, nullptr, elevations.get());
   auto const path_downhill =
-      route(param1, w, l, search_profile::kFoot, to, from, 360000 * 5,
+      route(param1, w, l, search_profile::kFoot, to, from, 21600,
             direction::kForward, 400, nullptr, nullptr, elevations.get());
 
   ASSERT_TRUE(path_no_elevation);
