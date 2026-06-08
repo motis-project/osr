@@ -27,6 +27,15 @@
       "args": [],
       "cwd": "${workspaceFolder}",
       "preLaunchTask": "build osr-test (Debug)"
+    },
+    {
+      "name": "osr-backend (Monaco) — RelWithDebInfo",
+      "type": "lldb",
+      "request": "launch",
+      "program": "${workspaceFolder}/build/macos-arm64-relwithdebinfo/osr-backend",
+      "args": ["-d", "test/monaco", "-s", "web"],
+      "cwd": "${workspaceFolder}",
+      "preLaunchTask": "build osr-backend (RelWithDebInfo)"
     }
   ],
   "inputs": [

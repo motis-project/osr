@@ -28,6 +28,20 @@
         "panel": "shared"
       },
       "problemMatcher": "$gcc"
+    },
+    {
+      "label": "build osr-backend (RelWithDebInfo)",
+      "type": "shell",
+      "command": "cmake --preset macos-arm64-relwithdebinfo && cmake --build --preset macos-arm64-relwithdebinfo --target osr-backend",
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "group": "build",
+      "presentation": {
+        "reveal": "silent",
+        "panel": "shared"
+      },
+      "problemMatcher": "$gcc"
     }
   ]
 }

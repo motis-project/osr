@@ -150,7 +150,7 @@ configure_file(
         ${CMAKE_CURRENT_SOURCE_DIR}/test/test_dir.h.in
         ${CMAKE_CURRENT_BINARY_DIR}/generated/test_dir.h
 )
-file(GLOB_RECURSE osr-test-files test/*cc)
+file(GLOB_RECURSE osr-test-files CONFIGURE_DEPENDS test/*cc)
 add_executable(osr-test ${osr-test-files})
 target_include_directories(osr-test PRIVATE ${CMAKE_CURRENT_BINARY_DIR}/generated)
 target_link_libraries(osr-test gmock osr boost-json)

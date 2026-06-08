@@ -1,4 +1,5 @@
 {
+  "cmake.cmakePath": "/opt/homebrew/bin/cmake",
   "testMate.cpp.test.executables": "build/macos-arm64-{debug,relwithdebinfo}/osr-test",
   "testMate.cpp.debug.configTemplate": {
     "type": "lldb",
