@@ -385,7 +385,23 @@
                 ['==', 'level', currentLevel]
             ],
             'paint': {
-                'line-color': '#42a5f5',
+                'line-color': [
+                     'match',
+                     ['get', 'mode'],
+                     'foot',
+                     'Orange',
+                     'wheelchair',
+                     'OrangeRed',
+                     'car',
+                     'MediumSlateBlue',
+                     'bike',
+                     'SpringGreen',
+                     'railway',
+                     'Crimson',
+                     'ferry',
+                     'Cyan',
+                     '#42a5f5',
+                 ],
                 'line-width': 5,
                 'line-opacity': 0.8
             }

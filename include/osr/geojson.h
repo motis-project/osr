@@ -52,7 +52,8 @@ inline std::string to_featurecollection(ways const& w,
                                      ? 0U
                                      : to_idx(w.way_osm_idx_[s.way_])},
                   {"cost", s.cost_},
-                  {"distance", s.dist_}},
+                  {"distance", s.dist_},
+                  {"mode", to_str(s.mode_)}},
              },
              {"geometry", to_line_string(s.polyline_)}};
        }) | utl::emplace_back_to<boost::json::array>()}});
