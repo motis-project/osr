@@ -499,7 +499,7 @@ struct ways {
     vec<opening_hours_monthday_range> opening_hours_monthday_ranges_;
     vec<opening_hours_weekday_range> opening_hours_weekday_ranges_;
     vec<opening_hours_time_span> opening_hours_time_spans_;
-    vec<pair<conditional_timezone_idx_t, string_idx_t>> timezones_;
+    vecvec<conditional_timezone_idx_t, char> timezones_;
 
     vecvec<way_idx_t, node_idx_t> way_nodes_;
     vecvec<way_idx_t, std::uint16_t> way_node_dist_;

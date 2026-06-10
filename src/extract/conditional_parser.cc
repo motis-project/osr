@@ -888,6 +888,7 @@ condition_set_result append_condition_set(
     std::string_view text, conditional_storage_builder& builder) {
   text = trim(text);
   auto set = conditional_condition_set{};
+  set.timezone_ = builder.timezone_;
   auto added = false;
   set.conditions_.begin_ = static_cast<std::uint32_t>(
       builder.routing_.conditional_conditions_.size());

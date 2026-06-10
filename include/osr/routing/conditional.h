@@ -4,19 +4,42 @@
 
 #include <chrono>
 #include <optional>
+#include <string_view>
+#include <utility>
+
+#include "date/iso_week.h"
+#include "date/tz.h"
 
 #include "osr/ways.h"
 
 namespace osr {
 
-struct conditional_wall_time {
+struct conditional_wall_date {
   std::int32_t year_{};
   std::uint8_t month_{};
   std::uint8_t day_{};
   std::uint8_t weekday_{};
   std::uint8_t iso_week_{};
+};
+
+struct conditional_wall_time {
+  conditional_wall_date date_{};
+  conditional_wall_date previous_date_{};
   std::uint16_t minutes_{};
 };
+
+inline conditional_wall_date to_conditional_wall_date(
+    std::chrono::sys_days const day) {
+  auto const ymd = std::chrono::year_month_day{day};
+  auto const iso = iso_week::year_weeknum_weekday{
+      iso_week::sys_days{day.time_since_epoch()}};
+  return conditional_wall_date{
+      .year_ = static_cast<std::int32_t>(int(ymd.year())),
+      .month_ = static_cast<std::uint8_t>(unsigned(ymd.month())),
+      .day_ = static_cast<std::uint8_t>(unsigned(ymd.day())),
+      .weekday_ = static_cast<std::uint8_t>(unsigned{iso.weekday()}),
+      .iso_week_ = static_cast<std::uint8_t>(unsigned{iso.weeknum()})};
+}
 
 inline constexpr bool compare_conditional_value(
     std::uint32_t const lhs,
@@ -34,41 +57,37 @@ inline constexpr bool compare_conditional_value(
 }
 
 inline std::optional<conditional_wall_time> to_conditional_wall_time(
-    std::optional<routing_time_t> const t) {
-  // timezones NYI
+    std::optional<routing_time_t> const t,
+    std::optional<std::string_view> const timezone = std::nullopt) {
   if (!t.has_value()) {
     return std::nullopt;
   }
-  auto const day = std::chrono::floor<std::chrono::days>(*t);
-  auto const ymd = std::chrono::year_month_day{day};
-  auto const wd = std::chrono::weekday{day}.c_encoding();
-  auto const iso_weekday = wd == 0U ? 7U : wd;
-  auto const jan4 =
-      std::chrono::sys_days{std::chrono::year{static_cast<int>(ymd.year())} /
-                            std::chrono::January / 4};
-  auto const jan4_wd = std::chrono::weekday{jan4}.c_encoding();
-  auto const jan4_iso_weekday = jan4_wd == 0U ? 7U : jan4_wd;
-  auto const week1_monday = jan4 - std::chrono::days{jan4_iso_weekday - 1U};
-  auto week = static_cast<int>((day - week1_monday).count() / 7) + 1;
-  if (week <= 0) {
-    auto const prev_jan4 = std::chrono::sys_days{
-        std::chrono::year{static_cast<int>(ymd.year()) - 1} /
-        std::chrono::January / 4};
-    auto const prev_wd = std::chrono::weekday{prev_jan4}.c_encoding();
-    auto const prev_iso_weekday = prev_wd == 0U ? 7U : prev_wd;
-    auto const prev_week1_monday =
-        prev_jan4 - std::chrono::days{prev_iso_weekday - 1U};
-    week = static_cast<int>((day - prev_week1_monday).count() / 7) + 1;
+  auto local_time = *t;
+  if (timezone.has_value()) {
+    auto const* tz = date::locate_zone(*timezone);
+    auto const zoned = date::zoned_time<routing_time_t::duration>{tz, *t};
+    local_time = routing_time_t{zoned.get_local_time().time_since_epoch()};
   }
+  auto const day = std::chrono::floor<std::chrono::days>(local_time);
   auto const minutes =
-      std::chrono::duration_cast<std::chrono::minutes>(*t - day).count();
+      std::chrono::duration_cast<std::chrono::minutes>(local_time - day)
+          .count();
   return conditional_wall_time{
-      .year_ = static_cast<std::int32_t>(int(ymd.year())),
-      .month_ = static_cast<std::uint8_t>(unsigned(ymd.month())),
-      .day_ = static_cast<std::uint8_t>(unsigned(ymd.day())),
-      .weekday_ = static_cast<std::uint8_t>(iso_weekday),
-      .iso_week_ = static_cast<std::uint8_t>(week),
+      .date_ = to_conditional_wall_date(day),
+      .previous_date_ = to_conditional_wall_date(day - std::chrono::days{1}),
       .minutes_ = static_cast<std::uint16_t>(minutes)};
+}
+
+inline std::optional<std::string_view> conditional_timezone_name(
+    ways::routing const& w, conditional_timezone_idx_t const idx) {
+  if (idx == conditional_timezone_idx_t::invalid()) {
+    return std::nullopt;
+  }
+  auto const i = to_idx(idx);
+  if (i >= w.timezones_.size()) {
+    return std::nullopt;
+  }
+  return w.timezones_[idx].view();
 }
 
 template <typename Range, typename Fn>
@@ -87,25 +106,25 @@ bool conditional_any_matches(conditional_range const range,
 }
 
 inline constexpr bool matches_conditional_year(
-    conditional_wall_time const& t, opening_hours_year_range const& r) {
+    conditional_wall_date const& t, opening_hours_year_range const& r) {
   return t.year_ >= r.from_ && t.year_ <= r.to_ &&
          ((t.year_ - r.from_) % r.step_) == 0;
 }
 
 inline constexpr bool matches_conditional_week(
-    conditional_wall_time const& t, opening_hours_week_range const& r) {
+    conditional_wall_date const& t, opening_hours_week_range const& r) {
   return t.iso_week_ >= r.from_ && t.iso_week_ <= r.to_ &&
          ((t.iso_week_ - r.from_) % r.step_) == 0;
 }
 
 inline constexpr bool matches_conditional_weekday(
-    conditional_wall_time const& t, opening_hours_weekday_range const& r) {
+    conditional_wall_date const& t, opening_hours_weekday_range const& r) {
   return r.from_ <= r.to_ ? t.weekday_ >= r.from_ && t.weekday_ <= r.to_
                           : t.weekday_ >= r.from_ || t.weekday_ <= r.to_;
 }
 
 inline constexpr bool matches_conditional_monthday(
-    conditional_wall_time const& t, opening_hours_monthday_range const& r) {
+    conditional_wall_date const& t, opening_hours_monthday_range const& r) {
   auto const value = static_cast<std::uint16_t>(t.month_ * 32U + t.day_);
   auto const date_value = [](opening_hours_date const& d, bool const end) {
     auto const month = d.month_ == 0U ? (end ? 12U : 1U) : d.month_;
@@ -126,9 +145,49 @@ inline constexpr bool matches_conditional_monthday(
 
 inline constexpr bool matches_conditional_time(
     conditional_wall_time const& t, opening_hours_time_span const& r) {
-  return r.from_minutes_ <= r.to_minutes_
-             ? t.minutes_ >= r.from_minutes_ && t.minutes_ < r.to_minutes_
-             : t.minutes_ >= r.from_minutes_ || t.minutes_ < r.to_minutes_;
+  auto const to = r.to_minutes_ <= r.from_minutes_
+                      ? static_cast<std::uint16_t>(r.to_minutes_ + 24U * 60U)
+                      : r.to_minutes_;
+  return (t.minutes_ >= r.from_minutes_ && t.minutes_ < to) ||
+         (static_cast<std::uint16_t>(t.minutes_ + 24U * 60U) >=
+              r.from_minutes_ &&
+          static_cast<std::uint16_t>(t.minutes_ + 24U * 60U) < to);
+}
+
+inline bool matches_conditional_date(conditional_wall_date const& t,
+                                     ways::routing const& w,
+                                     opening_hours_rule const& rule) {
+  return conditional_any_matches(
+             rule.years_, w.opening_hours_year_ranges_,
+             [&](auto const& r) { return matches_conditional_year(t, r); }) &&
+         conditional_any_matches(
+             rule.weeks_, w.opening_hours_week_ranges_,
+             [&](auto const& r) { return matches_conditional_week(t, r); }) &&
+         conditional_any_matches(rule.monthdays_,
+                                 w.opening_hours_monthday_ranges_,
+                                 [&](auto const& r) {
+                                   return matches_conditional_monthday(t, r);
+                                 }) &&
+         conditional_any_matches(
+             rule.weekdays_, w.opening_hours_weekday_ranges_,
+             [&](auto const& r) { return matches_conditional_weekday(t, r); });
+}
+
+inline bool matches_conditional_time_with_date(
+    conditional_wall_time const& t,
+    ways::routing const& w,
+    opening_hours_rule const& rule,
+    opening_hours_time_span const& r) {
+  auto const to = r.to_minutes_ <= r.from_minutes_
+                      ? static_cast<std::uint16_t>(r.to_minutes_ + 24U * 60U)
+                      : r.to_minutes_;
+  if (t.minutes_ >= r.from_minutes_ && t.minutes_ < to) {
+    return matches_conditional_date(t.date_, w, rule);
+  }
+  auto const previous_day_minutes =
+      static_cast<std::uint16_t>(t.minutes_ + 24U * 60U);
+  return previous_day_minutes >= r.from_minutes_ && previous_day_minutes < to &&
+         matches_conditional_date(t.previous_date_, w, rule);
 }
 
 inline bool matches_conditional_opening_hours(ways::routing const& w,
@@ -138,23 +197,12 @@ inline bool matches_conditional_opening_hours(ways::routing const& w,
   for (auto i = oh.rules_.begin_; i != oh.rules_.end_; ++i) {
     auto const& rule = w.opening_hours_rules_[i];
     auto const matches =
-        conditional_any_matches(
-            rule.years_, w.opening_hours_year_ranges_,
-            [&](auto const& r) { return matches_conditional_year(t, r); }) &&
-        conditional_any_matches(
-            rule.weeks_, w.opening_hours_week_ranges_,
-            [&](auto const& r) { return matches_conditional_week(t, r); }) &&
-        conditional_any_matches(rule.monthdays_,
-                                w.opening_hours_monthday_ranges_,
-                                [&](auto const& r) {
-                                  return matches_conditional_monthday(t, r);
-                                }) &&
-        conditional_any_matches(
-            rule.weekdays_, w.opening_hours_weekday_ranges_,
-            [&](auto const& r) { return matches_conditional_weekday(t, r); }) &&
-        conditional_any_matches(
-            rule.times_, w.opening_hours_time_spans_,
-            [&](auto const& r) { return matches_conditional_time(t, r); });
+        rule.times_.empty()
+            ? matches_conditional_date(t.date_, w, rule)
+            : conditional_any_matches(
+                  rule.times_, w.opening_hours_time_spans_, [&](auto const& r) {
+                    return matches_conditional_time_with_date(t, w, rule, r);
+                  });
     if (matches) {
       return rule.modifier_ != opening_hours_rule_modifier::kClosed;
     }
@@ -196,6 +244,23 @@ bool matches_conditional_condition_set(
     }
   }
   return true;
+}
+
+template <typename Fn>
+bool matches_conditional_condition_set_utc(
+    ways::routing const& w,
+    conditional_condition_set_idx_t const idx,
+    std::optional<routing_time_t> const utc_time,
+    Fn&& fn) {
+  if (idx == conditional_condition_set_idx_t::invalid()) {
+    return false;
+  }
+  auto const& set = w.conditional_condition_sets_[to_idx(idx)];
+  return matches_conditional_condition_set(
+      w, idx,
+      to_conditional_wall_time(utc_time,
+                               conditional_timezone_name(w, set.timezone_)),
+      std::forward<Fn>(fn));
 }
 
 inline constexpr bool conditional_direction_applies(

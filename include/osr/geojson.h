@@ -1,7 +1,9 @@
 #include <algorithm>
 #include <array>
+#include <optional>
 #include <sstream>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include "boost/json.hpp"
@@ -437,6 +439,13 @@ std::string conditional_to_string(ways const& w,
                      condition_set_to_string(w, r.condition_set_));
 }
 
+inline std::optional<std::string_view> tz_name(
+    ways::routing const& r, conditional_timezone_idx_t const idx) {
+  return idx == conditional_timezone_idx_t::invalid()
+             ? std::optional<std::string_view>{}
+             : std::optional{r.timezones_.at(idx).view()};
+}
+
 inline void add_conditional_properties(boost::json::object& properties,
                                        ways const& w,
                                        way_idx_t const way,
@@ -452,10 +461,17 @@ inline void add_conditional_properties(boost::json::object& properties,
   }
 
   auto clauses = boost::json::array{};
+  auto timezone = std::optional<std::string_view>{};
   auto append = [&](auto const range, auto const& values,
                     auto&& value_to_string) {
     for (auto i = range.begin_; i != range.end_; ++i) {
       auto const& r = values[i];
+      if (!timezone.has_value() &&
+          r.condition_set_ != conditional_condition_set_idx_t::invalid()) {
+        timezone = tz_name(
+            *w.r_, w.r_->conditional_condition_sets_[to_idx(r.condition_set_)]
+                       .timezone_);
+      }
       clauses.emplace_back(conditional_to_string(w, r, value_to_string(r)));
     }
   };
@@ -471,6 +487,9 @@ inline void add_conditional_properties(boost::json::object& properties,
          [](conditional_numeric_restriction const& r) {
            return to_string(r.value_);
          });
+  if (timezone.has_value()) {
+    properties["timezone"] = *timezone;
+  }
   properties["conditionals"] = std::move(clauses);
 }
 

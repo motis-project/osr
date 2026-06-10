@@ -25,6 +25,17 @@ osr::conditional_wall_time wall_time(int const year,
   return *osr::to_conditional_wall_time(tp);
 }
 
+osr::routing_time_t utc_time(int const year,
+                             unsigned const month,
+                             unsigned const day,
+                             int const hour,
+                             int const minute) {
+  return std::chrono::time_point_cast<std::chrono::seconds>(
+      std::chrono::sys_days{std::chrono::year{year} /
+                            std::chrono::month{month} / std::chrono::day{day}} +
+      std::chrono::hours{hour} + std::chrono::minutes{minute});
+}
+
 struct match_fixture {
   match_fixture() : builder_{.routing_ = routing_} {}
 
@@ -81,6 +92,14 @@ struct match_fixture {
     return matches_profile(params, condition_set, std::nullopt);
   }
 
+  bool matches_profile_utc(
+      osr::hgv::parameters const& params,
+      osr::conditional_condition_set_idx_t const condition_set,
+      osr::routing_time_t const t) const {
+    return osr::hgv::matches_profile_condition_set_utc(params, routing_,
+                                                       condition_set, t);
+  }
+
   osr::ways::routing routing_{};
   osr::conditional_storage_builder builder_;
 };
@@ -102,6 +121,104 @@ TEST(conditional_match, weekday_time_range) {
   EXPECT_FALSE(f.matches(idx, 2024, 6, 3, 10, 0));  // Mon 10:00 (end)
   EXPECT_FALSE(f.matches(idx, 2024, 6, 8, 8, 0));  // Sat 08:00 (wrong day)
   EXPECT_FALSE(f.matches(idx, 2024, 6, 9, 8, 0));  // Sun 08:00 (wrong day)
+}
+
+TEST(conditional_match, wall_date_uses_iso_week_number) {
+  auto const wall_date = [](int const year, unsigned const month,
+                            unsigned const day) {
+    return osr::to_conditional_wall_date(std::chrono::sys_days{
+        std::chrono::year{year} / std::chrono::month{month} /
+        std::chrono::day{day}});
+  };
+
+  EXPECT_EQ(53U, wall_date(2021, 1, 1).iso_week_);
+  EXPECT_EQ(1U, wall_date(2024, 1, 1).iso_week_);
+  EXPECT_EQ(7U, wall_date(2024, 1, 7).weekday_);
+  EXPECT_EQ(1U, wall_date(2024, 12, 30).iso_week_);
+}
+
+TEST(conditional_match, timezone_converts_utc_to_local_wall_time) {
+  auto f = match_fixture{};
+  f.routing_.timezones_.emplace_back("Europe/Berlin"sv);
+  f.builder_.timezone_ = osr::conditional_timezone_idx_t{0U};
+  ASSERT_TRUE(f.parse("hgv:conditional"sv, "no @ (08:00-09:00)"sv));
+
+  auto const idx = f.routing_.conditional_access_[0].condition_set_;
+  auto const params = osr::hgv::parameters{};
+
+  EXPECT_TRUE(f.matches_profile_utc(params, idx, utc_time(2024, 6, 3, 6, 30)));
+  EXPECT_FALSE(f.matches_profile_utc(params, idx, utc_time(2024, 6, 3, 8, 30)));
+  EXPECT_TRUE(f.matches_profile_utc(params, idx, utc_time(2024, 12, 3, 7, 30)));
+}
+
+TEST(conditional_match, timezone_handles_dst_spring_forward) {
+  auto f = match_fixture{};
+  f.routing_.timezones_.emplace_back("Europe/Berlin"sv);
+  f.builder_.timezone_ = osr::conditional_timezone_idx_t{0U};
+  ASSERT_TRUE(f.parse("hgv:conditional"sv, "no @ (Su 02:00-03:30)"sv));
+
+  auto const idx = f.routing_.conditional_access_[0].condition_set_;
+  auto const params = osr::hgv::parameters{};
+
+  EXPECT_FALSE(
+      f.matches_profile_utc(params, idx, utc_time(2024, 3, 31, 0, 30)));
+  EXPECT_TRUE(f.matches_profile_utc(params, idx, utc_time(2024, 3, 31, 1, 0)));
+  EXPECT_TRUE(f.matches_profile_utc(params, idx, utc_time(2024, 3, 31, 1, 29)));
+  EXPECT_FALSE(
+      f.matches_profile_utc(params, idx, utc_time(2024, 3, 31, 1, 30)));
+}
+
+TEST(conditional_match, timezone_handles_dst_fall_back) {
+  auto f = match_fixture{};
+  f.routing_.timezones_.emplace_back("Europe/Berlin"sv);
+  f.builder_.timezone_ = osr::conditional_timezone_idx_t{0U};
+  ASSERT_TRUE(f.parse("hgv:conditional"sv, "no @ (Su 02:00-03:00)"sv));
+
+  auto const idx = f.routing_.conditional_access_[0].condition_set_;
+  auto const params = osr::hgv::parameters{};
+
+  EXPECT_TRUE(
+      f.matches_profile_utc(params, idx, utc_time(2024, 10, 27, 0, 30)));
+  EXPECT_TRUE(
+      f.matches_profile_utc(params, idx, utc_time(2024, 10, 27, 1, 30)));
+  EXPECT_FALSE(
+      f.matches_profile_utc(params, idx, utc_time(2024, 10, 27, 2, 0)));
+}
+
+TEST(conditional_match,
+     timezone_handles_dst_spring_forward_in_overnight_range) {
+  auto f = match_fixture{};
+  f.routing_.timezones_.emplace_back("Europe/Berlin"sv);
+  f.builder_.timezone_ = osr::conditional_timezone_idx_t{0U};
+  ASSERT_TRUE(f.parse("hgv:conditional"sv, "no @ (Sa 22:00-03:30)"sv));
+
+  auto const idx = f.routing_.conditional_access_[0].condition_set_;
+  auto const params = osr::hgv::parameters{};
+
+  EXPECT_TRUE(
+      f.matches_profile_utc(params, idx, utc_time(2024, 3, 30, 22, 30)));
+  EXPECT_TRUE(f.matches_profile_utc(params, idx, utc_time(2024, 3, 31, 1, 15)));
+  EXPECT_FALSE(
+      f.matches_profile_utc(params, idx, utc_time(2024, 3, 31, 1, 30)));
+}
+
+TEST(conditional_match, timezone_handles_dst_fall_back_in_overnight_range) {
+  auto f = match_fixture{};
+  f.routing_.timezones_.emplace_back("Europe/Berlin"sv);
+  f.builder_.timezone_ = osr::conditional_timezone_idx_t{0U};
+  ASSERT_TRUE(f.parse("hgv:conditional"sv, "no @ (Sa 22:00-03:00)"sv));
+
+  auto const idx = f.routing_.conditional_access_[0].condition_set_;
+  auto const params = osr::hgv::parameters{};
+
+  EXPECT_TRUE(
+      f.matches_profile_utc(params, idx, utc_time(2024, 10, 26, 21, 30)));
+  EXPECT_TRUE(
+      f.matches_profile_utc(params, idx, utc_time(2024, 10, 27, 0, 30)));
+  EXPECT_TRUE(
+      f.matches_profile_utc(params, idx, utc_time(2024, 10, 27, 1, 30)));
+  EXPECT_FALSE(
+      f.matches_profile_utc(params, idx, utc_time(2024, 10, 27, 2, 0)));
 }
 
 TEST(conditional_match, always_24_7) {

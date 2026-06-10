@@ -116,6 +116,7 @@ TEST(conditional_extract, writes_conditionals_to_geojson_debug_output) {
   auto const json = writer.string();
 
   EXPECT_NE(std::string::npos, json.find("\"has_conditionals\":true"));
+  EXPECT_NE(std::string::npos, json.find("\"timezone\":\"Europe/Berlin\""));
   EXPECT_NE(std::string::npos,
             json.find("access:conditional = no @ (Mo-Fr 06:00-10:00)"));
   EXPECT_NE(std::string::npos,

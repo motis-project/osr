@@ -11,7 +11,6 @@
 #include <memory>
 #include <optional>
 #include <string>
-
 #include "osr/extract/extract.h"
 
 #include "boost/thread/tss.hpp"
@@ -29,12 +28,17 @@
 #include "osmium/io/xml_input.hpp"
 
 #include "utl/enumerate.h"
+#include "utl/get_or_create.h"
 #include "utl/helpers/algorithm.h"
 #include "utl/parser/arg_parser.h"
 #include "utl/progress_tracker.h"
 
 #include "tiles/osm/hybrid_node_idx.h"
 #include "tiles/osm/tmp_file.h"
+
+#include "tzbounds/timezones.h"
+
+#include "geo/box.h"
 
 #include "osr/elevation_storage.h"
 #include "osr/extract/conditional_parser.h"
@@ -427,10 +431,36 @@ struct way_handler : public osm::handler::Handler {
       return str_idx;
     };
 
+    auto const register_timezone = [&](std::string_view s) {
+      return utl::get_or_create(timezone_idx_by_name_, s, [&]() {
+        auto const idx = conditional_timezone_idx_t{
+            static_cast<std::uint16_t>(w_.r_->timezones_.size())};
+        w_.r_->timezones_.emplace_back(s);
+        return idx;
+      });
+    };
+
+    auto const get_timezone = [&]() {
+      if (t.conditional_tags_.empty()) {
+        return conditional_timezone_idx_t::invalid();
+      }
+      if (timezone_lookup_ == nullptr) {
+        timezone_lookup_ = std::make_unique<tzbounds::timezone_lookup>();
+      }
+      auto b = geo::box{};
+      for (auto const& n : w.nodes()) {
+        b.extend(point::from_location(n.location()).as_latlng());
+      }
+      auto const tz = timezone_lookup_->lookup(b.centroid());
+      return tz.has_value() ? register_timezone(*tz)
+                            : conditional_timezone_idx_t::invalid();
+    };
+
     auto l = std::scoped_lock{mutex_};
     auto const way_idx = way_idx_t{w_.way_osm_idx_.size()};
 
-    auto conditional_builder = conditional_storage_builder{.routing_ = *w_.r_};
+    auto conditional_builder = conditional_storage_builder{
+        .routing_ = *w_.r_, .timezone_ = get_timezone()};
     for (auto const& [key, value] : t.conditional_tags_) {
       if (!parse_conditional_restriction_tag(key, value, conditional_builder)) {
         std::clog << "osr: ignored unsupported conditional restriction on way "
@@ -488,6 +518,8 @@ struct way_handler : public osm::handler::Handler {
   ways& w_;
   platforms* platforms_;
   rel_ways_t const& rel_ways_;
+  std::unique_ptr<tzbounds::timezone_lookup> timezone_lookup_;
+  hash_map<std::string, conditional_timezone_idx_t> timezone_idx_by_name_;
 
   std::mutex elevator_nodes_mutex_;
   hash_map<osm_node_idx_t, level_bits_t>& elevator_nodes_;

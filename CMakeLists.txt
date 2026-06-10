@@ -122,10 +122,13 @@ target_link_libraries(osr
         cista
         utl
         tiles-import-library
+        date-tz
+        tzbounds
         rtree
         unordered_dense
         boost-thread
         boost-iostreams
+        boost-json
 )
 
 # --- MAIN ---

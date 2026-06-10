@@ -341,15 +341,15 @@ struct hgv {
     auto const to_way = restriction_dir == direction::kForward
                             ? way_pos_t{to}
                             : way_pos_t{from};
-    auto const wall_time = to_conditional_wall_time(
-        current_routing_time(start_time, search_dir, current_duration));
+    auto const current_time =
+        current_routing_time(start_time, search_dir, current_duration);
     return utl::any_of(w.node_restrictions_[n], [&](restriction const& x) {
       if (x.from_ != from_way || x.to_ != to_way || !x.applies_to_hgv_) {
         return false;
       }
       return x.condition_set_ == conditional_condition_set_idx_t::invalid() ||
-             matches_profile_condition_set(params, w, x.condition_set_,
-                                           wall_time);
+             matches_profile_condition_set_utc(params, w, x.condition_set_,
+                                               current_time);
     });
   }
 
@@ -503,6 +503,17 @@ struct hgv {
         });
   }
 
+  static bool matches_profile_condition_set_utc(
+      parameters const& params,
+      ways::routing const& w,
+      conditional_condition_set_idx_t const idx,
+      std::optional<routing_time_t> const t) {
+    return matches_conditional_condition_set_utc(
+        w, idx, t, [&](conditional_condition const& c) {
+          return matches_profile_condition(params, c);
+        });
+  }
+
   static bool mode_applies(conditional_transport_mode const mode) {
     switch (mode) {
       case conditional_transport_mode::kUnspecified: [[fallthrough]];
@@ -626,20 +637,19 @@ struct hgv {
     if (conditionals == nullptr) {
       return;
     }
-    auto const wall_time = to_conditional_wall_time(current_time);
     for (auto i = conditionals->access_.begin_; i != conditionals->access_.end_;
          ++i) {
       auto const& r = w.conditional_access_[i];
-      if (matches_profile_condition_set(params, w, r.condition_set_,
-                                        wall_time)) {
+      if (matches_profile_condition_set_utc(params, w, r.condition_set_,
+                                            current_time)) {
         apply_access_condition(r, params, dir, state);
       }
     }
     for (auto i = conditionals->numeric_.begin_;
          i != conditionals->numeric_.end_; ++i) {
       auto const& r = w.conditional_numeric_[i];
-      if (matches_profile_condition_set(params, w, r.condition_set_,
-                                        wall_time)) {
+      if (matches_profile_condition_set_utc(params, w, r.condition_set_,
+                                            current_time)) {
         apply_numeric_condition(r, params, dir, state);
       }
     }

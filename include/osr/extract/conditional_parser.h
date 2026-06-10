@@ -9,6 +9,7 @@ namespace osr {
 
 struct conditional_storage_builder {
   ways::routing& routing_;
+  conditional_timezone_idx_t timezone_{conditional_timezone_idx_t::invalid()};
   way_conditional_restrictions way_{};
 };
 
