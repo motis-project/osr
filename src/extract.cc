@@ -218,8 +218,7 @@ bool is_big_street(tags const& t) {
 
 speed_limit get_speed_limit(tags const& t) {
   if (auto const speed = parse_speed_km_h(t.max_speed_); speed.has_value()) {
-    // TODO: this * 0.9 should be removed (but may break some things)
-    return get_speed_limit(static_cast<unsigned>(speed.value() * 0.9));
+    return get_speed_limit(static_cast<unsigned>(speed.value()));
   } else {
     switch (cista::hash(t.highway_)) {
       case cista::hash("motorway"): return get_speed_limit(100);
