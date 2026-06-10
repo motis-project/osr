@@ -69,4 +69,4 @@
 [tzbounds]
   url=git@github.com:motis-project/tzbounds.git
   branch=master
-  commit=0c367de99e2afa4a69c53da61dd4b49d778005f3
+  commit=7d843f62791098b2aac49e5d04a5a180f8da7b13
