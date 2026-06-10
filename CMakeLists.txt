@@ -123,7 +123,9 @@ target_link_libraries(osr
         utl
         tiles-import-library
         date-tz
+        ianatzdb-res
         tzbounds
+        tzbounds_timezones-res
         rtree
         unordered_dense
         boost-thread
