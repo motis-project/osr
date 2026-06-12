@@ -224,6 +224,8 @@ struct lookup {
 
   void insert(way_idx_t);
 
+  void write();
+
   template <Profile P>
   match_t get_way_candidates(P::parameters const& params,
                              location const& query,
@@ -340,8 +342,6 @@ struct lookup {
     }
     return c;
   }
-
-  void write();
 
 private:
   std::vector<raw_way_candidate> get_raw_way_candidates(

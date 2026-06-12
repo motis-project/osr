@@ -34,6 +34,8 @@ void lookup::build_rtree() {
   rtree_.write_meta(p_ / "rtree_meta.bin");
 }
 
+void lookup::write() { rtree_.write_meta(p_ / "rtree_meta.bin"); }
+
 std::vector<raw_way_candidate> lookup::get_raw_way_candidates(
     location const& query, double const max_match_distance) const {
   auto way_candidates = std::vector<raw_way_candidate>{};
