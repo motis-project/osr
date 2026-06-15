@@ -39,6 +39,45 @@ constexpr auto const kConditionalRestrictionsOsm =
   </way>
 </osm>)osm";
 
+constexpr auto const kHgvAccessOsm = R"osm(<osm version="0.6" generator="test">
+  <node id="1" lat="48.0000" lon="9.0000"/>
+  <node id="2" lat="48.0000" lon="9.0010"/>
+  <node id="3" lat="48.0000" lon="9.0020"/>
+  <node id="4" lat="48.0000" lon="9.0030"/>
+  <node id="5" lat="48.0000" lon="9.0040"/>
+  <node id="6" lat="48.0000" lon="9.0050"/>
+  <way id="10">
+    <nd ref="1"/>
+    <nd ref="2"/>
+    <tag k="highway" v="primary"/>
+    <tag k="hgv" v="yes"/>
+  </way>
+  <way id="20">
+    <nd ref="2"/>
+    <nd ref="3"/>
+    <tag k="highway" v="primary"/>
+    <tag k="hgv" v="designated"/>
+  </way>
+  <way id="30">
+    <nd ref="3"/>
+    <nd ref="4"/>
+    <tag k="highway" v="primary"/>
+    <tag k="hgv" v="delivery"/>
+  </way>
+  <way id="40">
+    <nd ref="4"/>
+    <nd ref="5"/>
+    <tag k="highway" v="primary"/>
+    <tag k="hgv" v="destination"/>
+  </way>
+  <way id="50">
+    <nd ref="5"/>
+    <nd ref="6"/>
+    <tag k="highway" v="primary"/>
+    <tag k="hgv" v="no"/>
+  </way>
+</osm>)osm";
+
 fs::path write_osm(std::string_view const name,
                    std::string_view const content) {
   auto const path = fs::temp_directory_path() / name;
@@ -77,12 +116,12 @@ TEST(conditional_extract, stores_parseable_conditional_restrictions) {
   ASSERT_EQ(2U, conditionals->access_.size());
   ASSERT_EQ(1U, conditionals->numeric_.size());
   auto const& access = w.r_->conditional_access_[conditionals->access_.begin_];
-  EXPECT_EQ(osr::conditional_access_value::kNo, access.value_);
+  EXPECT_EQ(osr::access_value::kNo, access.value_);
   EXPECT_EQ(osr::conditional_restriction_field::kAccess, access.field_);
   auto const& hazmat =
       w.r_->conditional_access_[conditionals->access_.begin_ + 1U];
   EXPECT_EQ(osr::conditional_restriction_field::kHazmatWater, hazmat.field_);
-  EXPECT_EQ(osr::conditional_access_value::kNo, hazmat.value_);
+  EXPECT_EQ(osr::access_value::kNo, hazmat.value_);
 
   auto const& maxheight =
       w.r_->conditional_numeric_[conditionals->numeric_.begin_];
@@ -141,4 +180,33 @@ TEST(conditional_extract, ignores_unsupported_conditionals) {
 
   EXPECT_FALSE(w.r_->way_properties_[*way].has_conditionals());
   EXPECT_EQ(nullptr, w.r_->get_conditional_restrictions(*way));
+}
+
+TEST(conditional_extract, stores_hgv_access_values_separately) {
+  auto const osm_path = write_osm("osr_hgv_access.osm", kHgvAccessOsm);
+  auto const dir = prepare_extract_dir("osr_hgv_access_dir");
+
+  osr::extract(false, osm_path.generic_string(), dir, {});
+
+  auto w = osr::ways{dir, cista::mmap::protection::READ};
+  auto const get_hgv_access = [&](osr::osm_way_idx_t const osm_way) {
+    auto const way = w.find_way(osm_way);
+    if (!way.has_value()) {
+      return osr::access_value::kUnknown;
+    }
+    auto const* info = w.r_->get_hgv_info(*way);
+    if (info == nullptr || !info->has(osr::hgv_info_field::kAccess)) {
+      return osr::access_value::kUnknown;
+    }
+    return info->hgv_access();
+  };
+
+  EXPECT_EQ(osr::access_value::kYes, get_hgv_access(osr::osm_way_idx_t{10}));
+  EXPECT_EQ(osr::access_value::kDesignated,
+            get_hgv_access(osr::osm_way_idx_t{20}));
+  EXPECT_EQ(osr::access_value::kDelivery,
+            get_hgv_access(osr::osm_way_idx_t{30}));
+  EXPECT_EQ(osr::access_value::kDestination,
+            get_hgv_access(osr::osm_way_idx_t{40}));
+  EXPECT_EQ(osr::access_value::kNo, get_hgv_access(osr::osm_way_idx_t{50}));
 }

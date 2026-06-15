@@ -23,6 +23,18 @@
 
 namespace osr {
 
+enum class access_value : std::uint8_t {
+  kUnknown,
+  kYes,
+  kDesignated,
+  kPermissive,
+  kPrivate,
+  kDelivery,
+  kDestination,
+  kNo,
+  kDiscouraged,
+};
+
 template <typename K, typename V, typename SizeType = cista::base_t<K>>
 using vecvec = cista::raw::vecvec<K, V, SizeType>;
 

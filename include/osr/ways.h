@@ -70,12 +70,6 @@ struct restriction {
       conditional_condition_set_idx_t::invalid()};
 };
 
-enum class access_value : std::uint8_t {
-  kUnknown,
-  kAllowed,
-  kForbidden,
-};
-
 enum class hgv_info_field : std::uint16_t {
   kAccess = 1U << 0U,
   kMaxSpeed = 1U << 1U,

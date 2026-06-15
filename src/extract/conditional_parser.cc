@@ -139,22 +139,17 @@ std::optional<std::uint32_t> parse_u32(std::string_view s) {
   return value;
 }
 
-std::optional<conditional_access_value> parse_access_value(
-    std::string_view value) {
+std::optional<access_value> parse_access_value(std::string_view value) {
   auto const lower = to_lower(trim(value));
   switch (cista::hash(lower)) {
-    case cista::hash("yes"): return conditional_access_value::kYes;
-    case cista::hash("designated"):
-      return conditional_access_value::kDesignated;
-    case cista::hash("permissive"):
-      return conditional_access_value::kPermissive;
-    case cista::hash("private"): return conditional_access_value::kPrivate;
-    case cista::hash("no"): return conditional_access_value::kNo;
-    case cista::hash("destination"):
-      return conditional_access_value::kDestination;
-    case cista::hash("delivery"): return conditional_access_value::kDelivery;
-    case cista::hash("discouraged"):
-      return conditional_access_value::kDiscouraged;
+    case cista::hash("yes"): return access_value::kYes;
+    case cista::hash("designated"): return access_value::kDesignated;
+    case cista::hash("permissive"): return access_value::kPermissive;
+    case cista::hash("private"): return access_value::kPrivate;
+    case cista::hash("no"): return access_value::kNo;
+    case cista::hash("destination"): return access_value::kDestination;
+    case cista::hash("delivery"): return access_value::kDelivery;
+    case cista::hash("discouraged"): return access_value::kDiscouraged;
     default: return std::nullopt;
   }
 }

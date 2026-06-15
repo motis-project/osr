@@ -90,8 +90,14 @@ inline std::string platform_names(platforms const& pl, platform_idx_t const i) {
 inline char const* to_string(access_value const value) {
   switch (value) {
     case access_value::kUnknown: return "unknown";
-    case access_value::kAllowed: return "allowed";
-    case access_value::kForbidden: return "forbidden";
+    case access_value::kYes: return "yes";
+    case access_value::kDesignated: return "designated";
+    case access_value::kPermissive: return "permissive";
+    case access_value::kPrivate: return "private";
+    case access_value::kDelivery: return "delivery";
+    case access_value::kDestination: return "destination";
+    case access_value::kNo: return "no";
+    case access_value::kDiscouraged: return "discouraged";
   }
   return "unknown";
 }
@@ -139,21 +145,6 @@ inline char const* to_string(conditional_osm_direction const value) {
     case conditional_osm_direction::kBackward: return "backward";
   }
   return "";
-}
-
-inline char const* to_string(conditional_access_value const value) {
-  switch (value) {
-    case conditional_access_value::kUnknown: return "unknown";
-    case conditional_access_value::kYes: return "yes";
-    case conditional_access_value::kDesignated: return "designated";
-    case conditional_access_value::kPermissive: return "permissive";
-    case conditional_access_value::kPrivate: return "private";
-    case conditional_access_value::kNo: return "no";
-    case conditional_access_value::kDestination: return "destination";
-    case conditional_access_value::kDelivery: return "delivery";
-    case conditional_access_value::kDiscouraged: return "discouraged";
-  }
-  return "unknown";
 }
 
 inline char const* to_string(conditional_oneway_value const value) {

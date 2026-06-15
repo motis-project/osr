@@ -210,6 +210,8 @@ struct hgv {
   struct way_state {
     bool accessible_{};
     bool destination_penalty_{};
+    bool designated_preference_{};
+    access_value hgv_access_{access_value::kUnknown};
     hgv_way_info const* info_{};
     std::optional<std::uint16_t> max_speed_km_h_{};
   };
@@ -398,12 +400,14 @@ struct hgv {
 
     if (auto const* info = state.info_; info != nullptr) {
       if (info->has(hgv_info_field::kAccess)) {
-        state.accessible_ = info->hgv_access() == access_value::kAllowed;
+        state.hgv_access_ = info->hgv_access();
+        state.accessible_ = access_allowed(state.hgv_access_);
         state.destination_penalty_ = false;
       }
       if (!fits_vehicle(params, *info)) {
         return infeasible_cost_and_duration();
       }
+      apply_static_access_preferences(params, *info, state);
     }
 
     apply_conditional_restrictions(
@@ -415,7 +419,8 @@ struct hgv {
     }
     return {.cost_ = distance_cost(params, e, state.info_, dist,
                                    state.destination_penalty_,
-                                   state.max_speed_km_h_),
+                                   state.designated_preference_,
+                                   state.hgv_access_, state.max_speed_km_h_),
             .duration_ = distance_duration(params, e, state.info_, dist,
                                            state.max_speed_km_h_)};
   }
@@ -525,21 +530,46 @@ struct hgv {
     }
   }
 
-  static bool is_forbidden(conditional_access_value const value) {
+  static bool is_forbidden(access_value const value) {
     switch (value) {
-      case conditional_access_value::kNo: [[fallthrough]];
-      case conditional_access_value::kPrivate: [[fallthrough]];
-      case conditional_access_value::kDiscouraged: return true;
+      case access_value::kNo: [[fallthrough]];
+      case access_value::kPrivate: [[fallthrough]];
+      case access_value::kDiscouraged: return true;
       default: return false;
     }
   }
 
-  static bool is_destination_like(conditional_access_value const value) {
+  static bool is_destination_like(access_value const value) {
     switch (value) {
-      case conditional_access_value::kDestination: [[fallthrough]];
-      case conditional_access_value::kDelivery: return true;
+      case access_value::kDestination: [[fallthrough]];
+      case access_value::kDelivery: return true;
       default: return false;
     }
+  }
+
+  static bool is_designated(access_value const value) {
+    return value == access_value::kDesignated;
+  }
+
+  static constexpr bool access_allowed(access_value const value) {
+    switch (value) {
+      case access_value::kNo: [[fallthrough]];
+      case access_value::kPrivate: [[fallthrough]];
+      case access_value::kDiscouraged: return false;
+      default: return true;
+    }
+  }
+
+  static bool hazmat_applies(parameters const& params) {
+    return params.hazmat_ || params.hazmat_water_;
+  }
+
+  static bool hazmat_water_applies(parameters const& params) {
+    return params.hazmat_water_;
+  }
+
+  static bool trailer_applies(parameters const& params) {
+    return params.trailer_;
   }
 
   static bool exceeds_limit(parameters const& params,
@@ -579,6 +609,7 @@ struct hgv {
         if (!mode_applies(r.mode_)) {
           return;
         }
+        state.hgv_access_ = r.value_;
         if (is_forbidden(r.value_)) {
           state.accessible_ = false;
         } else {
@@ -587,19 +618,30 @@ struct hgv {
         }
         return;
       case conditional_restriction_field::kHazmat:
-        if ((params.hazmat_ || params.hazmat_water_) &&
-            is_forbidden(r.value_)) {
-          state.accessible_ = false;
+        if (hazmat_applies(params)) {
+          if (is_forbidden(r.value_)) {
+            state.accessible_ = false;
+          } else if (is_designated(r.value_)) {
+            state.designated_preference_ = true;
+          }
         }
         return;
       case conditional_restriction_field::kHazmatWater:
-        if (params.hazmat_water_ && is_forbidden(r.value_)) {
-          state.accessible_ = false;
+        if (hazmat_water_applies(params)) {
+          if (is_forbidden(r.value_)) {
+            state.accessible_ = false;
+          } else if (is_designated(r.value_)) {
+            state.designated_preference_ = true;
+          }
         }
         return;
       case conditional_restriction_field::kTrailer:
-        if (params.trailer_ && is_forbidden(r.value_)) {
-          state.accessible_ = false;
+        if (trailer_applies(params)) {
+          if (is_forbidden(r.value_)) {
+            state.accessible_ = false;
+          } else if (is_designated(r.value_)) {
+            state.designated_preference_ = true;
+          }
         }
         return;
       default: return;
@@ -675,11 +717,11 @@ struct hgv {
                                      hgv_way_info const& info) {
     if (info.has(hgv_info_field::kHazmat) &&
         (params.hazmat_ || params.hazmat_water_) &&
-        info.hazmat_access() == access_value::kForbidden) {
+        is_forbidden(info.hazmat_access())) {
       return false;
     }
     if (info.has(hgv_info_field::kHazmatWater) && params.hazmat_water_ &&
-        info.hazmat_water_access() == access_value::kForbidden) {
+        is_forbidden(info.hazmat_water_access())) {
       return false;
     }
     if (info.has(hgv_info_field::kMaxLength) &&
@@ -711,10 +753,28 @@ struct hgv {
       return false;
     }
     if (info.has(hgv_info_field::kTrailer) && params.trailer_ &&
-        info.trailer_access() == access_value::kForbidden) {
+        is_forbidden(info.trailer_access())) {
       return false;
     }
     return true;
+  }
+
+  static void apply_static_access_preferences(parameters const& params,
+                                              hgv_way_info const& info,
+                                              way_state& state) {
+    if (info.has(hgv_info_field::kHazmat) && hazmat_applies(params) &&
+        is_designated(info.hazmat_access())) {
+      state.designated_preference_ = true;
+    }
+    if (info.has(hgv_info_field::kHazmatWater) &&
+        hazmat_water_applies(params) &&
+        is_designated(info.hazmat_water_access())) {
+      state.designated_preference_ = true;
+    }
+    if (info.has(hgv_info_field::kTrailer) && trailer_applies(params) &&
+        is_designated(info.trailer_access())) {
+      state.designated_preference_ = true;
+    }
   }
 
   static constexpr cost_t distance_cost(
@@ -723,12 +783,15 @@ struct hgv {
       hgv_way_info const* info,
       distance_t const dist,
       bool const destination_penalty,
+      bool const designated_preference,
+      access_value const hgv_access,
       std::optional<std::uint16_t> const max_speed = std::nullopt) {
     auto const speed = get_speed(params, e, info, max_speed);
     return static_cast<cost_t>(boost::math::ccmath::round(
-               (destination_penalty ? 5.0F : 1.0F) * static_cast<float>(dist) *
-               (3.6F / static_cast<float>(speed)))) +
-           (destination_penalty ? 120U : 0U);
+               hgv_access_factor(destination_penalty, designated_preference,
+                                 hgv_access) *
+               static_cast<float>(dist) * (3.6F / static_cast<float>(speed)))) +
+           hgv_access_penalty(destination_penalty, hgv_access);
   }
 
   static constexpr duration_t distance_duration(
@@ -740,6 +803,30 @@ struct hgv {
     auto const speed = get_speed(params, e, info, max_speed);
     return duration_from_cost(static_cast<cost_t>(boost::math::ccmath::round(
         static_cast<float>(dist) * (3.6F / static_cast<float>(speed)))));
+  }
+
+  static constexpr float hgv_access_factor(bool const destination_penalty,
+                                           bool const designated_preference,
+                                           access_value const hgv_access) {
+    switch (hgv_access) {
+      case access_value::kDesignated: return 0.8F;
+      case access_value::kDelivery: [[fallthrough]];
+      case access_value::kDestination: return 5.0F;
+      default:
+        if (designated_preference) {
+          return 0.8F;
+        }
+        return destination_penalty ? 5.0F : 1.0F;
+    }
+  }
+
+  static constexpr cost_t hgv_access_penalty(bool const destination_penalty,
+                                             access_value const hgv_access) {
+    switch (hgv_access) {
+      case access_value::kDelivery: [[fallthrough]];
+      case access_value::kDestination: return 120U;
+      default: return destination_penalty ? 120U : 0U;
+    }
   }
 };
 

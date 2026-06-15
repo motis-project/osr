@@ -57,7 +57,7 @@ TEST(conditional_parser, parses_hgv_access_with_weekday_time_range) {
 
   ASSERT_EQ(1U, f.routing_.conditional_access_.size());
   auto const& restriction = f.routing_.conditional_access_.front();
-  EXPECT_EQ(osr::conditional_access_value::kDestination, restriction.value_);
+  EXPECT_EQ(osr::access_value::kDestination, restriction.value_);
   EXPECT_EQ(osr::conditional_transport_mode::kHgv, restriction.mode_);
   EXPECT_EQ(osr::conditional_restriction_field::kAccess, restriction.field_);
 
@@ -82,9 +82,8 @@ TEST(conditional_parser, semicolons_in_opening_hours) {
                       "delivery @ (trailer)"sv));
 
   ASSERT_EQ(2U, f.routing_.conditional_access_.size());
-  EXPECT_EQ(osr::conditional_access_value::kNo,
-            f.routing_.conditional_access_[0].value_);
-  EXPECT_EQ(osr::conditional_access_value::kDelivery,
+  EXPECT_EQ(osr::access_value::kNo, f.routing_.conditional_access_[0].value_);
+  EXPECT_EQ(osr::access_value::kDelivery,
             f.routing_.conditional_access_[1].value_);
   ASSERT_EQ(2U, f.routing_.opening_hours_rules_.size());
 
@@ -214,14 +213,12 @@ TEST(conditional_parser, supports_24_7_and_open_ended_time) {
   ASSERT_TRUE(f.parse("access:conditional"sv, "no @ (Mo 18:00+)"sv));
 
   ASSERT_EQ(2U, f.routing_.conditional_access_.size());
-  EXPECT_EQ(osr::conditional_access_value::kNo,
-            f.routing_.conditional_access_[0].value_);
+  EXPECT_EQ(osr::access_value::kNo, f.routing_.conditional_access_[0].value_);
   EXPECT_EQ(osr::conditional_transport_mode::kHgv,
             f.routing_.conditional_access_[0].mode_);
   EXPECT_EQ(osr::conditional_restriction_field::kAccess,
             f.routing_.conditional_access_[0].field_);
-  EXPECT_EQ(osr::conditional_access_value::kNo,
-            f.routing_.conditional_access_[1].value_);
+  EXPECT_EQ(osr::access_value::kNo, f.routing_.conditional_access_[1].value_);
   EXPECT_EQ(osr::conditional_transport_mode::kAccess,
             f.routing_.conditional_access_[1].mode_);
   EXPECT_EQ(osr::conditional_restriction_field::kAccess,
@@ -267,8 +264,7 @@ TEST(conditional_parser, supports_unparenthesized_conditions) {
       f.parse("maxweightrating:hgv:conditional"sv, "none @ destination"sv));
 
   ASSERT_EQ(1U, f.routing_.conditional_access_.size());
-  EXPECT_EQ(osr::conditional_access_value::kNo,
-            f.routing_.conditional_access_[0].value_);
+  EXPECT_EQ(osr::access_value::kNo, f.routing_.conditional_access_[0].value_);
   EXPECT_EQ(osr::conditional_transport_mode::kMotorVehicle,
             f.routing_.conditional_access_[0].mode_);
   EXPECT_EQ(osr::conditional_restriction_field::kAccess,
@@ -331,19 +327,18 @@ TEST(conditional_parser, parses_access_purpose_conditions) {
 TEST(conditional_parser, parses_supported_access_values) {
   struct test_case {
     std::string_view value_;
-    osr::conditional_access_value expected_;
+    osr::access_value expected_;
   };
 
   for (auto const& tc :
-       {test_case{"yes"sv, osr::conditional_access_value::kYes},
-        test_case{"designated"sv, osr::conditional_access_value::kDesignated},
-        test_case{"permissive"sv, osr::conditional_access_value::kPermissive},
-        test_case{"private"sv, osr::conditional_access_value::kPrivate},
-        test_case{"no"sv, osr::conditional_access_value::kNo},
-        test_case{"destination"sv, osr::conditional_access_value::kDestination},
-        test_case{"delivery"sv, osr::conditional_access_value::kDelivery},
-        test_case{"discouraged"sv,
-                  osr::conditional_access_value::kDiscouraged}}) {
+       {test_case{"yes"sv, osr::access_value::kYes},
+        test_case{"designated"sv, osr::access_value::kDesignated},
+        test_case{"permissive"sv, osr::access_value::kPermissive},
+        test_case{"private"sv, osr::access_value::kPrivate},
+        test_case{"no"sv, osr::access_value::kNo},
+        test_case{"destination"sv, osr::access_value::kDestination},
+        test_case{"delivery"sv, osr::access_value::kDelivery},
+        test_case{"discouraged"sv, osr::access_value::kDiscouraged}}) {
     auto f = parser_fixture{};
 
     ASSERT_TRUE(f.parse("access:conditional"sv,
@@ -439,7 +434,7 @@ TEST(conditional_parser, parses_hazmat_and_trailer_keys) {
             f.routing_.conditional_access_[2].field_);
   for (auto const& restriction : f.routing_.conditional_access_) {
     EXPECT_EQ(osr::conditional_transport_mode::kHgv, restriction.mode_);
-    EXPECT_EQ(osr::conditional_access_value::kNo, restriction.value_);
+    EXPECT_EQ(osr::access_value::kNo, restriction.value_);
   }
 }
 
@@ -542,8 +537,7 @@ TEST(conditional_parser, parses_opening_hours_modifiers_and_multiple_rules) {
                       "Sa 10:00-14:00 closed; Su unknown)"sv));
 
   ASSERT_EQ(1U, f.routing_.conditional_access_.size());
-  EXPECT_EQ(osr::conditional_access_value::kNo,
-            f.routing_.conditional_access_[0].value_);
+  EXPECT_EQ(osr::access_value::kNo, f.routing_.conditional_access_[0].value_);
   EXPECT_EQ(osr::conditional_transport_mode::kAccess,
             f.routing_.conditional_access_[0].mode_);
   EXPECT_EQ(osr::conditional_restriction_field::kAccess,
@@ -666,7 +660,7 @@ TEST(conditional_parser, ignores_unsupported_clauses) {
       f.parse("access:conditional"sv, "no @ (wheels > 6); no @ (trailer)"sv));
 
   ASSERT_EQ(1U, f.routing_.conditional_access_.size());
-  EXPECT_EQ(osr::conditional_access_value::kNo,
+  EXPECT_EQ(osr::access_value::kNo,
             f.routing_.conditional_access_.front().value_);
   ASSERT_EQ(1U, f.routing_.conditional_condition_sets_.size());
   ASSERT_EQ(1U, f.routing_.conditional_conditions_.size());

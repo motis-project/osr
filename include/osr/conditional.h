@@ -106,18 +106,6 @@ constexpr bool is_supported_conditional_restriction_key(std::string_view key) {
   }
 }
 
-enum class conditional_access_value : std::uint8_t {
-  kUnknown,
-  kYes,
-  kDesignated,
-  kPermissive,
-  kPrivate,
-  kNo,
-  kDestination,
-  kDelivery,
-  kDiscouraged,
-};
-
 enum class conditional_oneway_value : std::uint8_t {
   kNo,
   kForward,
@@ -152,8 +140,7 @@ struct conditional_restriction {
   conditional_osm_direction direction_{conditional_osm_direction::kNone};
 };
 
-using conditional_access_restriction =
-    conditional_restriction<conditional_access_value>;
+using conditional_access_restriction = conditional_restriction<access_value>;
 using conditional_oneway_restriction =
     conditional_restriction<conditional_oneway_value>;
 using conditional_numeric_restriction =

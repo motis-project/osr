@@ -123,21 +123,14 @@ std::string_view pick_hgv_variant(std::string_view base, std::string_view hgv) {
 
 std::optional<access_value> get_access_value(std::string_view value) {
   switch (cista::hash(value)) {
-    case cista::hash("yes"):
-    case cista::hash("designated"): return access_value::kAllowed;
-    case cista::hash("no"):
-    case cista::hash("discouraged"): return access_value::kForbidden;
-    default: return std::nullopt;
-  }
-}
-
-std::optional<access_value> get_hazmat_value(std::string_view value) {
-  switch (cista::hash(value)) {
-    case cista::hash("yes"):
-    case cista::hash("permissive"):
-    case cista::hash("designated"): return access_value::kAllowed;
-    case cista::hash("no"):
-    case cista::hash("discouraged"): return access_value::kForbidden;
+    case cista::hash("yes"): return access_value::kYes;
+    case cista::hash("designated"): return access_value::kDesignated;
+    case cista::hash("permissive"): return access_value::kPermissive;
+    case cista::hash("private"): return access_value::kPrivate;
+    case cista::hash("delivery"): return access_value::kDelivery;
+    case cista::hash("destination"): return access_value::kDestination;
+    case cista::hash("no"): return access_value::kNo;
+    case cista::hash("discouraged"): return access_value::kDiscouraged;
     default: return std::nullopt;
   }
 }
@@ -179,12 +172,12 @@ std::optional<hgv_way_info> get_hgv_way_info(tags const& t) {
   set_hgv_info_value(info, hgv_info_field::kMaxAxles, &hgv_way_info::maxaxles_,
                      to_integer<std::uint8_t>(parse_unitless(t.max_axles_)));
 
-  if (auto const hazmat = get_hazmat_value(t.hazmat_); hazmat.has_value()) {
+  if (auto const hazmat = get_access_value(t.hazmat_); hazmat.has_value()) {
     info.fields_ |= to_mask(hgv_info_field::kHazmat);
     info.hazmat_access_ = static_cast<std::uint8_t>(*hazmat);
   }
 
-  if (auto const hazmat_water = get_hazmat_value(t.hazmat_water_);
+  if (auto const hazmat_water = get_access_value(t.hazmat_water_);
       hazmat_water.has_value()) {
     info.fields_ |= to_mask(hgv_info_field::kHazmatWater);
     info.hazmat_water_access_ = static_cast<std::uint8_t>(*hazmat_water);
