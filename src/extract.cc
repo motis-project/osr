@@ -691,11 +691,7 @@ void extract(bool const with_platforms,
 
   std::vector<std::pair<osm_node_idx_t, point>> projections;
 
-  std::println("bike parkings: {}", bike_parkings.size());
-  std::println("max_osm_node_id {}", to_idx(max_osm_node_id));
-  std::println("max_osm_way_id {}", to_idx(max_osm_way_id));
-
-  auto l = lookup{w, out, cista::mmap::protection::READ};
+  auto l = lookup{w, out, cista::mmap::protection::WRITE};
 
   struct resolved_additional {
     osm_node_idx_t node_id_;
@@ -731,7 +727,7 @@ void extract(bool const with_platforms,
 
   auto insert = [](auto&& vec, const auto& n, const auto pos) {
     vec.push_back(n);
-    for (auto i = vec.size() - 1; (std::size_t)pos < i; --i) {
+    for (auto i = vec.size() - 1; static_cast<std::size_t>(pos) < i; --i) {
       vec[i] = vec[i - 1];
     }
     vec[pos] = n;
@@ -782,9 +778,9 @@ void extract(bool const with_platforms,
     prop.is_foot_accessible_ = true;
     w.r_->node_properties_.push_back(prop);
   }
+
   w.way_polylines_.bucket_starts_.resize(0);
   w.way_polylines_.data_.resize(0);
-
   w.way_osm_nodes_.bucket_starts_.resize(0);
   w.way_osm_nodes_.data_.resize(0);
   for (auto i = 0U; i < tmp_way_osm_nodes.size(); ++i) {
@@ -793,12 +789,10 @@ void extract(bool const with_platforms,
     w.way_osm_nodes_.emplace_back(tmp_way_osm_nodes[way]);
   }
 
-  auto e = std::error_code{};
-
-  std::filesystem::remove("tmp_way_polylines_data.bin", e);
-  std::filesystem::remove("tmp_way_polylines_index.bin", e);
-  std::filesystem::remove("tmp_way_osm_nodes_data.bin", e);
-  std::filesystem::remove("tmp_way_osm_nodes_index.bin", e);
+  fs::remove("tmp_way_polylines_data.bin");
+  fs::remove("tmp_way_polylines_index.bin");
+  fs::remove("tmp_way_osm_nodes_data.bin");
+  fs::remove("tmp_way_osm_nodes_index.bin");
 
   w.r_->write(out);
   w.sync();
