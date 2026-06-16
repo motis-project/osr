@@ -694,7 +694,7 @@ void extract(bool const with_platforms,
     location origin_point_;
 
     way_idx_t matched_way_;
-    uint8_t insert_pos_;
+    unsigned insert_pos_;
   };
 
   std::vector<resolved_additional> info;
@@ -719,7 +719,7 @@ void extract(bool const with_platforms,
 
   auto insert = [](auto&& vec, const auto& n, const auto pos) {
     vec.push_back(n);
-    for (auto i = vec.size() - 1; static_cast<std::size_t>(pos) < i; --i) {
+    for (auto i = vec.size() - 1; pos < i; --i) {
       vec[i] = vec[i - 1];
     }
     vec[pos] = n;
