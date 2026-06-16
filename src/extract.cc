@@ -1,11 +1,3 @@
-#include <cista/mmap.h>
-#include <cstddef>
-#include <osmium/osm/location.hpp>
-#include <print>
-#include "geo/latlng.h"
-#include "osr/location.h"
-#include "osr/point.h"
-#include "osr/types.h"
 #ifdef _WIN_32
 // Otherwise
 // winnt.h(169): fatal error C1189: #error:  "No Target Architecture"

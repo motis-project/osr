@@ -343,8 +343,6 @@ struct lookup {
     return c;
   }
 
-  void clear() { rtree_.nodes_.resize(0); }
-
 private:
   std::vector<raw_way_candidate> get_raw_way_candidates(
       location const& query, double const max_match_distance) const;
