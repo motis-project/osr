@@ -736,15 +736,32 @@ void extract(bool const with_platforms,
     }
     vec[pos] = n;
   };
+  auto tmp_way_polylines = mm_paged_vecvec<way_idx_t, point>{
+      cista::paged<mm_vec32<point>>{
+          mm_vec32<point>{cista::mmap("tmp_way_polylines_data.bin")}},
+      mm_vec<cista::page<std::uint32_t, std::uint16_t>>{
+          cista::mmap("tmp_way_polylines_index.bin")}};
+
+  auto tmp_way_osm_nodes = mm_paged_vecvec<way_idx_t, osm_node_idx_t>{
+      cista::paged<mm_vec32<osm_node_idx_t>>{
+          mm_vec32<osm_node_idx_t>{cista::mmap("tmp_way_osm_nodes_data.bin")}},
+      mm_vec<cista::page<std::uint32_t, std::uint16_t>>{
+          cista::mmap("tmp_way_osm_nodes_index.bin")}};
+  for (auto i = 0U; i < w.way_osm_nodes_.size(); ++i) {
+    auto way = way_idx_t{i};
+    tmp_way_polylines.emplace_back(w.way_polylines_[way]);
+    tmp_way_osm_nodes.emplace_back(w.way_osm_nodes_[way]);
+  }
 
   for (const auto& a : info) {
     auto const projection_point = point::from_latlng(a.projection_point_);
     auto const parking_point = point::from_latlng(a.origin_point_.pos_);
 
-    insert(w.way_osm_nodes_[a.matched_way_], a.fake_node_id_,
+    insert(tmp_way_osm_nodes[a.matched_way_], a.fake_node_id_,
            a.insert_pos_ + 1);
-    insert(w.way_polylines_[a.matched_way_], projection_point,
+    insert(tmp_way_polylines[a.matched_way_], projection_point,
            a.insert_pos_ + 1);
+
     w.node_way_counter_.increment(to_idx(a.fake_node_id_));
     w.node_way_counter_.increment(to_idx(a.fake_node_id_));
 
@@ -753,8 +770,8 @@ void extract(bool const with_platforms,
     additional_prop.is_bike_accessible_ = true;
     additional_prop.is_foot_accessible_ = true;
     w.r_->way_properties_.emplace_back(additional_prop);
-    w.way_polylines_.emplace_back({projection_point, parking_point});
-    w.way_osm_nodes_.emplace_back({a.fake_node_id_, a.node_id_});
+    tmp_way_polylines.emplace_back({projection_point, parking_point});
+    tmp_way_osm_nodes.emplace_back({a.fake_node_id_, a.node_id_});
     w.way_names_.emplace_back(string_idx_t::invalid());
     const auto new_way_id = way_idx_t{w.way_osm_idx_.size() - 1U};
     w.way_has_conditional_access_no_.resize(to_idx(new_way_id) + 1U);
@@ -765,10 +782,26 @@ void extract(bool const with_platforms,
     prop.is_foot_accessible_ = true;
     w.r_->node_properties_.push_back(prop);
   }
+  w.way_polylines_.bucket_starts_.resize(0);
+  w.way_polylines_.data_.resize(0);
+
+  w.way_osm_nodes_.bucket_starts_.resize(0);
+  w.way_osm_nodes_.data_.resize(0);
+  for (auto i = 0U; i < tmp_way_osm_nodes.size(); ++i) {
+    auto way = way_idx_t{i};
+    w.way_polylines_.emplace_back(tmp_way_polylines[way]);
+    w.way_osm_nodes_.emplace_back(tmp_way_osm_nodes[way]);
+  }
+
+  auto e = std::error_code{};
+
+  std::filesystem::remove("tmp_way_polylines_data.bin", e);
+  std::filesystem::remove("tmp_way_polylines_index.bin", e);
+  std::filesystem::remove("tmp_way_osm_nodes_data.bin", e);
+  std::filesystem::remove("tmp_way_osm_nodes_index.bin", e);
 
   w.r_->write(out);
   w.sync();
-
   w.connect_ways();
   w.build_components();
 
