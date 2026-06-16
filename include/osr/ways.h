@@ -204,6 +204,7 @@ struct ways {
   void connect_ways();
   void compute_turn_bearings();
   void build_components();
+  void assign_ids();
 
   std::optional<way_idx_t> find_way(osm_way_idx_t const i) {
     auto const it = std::lower_bound(begin(way_osm_idx_), end(way_osm_idx_), i);

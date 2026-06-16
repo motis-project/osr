@@ -184,9 +184,9 @@ void ways::compute_big_street_neighbors() {
       });
 }
 
-void ways::connect_ways() {
+void ways::assign_ids() {
+  node_to_osm_.resize(0);
   auto pt = utl::get_active_progress_tracker_or_activate("osr");
-
   {  // Assign graph node ids to every node with >1 way.
     pt->status("Create graph nodes")
         .in_high(node_way_counter_.size())
@@ -201,6 +201,11 @@ void ways::connect_ways() {
     });
     r_->node_is_restricted_.resize(to_idx(node_idx));
   }
+}
+
+void ways::connect_ways() {
+  auto pt = utl::get_active_progress_tracker_or_activate("osr");
+  assign_ids();
 
   // Build edges.
   {

@@ -1,4 +1,5 @@
 #include <cista/mmap.h>
+#include <cstddef>
 #include <osmium/osm/location.hpp>
 #include <print>
 #include "geo/latlng.h"
@@ -666,8 +667,7 @@ void extract(bool const with_platforms,
   w.r_->write(out);
   w.sync();
 
-  w.connect_ways();
-  w.build_components();
+  w.assign_ids();
 
   auto r = std::vector<resolved_restriction>{};
   {
@@ -686,29 +686,6 @@ void extract(bool const with_platforms,
     pt->update(pt->in_high_);
   }
 
-  w.add_restriction(r);
-
-  utl::sort(w.r_->multi_level_elevators_);
-
-  if (pl) {
-    utl::sort(pl->node_pos_,
-              [](auto&& a, auto&& b) { return a.first < b.first; });
-  }
-
-  if (!elevation_dir.empty()) {
-    auto const provider =
-        osr::preprocessing::elevation::provider{elevation_dir};
-    if (provider.driver_count() > 0) {
-      auto elevations = elevation_storage{out, cista::mmap::protection::WRITE};
-      elevations.set_elevations(w, provider);
-    }
-  }
-
-  pt->status("Big Street Neighbors").in_high(w.n_ways()).out_bounds(95, 99);
-  w.compute_big_street_neighbors();
-  w.r_->write(out);
-
-  pt->status("Build R-Tree").in_high(1).out_bounds(99, 100);
   lookup{w, out, cista::mmap::protection::WRITE}.build_rtree();
 
   std::vector<std::pair<osm_node_idx_t, point>> projections;
@@ -717,7 +694,6 @@ void extract(bool const with_platforms,
   std::println("max_osm_node_id {}", to_idx(max_osm_node_id));
   std::println("max_osm_way_id {}", to_idx(max_osm_way_id));
 
-  auto m = 0U;
   auto l = lookup{w, out, cista::mmap::protection::READ};
 
   struct resolved_additional {
@@ -750,32 +726,27 @@ void extract(bool const with_platforms,
     a.matched_way_ = match[0].way_;
     a.node_id_ = id;
     info.emplace_back(a);
-    m++;
   }
-  std::println("matches found {}", m);
 
-  // todo: one pass
-  // auto insert = [](auto&& vec, const auto& n, const auto pos) {
-  //   vec.push_back(n);
-  //   for (auto i = vec.size() - 1; i > pos; --i) {
-  //     vec[i] = vec[i - 1];
-  //   }
-  //   vec[pos] = n;
-  // };
+  auto insert = [](auto&& vec, const auto& n, const auto pos) {
+    vec.push_back(n);
+    for (auto i = vec.size() - 1; (std::size_t)pos < i; --i) {
+      vec[i] = vec[i - 1];
+    }
+    vec[pos] = n;
+  };
 
   for (const auto& a : info) {
     auto const projection_point = point::from_latlng(a.projection_point_);
     auto const parking_point = point::from_latlng(a.origin_point_.pos_);
 
-    // split existing way at projection point
-    // insert(w.way_osm_nodes_[a.matched_way_], a.fake_node_id_,
-    //        a.insert_pos_ + 1);
-    // insert(w.way_polylines_[a.matched_way_], projection_point,
-    //        a.insert_pos_ + 1);
+    insert(w.way_osm_nodes_[a.matched_way_], a.fake_node_id_,
+           a.insert_pos_ + 1);
+    insert(w.way_polylines_[a.matched_way_], projection_point,
+           a.insert_pos_ + 1);
     w.node_way_counter_.increment(to_idx(a.fake_node_id_));
     w.node_way_counter_.increment(to_idx(a.fake_node_id_));
 
-    // stub way: projection -> parking
     w.way_osm_idx_.emplace_back(a.fake_way_id_);
     way_properties additional_prop{};
     additional_prop.is_bike_accessible_ = true;
@@ -786,26 +757,43 @@ void extract(bool const with_platforms,
     w.way_names_.emplace_back(string_idx_t::invalid());
     const auto new_way_id = way_idx_t{w.way_osm_idx_.size() - 1U};
     w.way_has_conditional_access_no_.resize(to_idx(new_way_id) + 1U);
+
+    w.r_->node_positions_.push_back(projection_point);
+    node_properties prop{};
+    prop.is_bike_accessible_ = true;
+    prop.is_foot_accessible_ = true;
+    w.r_->node_properties_.push_back(prop);
   }
 
-  w.r_->node_ways_.clear();
-  w.r_->node_in_way_idx_.clear();
-  w.r_->way_nodes_.clear();
-  w.r_->way_node_dist_.clear();
-  w.r_->node_turn_bearings_.clear();
-  w.node_to_osm_.resize(0);
+  w.r_->write(out);
+  w.sync();
 
   w.connect_ways();
   w.build_components();
 
-  for (const auto& a : info) {
-    if (auto const idx = w.find_node_idx(a.fake_node_id_); idx.has_value()) {
-      w.r_->node_positions_[*idx] = point::from_latlng(a.projection_point_);
-      w.r_->node_properties_[*idx] = node_properties{};
+  w.add_restriction(r);
+
+  utl::sort(w.r_->multi_level_elevators_);
+
+  if (pl) {
+    utl::sort(pl->node_pos_,
+              [](auto&& a, auto&& b) { return a.first < b.first; });
+  }
+
+  if (!elevation_dir.empty()) {
+    auto const provider =
+        osr::preprocessing::elevation::provider{elevation_dir};
+    if (provider.driver_count() > 0) {
+      auto elevations = elevation_storage{out, cista::mmap::protection::WRITE};
+      elevations.set_elevations(w, provider);
     }
   }
 
+  pt->status("Big Street Neighbors").in_high(w.n_ways()).out_bounds(95, 99);
+  w.compute_big_street_neighbors();
   w.r_->write(out);
+
+  pt->status("Build R-Tree").in_high(1).out_bounds(99, 100);
   lookup{w, out, cista::mmap::protection::WRITE}.build_rtree();
 }
 
