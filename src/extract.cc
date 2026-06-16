@@ -683,7 +683,7 @@ void extract(bool const with_platforms,
 
   std::vector<std::pair<osm_node_idx_t, point>> projections;
 
-  auto l = lookup{w, out, cista::mmap::protection::WRITE};
+  auto l = lookup{w, out, cista::mmap::protection::READ};
 
   struct resolved_additional {
     osm_node_idx_t node_id_;
