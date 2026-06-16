@@ -531,6 +531,7 @@ struct mark_inaccessible_handler : public osm::handler::Handler {
     }
     if (t.is_bike_parking_) {
       w_.node_way_counter_.increment(n.positive_id());
+      w_.node_way_counter_.increment(n.positive_id());
       bike_parkings_.emplace_back(
           n.positive_id(),
           location{{n.location().lat(), n.location().lon()}, kNoLevel});
@@ -792,6 +793,7 @@ void extract(bool const with_platforms,
   pt->status("Big Street Neighbors").in_high(w.n_ways()).out_bounds(95, 99);
   w.compute_big_street_neighbors();
   w.r_->write(out);
+  w.sync();
 
   pt->status("Build R-Tree").in_high(1).out_bounds(99, 100);
   lookup{w, out, cista::mmap::protection::WRITE}.build_rtree();
