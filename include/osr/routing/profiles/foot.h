@@ -2,6 +2,7 @@
 
 #include <optional>
 
+#include "osr/types.h"
 #include "utl/for_each_bit_set.h"
 
 #include "osr/elevation_storage.h"
@@ -250,10 +251,11 @@ struct foot {
             // tobler's hiking function
             auto const tobler_speed = params.speed_meters_per_second_ *
                                       std::exp(-3.5F * std::abs(grad + 0.05F));
-            elevation_cost = static_cast<cost_t>(
-                std::max(0.F, static_cast<float>(dist) / tobler_speed -
-                                  static_cast<float>(dist) /
-                                      params.speed_meters_per_second_));
+            elevation_cost = static_cast<cost_t>(std::min(
+                std::max(kInfeasible, static_cast<float>(dist) / tobler_speed -
+                                          static_cast<float>(dist) /
+                                              params.speed_meters_per_second_),
+                0));
           }
 
           auto const cost = way_cost(params, target_way_prop, way_dir, dist) +
