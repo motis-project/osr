@@ -251,11 +251,13 @@ struct foot {
             // tobler's hiking function
             auto const tobler_speed = params.speed_meters_per_second_ *
                                       std::exp(-3.5F * std::abs(grad + 0.05F));
-            elevation_cost = static_cast<cost_t>(std::min(
-                std::max(kInfeasible, static_cast<float>(dist) / tobler_speed -
-                                          static_cast<float>(dist) /
-                                              params.speed_meters_per_second_),
-                0));
+            auto const ec =
+                std::max(0.F, static_cast<float>(dist) / tobler_speed -
+                                  static_cast<float>(dist) /
+                                      params.speed_meters_per_second_);
+            elevation_cost = ec >= static_cast<float>(kInfeasible)
+                                 ? kInfeasible - 1U
+                                 : static_cast<cost_t>(ec);
           }
 
           auto const cost = way_cost(params, target_way_prop, way_dir, dist) +
