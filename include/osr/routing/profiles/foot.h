@@ -16,7 +16,7 @@ struct sharing_data;
 
 template <bool IsWheelchair,
           typename Tracking = noop_tracking,
-          bool WithElevation = true>
+          bool WithElevation = false>
 struct foot {
   static constexpr auto const kMaxMatchDistance = 100U;
 

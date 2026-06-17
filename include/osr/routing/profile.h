@@ -161,7 +161,7 @@ concept ProfileParameters = Profile<typename Parameters::profile_t>;
 
 enum class search_profile : std::uint8_t {
   kFoot,
-  kFootNoElevation,
+  kFootWithElevation,
   kWheelchair,
   kBike,
   kBikeFast,

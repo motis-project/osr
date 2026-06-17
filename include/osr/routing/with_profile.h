@@ -17,8 +17,8 @@ template <typename Fn>
 auto with_profile(search_profile const p, Fn&& fn) {
   switch (p) {
     case search_profile::kFoot: return fn(foot<false, elevator_tracking>{});
-    case search_profile::kFootNoElevation:
-      return fn(foot<false, noop_tracking, false>{});
+    case search_profile::kFootWithElevation:
+      return fn(foot<false, noop_tracking, true>{});
     case search_profile::kWheelchair:
       return fn(foot<true, elevator_tracking>{});
     case search_profile::kBike:
