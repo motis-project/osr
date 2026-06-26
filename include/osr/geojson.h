@@ -601,7 +601,8 @@ struct geojson_writer {
           {"is_steps", p.is_steps()},
           {"is_parking", p.is_parking()},
           {"is_ramp", p.is_ramp()},
-          {"in_route", p.in_route()}};
+          {"in_route", p.in_route()},
+          {"is_detour", p.is_detour()}};
       add_hgv_way_info_properties(properties, *w_.r_, i, p);
       add_conditional_properties(properties, w_, i, p);
       features_.emplace_back(boost::json::value{
@@ -639,7 +640,8 @@ struct geojson_writer {
         {"is_steps", p.is_steps()},
         {"is_parking", p.is_parking()},
         {"is_ramp", p.is_ramp()},
-        {"in_route", p.in_route()}};
+        {"in_route", p.in_route()},
+        {"is_detour", p.is_detour()}};
     add_hgv_way_info_properties(properties, *w_.r_, i, p);
     add_conditional_properties(properties, w_, i, p);
 

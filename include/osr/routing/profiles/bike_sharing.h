@@ -59,7 +59,8 @@ struct bike_sharing {
                      .is_railway_accessible_with_penalty_ = false,
                      .has_hgv_info_ = false,
                      .has_conditionals_ = false,
-                     .is_in_low_emission_zone_ = false};
+                     .is_in_low_emission_zone_ = false,
+                     .is_detour_ = false};
 
   static constexpr auto const kAdditionalNodeProperties =
       node_properties{.from_level_ = 0,

@@ -181,6 +181,7 @@ struct way_properties {
   constexpr bool is_in_low_emission_zone() const {
     return is_in_low_emission_zone_;
   }
+  constexpr bool is_detour() const { return is_detour_; }
   constexpr std::uint16_t max_speed_km_per_h() const {
     return to_kmh(static_cast<speed_limit>(speed_limit_));
   }
@@ -235,6 +236,7 @@ struct way_properties {
   std::uint8_t has_hgv_info_ : 1;
   std::uint8_t has_conditionals_ : 1;
   std::uint8_t is_in_low_emission_zone_ : 1;
+  std::uint8_t is_detour_ : 1;
 };
 
 static_assert(sizeof(way_properties) == 6);

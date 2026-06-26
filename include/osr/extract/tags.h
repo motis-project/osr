@@ -241,6 +241,8 @@ struct tags {
     }
   }
 
+  bool is_detour_route() const { return is_route_ && route_type_ == "detour"; }
+
   // https://wiki.openstreetmap.org/wiki/Relation:route
   bool is_route_{false};
 

@@ -31,6 +31,7 @@ struct hgv {
   static constexpr auto const kName = "hgv";
   static constexpr auto const kMaxMatchDistance = 200U;
   static constexpr auto const kExactBidirectional = true;
+  static constexpr auto const kDetourCostFactor = 0.9F;
 
   using key = node_idx_t;
 
@@ -793,6 +794,7 @@ struct hgv {
       std::optional<std::uint16_t> const max_speed = std::nullopt) {
     auto const speed = get_speed(params, e, info, max_speed);
     return static_cast<cost_t>(boost::math::ccmath::round(
+               (e.is_detour() ? kDetourCostFactor : 1.0F) *
                hgv_access_factor(destination_penalty, designated_preference,
                                  hgv_access) *
                static_cast<float>(dist) * (3.6F / static_cast<float>(speed)))) +

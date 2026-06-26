@@ -299,6 +299,7 @@ way_properties get_way_properties(
   p.is_ferry_accessible_ = is_accessible<ferry_profile>(t, obj_type);
   p.is_railway_accessible_with_penalty_ =
       is_accessible_with_penalty<railway_profile>(t, obj_type);
+  p.is_detour_ = t.is_detour_route();
   return p;
 }
 
@@ -406,6 +407,9 @@ struct way_handler : public osm::handler::Handler {
 
     if (in_route) {
       p.in_route_ = true;
+    }
+    if (it != end(rel_ways_) && it->second.p_.is_detour_) {
+      p.is_detour_ = true;
     }
 
     auto const get_point = [](osmium::NodeRef const& n) {
@@ -775,7 +779,7 @@ struct rel_ways_handler : public osm::handler::Handler {
 
   void relation(osm::Relation const& r) {
     auto const p = get_way_properties(tags{r}, osm_obj_type::kRelation);
-    if (!p.is_accessible() && !p.in_route()) {
+    if (!p.is_accessible() && !p.in_route() && !p.is_detour()) {
       return;
     }
 
@@ -789,6 +793,7 @@ struct rel_ways_handler : public osm::handler::Handler {
             rel_ways_.emplace(to_osm_way_idx(m.ref()), rel_way{p, platform});
         if (!rw.second) {
           rw.first->second.p_.in_route_ |= p.in_route_;
+          rw.first->second.p_.is_detour_ |= p.is_detour_;
         }
       }
     }
