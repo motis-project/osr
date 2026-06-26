@@ -51,6 +51,7 @@ struct hgv {
     std::uint16_t axle_load_100kg_{115U};
     bool trailer_{true};
     std::uint8_t top_speed_km_h_{80U};
+    bool low_emission_zone_access_{true};
   };
 
   struct node {
@@ -389,6 +390,10 @@ struct hgv {
       duration_t const current_duration,
       direction const search_dir) {
     if (dir == direction::kBackward && e.is_oneway_car()) {
+      return infeasible_cost_and_duration();
+    }
+
+    if (!params.low_emission_zone_access_ && e.is_in_low_emission_zone()) {
       return infeasible_cost_and_duration();
     }
 

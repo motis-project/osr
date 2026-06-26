@@ -5,12 +5,16 @@
 #endif
 
 #include <cstdint>
+
 #include <algorithm>
+#include <array>
 #include <iostream>
 #include <limits>
 #include <memory>
+#include <mutex>
 #include <optional>
 #include <string>
+#include <vector>
 #include "osr/extract/extract.h"
 
 #include "boost/thread/tss.hpp"
@@ -42,6 +46,7 @@
 
 #include "osr/elevation_storage.h"
 #include "osr/extract/conditional_parser.h"
+#include "osr/extract/low_emission_zone.h"
 #include "osr/extract/tag_parser.h"
 #include "osr/extract/tags.h"
 #include "osr/lookup.h"
@@ -52,6 +57,7 @@
 namespace osm = osmium;
 namespace osm_io = osmium::io;
 namespace osm_eb = osmium::osm_entity_bits;
+namespace osm_area = osmium::area;
 namespace osm_mem = osmium::memory;
 namespace fs = std::filesystem;
 using namespace std::string_view_literals;
@@ -349,10 +355,12 @@ struct way_handler : public osm::handler::Handler {
   way_handler(ways& w,
               platforms* platforms,
               rel_ways_t const& rel_ways,
+              low_emission_zones const& low_emission_zones,
               hash_map<osm_node_idx_t, level_bits_t>& elevator_nodes)
       : w_{w},
         platforms_{platforms},
         rel_ways_{rel_ways},
+        low_emission_zones_{low_emission_zones},
         elevator_nodes_{elevator_nodes} {
     strings_set_.hash_function().strings_ = &w_.strings_;
     strings_set_.key_eq().strings_ = &w_.strings_;
@@ -474,6 +482,10 @@ struct way_handler : public osm::handler::Handler {
       platforms_->platform_ref_[it->second.pl_].push_back(to_value(way_idx));
     }
 
+    if (low_emission_zones_.intersects(w)) {
+      p.is_in_low_emission_zone_ = true;
+    }
+
     w_.way_osm_idx_.push_back(to_osm_way_idx(w.id()));
     w_.r_->way_properties_.emplace_back(p);
     if (hgv_info.has_value()) {
@@ -510,6 +522,7 @@ struct way_handler : public osm::handler::Handler {
   ways& w_;
   platforms* platforms_;
   rel_ways_t const& rel_ways_;
+  low_emission_zones const& low_emission_zones_;
   std::unique_ptr<tzbounds::timezone_lookup> timezone_lookup_;
   hash_map<std::string, conditional_timezone_idx_t> timezone_idx_by_name_;
 
@@ -821,6 +834,13 @@ void extract(bool const with_platforms,
   if (with_platforms) {
     pl = std::make_unique<platforms>(out, cista::mmap::protection::WRITE);
   }
+  auto low_emission_zone_filter = osm::TagsFilter{};
+  low_emission_zone_filter.add_rule(true, "boundary", "low_emission_zone");
+  auto low_emission_zone_manager =
+      osm_area::MultipolygonManager<osm_area::Assembler>{
+          osm_area::Assembler::config_type{}, low_emission_zone_filter};
+  auto low_emission_zones = osr::low_emission_zones{};
+  auto low_emission_zone_relations = low_emission_zone_relation_handler{};
 
   w.node_way_counter_.reserve(14'000'000'000);
   {  // Collect node coordinates.
@@ -834,17 +854,63 @@ void extract(bool const with_platforms,
                                  osmium::io::read_meta::no};
     while (auto buffer = reader.read()) {
       pt->update(reader.offset());
-      osm::apply(buffer, node_idx_builder, inaccessible_handler, rel_ways_h);
+      osm::apply(buffer, node_idx_builder, inaccessible_handler, rel_ways_h,
+                 low_emission_zone_relations, low_emission_zone_manager);
     }
     reader.close();
+    if (low_emission_zone_relations.has_low_emission_zone_) {
+      low_emission_zone_manager.prepare_for_lookup();
+    }
     node_idx_builder.finish();
+  }
+
+  if (low_emission_zone_relations.has_low_emission_zone_) {
+    // Extract low emission zone polygons.
+    pt->status("Load OSM / Low Emission Zones")
+        .in_high(file_size)
+        .out_bounds(15, 20);
+
+    auto reader =
+        osm_io::Reader{input_file, osm_eb::way, osmium::io::read_meta::no};
+    auto h = low_emission_zone_handler{low_emission_zones};
+
+    oneapi::tbb::parallel_pipeline(
+        std::thread::hardware_concurrency() * 4U,
+        oneapi::tbb::make_filter<void, osm_mem::Buffer>(
+            oneapi::tbb::filter_mode::serial_in_order,
+            [&](oneapi::tbb::flow_control& fc) {
+              auto buf = reader.read();
+              pt->update(reader.offset());
+              if (!buf) {
+                fc.stop();
+              }
+              return buf;
+            }) &
+            oneapi::tbb::make_filter<osm_mem::Buffer, osm_mem::Buffer>(
+                oneapi::tbb::filter_mode::parallel,
+                [&](osm_mem::Buffer&& buf) {
+                  update_locations(node_idx, buf);
+                  return std::move(buf);
+                }) &
+            oneapi::tbb::make_filter<osm_mem::Buffer, void>(
+                oneapi::tbb::filter_mode::serial_in_order,
+                [&](osm_mem::Buffer&& buf) {
+                  osm::apply(buf, low_emission_zone_manager.handler(
+                                      [&](auto&& area_buf) {
+                                        osm::apply(area_buf, h);
+                                      }));
+                }));
+
+    pt->update(pt->in_high_);
+    reader.close();
   }
 
   auto elevator_nodes = hash_map<osm_node_idx_t, level_bits_t>{};
   {  // Extract streets, places, and areas.
-    pt->status("Load OSM / Ways").in_high(file_size).out_bounds(15, 40);
+    pt->status("Load OSM / Ways").in_high(file_size).out_bounds(20, 40);
 
-    auto h = way_handler{w, pl.get(), rel_ways, elevator_nodes};
+    auto h =
+        way_handler{w, pl.get(), rel_ways, low_emission_zones, elevator_nodes};
     auto reader =
         osm_io::Reader{input_file, osm_eb::way, osmium::io::read_meta::no};
 

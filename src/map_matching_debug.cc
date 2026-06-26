@@ -171,6 +171,7 @@ boost::json::object build_map_match_debug_json(
         {"railway", p.is_railway_accessible()},
         {"railwayWithPenalty", p.is_railway_accessible_with_penalty()},
         {"ferry", p.is_ferry_accessible()},
+        {"lowEmissionZone", p.is_in_low_emission_zone()},
         {"isBigStreet", p.is_big_street()},
         {"isDestination", p.is_destination()},
         {"onewayCar", p.is_oneway_car()},

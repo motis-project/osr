@@ -178,6 +178,9 @@ struct way_properties {
   constexpr bool in_route() const { return in_route_; }
   constexpr bool has_hgv_info() const { return has_hgv_info_; }
   constexpr bool has_conditionals() const { return has_conditionals_; }
+  constexpr bool is_in_low_emission_zone() const {
+    return is_in_low_emission_zone_;
+  }
   constexpr std::uint16_t max_speed_km_per_h() const {
     return to_kmh(static_cast<speed_limit>(speed_limit_));
   }
@@ -231,9 +234,10 @@ struct way_properties {
   std::uint8_t is_railway_accessible_with_penalty_ : 1;
   std::uint8_t has_hgv_info_ : 1;
   std::uint8_t has_conditionals_ : 1;
+  std::uint8_t is_in_low_emission_zone_ : 1;
 };
 
-static_assert(sizeof(way_properties) == 5);
+static_assert(sizeof(way_properties) == 6);
 
 struct node_properties {
   constexpr bool is_car_accessible() const { return is_car_accessible_; }
