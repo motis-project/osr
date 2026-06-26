@@ -216,6 +216,7 @@ struct hgv {
     access_value hgv_access_{access_value::kUnknown};
     hgv_way_info const* info_{};
     std::optional<std::uint16_t> max_speed_km_h_{};
+    std::optional<conditional_oneway_value> oneway_{};
   };
 
   static node create_node(node_idx_t const n,
@@ -390,10 +391,6 @@ struct hgv {
       std::optional<routing_time_t> const start_time,
       duration_t const current_duration,
       direction const search_dir) {
-    if (dir == direction::kBackward && e.is_oneway_car()) {
-      return infeasible_cost_and_duration();
-    }
-
     if (!params.low_emission_zone_access_ && e.is_in_low_emission_zone()) {
       return infeasible_cost_and_duration();
     }
@@ -402,7 +399,8 @@ struct hgv {
     auto destination_penalty = e.is_destination();
     auto state = way_state{.accessible_ = accessible,
                            .destination_penalty_ = destination_penalty,
-                           .info_ = w.get_hgv_info(way)};
+                           .info_ = w.get_hgv_info(way),
+                           .oneway_ = static_oneway_value(e)};
 
     if (auto const* info = state.info_; info != nullptr) {
       if (info->has(hgv_info_field::kAccess)) {
@@ -419,6 +417,10 @@ struct hgv {
     apply_conditional_restrictions(
         params, w, way, dir,
         current_routing_time(start_time, search_dir, current_duration), state);
+
+    if (!conditional_oneway_accessible(state.oneway_, dir)) {
+      return infeasible_cost_and_duration();
+    }
 
     if (!state.accessible_) {
       return infeasible_cost_and_duration();
@@ -557,6 +559,27 @@ struct hgv {
     return value == access_value::kDesignated;
   }
 
+  static constexpr bool conditional_oneway_accessible(
+      std::optional<conditional_oneway_value> const value,
+      direction const dir) {
+    if (!value.has_value() || *value == conditional_oneway_value::kNo) {
+      return true;
+    }
+    return (*value == conditional_oneway_value::kForward &&
+            dir == direction::kForward) ||
+           (*value == conditional_oneway_value::kBackward &&
+            dir == direction::kBackward);
+  }
+
+  static constexpr std::optional<conditional_oneway_value> static_oneway_value(
+      way_properties const& e) {
+    if (!e.is_oneway_car()) {
+      return std::nullopt;
+    }
+    return e.is_oneway_reverse() ? conditional_oneway_value::kBackward
+                                 : conditional_oneway_value::kForward;
+  }
+
   static constexpr bool access_allowed(access_value const value) {
     switch (value) {
       case access_value::kNo: [[fallthrough]];
@@ -674,6 +697,15 @@ struct hgv {
     }
   }
 
+  static void apply_oneway_condition(conditional_oneway_restriction const& r,
+                                     direction const dir,
+                                     way_state& state) {
+    if (conditional_direction_applies(r.direction_, dir) &&
+        mode_applies(r.mode_)) {
+      state.oneway_ = r.value_;
+    }
+  }
+
   static void apply_conditional_restrictions(
       parameters const& params,
       ways::routing const& w,
@@ -699,6 +731,14 @@ struct hgv {
       if (matches_profile_condition_set_utc(params, w, r.condition_set_,
                                             current_time)) {
         apply_numeric_condition(r, params, dir, state);
+      }
+    }
+    for (auto i = conditionals->oneway_.begin_; i != conditionals->oneway_.end_;
+         ++i) {
+      auto const& r = w.conditional_oneway_[i];
+      if (matches_profile_condition_set_utc(params, w, r.condition_set_,
+                                            current_time)) {
+        apply_oneway_condition(r, dir, state);
       }
     }
   }

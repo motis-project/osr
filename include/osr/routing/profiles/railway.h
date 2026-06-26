@@ -283,7 +283,7 @@ struct railway {
     auto const accessible = e.is_railway_accessible();
     auto const accessible_with_penalty = e.is_railway_accessible_with_penalty();
     if ((accessible || accessible_with_penalty) &&
-        (dir == direction::kForward || !e.is_oneway_bus_psv())) {
+        e.is_bus_psv_direction_allowed(dir)) {
       auto cost = static_cast<cost_t>(dist);
       if (accessible_with_penalty) {
         cost *= e.in_route() ? 2U : 4U;

@@ -169,6 +169,21 @@ struct way_properties {
   constexpr bool is_oneway_car() const { return is_oneway_car_; }
   constexpr bool is_oneway_bike() const { return is_oneway_bike_; }
   constexpr bool is_oneway_bus_psv() const { return is_oneway_bus_psv_; }
+  constexpr bool is_oneway_reverse() const { return is_oneway_reverse_; }
+  constexpr bool is_oneway_direction_allowed(bool const is_oneway,
+                                             direction const dir) const {
+    return !is_oneway || dir == (is_oneway_reverse_ ? direction::kBackward
+                                                    : direction::kForward);
+  }
+  constexpr bool is_car_direction_allowed(direction const dir) const {
+    return is_oneway_direction_allowed(is_oneway_car(), dir);
+  }
+  constexpr bool is_bike_direction_allowed(direction const dir) const {
+    return is_oneway_direction_allowed(is_oneway_bike(), dir);
+  }
+  constexpr bool is_bus_psv_direction_allowed(direction const dir) const {
+    return is_oneway_direction_allowed(is_oneway_bus_psv(), dir);
+  }
   constexpr bool is_elevator() const { return is_elevator_; }
   constexpr bool is_steps() const { return is_steps_; }
   constexpr bool is_ramp() const { return is_ramp_; }
@@ -237,6 +252,7 @@ struct way_properties {
   std::uint8_t has_conditionals_ : 1;
   std::uint8_t is_in_low_emission_zone_ : 1;
   std::uint8_t is_detour_ : 1;
+  std::uint8_t is_oneway_reverse_ : 1;
 };
 
 static_assert(sizeof(way_properties) == 6);

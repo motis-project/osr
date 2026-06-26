@@ -177,6 +177,7 @@ boost::json::object build_map_match_debug_json(
         {"onewayCar", p.is_oneway_car()},
         {"onewayBike", p.is_oneway_bike()},
         {"onewayPsv", p.is_oneway_bus_psv()},
+        {"onewayReverse", p.is_oneway_reverse()},
         {"maxSpeedKmh", p.max_speed_km_per_h()},
         {"speedLimit", p.speed_limit_},
         {"fromLevel", p.from_level().to_float()},

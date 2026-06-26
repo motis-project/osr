@@ -296,7 +296,7 @@ struct generic_car {
       auto const accessible = e.is_bus_accessible();
       auto const accessible_with_penalty = e.is_bus_accessible_with_penalty();
       if ((accessible || accessible_with_penalty) &&
-          (dir == direction::kForward || !e.is_oneway_bus_psv())) {
+          e.is_bus_psv_direction_allowed(dir)) {
         auto const in_route = e.in_route();
         auto const bus_only = !e.is_car_accessible();
         auto sl = static_cast<speed_limit>(e.speed_limit_);
@@ -320,8 +320,7 @@ struct generic_car {
         return infeasible_cost_and_duration();
       }
     } else {
-      if (e.is_car_accessible() &&
-          (dir == direction::kForward || !e.is_oneway_car())) {
+      if (e.is_car_accessible() && e.is_car_direction_allowed(dir)) {
         auto const base_cost = static_cast<cost_t>(
             std::rint(static_cast<float>(dist) * e.max_speed_s_per_m()));
         return {.cost_ = clamp_cost(static_cast<std::uint64_t>(base_cost) *

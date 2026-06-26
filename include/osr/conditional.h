@@ -81,6 +81,7 @@ constexpr bool is_supported_conditional_restriction_key(std::string_view key) {
 
   switch (cista::hash(key)) {
     case cista::hash("access"):
+    case cista::hash("oneway"):
     case cista::hash("hgv"):
     case cista::hash("motor_vehicle"):
     case cista::hash("maxspeed"):

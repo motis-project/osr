@@ -280,8 +280,7 @@ struct bike {
       std::optional<routing_time_t> const,
       duration_t const,
       direction const) {
-    if (e.is_bike_accessible() &&
-        (dir == direction::kForward || !e.is_oneway_bike())) {
+    if (e.is_bike_accessible() && e.is_bike_direction_allowed(dir)) {
       auto const cost = static_cast<cost_t>(
           std::round(static_cast<double>(dist) /
                      (params.speed_meters_per_second_ +

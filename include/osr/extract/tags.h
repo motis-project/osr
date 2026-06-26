@@ -62,7 +62,8 @@ struct tags {
           break;
         case cista::hash("oneway"):
           oneway_defined = true;
-          oneway_ |= t.value() == "yes"sv;
+          oneway_reverse_ |= t.value() == "-1"sv;
+          oneway_ |= t.value() == "yes"sv || oneway_reverse_;
           break;
         case cista::hash("junction"):
           oneway_ |= t.value() == "roundabout"sv;
@@ -255,6 +256,9 @@ struct tags {
   // https://wiki.openstreetmap.org/wiki/Key:oneway
   // https://wiki.openstreetmap.org/wiki/Tag:junction=roundabout
   bool oneway_{false};
+
+  // https://wiki.openstreetmap.org/wiki/Key:oneway
+  bool oneway_reverse_{false};
 
   // https://wiki.openstreetmap.org/wiki/Key:oneway:bicycle
   bool not_oneway_bike_{false};
