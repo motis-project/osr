@@ -67,7 +67,7 @@ ways::ways(std::filesystem::path p, cista::mmap::protection const mode)
           mm_vec<std::uint64_t>(mm("way_has_conditional_access_no"))},
       way_conditional_access_no_{mm("way_conditional_access_no")} {}
 
-void ways::build_components() {
+unsigned ways::build_components() {
   auto q = hash_set<way_idx_t>{};
   auto flood_fill = [&](way_idx_t const way_idx, component_idx_t const c) {
     assert(q.empty());
@@ -102,6 +102,7 @@ void ways::build_components() {
     flood_fill(way_idx, c);
     pt->increment();
   }
+  return next_component_idx.v_;
 }
 
 void ways::add_restriction(std::vector<resolved_restriction>& rs) {

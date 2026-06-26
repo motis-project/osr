@@ -33,6 +33,7 @@
 #include "osr/lookup.h"
 #include "osr/platforms.h"
 #include "osr/preprocessing/elevation/provider.h"
+#include "osr/routing/parking_matching.h"
 #include "osr/ways.h"
 
 namespace osm = osmium;
@@ -162,6 +163,7 @@ way_properties get_way_properties(
   p.is_ferry_accessible_ = is_accessible<ferry_profile>(t, obj_type);
   p.is_railway_accessible_with_penalty_ =
       is_accessible_with_penalty<railway_profile>(t, obj_type);
+  p.is_parking_aisle_ = t.service_ == "parking_aisle"sv;
   return p;
 }
 
@@ -505,7 +507,7 @@ struct mark_inaccessible_handler : public osm::handler::Handler {
     }
 
     if (track_platforms_ && t.is_platform()) {
-      // Wnsure nodes are created even if they are not part of a routable way.
+      // Ensure nodes are created even if they are not part of a routable way.
       w_.node_way_counter_.increment(n.positive_id());
     }
   }
@@ -575,12 +577,13 @@ void extract(bool const with_platforms,
 
   auto rel_ways = rel_ways_t{};
   auto w = ways{out, cista::mmap::protection::WRITE};
+  auto extra_ways = tiles::tmp_file{(out / "extra_ways.bin").generic_string()};
   auto pl = std::unique_ptr<platforms>{};
   if (with_platforms) {
     pl = std::make_unique<platforms>(out, cista::mmap::protection::WRITE);
   }
 
-  w.node_way_counter_.reserve(12000000000);
+  w.node_way_counter_.reserve(12'000'000'000);
   {  // Collect node coordinates.
     pt->status("Load OSM / Coordinates").in_high(file_size).out_bounds(0, 15);
 
@@ -636,7 +639,7 @@ void extract(bool const with_platforms,
   w.sync();
 
   w.connect_ways();
-  w.build_components();
+  auto const n_components = w.build_components();
 
   auto r = std::vector<resolved_restriction>{};
   {
@@ -678,7 +681,9 @@ void extract(bool const with_platforms,
   w.r_->write(out);
 
   pt->status("Build R-Tree").in_high(1).out_bounds(99, 100);
-  lookup{w, out, cista::mmap::protection::WRITE}.build_rtree();
+  auto l = lookup{w, out, cista::mmap::protection::WRITE};
+  l.build_rtree();
+  connect_parking_ways(w, l, static_cast<unsigned>(n_components));
 }
 
 }  // namespace osr
