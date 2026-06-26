@@ -21,8 +21,28 @@ osr::way_properties hgv_way_properties() {
 }
 
 osr::hgv_way_info hgv_info(osr::access_value const value) {
-  return {.fields_ = osr::to_mask(osr::hgv_info_field::kAccess),
-          .hgv_access_ = static_cast<std::uint8_t>(value)};
+  return {.fields_ = osr::to_mask(osr::hgv_info_field::kAccessFwd) |
+                     osr::to_mask(osr::hgv_info_field::kAccessBwd),
+          .hgv_access_fwd_ = static_cast<std::uint8_t>(value),
+          .hgv_access_bwd_ = static_cast<std::uint8_t>(value)};
+}
+
+osr::hgv_way_info hgv_info_fwd(osr::access_value const value) {
+  return {.fields_ = osr::to_mask(osr::hgv_info_field::kAccessFwd),
+          .hgv_access_fwd_ = static_cast<std::uint8_t>(value)};
+}
+
+osr::hgv_way_info hgv_info_bwd(osr::access_value const value) {
+  return {.fields_ = osr::to_mask(osr::hgv_info_field::kAccessBwd),
+          .hgv_access_bwd_ = static_cast<std::uint8_t>(value)};
+}
+
+osr::hgv_way_info hgv_info(osr::access_value const fwd,
+                           osr::access_value const bwd) {
+  return {.fields_ = osr::to_mask(osr::hgv_info_field::kAccessFwd) |
+                     osr::to_mask(osr::hgv_info_field::kAccessBwd),
+          .hgv_access_fwd_ = static_cast<std::uint8_t>(fwd),
+          .hgv_access_bwd_ = static_cast<std::uint8_t>(bwd)};
 }
 
 osr::hgv_way_info hgv_info(osr::hgv_info_field const field,

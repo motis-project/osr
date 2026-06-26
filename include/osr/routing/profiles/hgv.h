@@ -403,8 +403,15 @@ struct hgv {
                            .oneway_ = static_oneway_value(e)};
 
     if (auto const* info = state.info_; info != nullptr) {
-      if (info->has(hgv_info_field::kAccess)) {
-        state.hgv_access_ = info->hgv_access();
+      auto const dir_access = dir == direction::kForward
+                                  ? (info->has(hgv_info_field::kAccessFwd)
+                                         ? std::optional{info->hgv_access_fwd()}
+                                         : std::nullopt)
+                                  : (info->has(hgv_info_field::kAccessBwd)
+                                         ? std::optional{info->hgv_access_bwd()}
+                                         : std::nullopt);
+      if (dir_access.has_value()) {
+        state.hgv_access_ = *dir_access;
         state.accessible_ = access_allowed(state.hgv_access_);
         state.destination_penalty_ = false;
       }

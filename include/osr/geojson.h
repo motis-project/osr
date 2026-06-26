@@ -498,8 +498,11 @@ inline void add_hgv_way_info_properties(boost::json::object& properties,
     return;
   }
 
-  if (hgv_info->has(hgv_info_field::kAccess)) {
-    properties["hgv_access"] = to_string(hgv_info->hgv_access());
+  if (hgv_info->has(hgv_info_field::kAccessFwd)) {
+    properties["hgv_access_fwd"] = to_string(hgv_info->hgv_access_fwd());
+  }
+  if (hgv_info->has(hgv_info_field::kAccessBwd)) {
+    properties["hgv_access_bwd"] = to_string(hgv_info->hgv_access_bwd());
   }
   if (hgv_info->has(hgv_info_field::kHazmat)) {
     properties["hazmat_access"] = to_string(hgv_info->hazmat_access());

@@ -71,18 +71,19 @@ struct restriction {
 };
 
 enum class hgv_info_field : std::uint16_t {
-  kAccess = 1U << 0U,
-  kMaxSpeed = 1U << 1U,
-  kMaxLength = 1U << 2U,
-  kMaxWeightRating = 1U << 3U,
-  kMaxHeight = 1U << 4U,
-  kMaxWidth = 1U << 5U,
-  kMaxWeight = 1U << 6U,
-  kMaxAxleLoad = 1U << 7U,
-  kMaxAxles = 1U << 8U,
-  kHazmat = 1U << 9U,
-  kHazmatWater = 1U << 10U,
-  kTrailer = 1U << 11U,
+  kAccessFwd = 1U << 0U,
+  kAccessBwd = 1U << 1U,
+  kMaxSpeed = 1U << 2U,
+  kMaxLength = 1U << 3U,
+  kMaxWeightRating = 1U << 4U,
+  kMaxHeight = 1U << 5U,
+  kMaxWidth = 1U << 6U,
+  kMaxWeight = 1U << 7U,
+  kMaxAxleLoad = 1U << 8U,
+  kMaxAxles = 1U << 9U,
+  kHazmat = 1U << 10U,
+  kHazmatWater = 1U << 11U,
+  kTrailer = 1U << 12U,
 };
 
 constexpr std::uint16_t to_mask(hgv_info_field const field) {
@@ -108,8 +109,12 @@ struct hgv_way_info {
     return (fields_ & to_mask(field)) != 0U;
   }
 
-  constexpr access_value hgv_access() const {
-    return static_cast<access_value>(hgv_access_);
+  constexpr access_value hgv_access_fwd() const {
+    return static_cast<access_value>(hgv_access_fwd_);
+  }
+
+  constexpr access_value hgv_access_bwd() const {
+    return static_cast<access_value>(hgv_access_bwd_);
   }
 
   constexpr access_value hazmat_access() const {
@@ -125,7 +130,10 @@ struct hgv_way_info {
   }
 
   std::uint16_t fields_{0U};
-  std::uint8_t hgv_access_{static_cast<std::uint8_t>(access_value::kUnknown)};
+  std::uint8_t hgv_access_fwd_{
+      static_cast<std::uint8_t>(access_value::kUnknown)};
+  std::uint8_t hgv_access_bwd_{
+      static_cast<std::uint8_t>(access_value::kUnknown)};
   std::uint8_t hazmat_access_{
       static_cast<std::uint8_t>(access_value::kUnknown)};
   std::uint8_t hazmat_water_access_{

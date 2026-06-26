@@ -144,9 +144,23 @@ std::optional<access_value> get_access_value(std::string_view value) {
 std::optional<hgv_way_info> get_hgv_way_info(tags const& t) {
   auto info = hgv_way_info{};
 
-  if (auto const access = get_access_value(t.hgv_); access.has_value()) {
-    info.fields_ |= to_mask(hgv_info_field::kAccess);
-    info.hgv_access_ = static_cast<std::uint8_t>(*access);
+  auto const hgv_access = get_access_value(t.hgv_);
+  auto const hgv_fwd = get_access_value(t.hgv_forward_);
+  auto const hgv_bwd = get_access_value(t.hgv_backward_);
+
+  if (hgv_access.has_value()) {
+    info.fields_ |= to_mask(hgv_info_field::kAccessFwd);
+    info.hgv_access_fwd_ = static_cast<std::uint8_t>(*hgv_access);
+    info.fields_ |= to_mask(hgv_info_field::kAccessBwd);
+    info.hgv_access_bwd_ = static_cast<std::uint8_t>(*hgv_access);
+  }
+  if (hgv_fwd.has_value()) {
+    info.fields_ |= to_mask(hgv_info_field::kAccessFwd);
+    info.hgv_access_fwd_ = static_cast<std::uint8_t>(*hgv_fwd);
+  }
+  if (hgv_bwd.has_value()) {
+    info.fields_ |= to_mask(hgv_info_field::kAccessBwd);
+    info.hgv_access_bwd_ = static_cast<std::uint8_t>(*hgv_bwd);
   }
 
   set_hgv_info_value(

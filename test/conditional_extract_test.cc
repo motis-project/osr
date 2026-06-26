@@ -195,10 +195,10 @@ TEST(conditional_extract, stores_hgv_access_values_separately) {
       return osr::access_value::kUnknown;
     }
     auto const* info = w.r_->get_hgv_info(*way);
-    if (info == nullptr || !info->has(osr::hgv_info_field::kAccess)) {
+    if (info == nullptr || !info->has(osr::hgv_info_field::kAccessFwd)) {
       return osr::access_value::kUnknown;
     }
-    return info->hgv_access();
+    return info->hgv_access_fwd();
   };
 
   EXPECT_EQ(osr::access_value::kYes, get_hgv_access(osr::osm_way_idx_t{10}));
