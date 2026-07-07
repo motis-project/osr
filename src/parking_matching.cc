@@ -25,7 +25,12 @@ geo::box get_bounding_box(ways const& w, vec<way_idx_t> const& component) {
 }
 
 struct best_candidate {
-  way_candidate candidate_;
+  way_candidate best_;
+  double min_dist_{std::numeric_limits<double>::infinity()};
+  double min_dist_accessible_{std::numeric_limits<double>::infinity()};
+  double min_dist_designated_{std::numeric_limits<double>::infinity()};
+  double min_dist_designated_accessible_{
+      std::numeric_limits<double>::infinity()};
   bool is_accessible;
   bool is_designated_;  // For example parking-aisle
 };
@@ -76,18 +81,47 @@ auto find_closest(ways const& w,
       return;
     }
     auto created = false;
+    auto const candidate = static_cast<way_candidate>(find_best(way_idx));
+// START DEBUG
+    if (parking_component == 462) {
+      fmt::println("way: {} (osm: {})   (left: {}  right: {})", candidate.way_, w.way_osm_idx_[candidate.way_], candidate.left_.valid(), candidate.right_.valid());
+    }
+// END DEBUG
     auto& curr = utl::get_or_create(bests, component, [&]() {
       created = true;
-      auto const candidate = find_best(way_idx);
-      return best_candidate{.candidate_ = std::move(candidate),
-                            .is_accessible = is_accessible(candidate),
-                            .is_designated_ = is_designated(candidate)};
+      auto const accessible = is_accessible(candidate);
+      auto const designated = is_designated(candidate);
+      auto const dist = candidate.dist_to_way_;
+      auto const inf = std::numeric_limits<double>::infinity();
+      return best_candidate{.best_ = std::move(candidate),
+                            .min_dist_ = dist,
+                            .min_dist_accessible_ = accessible ? dist : inf,
+                            .min_dist_designated_ = designated ? dist : inf,
+                            .min_dist_designated_accessible_ =
+                                (accessible && designated) ? dist : inf,
+                            .is_accessible = accessible,
+                            .is_designated_ = designated};
     });
     if (created) {
       return;
     }
-    auto const candidate = find_best(way_idx);
+    auto const accessible = is_accessible(candidate);
     auto const designated = is_designated(candidate);
+    auto const dist = candidate.dist_to_way_;
+    if (dist < curr.min_dist_accessible_) {
+      curr.min_dist_ = dist;
+    }
+    if (accessible && dist < curr.min_dist_accessible_) {
+      curr.min_dist_accessible_ = dist;
+    }
+    if (designated && dist < curr.min_dist_designated_) {
+      curr.min_dist_designated_ = dist;
+    }
+    if (accessible && designated &&
+        dist < curr.min_dist_designated_accessible_) {
+      curr.min_dist_designated_accessible_ = dist;
+    }
+    // if (accessible && dist < curr.
     if (!designated && curr.is_designated_) {
       return;
     }
@@ -96,18 +130,18 @@ auto find_closest(ways const& w,
       fmt::println("testing...");
     }
     if ((designated && !curr.is_designated_) ||
-        (candidate.dist_to_way_ < curr.candidate_.dist_to_way_)) {
+        (candidate.dist_to_way_ < curr.best_.dist_to_way_)) {
       if (parking_component == 462) {
         fmt::println("UPDATE");
       }
-      curr.candidate_ = candidate;
+      curr.best_ = candidate;
       curr.is_designated_ = designated;
     }
   });
 
   auto s = std::string{"["};
   for (auto const& [k, v] : bests) {
-    s += fmt::format("{} ({}), ", v.candidate_.closest_point_on_way_, k);
+    s += fmt::format("{} ({}), ", v.best_.closest_point_on_way_, k);
   }
   fmt::println("Connections {} ({}) -> {}      - bbox: [{}, {}]",
                parking_component, center, s, bbox.min_, bbox.max_);
