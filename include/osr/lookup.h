@@ -46,7 +46,7 @@ void till_the_end(T const& start,
 }
 
 struct node_candidate {
-  bool valid() const { return valid_; }
+  bool valid() const { return node_ != node_idx_t::invalid(); }
 
   level_t lvl_{kNoLevel};
   direction way_dir_{direction::kForward};
@@ -54,7 +54,6 @@ struct node_candidate {
   double dist_to_node_{0.0};
   cost_t cost_{0U};
   std::vector<geo::latlng> path_{};
-  bool valid_{false};
 };
 
 struct raw_node_candidate {
@@ -323,11 +322,10 @@ struct lookup {
 
                    auto const way_node = ways_.find_node_idx(osm_node_idx);
                    if (way_node.has_value()) {
-                     c.node_ = *way_node;
                      if (is_way_node_feasible<P>(params, wc, *way_node, query,
                                                  reverse, search_dir) &&
                          (blocked == nullptr || !blocked->test(*way_node))) {
-                       c.valid_ = true;
+                       c.node_ = *way_node;
                        c.cost_ = P::way_cost(
                            params, way_prop, flip(search_dir, edge_dir),
                            static_cast<distance_t>(c.dist_to_node_));
@@ -368,7 +366,6 @@ private:
     if (!is_way_node_feasible<P>(params, wc, nc.node_, query, reverse,
                                  search_dir)) {
       nc.node_ = node_idx_t::invalid();
-      nc.valid_ = false;
       return;
     }
     auto const way_prop = ways_.r_->way_properties_[wc.way_];
@@ -382,7 +379,6 @@ private:
       nc.cost_ = cost;
     } else {
       nc.node_ = node_idx_t::invalid();
-      nc.valid_ = false;
     }
   }
 
