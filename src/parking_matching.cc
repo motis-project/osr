@@ -39,6 +39,7 @@ template <Profile P>
 auto find_closest(ways const& w,
                   lookup const& l,
                   vec<way_idx_t> const& component_ways,
+                  vec_map<way_idx_t, way_extra_properties> const& way_extra,
                   component_idx_t const parking_component) {
   auto const params = typename P::parameters{};
   auto const bbox = get_bounding_box(w, component_ways);
@@ -70,8 +71,7 @@ auto find_closest(ways const& w,
     return wc.left_.valid() || wc.right_.valid();
   };
   auto const is_designated = [&](way_candidate const& wc) -> bool {
-    auto const p = w.r_->way_properties_[wc.way_];
-    return p.is_parking_aisle();
+    return way_extra[wc.way_].is_parking_aisle();
   };
 
   auto bests = hash_map<component_idx_t, best_candidate>{};
@@ -82,11 +82,13 @@ auto find_closest(ways const& w,
     }
     auto created = false;
     auto const candidate = static_cast<way_candidate>(find_best(way_idx));
-// START DEBUG
+    // START DEBUG
     if (parking_component == 462) {
-      fmt::println("way: {} (osm: {})   (left: {}  right: {})", candidate.way_, w.way_osm_idx_[candidate.way_], candidate.left_.valid(), candidate.right_.valid());
+      fmt::println("way: {} (osm: {})   (left: {}  right: {})", candidate.way_,
+                   w.way_osm_idx_[candidate.way_], candidate.left_.valid(),
+                   candidate.right_.valid());
     }
-// END DEBUG
+    // END DEBUG
     auto& curr = utl::get_or_create(bests, component, [&]() {
       created = true;
       auto const accessible = is_accessible(candidate);
@@ -172,9 +174,11 @@ vec<way_idx_t> component_ways(ways const& w, way_idx_t const way_idx) {
   return seen;
 }
 
-void connect_parking_ways(ways const& w,
-                          lookup const& l,
-                          unsigned const n_components) {
+void connect_parking_ways(
+    ways const& w,
+    lookup const& l,
+    vec_map<way_idx_t, way_extra_properties> const& way_extra,
+    unsigned const n_components) {
   // Compute component sizes
   auto component_sizes =
       vec_map<component_idx_t, std::size_t>(n_components, std::size_t{0U});
@@ -219,7 +223,7 @@ void connect_parking_ways(ways const& w,
                    pos.lat(), pos.lng());
 
       [[maybe_unused]] auto closest_car =
-          find_closest<car>(w, l, parking_component, component);
+          find_closest<car>(w, l, parking_component, way_extra, component);
       fmt::println("Closest (car): {} (osm: {}) ({}, {}) ...", way_idx, osm_way,
                    pos.lat(), pos.lng());
     }

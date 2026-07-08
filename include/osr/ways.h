@@ -91,7 +91,6 @@ struct way_properties {
   constexpr bool is_steps() const { return is_steps_; }
   constexpr bool is_ramp() const { return is_ramp_; }
   constexpr bool is_parking() const { return is_parking_; }
-  constexpr bool is_parking_aisle() const { return is_parking_aisle_; }
   constexpr bool has_toll() const { return has_toll_; }
   constexpr bool is_sidewalk_separate() const { return is_sidewalk_separate_; }
   constexpr bool in_route() const { return in_route_; }
@@ -146,7 +145,6 @@ struct way_properties {
   std::uint8_t is_bus_accessible_with_penalty_ : 1;
   std::uint8_t is_ferry_accessible_ : 1;
   std::uint8_t is_railway_accessible_with_penalty_ : 1;
-  std::uint8_t is_parking_aisle_ : 1;
 };
 
 static_assert(sizeof(way_properties) == 5);

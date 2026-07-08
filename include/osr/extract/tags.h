@@ -2,6 +2,8 @@
 
 #include "cista/hash.h"
 
+#include "utl/parser/arg_parser.h"
+
 #include "osmium/osm/object.hpp"
 
 #include "osr/types.h"

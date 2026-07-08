@@ -2,9 +2,13 @@
 
 #include "osr/lookup.h"
 #include "osr/ways.h"
+#include "osr/ways_extra.h"
 
 namespace osr {
 
-void connect_parking_ways(ways const&, lookup const&, unsigned n_components);
+void connect_parking_ways(ways const&,
+                          lookup const&,
+                          vec_map<way_idx_t, way_extra_properties> const&,
+                          unsigned n_components);
 
 }  // namespace osr
