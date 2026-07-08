@@ -11,6 +11,8 @@
 
 namespace osr {
 
+namespace {
+
 geo::box get_bounding_box(ways const& w, vec<way_idx_t> const& component) {
   // ?? TODO Optional matching distance ??
   auto bbox = geo::box{};
@@ -173,6 +175,8 @@ vec<way_idx_t> component_ways(ways const& w, way_idx_t const way_idx) {
   }
   return seen;
 }
+
+}  // namespace
 
 void connect_parking_ways(
     ways const& w,

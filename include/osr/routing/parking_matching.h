@@ -1,8 +1,8 @@
 #pragma once
 
 #include "osr/lookup.h"
+#include "osr/types.h"
 #include "osr/ways.h"
-#include "osr/ways_extra.h"
 
 namespace osr {
 

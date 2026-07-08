@@ -35,7 +35,6 @@
 #include "osr/preprocessing/elevation/provider.h"
 #include "osr/routing/parking_matching.h"
 #include "osr/ways.h"
-#include "osr/ways_extra.h"
 
 namespace osm = osmium;
 namespace osm_io = osmium::io;
