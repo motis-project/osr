@@ -16,6 +16,7 @@ namespace osr {
 
 using profile_parameters =
     std::variant<foot<false, noop_tracking>::parameters,
+                 foot<false, noop_tracking, true>::parameters,
                  foot<true, noop_tracking>::parameters,
                  foot<false, elevator_tracking>::parameters,
                  foot<true, elevator_tracking>::parameters,

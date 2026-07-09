@@ -2,6 +2,7 @@
 
 #include <optional>
 
+#include "osr/types.h"
 #include "utl/for_each_bit_set.h"
 
 #include "osr/elevation_storage.h"
@@ -14,12 +15,14 @@ namespace osr {
 
 struct sharing_data;
 
-template <bool IsWheelchair, typename Tracking = noop_tracking>
+template <bool IsWheelchair,
+          typename Tracking = noop_tracking,
+          bool WithElevation = false>
 struct foot {
   static constexpr auto const kMaxMatchDistance = 100U;
 
   struct parameters {
-    using profile_t = foot<IsWheelchair, Tracking>;
+    using profile_t = foot<IsWheelchair, Tracking, WithElevation>;
     float const speed_meters_per_second_{IsWheelchair ? 0.8F : 1.2F};
   };
 
@@ -184,7 +187,7 @@ struct foot {
                        node const n,
                        bitvec<node_idx_t> const* blocked,
                        sharing_data const*,
-                       elevation_storage const*,
+                       elevation_storage const* elevations,
                        Fn&& fn) {
     for (auto const [way, i] :
          utl::zip_unchecked(w.node_ways_[n.n_], w.node_in_way_idx_[n.n_])) {
@@ -227,10 +230,41 @@ struct foot {
           }
 
           auto const dist = w.get_way_node_distance(way, std::min(from, to));
+          auto const elevation = [&]() {
+            auto const e = (from < to) ? get_elevations(elevations, way, from)
+                                       : get_elevations(elevations, way, to);
+            auto const in_direction =
+                (SearchDir == direction::kForward) == (from < to);
+            return in_direction ? e : e.swapped();
+          }();
+
+          cost_t elevation_cost = 0U;
+          if (WithElevation) {
+            // assumes elevation is dominated in one direction
+            auto const dx =
+                std::max(to_idx(elevation.up_), to_idx(elevation.down_));
+
+            auto const grad =
+                dist > 0U ? static_cast<float>(dx) / static_cast<float>(dist)
+                          : 0.F;
+
+            // tobler's hiking function
+            auto const tobler_speed = params.speed_meters_per_second_ *
+                                      std::exp(-3.5F * std::abs(grad + 0.05F));
+            auto const ec =
+                std::max(0.F, static_cast<float>(dist) / tobler_speed -
+                                  static_cast<float>(dist) /
+                                      params.speed_meters_per_second_);
+            elevation_cost = ec >= static_cast<float>(kInfeasible)
+                                 ? kInfeasible - 1U
+                                 : static_cast<cost_t>(ec);
+          }
+
           auto const cost = way_cost(params, target_way_prop, way_dir, dist) +
-                            node_cost(params, target_node_prop);
+                            node_cost(params, target_node_prop) +
+                            elevation_cost;
           fn(node{target_node, *target_lvl}, static_cast<std::uint32_t>(cost),
-             dist, way, from, to, elevation_storage::elevation{}, false);
+             dist, way, from, to, elevation, false);
         }
       };
 

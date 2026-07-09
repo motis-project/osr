@@ -6,6 +6,8 @@ profile_parameters get_parameters(search_profile const p) {
   switch (p) {
     case search_profile::kFoot:
       return foot<false, elevator_tracking>::parameters{};
+    case search_profile::kFootWithElevation:
+      return foot<false, noop_tracking, true>::parameters{};
     case search_profile::kWheelchair:
       return foot<true, elevator_tracking>::parameters{};
     case search_profile::kBike:

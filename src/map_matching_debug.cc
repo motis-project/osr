@@ -981,6 +981,17 @@ build_map_match_debug_json<foot<false, elevator_tracking>>(
     std::function<geo::latlng(node_idx_t)> const&);
 
 template boost::json::object
+build_map_match_debug_json<foot<false, noop_tracking, true>>(
+    ways const&,
+    lookup const&,
+    foot<false, noop_tracking, true>::parameters const&,
+    std::vector<location> const&,
+    std::vector<point_data<foot<false, noop_tracking, true>>> const&,
+    std::vector<segment_data<foot<false, noop_tracking, true>>> const&,
+    matched_route const&,
+    std::function<geo::latlng(node_idx_t)> const&);
+
+template boost::json::object
 build_map_match_debug_json<foot<true, elevator_tracking>>(
     ways const&,
     lookup const&,
