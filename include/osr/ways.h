@@ -238,6 +238,20 @@ struct ways {
   std::size_t get_polyline_node_idx(
       way_idx_t const way, std::uint16_t const target_routing_idx) const;
 
+  std::optional<std::int64_t> get_osm_node(node_idx_t const n) const {
+    return n != node_idx_t::invalid() && n < n_nodes()
+               ? std::optional{static_cast<std::int64_t>(
+                     to_idx(node_to_osm_[n]))}
+               : std::nullopt;
+  }
+
+  std::optional<std::int64_t> get_osm_way(way_idx_t const way) const {
+    return way != way_idx_t::invalid()
+               ? std::optional{static_cast<std::int64_t>(
+                     to_idx(way_osm_idx_[way]))}
+               : std::nullopt;
+  }
+
   cista::mmap mm(char const* file) {
     return cista::mmap{(p_ / file).generic_string().c_str(), mode_};
   }
