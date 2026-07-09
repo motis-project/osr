@@ -32,17 +32,20 @@ struct fit {
     if (best_ == std::nullopt) {
       return true;
     }
-    return score(*best_, is_designated_) < score(c, is_designated);
+    fmt::println("Testing scores: {} < {}    dists: {} - {}",
+                 score(*best_, is_preferred_), score(c, is_designated),
+                 best_->dist_to_way_, c.dist_to_way_);
+    return score(*best_, is_preferred_) < score(c, is_designated);
   }
 
-  double static score(way_candidate const& c, bool const is_designated) {
+  double static score(way_candidate const& c, bool const is_preferred) {
     // Penalize not designated ways
-    // Add shift to maybe (?) handle elongated parking spaces with nearby road
-    return -((is_designated ? 1.0 : 5.0) * (c.dist_to_way_ + 2.5));
+    // Add shift to maybe (?) find preferred way, like nearest footpath
+    return -((is_preferred ? 1.0 : 5.0) * (c.dist_to_way_ + 2.5));
   }
 
   std::optional<way_candidate> best_{std::nullopt};
-  bool is_designated_{false};  // For example parking-aisle
+  bool is_preferred_{false};  // For example parking-aisle
   std::size_t component_size_{};
   // double min_dist_{std::numeric_limits<double>::infinity()};
 };
@@ -54,7 +57,8 @@ std::optional<way_candidate> find_closest(
     vec_map<way_idx_t, way_extra_properties> const& way_extra,
     vec<way_idx_t> const& component_ways,
     vec_map<component_idx_t, std::size_t> const& component_sizes,
-    std::function<bool(way_extra_properties const&)> const& p) {
+    std::function<std::tuple<bool, bool>(way_extra_properties const&)> const&
+        p) {
   auto const debug_this = component_ways[0] == 15609;  // TODO: drop - Drop
 
   auto const params = typename P::parameters{};
@@ -97,7 +101,8 @@ std::optional<way_candidate> find_closest(
       //     w.r_->way_component_[component_ways[0]]);
       return;
     }
-    if (!p(way_extra[way_idx])) {
+    auto const [is_usable, is_preferred] = p(way_extra[way_idx]);
+    if (!is_usable) {
       if (debug_this) {
         fmt::println("Not usable: {} (osm: {})", way_idx,
                      w.way_osm_idx_[way_idx]);
@@ -112,13 +117,11 @@ std::optional<way_candidate> find_closest(
                    candidate.right_.valid());
     }
     // END DEBUG
-    auto const is_designated =
-        static_cast<bool>(way_extra[way_idx].is_parking_aisle_);
-    if (best_fit.worse_than(candidate, is_designated)) {
+    if (best_fit.worse_than(candidate, is_preferred)) {
       best_fit.best_ = candidate;
       best_fit.component_size_ = component_sizes[component];
       // best_fit.min_dist_ = candidate.dist_to_way_;
-      best_fit.is_designated_ = is_designated;
+      best_fit.is_preferred_ = is_preferred;
     }
   });
 
@@ -211,15 +214,15 @@ void connect_parking_ways(
       fmt::println("Connecting {} (osm: {}) ({}, {}) ...", way_idx, osm_way,
                    pos.lat(), pos.lng());
 
-      auto closest_car =
-          find_closest<car>(w, l, way_extra, parking_component, component_sizes,
-                            [&](way_extra_properties const& props) {
-                              return props.is_car_usable();
-                            });
+      auto closest_car = find_closest<car>(
+          w, l, way_extra, parking_component, component_sizes,
+          [&](way_extra_properties const& props) -> std::tuple<bool, bool> {
+            return {props.is_car_usable(), props.is_parking_aisle()};
+          });
       auto closest_foot = find_closest<foot<false>>(
           w, l, way_extra, parking_component, component_sizes,
-          [&](way_extra_properties const& props) {
-            return props.is_foot_usable();
+          [&](way_extra_properties const& props) -> std::tuple<bool, bool> {
+            return {props.is_foot_usable(), props.is_preferred_footpath()};
           });
       if (closest_car.has_value()) {
         if (closest_foot.has_value()) {
