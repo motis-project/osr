@@ -27,24 +27,35 @@ geo::box get_bounding_box(ways const& w, vec<way_idx_t> const& component) {
   return bbox;
 }
 
-struct best_candidate {
-  way_candidate best_;
-  double min_dist_{std::numeric_limits<double>::infinity()};
-  double min_dist_accessible_{std::numeric_limits<double>::infinity()};
-  double min_dist_designated_{std::numeric_limits<double>::infinity()};
-  double min_dist_designated_accessible_{
-      std::numeric_limits<double>::infinity()};
-  bool is_accessible;
-  bool is_designated_;  // For example parking-aisle
+struct fit {
+  bool worse_than(way_candidate const& c, bool const is_designated) const {
+    if (best_ == std::nullopt) {
+      return true;
+    }
+    return score(*best_, is_designated_) < score(c, is_designated);
+  }
+
+  double static score(way_candidate const& c, bool const is_designated) {
+    // Penalize not designated ways
+    // Add shift to maybe (?) handle elongated parking spaces with nearby road
+    return -((is_designated ? 1.0 : 5.0) * (c.dist_to_way_ + 2.5));
+  }
+
+  std::optional<way_candidate> best_{std::nullopt};
+  bool is_designated_{false};  // For example parking-aisle
+  std::size_t component_size_{};
+  // double min_dist_{std::numeric_limits<double>::infinity()};
 };
 
 template <Profile P>
 auto find_closest(ways const& w,
                   lookup const& l,
-                  vec<way_idx_t> const& component_ways,
                   vec_map<way_idx_t, way_extra_properties> const& way_extra,
-                  component_idx_t const parking_component,
+                  vec<way_idx_t> const& component_ways,
+                  vec_map<component_idx_t, std::size_t> const& component_sizes,
                   std::function<bool(way_extra_properties const&)> const& p) {
+  auto const debug_this = component_ways[0] == 15609;  // TODO: drop - Drop
+
   auto const params = typename P::parameters{};
   auto const bbox = get_bounding_box(w, component_ways);
   auto const center = bbox.centroid();
@@ -71,93 +82,58 @@ auto find_closest(ways const& w,
                             approx_distance_lng_degrees, best, segment_idx);
     return wc;
   };
-  auto const is_accessible = [](way_candidate const& wc) -> bool {
-    return wc.left_.valid() || wc.right_.valid();
-  };
-  auto const is_designated = [&](way_candidate const& wc) -> bool {
-    return way_extra[wc.way_].is_parking_aisle();
-  };
 
-  auto bests = hash_map<component_idx_t, best_candidate>{};
+  auto best_fit = fit{.component_size_ = component_ways.size() + 1};
   l.find(bbox, [&](way_idx_t const way_idx) {
     auto const component = w.r_->way_component_[way_idx];
-    if (component == parking_component) {
+    if (component_sizes[component] < best_fit.component_size_) {
+      // fmt::println(
+      //     "DEBUG: Not matched. Target component too small: {} (osm: {})   "
+      //     "Sizes: {} < {}    from: {} (osm: {}  component: {})",
+      //     way_idx, w.way_osm_idx_[way_idx], component_sizes[component],
+      //     best_fit.component_size_, component_ways[0],
+      //     w.way_osm_idx_[component_ways[0]],
+      //     w.r_->way_component_[component_ways[0]]);
       return;
     }
     if (!p(way_extra[way_idx])) {
-      if (parking_component == 462) {
+      if (debug_this) {
         fmt::println("Not usable: {} (osm: {})", way_idx,
                      w.way_osm_idx_[way_idx]);
       }
       return;
     }
-    auto created = false;
     auto const candidate = static_cast<way_candidate>(find_best(way_idx));
     // START DEBUG
-    if (parking_component == 462) {
+    if (debug_this) {
       fmt::println("way: {} (osm: {})   (left: {}  right: {})", candidate.way_,
                    w.way_osm_idx_[candidate.way_], candidate.left_.valid(),
                    candidate.right_.valid());
     }
     // END DEBUG
-    auto& curr = utl::get_or_create(bests, component, [&]() {
-      created = true;
-      auto const accessible = is_accessible(candidate);
-      auto const designated = is_designated(candidate);
-      auto const dist = candidate.dist_to_way_;
-      auto const inf = std::numeric_limits<double>::infinity();
-      return best_candidate{.best_ = std::move(candidate),
-                            .min_dist_ = dist,
-                            .min_dist_accessible_ = accessible ? dist : inf,
-                            .min_dist_designated_ = designated ? dist : inf,
-                            .min_dist_designated_accessible_ =
-                                (accessible && designated) ? dist : inf,
-                            .is_accessible = accessible,
-                            .is_designated_ = designated};
-    });
-    if (created) {
-      return;
-    }
-    auto const accessible = is_accessible(candidate);
-    auto const designated = is_designated(candidate);
-    auto const dist = candidate.dist_to_way_;
-    if (dist < curr.min_dist_accessible_) {
-      curr.min_dist_ = dist;
-    }
-    if (accessible && dist < curr.min_dist_accessible_) {
-      curr.min_dist_accessible_ = dist;
-    }
-    if (designated && dist < curr.min_dist_designated_) {
-      curr.min_dist_designated_ = dist;
-    }
-    if (accessible && designated &&
-        dist < curr.min_dist_designated_accessible_) {
-      curr.min_dist_designated_accessible_ = dist;
-    }
-    // if (accessible && dist < curr.
-    if (!designated && curr.is_designated_) {
-      return;
-    }
-
-    if (parking_component == 462) {
-      fmt::println("testing...");
-    }
-    if ((designated && !curr.is_designated_) ||
-        (candidate.dist_to_way_ < curr.best_.dist_to_way_)) {
-      if (parking_component == 462) {
-        fmt::println("UPDATE");
-      }
-      curr.best_ = candidate;
-      curr.is_designated_ = designated;
+    auto const is_designated =
+        static_cast<bool>(way_extra[way_idx].is_parking_aisle_);
+    if (best_fit.worse_than(candidate, is_designated)) {
+      best_fit.best_ = candidate;
+      best_fit.component_size_ = component_sizes[component];
+      // best_fit.min_dist_ = candidate.dist_to_way_;
+      best_fit.is_designated_ = is_designated;
     }
   });
 
-  auto s = std::string{"["};
-  for (auto const& [k, v] : bests) {
-    s += fmt::format("{} ({}), ", v.best_.closest_point_on_way_, k);
+  if (best_fit.best_ == std::nullopt) {
+    fmt::println("Unmatched component: {}  center: {}  way:  {} (osm: {})",
+                 w.r_->way_component_[component_ways[0]], center,
+                 component_ways[0], w.way_osm_idx_[component_ways[0]]);
+  } else {
+    fmt::println(
+        "Matched component: {}  center: {}  way:  {} (osm: {})  "
+        "->   way {} (osm: {}  component: {})",
+        w.r_->way_component_[component_ways[0]], center, component_ways[0],
+        w.way_osm_idx_[component_ways[0]], best_fit.best_->way_,
+        w.way_osm_idx_[best_fit.best_->way_],
+        w.r_->way_component_[best_fit.best_->way_]);
   }
-  fmt::println("Connections {} ({}) -> {}      - bbox: [{}, {}]",
-               parking_component, center, s, bbox.min_, bbox.max_);
 
   // TODO: return - Update return value
   return -1;
@@ -236,7 +212,7 @@ void connect_parking_ways(
                    pos.lat(), pos.lng());
 
       [[maybe_unused]] auto closest_car =
-          find_closest<car>(w, l, parking_component, way_extra, component,
+          find_closest<car>(w, l, way_extra, parking_component, component_sizes,
                             [&](way_extra_properties const& props) {
                               return props.is_car_usable();
                             });
