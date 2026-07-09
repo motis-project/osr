@@ -4,7 +4,6 @@
 #include <ostream>
 
 #include "cista/containers/rtree.h"
-#include "cista/reflection/printable.h"
 
 #include "geo/box.h"
 #include "geo/latlng.h"
@@ -224,6 +223,8 @@ struct lookup {
   hash_set<node_idx_t> find_elevators(geo::box const& b) const;
 
   void insert(way_idx_t);
+
+  void write();
 
   template <Profile P>
   match_t get_way_candidates(P::parameters const& params,

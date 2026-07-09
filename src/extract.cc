@@ -218,10 +218,12 @@ struct way_handler : public osm::handler::Handler {
   way_handler(ways& w,
               platforms* platforms,
               rel_ways_t const& rel_ways,
+              osm_way_idx_t& max_osm_way_id,
               hash_map<osm_node_idx_t, level_bits_t>& elevator_nodes)
       : w_{w},
         platforms_{platforms},
         rel_ways_{rel_ways},
+        max_osm_way_id_{max_osm_way_id},
         elevator_nodes_{elevator_nodes} {
     strings_set_.hash_function().strings_ = &w_.strings_;
     strings_set_.key_eq().strings_ = &w_.strings_;
@@ -229,6 +231,7 @@ struct way_handler : public osm::handler::Handler {
 
   void way(osm::Way const& w) {
     auto const osm_way_idx = osm_way_idx_t{w.positive_id()};
+    max_osm_way_id_ = std::max(max_osm_way_id_, osm_way_idx);
     auto const it = rel_ways_.find(osm_way_idx);
     auto t = tags{w};
 
@@ -335,6 +338,7 @@ struct way_handler : public osm::handler::Handler {
   ways& w_;
   platforms* platforms_;
   rel_ways_t const& rel_ways_;
+  osm_way_idx_t& max_osm_way_id_;
 
   std::mutex elevator_nodes_mutex_;
   hash_map<osm_node_idx_t, level_bits_t>& elevator_nodes_;
@@ -491,10 +495,19 @@ struct node_handler : public osm::handler::Handler {
 };
 
 struct mark_inaccessible_handler : public osm::handler::Handler {
-  explicit mark_inaccessible_handler(bool track_platforms, ways& w)
-      : track_platforms_{track_platforms}, w_{w} {}
+  explicit mark_inaccessible_handler(
+      bool track_platforms,
+      ways& w,
+      std::vector<std::pair<osm_node_idx_t, location>>& bike_parkings,
+      osm_node_idx_t& max_osm_node_id)
+      : track_platforms_{track_platforms},
+        w_{w},
+        bike_parkings_(bike_parkings),
+        max_osm_node_id_{max_osm_node_id} {}
 
   void node(osm::Node const& n) {
+    max_osm_node_id_ =
+        std::max(max_osm_node_id_, osm_node_idx_t{n.positive_id()});
     auto const t = tags{n};
     auto const accessible =
         is_accessible<car_profile>(t, osm_obj_type::kNode) &&
@@ -508,10 +521,19 @@ struct mark_inaccessible_handler : public osm::handler::Handler {
       // Wnsure nodes are created even if they are not part of a routable way.
       w_.node_way_counter_.increment(n.positive_id());
     }
+    if (t.is_bike_parking_) {
+      w_.node_way_counter_.increment(n.positive_id());
+      w_.node_way_counter_.increment(n.positive_id());
+      bike_parkings_.emplace_back(
+          n.positive_id(),
+          location{{n.location().lat(), n.location().lon()}, kNoLevel});
+    }
   }
 
   bool track_platforms_;
   ways& w_;
+  std::vector<std::pair<osm_node_idx_t, location>>& bike_parkings_;
+  osm_node_idx_t& max_osm_node_id_;
 };
 
 struct rel_ways_handler : public osm::handler::Handler {
@@ -580,13 +602,15 @@ void extract(bool const with_platforms,
     pl = std::make_unique<platforms>(out, cista::mmap::protection::WRITE);
   }
 
+  std::vector<std::pair<osm_node_idx_t, location>> bike_parkings;
+  osm_node_idx_t max_osm_node_id{0};
   w.node_way_counter_.reserve(12000000000);
   {  // Collect node coordinates.
     pt->status("Load OSM / Coordinates").in_high(file_size).out_bounds(0, 15);
 
     auto node_idx_builder = tiles::hybrid_node_idx_builder{node_idx};
-
-    auto inaccessible_handler = mark_inaccessible_handler{pl != nullptr, w};
+    auto inaccessible_handler = mark_inaccessible_handler{
+        pl != nullptr, w, bike_parkings, max_osm_node_id};
     auto rel_ways_h = rel_ways_handler{pl.get(), rel_ways};
     auto reader = osm_io::Reader{input_file, osm_eb::node | osm_eb::relation,
                                  osmium::io::read_meta::no};
@@ -598,11 +622,12 @@ void extract(bool const with_platforms,
     node_idx_builder.finish();
   }
 
+  osm_way_idx_t max_osm_way_id{0};
   auto elevator_nodes = hash_map<osm_node_idx_t, level_bits_t>{};
   {  // Extract streets, places, and areas.
     pt->status("Load OSM / Ways").in_high(file_size).out_bounds(15, 40);
 
-    auto h = way_handler{w, pl.get(), rel_ways, elevator_nodes};
+    auto h = way_handler{w, pl.get(), rel_ways, max_osm_way_id, elevator_nodes};
     auto reader =
         osm_io::Reader{input_file, osm_eb::way, osmium::io::read_meta::no};
 
@@ -635,8 +660,7 @@ void extract(bool const with_platforms,
   w.r_->write(out);
   w.sync();
 
-  w.connect_ways();
-  w.build_components();
+  w.assign_ids();
 
   auto r = std::vector<resolved_restriction>{};
   {
@@ -654,6 +678,118 @@ void extract(bool const with_platforms,
     reader.close();
     pt->update(pt->in_high_);
   }
+
+  lookup{w, out, cista::mmap::protection::WRITE}.build_rtree();
+
+  std::vector<std::pair<osm_node_idx_t, point>> projections;
+
+  auto l = lookup{w, out, cista::mmap::protection::READ};
+
+  struct resolved_additional {
+    osm_node_idx_t node_id_;
+    osm_node_idx_t fake_node_id_;
+    osm_way_idx_t fake_way_id_;
+
+    geo::latlng projection_point_;
+    location origin_point_;
+
+    way_idx_t matched_way_;
+    unsigned insert_pos_;
+  };
+
+  std::vector<resolved_additional> info;
+  for (const auto& [id, loc] : bike_parkings) {
+    auto const match =
+        l.match(get_parameters(search_profile::kBike), loc, false,
+                direction::kForward, 500, nullptr, search_profile::kBike);
+    if (match.empty()) {
+      continue;
+    }
+
+    resolved_additional a{};
+    a.fake_node_id_ = ++max_osm_node_id;
+    a.fake_way_id_ = ++max_osm_way_id;
+    a.origin_point_ = loc;
+    a.projection_point_ = match[0].closest_point_on_way_;
+    a.insert_pos_ = match[0].segment_idx_;
+    a.matched_way_ = match[0].way_;
+    a.node_id_ = id;
+    info.emplace_back(a);
+  }
+
+  auto insert = [](auto&& vec, const auto& n, const auto pos) {
+    vec.push_back(n);
+    for (auto i = vec.size() - 1; pos < i; --i) {
+      vec[i] = vec[i - 1];
+    }
+    vec[pos] = n;
+  };
+  auto tmp_way_polylines = mm_paged_vecvec<way_idx_t, point>{
+      cista::paged<mm_vec32<point>>{
+          mm_vec32<point>{cista::mmap("tmp_way_polylines_data.bin")}},
+      mm_vec<cista::page<std::uint32_t, std::uint16_t>>{
+          cista::mmap("tmp_way_polylines_index.bin")}};
+
+  auto tmp_way_osm_nodes = mm_paged_vecvec<way_idx_t, osm_node_idx_t>{
+      cista::paged<mm_vec32<osm_node_idx_t>>{
+          mm_vec32<osm_node_idx_t>{cista::mmap("tmp_way_osm_nodes_data.bin")}},
+      mm_vec<cista::page<std::uint32_t, std::uint16_t>>{
+          cista::mmap("tmp_way_osm_nodes_index.bin")}};
+  for (auto i = 0U; i < w.way_osm_nodes_.size(); ++i) {
+    auto way = way_idx_t{i};
+    tmp_way_polylines.emplace_back(w.way_polylines_[way]);
+    tmp_way_osm_nodes.emplace_back(w.way_osm_nodes_[way]);
+  }
+
+  for (const auto& a : info) {
+    auto const projection_point = point::from_latlng(a.projection_point_);
+    auto const parking_point = point::from_latlng(a.origin_point_.pos_);
+
+    insert(tmp_way_osm_nodes[a.matched_way_], a.fake_node_id_,
+           a.insert_pos_ + 1);
+    insert(tmp_way_polylines[a.matched_way_], projection_point,
+           a.insert_pos_ + 1);
+
+    w.node_way_counter_.increment(to_idx(a.fake_node_id_));
+    w.node_way_counter_.increment(to_idx(a.fake_node_id_));
+
+    w.way_osm_idx_.emplace_back(a.fake_way_id_);
+    way_properties additional_prop{};
+    additional_prop.is_bike_accessible_ = true;
+    additional_prop.is_foot_accessible_ = true;
+    w.r_->way_properties_.emplace_back(additional_prop);
+    tmp_way_polylines.emplace_back({projection_point, parking_point});
+    tmp_way_osm_nodes.emplace_back({a.fake_node_id_, a.node_id_});
+    w.way_names_.emplace_back(string_idx_t::invalid());
+    const auto new_way_id = way_idx_t{w.way_osm_idx_.size() - 1U};
+    w.way_has_conditional_access_no_.resize(to_idx(new_way_id) + 1U);
+
+    w.r_->node_positions_.push_back(projection_point);
+    node_properties prop{};
+    prop.is_bike_accessible_ = true;
+    prop.is_foot_accessible_ = true;
+    w.r_->node_properties_.push_back(prop);
+  }
+
+  w.way_polylines_.bucket_starts_.resize(0);
+  w.way_polylines_.data_.resize(0);
+  w.way_osm_nodes_.bucket_starts_.resize(0);
+  w.way_osm_nodes_.data_.resize(0);
+  for (auto i = 0U; i < tmp_way_osm_nodes.size(); ++i) {
+    auto way = way_idx_t{i};
+    w.way_polylines_.emplace_back(tmp_way_polylines[way]);
+    w.way_osm_nodes_.emplace_back(tmp_way_osm_nodes[way]);
+  }
+
+  fs::remove("tmp_way_polylines_data.bin");
+  fs::remove("tmp_way_polylines_index.bin");
+  fs::remove("tmp_way_osm_nodes_data.bin");
+  fs::remove("tmp_way_osm_nodes_index.bin");
+
+  w.r_->write(out);
+  w.sync();
+  w.connect_ways();
+  w.build_components();
 
   w.add_restriction(r);
 
@@ -676,6 +812,7 @@ void extract(bool const with_platforms,
   pt->status("Big Street Neighbors").in_high(w.n_ways()).out_bounds(95, 99);
   w.compute_big_street_neighbors();
   w.r_->write(out);
+  w.sync();
 
   pt->status("Build R-Tree").in_high(1).out_bounds(99, 100);
   lookup{w, out, cista::mmap::protection::WRITE}.build_rtree();

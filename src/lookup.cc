@@ -1,4 +1,5 @@
 #include "osr/lookup.h"
+#include <print>
 
 #include "osr/routing/parameters.h"
 #include "osr/routing/profiles/bike.h"
