@@ -200,6 +200,7 @@ struct geojson_writer {
           {"car", p.is_car_accessible()},
           {"bike", p.is_bike_accessible()},
           {"foot", p.is_walk_accessible()},
+          {"importance", w_.r_->node_importance_[n]},
           {"bus", p.is_bus_accessible()},
           {"bus_with_penalty", p.is_bus_accessible_with_penalty()},
           {"is_restricted", w_.r_->node_is_restricted_[n]},

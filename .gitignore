@@ -5,3 +5,8 @@
 /.clang-tidy
 /.vs
 /out
+*.pbf
+test/monaco
+test/hamburg
+test/switzerland
+test/germany
