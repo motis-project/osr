@@ -48,12 +48,13 @@ struct fit {
 };
 
 template <Profile P>
-auto find_closest(ways const& w,
-                  lookup const& l,
-                  vec_map<way_idx_t, way_extra_properties> const& way_extra,
-                  vec<way_idx_t> const& component_ways,
-                  vec_map<component_idx_t, std::size_t> const& component_sizes,
-                  std::function<bool(way_extra_properties const&)> const& p) {
+std::optional<way_candidate> find_closest(
+    ways const& w,
+    lookup const& l,
+    vec_map<way_idx_t, way_extra_properties> const& way_extra,
+    vec<way_idx_t> const& component_ways,
+    vec_map<component_idx_t, std::size_t> const& component_sizes,
+    std::function<bool(way_extra_properties const&)> const& p) {
   auto const debug_this = component_ways[0] == 15609;  // TODO: drop - Drop
 
   auto const params = typename P::parameters{};
@@ -135,8 +136,7 @@ auto find_closest(ways const& w,
         w.r_->way_component_[best_fit.best_->way_]);
   }
 
-  // TODO: return - Update return value
-  return -1;
+  return best_fit.best_;
 }
 
 bool contains(vec<way_idx_t> const& v, way_idx_t way_idx) {
@@ -211,11 +211,27 @@ void connect_parking_ways(
       fmt::println("Connecting {} (osm: {}) ({}, {}) ...", way_idx, osm_way,
                    pos.lat(), pos.lng());
 
-      [[maybe_unused]] auto closest_car =
+      auto closest_car =
           find_closest<car>(w, l, way_extra, parking_component, component_sizes,
                             [&](way_extra_properties const& props) {
                               return props.is_car_usable();
                             });
+      auto closest_foot = find_closest<foot<false>>(
+          w, l, way_extra, parking_component, component_sizes,
+          [&](way_extra_properties const& props) {
+            return props.is_foot_usable();
+          });
+      if (closest_car.has_value()) {
+        if (closest_foot.has_value()) {
+          fmt::println("MATCH: {} (osm: {})  ->  {} (osm: {})",
+                       closest_car->way_, w.way_osm_idx_[closest_car->way_],
+                       closest_foot->way_, w.way_osm_idx_[closest_foot->way_]);
+        } else {
+          fmt::println("FAILED: No matching foot way");
+        }
+      } else {
+        fmt::println("FAILED: No matching car way");
+      }
       fmt::println("Closest (car): {} (osm: {}) ({}, {}) ...", way_idx, osm_way,
                    pos.lat(), pos.lng());
     }
