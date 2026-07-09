@@ -1,5 +1,6 @@
 #include "osr/routing/parking_matching.h"
 
+#include <functional>
 #include <optional>
 
 #include "utl/get_or_create.h"
@@ -42,7 +43,8 @@ auto find_closest(ways const& w,
                   lookup const& l,
                   vec<way_idx_t> const& component_ways,
                   vec_map<way_idx_t, way_extra_properties> const& way_extra,
-                  component_idx_t const parking_component) {
+                  component_idx_t const parking_component,
+                  std::function<bool(way_extra_properties const&)> const& p) {
   auto const params = typename P::parameters{};
   auto const bbox = get_bounding_box(w, component_ways);
   auto const center = bbox.centroid();
@@ -80,6 +82,13 @@ auto find_closest(ways const& w,
   l.find(bbox, [&](way_idx_t const way_idx) {
     auto const component = w.r_->way_component_[way_idx];
     if (component == parking_component) {
+      return;
+    }
+    if (!p(way_extra[way_idx])) {
+      if (parking_component == 462) {
+        fmt::println("Not usable: {} (osm: {})", way_idx,
+                     w.way_osm_idx_[way_idx]);
+      }
       return;
     }
     auto created = false;
@@ -227,7 +236,10 @@ void connect_parking_ways(
                    pos.lat(), pos.lng());
 
       [[maybe_unused]] auto closest_car =
-          find_closest<car>(w, l, parking_component, way_extra, component);
+          find_closest<car>(w, l, parking_component, way_extra, component,
+                            [&](way_extra_properties const& props) {
+                              return props.is_car_usable();
+                            });
       fmt::println("Closest (car): {} (osm: {}) ({}, {}) ...", way_idx, osm_way,
                    pos.lat(), pos.lng());
     }
