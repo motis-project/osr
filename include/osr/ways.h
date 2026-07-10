@@ -356,6 +356,17 @@ struct ways {
       distance_t distance_{};
     };
 
+    struct parking_edge {
+      CISTA_COMPARABLE()
+
+      node_idx_t car_left_;
+      node_idx_t car_right_;
+      point car_extra_point_;
+      point foot_extra_point_;
+      node_idx_t foot_left_;
+      node_idx_t foot_right_;
+    };
+
     vec_map<node_idx_t, node_properties> node_properties_;
     vec_map<way_idx_t, way_properties> way_properties_;
 
@@ -375,6 +386,10 @@ struct ways {
     vec<pair<node_idx_t, level_bits_t>> multi_level_elevators_;
 
     vec_map<way_idx_t, component_idx_t> way_component_;
+
+    bitvec<node_idx_t> has_parking_edges_;
+    vec<pair<node_idx_t, parking_edge_idx_t>> node_parking_edges_;
+    vec_map<parking_edge_idx_t, parking_edge> parking_edges_;
   };
 
   cista::wrapped<routing> r_;
