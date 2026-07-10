@@ -264,7 +264,7 @@ void add_alternatives(ways const& w,
     const auto forward_hub_node_idx =
         static_cast<std::uint16_t>(std::distance(osm_nodes.begin(), forward_it));
 
-    if (forward_hub_node_idx + 1 < osm_nodes.size() &&
+    if (forward_hub_node_idx + 1U < osm_nodes.size() &&
         (alt_way != exit_way_idx || !exit_from_hub.is_way_aligned())) {
       way_segment_t alt_seg_forw = {
           .way_idx_ = alt_way,
