@@ -6,7 +6,7 @@
 
 namespace osr {
 
-void connect_parking_ways(ways const&,
+void connect_parking_ways(ways&,
                           lookup const&,
                           vec_map<way_idx_t, way_extra_properties> const&,
                           unsigned n_components);

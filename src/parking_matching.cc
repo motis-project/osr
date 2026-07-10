@@ -167,7 +167,7 @@ vec<way_idx_t> component_ways(ways const& w, way_idx_t const way_idx) {
 }  // namespace
 
 void connect_parking_ways(
-    ways const& w,
+    ways& w,
     lookup const& l,
     vec_map<way_idx_t, way_extra_properties> const& way_extra,
     unsigned const n_components) {
@@ -181,6 +181,13 @@ void connect_parking_ways(
                 "Invalid component index {} (>= {})", component, n_components);
     ++component_sizes[component];
   }
+
+  w.r_->has_parking_edges_.resize(w.n_nodes());
+  auto const add_parking_edge = [&](node_idx_t const node_idx,
+                                    parking_edge_idx_t const parking_edge_idx) {
+    w.r_->node_parking_edges_.emplace_back(node_idx, parking_edge_idx);
+    w.r_->has_parking_edges_.set(node_idx);
+  };
 
   auto const max_isolated_component_size = 20U;  // 100U;
   // Find parking ways with small component sizes
@@ -229,6 +236,26 @@ void connect_parking_ways(
           fmt::println("MATCH: {} (osm: {})  ->  {} (osm: {})",
                        closest_car->way_, w.way_osm_idx_[closest_car->way_],
                        closest_foot->way_, w.way_osm_idx_[closest_foot->way_]);
+
+          auto const parking_edge_idx =
+              parking_edge_idx_t{w.r_->parking_edges_.size()};
+          w.r_->parking_edges_.emplace_back(
+              closest_car->left_.node_, closest_car->right_.node_,
+              point::from_latlng(closest_car->closest_point_on_way_),
+              point::from_latlng(closest_foot->closest_point_on_way_),
+              closest_foot->left_.node_, closest_foot->right_.node_);
+          if (closest_car->left_.valid()) {
+            add_parking_edge(closest_car->left_.node_, parking_edge_idx);
+          }
+          if (closest_car->right_.valid()) {
+            add_parking_edge(closest_car->right_.node_, parking_edge_idx);
+          }
+          if (closest_foot->left_.valid()) {
+            add_parking_edge(closest_foot->left_.node_, parking_edge_idx);
+          }
+          if (closest_foot->right_.valid()) {
+            add_parking_edge(closest_foot->right_.node_, parking_edge_idx);
+          }
         } else {
           fmt::println("FAILED: No matching foot way");
         }
@@ -239,6 +266,7 @@ void connect_parking_ways(
                    pos.lat(), pos.lng());
     }
   }
+  utl::sort(w.r_->node_parking_edges_);
 }
 
 }  // namespace osr

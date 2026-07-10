@@ -684,13 +684,14 @@ void extract(bool const with_platforms,
 
   pt->status("Big Street Neighbors").in_high(w.n_ways()).out_bounds(95, 99);
   w.compute_big_street_neighbors();
-  w.r_->write(out);
 
   pt->status("Build R-Tree").in_high(1).out_bounds(99, 100);
   auto l = lookup{w, out, cista::mmap::protection::WRITE};
   l.build_rtree();
   connect_parking_ways(w, l, *way_extra, static_cast<unsigned>(n_components));
   way_extra.reset();
+
+  w.r_->write(out);
 }
 
 }  // namespace osr
