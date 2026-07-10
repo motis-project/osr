@@ -262,4 +262,44 @@ constexpr float to_seconds_per_meter(speed_limit const l) {
   std::unreachable();
 }
 
+enum highway : std::uint8_t {
+  motorway,
+  trunk,
+  primary,
+  secondary,
+  tertiary,
+  residential,
+  footish,
+  highway_other
+};
+
+constexpr std::string get_highway_name(highway const h) {
+  switch (h) {
+    case motorway: return "motorway";
+    case trunk: return "trunk";
+    case primary: return "primary";
+    case secondary: return "secondary";
+    case tertiary: return "tertiary";
+    case residential: return "residential";
+    case footish: return "footish";
+    default: return "highway_other";
+  }
+}
+
+enum junction : std::uint8_t {
+  roundabout,
+  circular,
+  jughandle,
+  junction_none
+};
+
+constexpr std::string get_junction_name(junction const j) {
+  switch (j) {
+    case roundabout: return "roundabout";
+    case circular: return "circular";
+    case jughandle: return "jughandle";
+    default: return "junction_none";
+  }
+}
+
 }  // namespace osr

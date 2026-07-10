@@ -1,0 +1,3860 @@
+[
+  {
+    "name": "intersection_right_turn",
+    "osm_file": "komponistenviertel-darmstadt-pbf.osm.pbf",
+    "start": {
+      "lat": 4.9883621E1,
+      "lng": 8.677029E0,
+      "lvl": 0
+    },
+    "end": {
+      "lat": 4.9885453E1,
+      "lng": 8.67891E0,
+      "lvl": 0
+    },
+    "profile": "foot",
+    "direction": "forward",
+    "routing_algo": "dijkstra",
+    "expected_actions": [
+      {
+        "type": "none"
+      },
+      {
+        "type": "turn",
+        "direction": "right"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "destination",
+        "direction": "invalid"
+      }
+    ]
+  },
+  {
+    "name": "intersection_left_turn",
+    "osm_file": "komponistenviertel-darmstadt-pbf.osm.pbf",
+    "start": {
+      "lat": 4.988452E1,
+      "lng": 8.675994E0,
+      "lvl": 0
+    },
+    "end": {
+      "lat": 4.9884308E1,
+      "lng": 8.674567E0,
+      "lvl": 0
+    },
+    "profile": "foot",
+    "direction": "forward",
+    "routing_algo": "dijkstra",
+    "expected_actions": [
+      {
+        "type": "none"
+      },
+      {
+        "type": "turn",
+        "direction": "left"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "destination",
+        "direction": "invalid"
+      }
+    ]
+  },
+  {
+    "name": "intersection_continue",
+    "osm_file": "komponistenviertel-darmstadt-pbf.osm.pbf",
+    "start": {
+      "lat": 4.9883621E1,
+      "lng": 8.677029E0,
+      "lvl": 0
+    },
+    "end": {
+      "lat": 4.9884755E1,
+      "lng": 8.675667E0,
+      "lvl": 0
+    },
+    "profile": "foot",
+    "direction": "forward",
+    "routing_algo": "dijkstra",
+    "expected_actions": [
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "destination",
+        "direction": "invalid"
+      }
+    ]
+  },
+  {
+    "name": "intersection_composition_1",
+    "osm_file": "komponistenviertel-darmstadt-pbf.osm.pbf",
+    "start": {
+      "lat": 4.9882061E1,
+      "lng": 8.679368E0,
+      "lvl": 0
+    },
+    "end": {
+      "lat": 4.9883765E1,
+      "lng": 8.679143E0,
+      "lvl": 0
+    },
+    "profile": "car",
+    "direction": "forward",
+    "routing_algo": "dijkstra",
+    "expected_actions": [
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "turn",
+        "direction": "left"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "turn",
+        "direction": "left"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "turn",
+        "direction": "left"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "destination",
+        "direction": "invalid"
+      }
+    ]
+  },
+  {
+    "name": "intersection_composition_2",
+    "osm_file": "komponistenviertel-darmstadt-pbf.osm.pbf",
+    "start": {
+      "lat": 4.9880222E1,
+      "lng": 8.67336E0,
+      "lvl": 0
+    },
+    "end": {
+      "lat": 4.9886988E1,
+      "lng": 8.677882E0,
+      "lvl": 0
+    },
+    "profile": "car",
+    "direction": "forward",
+    "routing_algo": "dijkstra",
+    "expected_actions": [
+      {
+        "type": "none"
+      },
+      {
+        "type": "turn",
+        "direction": "left"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "turn",
+        "direction": "right"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "turn",
+        "direction": "left"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "destination",
+        "direction": "invalid"
+      }
+    ]
+  },
+  {
+    "name": "turning_at_crossing_islands_1",
+    "osm_file": "spessartring-fiedlerweg-darmstadt-pbf.osm.pbf",
+    "start": {
+      "lat": 4.9879340086605566E1,
+      "lng": 8.670534089302151E0,
+      "lvl": 0
+    },
+    "end": {
+      "lat": 4.987437815260495E1,
+      "lng": 8.669649757714751E0,
+      "lvl": 0
+    },
+    "profile": "car",
+    "direction": "forward",
+    "routing_algo": "dijkstra",
+    "expected_actions": [
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "turn",
+        "direction": "left"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "turn",
+        "direction": "right"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "destination",
+        "direction": "invalid"
+      }
+    ]
+  },
+  {
+    "name": "turning_at_crossing_islands_2",
+    "osm_file": "spessartring-fiedlerweg-darmstadt-pbf.osm.pbf",
+    "start": {
+      "lat": 4.9879340086605566E1,
+      "lng": 8.670534089302151E0,
+      "lvl": 0
+    },
+    "end": {
+      "lat": 4.987560632642536E1,
+      "lng": 8.671821524609669E0,
+      "lvl": 0
+    },
+    "profile": "car",
+    "direction": "forward",
+    "routing_algo": "dijkstra",
+    "expected_actions": [
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "turn",
+        "direction": "left"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "turn",
+        "direction": "left"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "destination",
+        "direction": "invalid"
+      }
+    ]
+  },
+  {
+    "name": "turning_at_crossing_islands_3",
+    "osm_file": "spessartring-fiedlerweg-darmstadt-pbf.osm.pbf",
+    "start": {
+      "lat": 4.9877715328501154E1,
+      "lng": 8.67073281287631E0,
+      "lvl": 0
+    },
+    "end": {
+      "lat": 4.987669864589475E1,
+      "lng": 8.671015668239875E0,
+      "lvl": 0
+    },
+    "profile": "car",
+    "direction": "forward",
+    "routing_algo": "dijkstra",
+    "expected_actions": [
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "turn",
+        "direction": "left"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "destination",
+        "direction": "invalid"
+      }
+    ]
+  },
+  {
+    "name": "intersection_with_turn_lanes_1",
+    "osm_file": "darmstadt-schloß-pbf.osm.pbf",
+    "start": {
+      "lat": 4.9873222391166394E1,
+      "lng": 8.657688853205684E0,
+      "lvl": 0
+    },
+    "end": {
+      "lat": 4.987455729158083E1,
+      "lng": 8.65503993885622E0,
+      "lvl": 0
+    },
+    "profile": "car",
+    "direction": "forward",
+    "routing_algo": "dijkstra",
+    "expected_actions": [
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "turn",
+        "direction": "slight_left"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "destination",
+        "direction": "invalid"
+      }
+    ]
+  },
+  {
+    "name": "intersection_with_turn_lanes_2",
+    "osm_file": "darmstadt-schloß-pbf.osm.pbf",
+    "start": {
+      "lat": 4.9873222391166394E1,
+      "lng": 8.657688853205684E0,
+      "lvl": 0
+    },
+    "end": {
+      "lat": 4.9874871763009025E1,
+      "lng": 8.657660442236391E0,
+      "lvl": 0
+    },
+    "profile": "car",
+    "direction": "forward",
+    "routing_algo": "dijkstra",
+    "expected_actions": [
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "stay",
+        "direction": "right"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "destination",
+        "direction": "invalid"
+      }
+    ]
+  },
+  {
+    "name": "intersection_with_turn_lanes_3",
+    "osm_file": "darmstadt-schloß-pbf.osm.pbf",
+    "start": {
+      "lat": 4.987239907237583E1,
+      "lng": 8.657115581934875E0,
+      "lvl": 0
+    },
+    "end": {
+      "lat": 4.9873198674651206E1,
+      "lng": 8.658650183543898E0,
+      "lvl": 0
+    },
+    "profile": "car",
+    "direction": "forward",
+    "routing_algo": "dijkstra",
+    "expected_actions": [
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "stay",
+        "direction": "right"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "destination",
+        "direction": "invalid"
+      }
+    ]
+  },
+  {
+    "name": "right_hand_roundabout_1",
+    "osm_file": "biarritz-roundabouts.osm.pbf",
+    "start": {
+      "lat": 4.34646489450472E1,
+      "lng": -1.500705396949627E0,
+      "lvl": 0
+    },
+    "end": {
+      "lat": 4.346430727226817E1,
+      "lng": -1.4990421475397682E0,
+      "lvl": 0
+    },
+    "profile": "car",
+    "direction": "forward",
+    "routing_algo": "dijkstra",
+    "expected_actions": [
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "enter_roundabout"
+      },
+      {
+        "type": "exit_roundabout",
+        "exit": 1
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "destination",
+        "direction": "invalid"
+      }
+    ]
+  },
+  {
+    "name": "right_hand_roundabout_2",
+    "osm_file": "biarritz-roundabouts.osm.pbf",
+    "start": {
+      "lat": 4.346470404546079E1,
+      "lng": -1.5005710994199433E0,
+      "lvl": 0
+    },
+    "end": {
+      "lat": 4.346615038341835E1,
+      "lng": -1.4989085541240286E0,
+      "lvl": 0
+    },
+    "profile": "car",
+    "direction": "forward",
+    "routing_algo": "dijkstra",
+    "expected_actions": [
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "enter_roundabout"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "exit_roundabout",
+        "exit": 2
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "destination",
+        "direction": "invalid"
+      }
+    ]
+  },
+  {
+    "name": "right_hand_roundabout_3",
+    "osm_file": "biarritz-roundabouts.osm.pbf",
+    "start": {
+      "lat": 4.346585363422E1,
+      "lng": -1.4990140852794411E0,
+      "lvl": 0
+    },
+    "end": {
+      "lat": 4.3467167907318725E1,
+      "lng": -1.4974530267344903E0,
+      "lvl": 0
+    },
+    "profile": "car",
+    "direction": "forward",
+    "routing_algo": "dijkstra",
+    "expected_actions": [
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "enter_roundabout"
+      },
+      {
+        "type": "exit_roundabout",
+        "exit": 1
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "destination",
+        "direction": "invalid"
+      }
+    ]
+  },
+  {
+    "name": "right_hand_roundabout_4",
+    "osm_file": "biarritz-roundabouts.osm.pbf",
+    "start": {
+      "lat": 4.346585363422E1,
+      "lng": -1.4990140852794411E0,
+      "lvl": 0
+    },
+    "end": {
+      "lat": 4.346832448276325E1,
+      "lng": -1.496589681324906E0,
+      "lvl": 0
+    },
+    "profile": "car",
+    "direction": "forward",
+    "routing_algo": "dijkstra",
+    "expected_actions": [
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "enter_roundabout"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "exit_roundabout",
+        "exit": 2
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "destination",
+        "direction": "invalid"
+      }
+    ]
+  },
+  {
+    "name": "right_hand_roundabout_5",
+    "osm_file": "biarritz-roundabouts.osm.pbf",
+    "start": {
+      "lat": 4.346706617279216E1,
+      "lng": -1.4985351188039715E0,
+      "lvl": 0
+    },
+    "end": {
+      "lat": 4.346859985122825E1,
+      "lng": -1.4975925480058834E0,
+      "lvl": 0
+    },
+    "profile": "car",
+    "direction": "forward",
+    "routing_algo": "dijkstra",
+    "expected_actions": [
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "enter_roundabout"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "exit_roundabout",
+        "exit": 3
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "destination",
+        "direction": "invalid"
+      }
+    ]
+  },
+  {
+    "name": "right_hand_roundabout_6",
+    "osm_file": "biarritz-roundabouts.osm.pbf",
+    "start": {
+      "lat": 4.346706617279216E1,
+      "lng": -1.4985351188039715E0,
+      "lvl": 0
+    },
+    "end": {
+      "lat": 4.3468176797315294E1,
+      "lng": -1.4982018514449464E0,
+      "lvl": 0
+    },
+    "profile": "car",
+    "direction": "forward",
+    "routing_algo": "dijkstra",
+    "expected_actions": [
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "enter_roundabout"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "exit_roundabout",
+        "exit": 4
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "destination",
+        "direction": "invalid"
+      }
+    ]
+  },
+  {
+    "name": "right_hand_roundabout_7",
+    "osm_file": "biarritz-roundabouts.osm.pbf",
+    "start": {
+      "lat": 4.346630474302367E1,
+      "lng": -1.4962553803228502E0,
+      "lvl": 0
+    },
+    "end": {
+      "lat": 4.3466354944983266E1,
+      "lng": -1.493485413059943E0,
+      "lvl": 0
+    },
+    "profile": "car",
+    "direction": "forward",
+    "routing_algo": "dijkstra",
+    "expected_actions": [
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "enter_roundabout"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "exit_roundabout",
+        "exit": 2
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "destination",
+        "direction": "invalid"
+      }
+    ]
+  },
+  {
+    "name": "right_hand_roundabout_8",
+    "osm_file": "biarritz-roundabouts.osm.pbf",
+    "start": {
+      "lat": 4.346630474302367E1,
+      "lng": -1.4962553803228502E0,
+      "lvl": 0
+    },
+    "end": {
+      "lat": 4.3464433743023335E1,
+      "lng": -1.4954871908480527E0,
+      "lvl": 0
+    },
+    "profile": "car",
+    "direction": "forward",
+    "routing_algo": "dijkstra",
+    "expected_actions": [
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "enter_roundabout"
+      },
+      {
+        "type": "exit_roundabout",
+        "exit": 1
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "destination",
+        "direction": "invalid"
+      }
+    ]
+  },
+  {
+    "name": "right_hand_roundabout_9",
+    "osm_file": "biarritz-roundabouts.osm.pbf",
+    "start": {
+      "lat": 4.346630474302367E1,
+      "lng": -1.4962553803228502E0,
+      "lvl": 0
+    },
+    "end": {
+      "lat": 4.346700961219898E1,
+      "lng": -1.4944559790516792E0,
+      "lvl": 0
+    },
+    "profile": "car",
+    "direction": "forward",
+    "routing_algo": "dijkstra",
+    "expected_actions": [
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "enter_roundabout"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "exit_roundabout",
+        "exit": 3
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "destination",
+        "direction": "invalid"
+      }
+    ]
+  },
+  {
+    "name": "right_hand_roundabout_10",
+    "osm_file": "biarritz-roundabouts.osm.pbf",
+    "start": {
+      "lat": 4.346374948220381E1,
+      "lng": -1.4956169045163392E0,
+      "lvl": 0
+    },
+    "end": {
+      "lat": 4.346335939417662E1,
+      "lng": -1.4955744422604766E0,
+      "lvl": 0
+    },
+    "profile": "car",
+    "direction": "forward",
+    "routing_algo": "dijkstra",
+    "expected_actions": [
+      {
+        "type": "none"
+      },
+      {
+        "type": "enter_roundabout"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "exit_roundabout",
+        "exit": 4
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "destination",
+        "direction": "invalid"
+      }
+    ]
+  },
+  {
+    "name": "left_hand_roundabout_1",
+    "osm_file": "milton-keynes-roundabouts.osm.pbf",
+    "start": {
+      "lat": 5.2039354635275714E1,
+      "lng": -7.772930495326875E-1,
+      "lvl": 0
+    },
+    "end": {
+      "lat": 5.2041241498726606E1,
+      "lng": -7.75970513089419E-1,
+      "lvl": 0
+    },
+    "profile": "car",
+    "direction": "forward",
+    "routing_algo": "dijkstra",
+    "expected_actions": [
+      {
+        "type": "none"
+      },
+      {
+        "type": "enter_roundabout"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "exit_roundabout",
+        "exit": 1
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "destination",
+        "direction": "invalid"
+      }
+    ]
+  },
+  {
+    "name": "left_hand_roundabout_2",
+    "osm_file": "milton-keynes-roundabouts.osm.pbf",
+    "start": {
+      "lat": 5.2039354635275714E1,
+      "lng": -7.772930495326875E-1,
+      "lvl": 0
+    },
+    "end": {
+      "lat": 5.2040781024380635E1,
+      "lng": -7.723610680176307E-1,
+      "lvl": 0
+    },
+    "profile": "car",
+    "direction": "forward",
+    "routing_algo": "dijkstra",
+    "expected_actions": [
+      {
+        "type": "none"
+      },
+      {
+        "type": "enter_roundabout"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "exit_roundabout",
+        "exit": 2
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "destination",
+        "direction": "invalid"
+      }
+    ]
+  },
+  {
+    "name": "left_hand_roundabout_3",
+    "osm_file": "milton-keynes-roundabouts.osm.pbf",
+    "start": {
+      "lat": 5.2039354635275714E1,
+      "lng": -7.772930495326875E-1,
+      "lvl": 0
+    },
+    "end": {
+      "lat": 5.203890113249673E1,
+      "lng": -7.73495153167147E-1,
+      "lvl": 0
+    },
+    "profile": "car",
+    "direction": "forward",
+    "routing_algo": "dijkstra",
+    "expected_actions": [
+      {
+        "type": "none"
+      },
+      {
+        "type": "enter_roundabout"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "exit_roundabout",
+        "exit": 3
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "destination",
+        "direction": "invalid"
+      }
+    ]
+  },
+  {
+    "name": "left_hand_roundabout_4",
+    "osm_file": "milton-keynes-roundabouts.osm.pbf",
+    "start": {
+      "lat": 5.2039354635275714E1,
+      "lng": -7.772930495326875E-1,
+      "lvl": 0
+    },
+    "end": {
+      "lat": 5.2039493532197355E1,
+      "lng": -7.7593470859685E-1,
+      "lvl": 0
+    },
+    "profile": "car",
+    "direction": "forward",
+    "routing_algo": "dijkstra",
+    "expected_actions": [
+      {
+        "type": "none"
+      },
+      {
+        "type": "enter_roundabout"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "exit_roundabout",
+        "exit": 4
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "destination",
+        "direction": "invalid"
+      }
+    ]
+  },
+  {
+    "name": "left_hand_roundabout_5",
+    "osm_file": "milton-keynes-roundabouts.osm.pbf",
+    "start": {
+      "lat": 5.204037336020693E1,
+      "lng": -7.740829714938968E-1,
+      "lvl": 0
+    },
+    "end": {
+      "lat": 5.204300520333831E1,
+      "lng": -7.669083325009467E-1,
+      "lvl": 0
+    },
+    "profile": "car",
+    "direction": "forward",
+    "routing_algo": "dijkstra",
+    "expected_actions": [
+      {
+        "type": "none"
+      },
+      {
+        "type": "enter_roundabout"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "exit_roundabout",
+        "exit": 2
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "destination",
+        "direction": "invalid"
+      }
+    ]
+  },
+  {
+    "name": "left_hand_roundabout_6",
+    "osm_file": "milton-keynes-roundabouts.osm.pbf",
+    "start": {
+      "lat": 5.204038475959783E1,
+      "lng": -7.73959673387111E-1,
+      "lvl": 0
+    },
+    "end": {
+      "lat": 5.204254352110402E1,
+      "lng": -7.69589585974046E-1,
+      "lvl": 0
+    },
+    "profile": "car",
+    "direction": "forward",
+    "routing_algo": "dijkstra",
+    "expected_actions": [
+      {
+        "type": "none"
+      },
+      {
+        "type": "enter_roundabout"
+      },
+      {
+        "type": "exit_roundabout",
+        "exit": 1
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "destination",
+        "direction": "invalid"
+      }
+    ]
+  },
+  {
+    "name": "left_hand_roundabout_7",
+    "osm_file": "milton-keynes-roundabouts.osm.pbf",
+    "start": {
+      "lat": 5.203836485381317E1,
+      "lng": -7.797354417295708E-1,
+      "lvl": 0
+    },
+    "end": {
+      "lat": 5.2036357996390535E1,
+      "lng": -7.847691437542608E-1,
+      "lvl": 0
+    },
+    "profile": "car",
+    "direction": "forward",
+    "routing_algo": "dijkstra",
+    "expected_actions": [
+      {
+        "type": "none"
+      },
+      {
+        "type": "enter_roundabout"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "exit_roundabout",
+        "exit": 2
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "destination",
+        "direction": "invalid"
+      }
+    ]
+  },
+  {
+    "name": "left_hand_roundabout_8",
+    "osm_file": "milton-keynes-roundabouts.osm.pbf",
+    "start": {
+      "lat": 5.203836485381317E1,
+      "lng": -7.797354417295708E-1,
+      "lvl": 0
+    },
+    "end": {
+      "lat": 5.203870177607047E1,
+      "lng": -7.844374519932558E-1,
+      "lvl": 0
+    },
+    "profile": "car",
+    "direction": "forward",
+    "routing_algo": "dijkstra",
+    "expected_actions": [
+      {
+        "type": "none"
+      },
+      {
+        "type": "enter_roundabout"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "exit_roundabout",
+        "exit": 3
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "destination",
+        "direction": "invalid"
+      }
+    ]
+  },
+  {
+    "name": "left_hand_roundabout_9",
+    "osm_file": "milton-keynes-roundabouts.osm.pbf",
+    "start": {
+      "lat": 5.203836485381317E1,
+      "lng": -7.797354417295708E-1,
+      "lvl": 0
+    },
+    "end": {
+      "lat": 5.203611157903134E1,
+      "lng": -7.794884245121523E-1,
+      "lvl": 0
+    },
+    "profile": "car",
+    "direction": "forward",
+    "routing_algo": "dijkstra",
+    "expected_actions": [
+      {
+        "type": "none"
+      },
+      {
+        "type": "enter_roundabout"
+      },
+      {
+        "type": "exit_roundabout",
+        "exit": 1
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "destination",
+        "direction": "invalid"
+      }
+    ]
+  },
+  {
+    "name": "motorway_through",
+    "osm_file": "frankfurter-kreuz.osm.pbf",
+    "start": {
+      "lat": 5.0032259584389806E1,
+      "lng": 8.594255760472038E0,
+      "lvl": 0
+    },
+    "end": {
+      "lat": 5.0066827716208735E1,
+      "lng": 8.611192523278106E0,
+      "lvl": 0
+    },
+    "profile": "car",
+    "direction": "forward",
+    "routing_algo": "dijkstra",
+    "expected_actions": [
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "destination",
+        "direction": "invalid"
+      }
+    ]
+  },
+  {
+    "name": "motorway_ramp_off_1",
+    "osm_file": "frankfurter-kreuz.osm.pbf",
+    "start": {
+      "lat": 5.0032259584389806E1,
+      "lng": 8.594255760472038E0,
+      "lvl": 0
+    },
+    "end": {
+      "lat": 5.005214683967307E1,
+      "lng": 8.615370911321406E0,
+      "lvl": 0
+    },
+    "profile": "car",
+    "direction": "forward",
+    "routing_algo": "dijkstra",
+    "expected_actions": [
+      {
+        "type": "none"
+      },
+      {
+        "type": "ramp_off",
+        "direction": "right"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "stay",
+        "direction": "right"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "destination",
+        "direction": "invalid"
+      }
+    ]
+  },
+  {
+    "name": "motorway_ramp_off_2",
+    "osm_file": "frankfurter-kreuz.osm.pbf",
+    "start": {
+      "lat": 5.0032259584389806E1,
+      "lng": 8.594255760472038E0,
+      "lvl": 0
+    },
+    "end": {
+      "lat": 5.0053401543938634E1,
+      "lng": 8.604829706814456E0,
+      "lvl": 0
+    },
+    "profile": "car",
+    "direction": "forward",
+    "routing_algo": "dijkstra",
+    "expected_actions": [
+      {
+        "type": "none"
+      },
+      {
+        "type": "ramp_off",
+        "direction": "right"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "stay",
+        "direction": "left"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "destination",
+        "direction": "invalid"
+      }
+    ]
+  },
+  {
+    "name": "motorway_ramp_off_and_on",
+    "osm_file": "frankfurter-kreuz.osm.pbf",
+    "start": {
+      "lat": 5.0032259584389806E1,
+      "lng": 8.594255760472038E0,
+      "lvl": 0
+    },
+    "end": {
+      "lat": 5.005324599915372E1,
+      "lng": 8.573831432075764E0,
+      "lvl": 0
+    },
+    "profile": "car",
+    "direction": "forward",
+    "routing_algo": "dijkstra",
+    "expected_actions": [
+      {
+        "type": "none"
+      },
+      {
+        "type": "ramp_off",
+        "direction": "right"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "stay",
+        "direction": "left"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "stay",
+        "direction": "right"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "stay",
+        "direction": "left"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "stay",
+        "direction": "left"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "ramp_on",
+        "direction": "left"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "destination",
+        "direction": "invalid"
+      }
+    ]
+  },
+  {
+    "name": "motorway_ramp_on_1",
+    "osm_file": "frankfurter-kreuz.osm.pbf",
+    "start": {
+      "lat": 5.005791941387463E1,
+      "lng": 8.597273495597165E0,
+      "lvl": 0
+    },
+    "end": {
+      "lat": 5.0040185174932475E1,
+      "lng": 8.597645010598825E0,
+      "lvl": 0
+    },
+    "profile": "car",
+    "direction": "forward",
+    "routing_algo": "dijkstra",
+    "expected_actions": [
+      {
+        "type": "none"
+      },
+      {
+        "type": "ramp_off",
+        "direction": "right"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "ramp_on",
+        "direction": "left"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "destination",
+        "direction": "invalid"
+      }
+    ]
+  },
+  {
+    "name": "motorway_ramp_on_2",
+    "osm_file": "frankfurter-kreuz.osm.pbf",
+    "start": {
+      "lat": 5.005791941387463E1,
+      "lng": 8.597273495597165E0,
+      "lvl": 0
+    },
+    "end": {
+      "lat": 5.006094038408136E1,
+      "lng": 8.60827006018394E0,
+      "lvl": 0
+    },
+    "profile": "car",
+    "direction": "forward",
+    "routing_algo": "dijkstra",
+    "expected_actions": [
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "ramp_off",
+        "direction": "right"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "ramp_on",
+        "direction": "left"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "destination",
+        "direction": "invalid"
+      }
+    ]
+  },
+  {
+    "name": "motorway_through_2",
+    "osm_file": "frankfurter-kreuz.osm.pbf",
+    "start": {
+      "lat": 5.005791941387463E1,
+      "lng": 8.597273495597165E0,
+      "lvl": 0
+    },
+    "end": {
+      "lat": 5.005650844189552E1,
+      "lng": 8.612083847258845E0,
+      "lvl": 0
+    },
+    "profile": "car",
+    "direction": "forward",
+    "routing_algo": "dijkstra",
+    "expected_actions": [
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "destination",
+        "direction": "invalid"
+      }
+    ]
+  },
+  {
+    "name": "motorway_through_on_off_with_roundabout",
+    "osm_file": "frankfurter-kreuz.osm.pbf",
+    "start": {
+      "lat": 5.005982174092185E1,
+      "lng": 8.607222060350068E0,
+      "lvl": 0
+    },
+    "end": {
+      "lat": 5.005773535792088E1,
+      "lng": 8.60029967017067E0,
+      "lvl": 0
+    },
+    "profile": "car",
+    "direction": "forward",
+    "routing_algo": "dijkstra",
+    "expected_actions": [
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "stay",
+        "direction": "right"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "stay",
+        "direction": "right"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "stay",
+        "direction": "right"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "stay",
+        "direction": "left"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "enter_roundabout"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "exit_roundabout",
+        "exit": 2
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "ramp_on",
+        "direction": "left"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "destination",
+        "direction": "invalid"
+      }
+    ]
+  },
+  {
+    "name": "motorway_off_on_2",
+    "osm_file": "frankfurter-kreuz.osm.pbf",
+    "start": {
+      "lat": 5.005375527478981E1,
+      "lng": 8.584174924930267E0,
+      "lvl": 0
+    },
+    "end": {
+      "lat": 5.004362118438965E1,
+      "lng": 8.599316744996656E0,
+      "lvl": 0
+    },
+    "profile": "car",
+    "direction": "forward",
+    "routing_algo": "dijkstra",
+    "expected_actions": [
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "ramp_off",
+        "direction": "right"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "stay",
+        "direction": "right"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "ramp_on",
+        "direction": "left"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "destination",
+        "direction": "invalid"
+      }
+    ]
+  },
+  {
+    "name": "motorway_u_turn",
+    "osm_file": "frankfurter-kreuz.osm.pbf",
+    "start": {
+      "lat": 5.004744288897024E1,
+      "lng": 8.601198624659474E0,
+      "lvl": 0
+    },
+    "end": {
+      "lat": 5.003679995654403E1,
+      "lng": 8.596481031787249E0,
+      "lvl": 0
+    },
+    "profile": "car",
+    "direction": "forward",
+    "routing_algo": "dijkstra",
+    "expected_actions": [
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "ramp_off",
+        "direction": "right"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "stay",
+        "direction": "left"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "stay",
+        "direction": "right"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "stay",
+        "direction": "right"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "stay",
+        "direction": "left"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "destination",
+        "direction": "invalid"
+      }
+    ]
+  },
+  {
+    "name": "stairs_left",
+    "osm_file": "komponistenviertel-darmstadt-pbf.osm.pbf",
+    "start": {
+      "lat": 4.988533175489982E1,
+      "lng": 8.683276613884857E0,
+      "lvl": 0
+    },
+    "end": {
+      "lat": 4.988439095168064E1,
+      "lng": 8.683106421215285E0,
+      "lvl": 0
+    },
+    "profile": "foot",
+    "direction": "forward",
+    "routing_algo": "dijkstra",
+    "expected_actions": [
+      {
+        "type": "none"
+      },
+      {
+        "type": "stairs",
+        "direction": "up",
+        "relative_direction": "left"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "destination",
+        "direction": "invalid"
+      }
+    ]
+  },
+  {
+    "name": "stairs_right",
+    "osm_file": "komponistenviertel-darmstadt-pbf.osm.pbf",
+    "start": {
+      "lat": 4.988459264152897E1,
+      "lng": 8.681981351700415E0,
+      "lvl": 0
+    },
+    "end": {
+      "lat": 4.988439095168064E1,
+      "lng": 8.683106421215285E0,
+      "lvl": 0
+    },
+    "profile": "foot",
+    "direction": "forward",
+    "routing_algo": "dijkstra",
+    "expected_actions": [
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "stairs",
+        "direction": "up",
+        "relative_direction": "right"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "destination",
+        "direction": "invalid"
+      }
+    ]
+  },
+  {
+    "name": "stairs_down",
+    "osm_file": "komponistenviertel-darmstadt-pbf.osm.pbf",
+    "start": {
+      "lat": 4.9884459199029465E1,
+      "lng": 8.683079285543727E0,
+      "lvl": 0
+    },
+    "end": {
+      "lat": 4.988526918808148E1,
+      "lng": 8.683190993508731E0,
+      "lvl": 0
+    },
+    "profile": "foot",
+    "direction": "forward",
+    "routing_algo": "dijkstra",
+    "expected_actions": [
+      {
+        "type": "none"
+      },
+      {
+        "type": "stairs",
+        "direction": "down",
+        "relative_direction": "straight"
+      },
+      {
+        "type": "turn",
+        "direction": "right"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "destination",
+        "direction": "invalid"
+      }
+    ]
+  },
+  {
+    "name": "stairs_down_and_up",
+    "osm_file": "komponistenviertel-darmstadt-pbf.osm.pbf",
+    "start": {
+      "lat": 4.9884459199029465E1,
+      "lng": 8.683079285543727E0,
+      "lvl": 0
+    },
+    "end": {
+      "lat": 4.988447930041048E1,
+      "lng": 8.682549015845979E0,
+      "lvl": 0
+    },
+    "profile": "foot",
+    "direction": "forward",
+    "routing_algo": "dijkstra",
+    "expected_actions": [
+      {
+        "type": "none"
+      },
+      {
+        "type": "stairs",
+        "direction": "down",
+        "relative_direction": "straight"
+      },
+      {
+        "type": "turn",
+        "direction": "left"
+      },
+      {
+        "type": "stairs",
+        "direction": "up",
+        "relative_direction": "left"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "destination",
+        "direction": "invalid"
+      }
+    ]
+  },
+  {
+    "name": "street_crossing_elbchausee",
+    "osm_file": "hamburg.osm.pbf",
+    "start": {
+      "lat": 5.354926853152634E1,
+      "lng": 9.851434038791496E0,
+      "lvl": 0
+    },
+    "end": {
+      "lat": 5.354945176982216E1,
+      "lng": 9.85129625321474E0,
+      "lvl": 0
+    },
+    "profile": "foot",
+    "direction": "forward",
+    "routing_algo": "dijkstra",
+    "expected_actions": [
+      {
+        "type": "none"
+      },
+      {
+        "type": "turn",
+        "direction": "left"
+      },
+      {
+        "type": "crossing",
+        "street": "Elbchaussee"
+      },
+      {
+        "type": "turn",
+        "direction": "left"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "crossing",
+        "street": "Elbschloßstraße"
+      },
+      {
+        "type": "stairs",
+        "direction": "up",
+        "relative_direction": "left"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "destination",
+        "direction": "invalid"
+      }
+    ]
+  },
+  {
+    "name": "street_crossing_margarete_mrosek",
+    "osm_file": "hamburg.osm.pbf",
+    "start": {
+      "lat": 5.348542436090705E1,
+      "lng": 1.0158613381862892E1,
+      "lvl": 0
+    },
+    "end": {
+      "lat": 5.348528766950329E1,
+      "lng": 1.0158048845331647E1,
+      "lvl": 0
+    },
+    "profile": "foot",
+    "direction": "forward",
+    "routing_algo": "dijkstra",
+    "expected_actions": [
+      {
+        "type": "none"
+      },
+      {
+        "type": "crossing",
+        "street": "Margarete-Mrosek-Bogen"
+      },
+      {
+        "type": "turn",
+        "direction": "right"
+      },
+      {
+        "type": "turn",
+        "direction": "left"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "destination",
+        "direction": "invalid"
+      }
+    ]
+  },
+  {
+    "name": "crossing_two_streets",
+    "osm_file": "hamburg.osm.pbf",
+    "start": {
+      "lat": 5.357453883137305E1,
+      "lng": 9.975295334461606E0,
+      "lvl": 0
+    },
+    "end": {
+      "lat": 5.357423557112031E1,
+      "lng": 9.97678766010128E0,
+      "lvl": 0
+    },
+    "profile": "foot",
+    "direction": "forward",
+    "routing_algo": "dijkstra",
+    "expected_actions": [
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "crossing",
+        "street": "Gustav-Falke-Straße"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "turn",
+        "direction": "right"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "crossing",
+        "street": "Helene-Lange-Straße"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "turn",
+        "direction": "left"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "destination",
+        "direction": "invalid"
+      }
+    ]
+  },
+  {
+    "name": "crossing_seperated_street",
+    "osm_file": "hamburg.osm.pbf",
+    "start": {
+      "lat": 5.358082827090095E1,
+      "lng": 9.946933387458444E0,
+      "lvl": 0
+    },
+    "end": {
+      "lat": 5.3580722911095506E1,
+      "lng": 9.94754014675354E0,
+      "lvl": 0
+    },
+    "profile": "foot",
+    "direction": "forward",
+    "routing_algo": "dijkstra",
+    "expected_actions": [
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "crossing",
+        "street": "Methfesselstraße"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "destination",
+        "direction": "invalid"
+      }
+    ]
+  },
+  {
+    "name": "crossing_grevenweg_1",
+    "osm_file": "hamburg.osm.pbf",
+    "start": {
+      "lat": 5.355532025058787E1,
+      "lng": 1.0040549876621697E1,
+      "lvl": 0
+    },
+    "end": {
+      "lat": 5.355536300039128E1,
+      "lng": 1.0041125323237653E1,
+      "lvl": 0
+    },
+    "profile": "foot",
+    "direction": "forward",
+    "routing_algo": "dijkstra",
+    "expected_actions": [
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "crossing",
+        "street": "Grevenweg"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "destination",
+        "direction": "invalid"
+      }
+    ]
+  },
+  {
+    "name": "crossing_grevenweg_2",
+    "osm_file": "hamburg.osm.pbf",
+    "start": {
+      "lat": 5.3555346282446635E1,
+      "lng": 1.0040344299203184E1,
+      "lvl": 0
+    },
+    "end": {
+      "lat": 5.355536300039128E1,
+      "lng": 1.0041125323237653E1,
+      "lvl": 0
+    },
+    "profile": "foot",
+    "direction": "forward",
+    "routing_algo": "dijkstra",
+    "expected_actions": [
+      {
+        "type": "none"
+      },
+      {
+        "type": "turn",
+        "direction": "left"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "crossing",
+        "street": "Grevenweg"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "destination",
+        "direction": "invalid"
+      }
+    ]
+  },
+  {
+    "name": "crossing_grevenweg_3",
+    "osm_file": "hamburg.osm.pbf",
+    "start": {
+      "lat": 5.3555346282446635E1,
+      "lng": 1.0040344299203184E1,
+      "lvl": 0
+    },
+    "end": {
+      "lat": 5.3555322385464706E1,
+      "lng": 1.0040759455062217E1,
+      "lvl": 0
+    },
+    "profile": "foot",
+    "direction": "forward",
+    "routing_algo": "dijkstra",
+    "expected_actions": [
+      {
+        "type": "none"
+      },
+      {
+        "type": "turn",
+        "direction": "left"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "crossing",
+        "street": "Grevenweg"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "destination",
+        "direction": "invalid"
+      }
+    ]
+  },
+  {
+    "name": "crossing_grevenweg_4",
+    "osm_file": "hamburg.osm.pbf",
+    "start": {
+      "lat": 5.355532135066002E1,
+      "lng": 1.0040550447383566E1,
+      "lvl": 0
+    },
+    "end": {
+      "lat": 5.3555341601387425E1,
+      "lng": 1.0040846537930436E1,
+      "lvl": 0
+    },
+    "profile": "foot",
+    "direction": "forward",
+    "routing_algo": "dijkstra",
+    "expected_actions": [
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "crossing",
+        "street": "Grevenweg"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "destination",
+        "direction": "invalid"
+      }
+    ]
+  },
+  {
+    "name": "composite_u_turn_1",
+    "osm_file": "hamburg.osm.pbf",
+    "start": {
+      "lat": 5.3561102591275045E1,
+      "lng": 1.005151327969824E1,
+      "lvl": 0
+    },
+    "end": {
+      "lat": 5.35609894766971E1,
+      "lng": 1.0051235830037626E1,
+      "lvl": 0
+    },
+    "profile": "car",
+    "direction": "forward",
+    "routing_algo": "dijkstra",
+    "expected_actions": [
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "turn",
+        "direction": "turn_around"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "destination",
+        "direction": "invalid"
+      }
+    ]
+  },
+  {
+    "name": "stay_left_turn_left",
+    "osm_file": "hamburg.osm.pbf",
+    "start": {
+      "lat": 5.3556758465188295E1,
+      "lng": 1.0039910326929828E1,
+      "lvl": 0
+    },
+    "end": {
+      "lat": 5.3558383129953256E1,
+      "lng": 1.0036018930616391E1,
+      "lvl": 0
+    },
+    "profile": "car",
+    "direction": "forward",
+    "routing_algo": "dijkstra",
+    "expected_actions": [
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "stay",
+        "direction": "left"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "turn",
+        "direction": "left"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "destination",
+        "direction": "invalid"
+      }
+    ]
+  },
+  {
+    "name": "stay_left_turn_left_2",
+    "osm_file": "hamburg.osm.pbf",
+    "start": {
+      "lat": 5.3560623055010154E1,
+      "lng": 1.0037864819539578E1,
+      "lvl": 0
+    },
+    "end": {
+      "lat": 5.356032080557574E1,
+      "lng": 1.0040984991173955E1,
+      "lvl": 0
+    },
+    "profile": "car",
+    "direction": "forward",
+    "routing_algo": "dijkstra",
+    "expected_actions": [
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "stay",
+        "direction": "left"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "turn",
+        "direction": "left"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "destination",
+        "direction": "invalid"
+      }
+    ]
+  },
+  {
+    "name": "big_intersection_turn_left_1",
+    "osm_file": "hamburg.osm.pbf",
+    "start": {
+      "lat": 5.357429942480792E1,
+      "lng": 1.0036827067467044E1,
+      "lvl": 0
+    },
+    "end": {
+      "lat": 5.357416443364653E1,
+      "lng": 1.0034304088026772E1,
+      "lvl": 0
+    },
+    "profile": "car",
+    "direction": "forward",
+    "routing_algo": "dijkstra",
+    "expected_actions": [
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "turn",
+        "direction": "left"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "turn",
+        "direction": "left"
+      },
+      {
+        "type": "turn",
+        "direction": "left"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "destination",
+        "direction": "invalid"
+      }
+    ]
+  },
+  {
+    "name": "big_intersection_turn_left_2",
+    "osm_file": "hamburg.osm.pbf",
+    "start": {
+      "lat": 5.3557272288340954E1,
+      "lng": 1.002546915365616E1,
+      "lvl": 0
+    },
+    "end": {
+      "lat": 5.3557330143608766E1,
+      "lng": 1.0020487217420223E1,
+      "lvl": 0
+    },
+    "profile": "car",
+    "direction": "forward",
+    "routing_algo": "dijkstra",
+    "expected_actions": [
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "turn",
+        "direction": "left"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "destination",
+        "direction": "invalid"
+      }
+    ]
+  },
+  {
+    "name": "big_intersection_turn_left_3",
+    "osm_file": "hamburg.osm.pbf",
+    "start": {
+      "lat": 5.361274298566116E1,
+      "lng": 1.0154556417747528E1,
+      "lvl": 0
+    },
+    "end": {
+      "lat": 5.3615740687498146E1,
+      "lng": 1.015249083766247E1,
+      "lvl": 0
+    },
+    "profile": "car",
+    "direction": "forward",
+    "routing_algo": "dijkstra",
+    "expected_actions": [
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "turn",
+        "direction": "left"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "destination",
+        "direction": "invalid"
+      }
+    ]
+  },
+  {
+    "name": "big_intersection_turn_left_4",
+    "osm_file": "hamburg.osm.pbf",
+    "start": {
+      "lat": 5.357907965720637E1,
+      "lng": 1.0043865197252217E1,
+      "lvl": 0
+    },
+    "end": {
+      "lat": 5.357870015546928E1,
+      "lng": 1.0039238473899218E1,
+      "lvl": 0
+    },
+    "profile": "car",
+    "direction": "forward",
+    "routing_algo": "dijkstra",
+    "expected_actions": [
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "turn",
+        "direction": "left"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "destination",
+        "direction": "invalid"
+      }
+    ]
+  },
+  {
+    "name": "intersection_right_with_link",
+    "osm_file": "hamburg.osm.pbf",
+    "start": {
+      "lat": 5.360003006503504E1,
+      "lng": 1.0067684180553924E1,
+      "lvl": 0
+    },
+    "end": {
+      "lat": 5.359933162630392E1,
+      "lng": 1.007024955066612E1,
+      "lvl": 0
+    },
+    "profile": "car",
+    "direction": "forward",
+    "routing_algo": "dijkstra",
+    "expected_actions": [
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "turn",
+        "direction": "right"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "destination",
+        "direction": "invalid"
+      }
+    ]
+  },
+  {
+    "name": "double_straight_stairs_1",
+    "osm_file": "hamburg.osm.pbf",
+    "start": {
+      "lat": 5.3550030210691034E1,
+      "lng": 1.0008959192290888E1,
+      "lvl": 0
+    },
+    "end": {
+      "lat": 5.3550137138556806E1,
+      "lng": 1.000913396144952E1,
+      "lvl": 0
+    },
+    "profile": "foot",
+    "direction": "forward",
+    "routing_algo": "dijkstra",
+    "expected_actions": [
+      {
+        "type": "none"
+      },
+      {
+        "type": "stairs",
+        "direction": "down",
+        "relative_direction": "straight"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "destination",
+        "direction": "invalid"
+      }
+    ]
+  },
+  {
+    "name": "double_straight_stairs_2",
+    "osm_file": "hamburg.osm.pbf",
+    "start": {
+      "lat": 5.35502005770816E1,
+      "lng": 1.0008965449658264E1,
+      "lvl": 0
+    },
+    "end": {
+      "lat": 5.355019553096648E1,
+      "lng": 1.0008780141530394E1,
+      "lvl": 0
+    },
+    "profile": "foot",
+    "direction": "forward",
+    "routing_algo": "dijkstra",
+    "expected_actions": [
+      {
+        "type": "none"
+      },
+      {
+        "type": "stairs",
+        "direction": "up",
+        "relative_direction": "straight"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "destination",
+        "direction": "invalid"
+      }
+    ]
+  },
+  {
+    "name": "dedicated_left_turn_lane_intersection",
+    "osm_file": "hamburg.osm.pbf",
+    "start": {
+      "lat": 5.347114602553626E1,
+      "lng": 9.942823168020368E0,
+      "lvl": 0
+    },
+    "end": {
+      "lat": 5.3477578761622226E1,
+      "lng": 9.927004897337952E0,
+      "lvl": 0
+    },
+    "profile": "car",
+    "direction": "forward",
+    "routing_algo": "dijkstra",
+    "expected_actions": [
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "turn",
+        "direction": "right"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "turn",
+        "direction": "left"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "destination",
+        "direction": "invalid"
+      }
+    ]
+  },
+  {
+    "name": "intersection_left_turn_1",
+    "osm_file": "hamburg.osm.pbf",
+    "start": {
+      "lat": 5.347541933495617E1,
+      "lng": 9.945460062546658E0,
+      "lvl": 0
+    },
+    "end": {
+      "lat": 5.347501565683655E1,
+      "lng": 9.949633334064655E0,
+      "lvl": 0
+    },
+    "profile": "car",
+    "direction": "forward",
+    "routing_algo": "dijkstra",
+    "expected_actions": [
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "turn",
+        "direction": "left"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "destination",
+        "direction": "invalid"
+      }
+    ]
+  },
+  {
+    "name": "intersection_left_turn_2",
+    "osm_file": "hamburg.osm.pbf",
+    "start": {
+      "lat": 5.3459557738719525E1,
+      "lng": 9.985788515205968E0,
+      "lvl": 0
+    },
+    "end": {
+      "lat": 5.346064181114801E1,
+      "lng": 9.986372512856748E0,
+      "lvl": 0
+    },
+    "profile": "car",
+    "direction": "forward",
+    "routing_algo": "dijkstra",
+    "expected_actions": [
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "turn",
+        "direction": "left"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "destination",
+        "direction": "invalid"
+      }
+    ]
+  },
+  {
+    "name": "turn_right_with_dedicated_turn_lane_1",
+    "osm_file": "hamburg.osm.pbf",
+    "start": {
+      "lat": 5.352002314782041E1,
+      "lng": 9.985766631838914E0,
+      "lvl": 0
+    },
+    "end": {
+      "lat": 5.352090677060616E1,
+      "lng": 9.98193479434994E0,
+      "lvl": 0
+    },
+    "profile": "car",
+    "direction": "forward",
+    "routing_algo": "dijkstra",
+    "expected_actions": [
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "stay",
+        "direction": "right"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "turn",
+        "direction": "right"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "destination",
+        "direction": "invalid"
+      }
+    ]
+  },
+  {
+    "name": "follow_street_with_left_turn",
+    "osm_file": "hamburg.osm.pbf",
+    "start": {
+      "lat": 5.3512154935914765E1,
+      "lng": 9.973060365558496E0,
+      "lvl": 0
+    },
+    "end": {
+      "lat": 5.351626618908929E1,
+      "lng": 9.968133436474716E0,
+      "lvl": 0
+    },
+    "profile": "car",
+    "direction": "forward",
+    "routing_algo": "dijkstra",
+    "expected_actions": [
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "turn",
+        "direction": "left"
+      },
+      {
+        "type": "none"
+      },
+      {
+        "type": "destination",
+        "direction": "invalid"
+      }
+    ]
+  }
+]

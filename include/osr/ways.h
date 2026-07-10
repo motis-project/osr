@@ -61,6 +61,84 @@ struct restriction {
   way_pos_t applies_to_bus_ : 1;
 };
 
+struct way_instruction_properties {
+
+  template <std::size_t NMaxTypes>
+  friend constexpr auto static_type_hash(
+      way_instruction_properties const*,
+      cista::hash_data<NMaxTypes> h) noexcept {
+    return h.combine(cista::hash("way_instruction_properties v1"));
+  }
+
+  template <typename Ctx>
+  friend void serialize(Ctx&, way_instruction_properties const*,
+                        cista::offset_t) {}
+
+  template <typename Ctx>
+  friend void deserialize(Ctx const&, way_instruction_properties*) {}
+
+  constexpr highway get_highway() const { return static_cast<highway>(highway_); }
+
+  constexpr junction get_junction() const { return static_cast<junction>(junction_); }
+
+  constexpr bool is_link() const { return is_link_ == 1U; }
+
+  constexpr bool is_footway_crossing() const { return is_footway_crossing_ == 1U; }
+
+  constexpr std::uint8_t lanes_forward() const { return lanes_forward_; }
+
+  constexpr std::uint8_t lanes_backward() const { return lanes_backward_; }
+
+  constexpr bool has_lanes() const { return lanes_forward_ != 0 || lanes_backward_ != 0; }
+
+  constexpr bool is_stairs() const { return is_stairs_up_ == 1U || is_stairs_down_ == 1U; }
+
+  constexpr bool is_stairs_up() const { return is_stairs_up_ == 1U; }
+
+  constexpr bool is_stairs_down() const { return is_stairs_down_ == 1U; }
+
+  constexpr bool has_left_turn_lane(direction const dir) const {
+    return (static_cast<std::uint8_t>(dir == direction::kForward ? turn_lanes_forward_ : turn_lanes_backward_) & 1U) != 0;
+  }
+
+  constexpr bool has_through_lane(direction const dir) const {
+    return (static_cast<std::uint8_t>(dir == direction::kForward ? turn_lanes_forward_ : turn_lanes_backward_) & 2U) != 0;
+  }
+
+  constexpr bool has_right_turn_lane(direction const dir) const {
+    return (static_cast<std::uint8_t>(dir == direction::kForward ? turn_lanes_forward_ : turn_lanes_backward_) & 4U) != 0;
+  }
+
+  std::uint8_t highway_ : 3;
+  std::uint8_t is_link_ : 1;
+  std::uint8_t junction_ : 2;
+  std::uint8_t is_footway_crossing_ : 1;
+  std::uint8_t is_stairs_down_ : 1;
+  std::uint8_t is_stairs_up_ : 1;
+
+  /*
+   * Bitmask representations for turn lane configurations mapping from OSM keys:
+   * (turn:lanes, turn:lanes:forward, turn:lanes:backward, turn:lanes:both_ways)
+   *
+   * Each 3-bit field uses the following layout:
+   * [ Bit 2 ] [ Bit 1 ] [ Bit 0 ]
+   * |         |         |
+   * |         |         +-- Leftish turn lane exists (e.g., left, sharp_left, slight_left)
+   * |         +------------ Through lane exists    (e.g., through)
+   * +---------------------- Rightish turn lane exists (e.g., right, sharp_right, slight_right)
+   *
+   * Example: 0b101 (5) means there are left and right turn lanes, but no through lane.
+   */
+  std::uint8_t turn_lanes_forward_ : 3;
+  std::uint8_t turn_lanes_backward_ : 3;
+
+  std::uint8_t reserved_ : 1;
+  std::uint8_t lanes_forward_ : 4;
+  std::uint8_t lanes_backward_ : 4;
+};
+
+static_assert(sizeof(way_instruction_properties) == 3);
+
 struct way_properties {
   constexpr bool is_accessible() const {
     return is_car_accessible() || is_bike_accessible() ||
@@ -203,7 +281,18 @@ struct ways {
   void compute_turn_bearings();
   void build_components();
 
-  std::optional<way_idx_t> find_way(osm_way_idx_t const i) {
+  std::optional<string_idx_t> find_string(std::string const& s) const {
+    const auto it =
+        std::find_if(begin(strings_), end(strings_),
+                     [&s](const auto& str) { return str.view() == s; });
+    if (it != end(strings_)) {
+      return std::optional{string_idx_t{std::distance(begin(strings_), it)}};
+    }
+
+    return std::nullopt;
+  }
+
+  std::optional<way_idx_t> find_way(osm_way_idx_t const i) const {
     auto const it = std::lower_bound(begin(way_osm_idx_), end(way_osm_idx_), i);
     return it != end(way_osm_idx_) && *it == i
                ? std::optional{way_idx_t{
@@ -398,6 +487,7 @@ struct ways {
   mm_vecvec<way_idx_t, osm_node_idx_t, std::uint64_t> way_osm_nodes_;
   mm_vecvec<string_idx_t, char, std::uint64_t> strings_;
   mm_vec_map<way_idx_t, string_idx_t> way_names_;
+  mm_vec_map<way_idx_t, way_instruction_properties> way_instruction_properties_;
 
   mm_bitvec<way_idx_t> way_has_conditional_access_no_;
   mm_vec<pair<way_idx_t, string_idx_t>> way_conditional_access_no_;
