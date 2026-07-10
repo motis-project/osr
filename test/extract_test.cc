@@ -32,6 +32,63 @@ TEST(extract, string_cache) {
   ASSERT_EQ(name_idx1, name_idx2);
 }
 
+
+TEST(extract, lanes) {
+  auto p = fs::temp_directory_path() / "osr_test";
+  auto ec = std::error_code{};
+  fs::remove_all(p, ec);
+  fs::create_directories(p, ec);
+
+  extract(false, "test/karlsruhe-kirchfeld.osm.pbf", p, {});
+
+  auto w = ways{p, cista::mmap::protection::READ};
+  const auto linkenheimer_street = w.find_way(osm_way_idx_t{638750467});
+  ASSERT_TRUE(linkenheimer_street.has_value());
+
+  const auto linkenheimer_way_instruction_props =
+      w.way_instruction_properties_[linkenheimer_street.value()];
+  ASSERT_TRUE(linkenheimer_way_instruction_props.has_lanes());
+  ASSERT_EQ(linkenheimer_way_instruction_props.lanes_forward(), 2);
+  ASSERT_EQ(linkenheimer_way_instruction_props.lanes_backward(), 0);
+
+  const auto laerchen_street = w.find_way(osm_way_idx_t{4242890});
+  ASSERT_TRUE(laerchen_street.has_value());
+
+  const auto laerchen_way_instruction_props =
+      w.way_instruction_properties_[laerchen_street.value()];
+  ASSERT_FALSE(laerchen_way_instruction_props.has_lanes());
+  ASSERT_EQ(laerchen_way_instruction_props.lanes_forward(), 0);
+  ASSERT_EQ(laerchen_way_instruction_props.lanes_backward(), 0);
+
+  const auto forlenweg = w.find_way(osm_way_idx_t{4242887});
+  ASSERT_TRUE(forlenweg.has_value());
+
+  const auto forlwenweg_way_instruction_props =
+      w.way_instruction_properties_[forlenweg.value()];
+  ASSERT_TRUE(forlwenweg_way_instruction_props.has_lanes());
+  ASSERT_EQ(forlwenweg_way_instruction_props.lanes_forward(), 1);
+  ASSERT_EQ(forlwenweg_way_instruction_props.lanes_backward(), 1);
+
+  const auto untere_hardtstrasse = w.find_way(osm_way_idx_t{261412003});
+  ASSERT_TRUE(untere_hardtstrasse.has_value());
+
+  const auto untere_way_instruction_props =
+      w.way_instruction_properties_[untere_hardtstrasse.value()];
+  ASSERT_TRUE(untere_way_instruction_props.has_lanes());
+  ASSERT_EQ(untere_way_instruction_props.lanes_forward(), 2);
+  ASSERT_EQ(untere_way_instruction_props.lanes_backward(), 1);
+
+  const auto neureuter_querallee = w.find_way(osm_way_idx_t{4242628});
+  ASSERT_TRUE(neureuter_querallee.has_value());
+
+  const auto neureuter_way_instruction_props =
+      w.way_instruction_properties_[neureuter_querallee.value()];
+
+  ASSERT_TRUE(neureuter_way_instruction_props.has_lanes());
+  ASSERT_EQ(neureuter_way_instruction_props.lanes_forward(), 3);
+  ASSERT_EQ(neureuter_way_instruction_props.lanes_backward(), 1);
+}
+
 TEST(extract, bus_only_on_highway) {
   auto p = fs::temp_directory_path() / "osr_test";
   auto ec = std::error_code{};
@@ -47,4 +104,110 @@ TEST(extract, bus_only_on_highway) {
   auto const& wp = w.r_->way_properties_[luisenplatz_outer.value()];
   ASSERT_FALSE(wp.is_bus_accessible());
   ASSERT_TRUE(wp.is_foot_accessible());
+}
+
+TEST(extract, stairs) {
+  auto p = fs::temp_directory_path() / "osr_test";
+  auto ec = std::error_code{};
+  fs::remove_all(p, ec);
+  fs::create_directories(p, ec);
+
+  extract(false, "test/da_hbf_2.osm.pbf", p, {});
+
+  auto w = ways{p, cista::mmap::protection::READ};
+  auto const platform_1_stairs = w.find_way(osm_way_idx_t{540718863});
+  ASSERT_TRUE(platform_1_stairs.has_value());
+
+  const auto platform_1_way_instruction_props =
+    w.way_instruction_properties_[platform_1_stairs.value()];
+  ASSERT_TRUE(platform_1_way_instruction_props.is_stairs());
+  ASSERT_TRUE(platform_1_way_instruction_props.is_stairs_up());
+  ASSERT_FALSE(platform_1_way_instruction_props.is_stairs_down());
+
+  auto const hbf_bridge = w.find_way(osm_way_idx_t{38182079});
+  ASSERT_TRUE(hbf_bridge.has_value());
+
+  const auto hbf_bridge_instruction_properties =
+    w.way_instruction_properties_[hbf_bridge.value()];
+  ASSERT_FALSE(hbf_bridge_instruction_properties.is_stairs());
+  ASSERT_FALSE(hbf_bridge_instruction_properties.is_stairs_up());
+  ASSERT_FALSE(hbf_bridge_instruction_properties.is_stairs_down());
+}
+
+TEST(extract, turn_lanes) {
+  auto const raw_data = "test/hamburg.osm.pbf";
+
+  if (!fs::exists(raw_data)) {
+    GTEST_SKIP() << raw_data << " not found";
+  }
+
+  auto p = fs::temp_directory_path() / "osr_test";
+  auto ec = std::error_code{};
+  fs::remove_all(p, ec);
+  fs::create_directories(p, ec);
+
+  extract(false, raw_data, p, {});
+  auto w = ways{p, cista::mmap::protection::READ};
+
+  /*
+   * Annotations:
+   * turn:lanes:backward = through
+   * turn:lanes:both_ways = left;right
+   * turn:lanes:forward = through
+   */
+  auto const aussschlager_weg = w.find_way(osm_way_idx_t{940905385});
+  ASSERT_TRUE(aussschlager_weg.has_value());
+  const auto auschlager_weg_instruction_props =
+    w.way_instruction_properties_[aussschlager_weg.value()];
+  ASSERT_TRUE(auschlager_weg_instruction_props.has_left_turn_lane(direction::kForward));
+  ASSERT_TRUE(auschlager_weg_instruction_props.has_right_turn_lane(direction::kForward));
+  ASSERT_TRUE(auschlager_weg_instruction_props.has_through_lane(direction::kForward));
+  ASSERT_TRUE(auschlager_weg_instruction_props.has_left_turn_lane(direction::kBackward));
+  ASSERT_TRUE(auschlager_weg_instruction_props.has_right_turn_lane(direction::kBackward));
+  ASSERT_TRUE(auschlager_weg_instruction_props.has_through_lane(direction::kBackward));
+
+  /*
+   * Annotations:
+   * turn:lanes:forward = through|through|right
+   */
+  auto const landwehr = w.find_way(osm_way_idx_t{640885955});
+  ASSERT_TRUE(landwehr.has_value());
+  const auto landwehr_instruction_props =
+    w.way_instruction_properties_[landwehr.value()];
+  ASSERT_FALSE(landwehr_instruction_props.has_left_turn_lane(direction::kForward));
+  ASSERT_TRUE(landwehr_instruction_props.has_right_turn_lane(direction::kForward));
+  ASSERT_TRUE(landwehr_instruction_props.has_through_lane(direction::kForward));
+  ASSERT_FALSE(landwehr_instruction_props.has_left_turn_lane(direction::kBackward));
+  ASSERT_FALSE(landwehr_instruction_props.has_right_turn_lane(direction::kBackward));
+  ASSERT_FALSE(landwehr_instruction_props.has_through_lane(direction::kBackward));
+
+  /*
+   * Annotations:
+   * turn:lanes:backward = left|through;right
+   */
+  auto const aussschlager_weg_2 = w.find_way(osm_way_idx_t{177037597});
+  ASSERT_TRUE(aussschlager_weg_2.has_value());
+  const auto aussschlager_weg_2_instruction_props =
+    w.way_instruction_properties_[aussschlager_weg_2.value()];
+  ASSERT_FALSE(aussschlager_weg_2_instruction_props.has_left_turn_lane(direction::kForward));
+  ASSERT_FALSE(aussschlager_weg_2_instruction_props.has_right_turn_lane(direction::kForward));
+  ASSERT_FALSE(aussschlager_weg_2_instruction_props.has_through_lane(direction::kForward));
+  ASSERT_TRUE(aussschlager_weg_2_instruction_props.has_left_turn_lane(direction::kBackward));
+  ASSERT_TRUE(aussschlager_weg_2_instruction_props.has_right_turn_lane(direction::kBackward));
+  ASSERT_TRUE(aussschlager_weg_2_instruction_props.has_through_lane(direction::kBackward));
+
+  /*
+   * Annotations:
+   * turn:lanes = left|through|through|right
+   */
+  auto const sievekingsallee = w.find_way(osm_way_idx_t{458542851});
+  ASSERT_TRUE(sievekingsallee.has_value());
+  const auto sievekingsallee_instruction_props =
+    w.way_instruction_properties_[sievekingsallee.value()];
+  ASSERT_TRUE(sievekingsallee_instruction_props.has_left_turn_lane(direction::kForward));
+  ASSERT_TRUE(sievekingsallee_instruction_props.has_right_turn_lane(direction::kForward));
+  ASSERT_TRUE(sievekingsallee_instruction_props.has_through_lane(direction::kForward));
+  ASSERT_FALSE(sievekingsallee_instruction_props.has_left_turn_lane(direction::kBackward));
+  ASSERT_FALSE(sievekingsallee_instruction_props.has_right_turn_lane(direction::kBackward));
+  ASSERT_FALSE(sievekingsallee_instruction_props.has_through_lane(direction::kBackward));
 }

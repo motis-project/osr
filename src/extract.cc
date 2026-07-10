@@ -7,6 +7,7 @@
 #include "osr/extract/extract.h"
 
 #include "boost/thread/tss.hpp"
+#include "boost/algorithm/string.hpp"
 
 #include "fmt/core.h"
 #include "fmt/std.h"
@@ -117,6 +118,120 @@ speed_limit get_speed_limit(tags const& t) {
   }
 }
 
+std::pair<highway,bool> get_highway(tags const& t) {
+  switch (cista::hash(t.highway_)) {
+    case cista::hash("motorway"): return { motorway, false };
+    case cista::hash("motorway_link"): return { motorway, true };
+    case cista::hash("trunk"): return { trunk, false };
+    case cista::hash("trunk_link"): return { trunk, true };
+    case cista::hash("primary"): return { primary, false };
+    case cista::hash("primary_link"): return { primary, true };
+    case cista::hash("secondary"): return { secondary, false };
+    case cista::hash("secondary_link"): return { secondary, true };
+    case cista::hash("tertiary"): return { tertiary, false };
+    case cista::hash("tertiary_link"): return { tertiary, true };
+    case cista::hash("residential"): return { residential, false };
+
+    case cista::hash("footway"):
+    case cista::hash("bridleway"):
+    case cista::hash("steps"):
+    case cista::hash("corridor"):
+    case cista::hash("path"):
+    case cista::hash("via_ferrata"): return { footish, false };
+
+    default: return { highway_other, false };
+  }
+}
+
+std::pair<std::uint8_t, std::uint8_t> get_lanes(tags const& t) {
+  if (is_number(t.lanes_forward_) && is_number(t.lanes_backward_)) {
+    return {static_cast<std::uint8_t>(std::min<unsigned>(
+                15U, utl::parse<unsigned>(t.lanes_forward_))),
+            static_cast<std::uint8_t>(std::min<unsigned>(
+                15U, utl::parse<unsigned>(t.lanes_backward_)))};
+  }
+
+  if (t.oneway_) {
+    const auto total_lanes = is_number(t.lanes_forward_)
+                                 ? t.lanes_forward_
+                                 : (is_number(t.lanes_) ? t.lanes_ : "0");
+    return {static_cast<std::uint8_t>(
+                std::min<unsigned>(15U, utl::parse<unsigned>(total_lanes))),
+            0U};
+  }
+
+  // Bidirectional way
+
+  if (is_number(t.lanes_) && (is_number(t.lanes_forward_) || is_number(t.lanes_backward_))) {
+    const bool is_forward_lanes_defined = is_number(t.lanes_forward_);
+    const auto total_lanes = utl::parse<unsigned>(t.lanes_);
+
+    const auto lanes_forward =
+        is_forward_lanes_defined
+            ? utl::parse<unsigned>(t.lanes_forward_)
+            : std::max(0U,
+                       total_lanes - utl::parse<unsigned>(t.lanes_backward_));
+
+    const auto lanes_backward =
+        !is_forward_lanes_defined
+            ? utl::parse<unsigned>(t.lanes_backward_)
+            : std::max(0U,
+                       total_lanes - utl::parse<unsigned>(t.lanes_forward_));
+
+    return {static_cast<std::uint8_t>(std::min<unsigned>(15U, lanes_forward)),
+            static_cast<std::uint8_t>(std::min<unsigned>(15U, lanes_backward))};
+  }
+
+  // if not specified further, when way is bidirectional it is assumed that
+  // the total number of lanes split evenly in both directions
+  if (is_number(t.lanes_)) {
+    if (const auto total_lanes = utl::parse<unsigned>(t.lanes_);
+        total_lanes % 2 != 0) {
+      // this is a weird case and mostly due
+      // to wrong tagging, so we return 0 in
+      // both directions
+      return {0U, 0U};
+    }
+    const auto lanes_both = static_cast<std::uint8_t>(
+        std::min<unsigned>(15U, utl::parse<unsigned>(t.lanes_) >> 1));
+
+    return {lanes_both, lanes_both};
+  }
+
+  return {0U, 0U};
+}
+
+std::pair<bool, bool> get_stairs(tags const& t) {
+  if (t.highway_ == "steps") {
+    if (t.is_incline_down_) {
+      return {false, true};
+    } else {
+      return {true, false};
+    }
+  }
+
+  return {false, false};
+}
+
+junction get_junction(tags const& t) {
+  switch (cista::hash(t.junction_)) {
+    case cista::hash("roundabout"): return roundabout;
+    case cista::hash("circular"): return circular;
+    case cista::hash("jughandle"): return jughandle;
+    default: return junction_none;
+  }
+}
+
+bool is_foot_crossing(tags const& t) {
+  switch (cista::hash(t.footway_)) {
+    case cista::hash("crossing"):
+    case cista::hash("traffic_island"): return true;
+    default: return false;
+  }
+}
+
+
+
 struct rel_way {
   way_properties p_;
   platform_idx_t pl_{platform_idx_t::invalid()};
@@ -126,6 +241,73 @@ using rel_ways_t = hash_map<osm_way_idx_t, rel_way>;
 
 std::tuple<level_t, level_t, bool> get_levels(tags const& t) {
   return get_levels(t.has_level_, t.level_bits_);
+}
+
+std::uint8_t parse_turn_lanes(std::string_view s) {
+  if (s.empty()) {
+    return 0;
+  }
+  std::uint8_t mask = 0;
+  while (!s.empty()) {
+    auto const pos = s.find('|');
+    auto const part = (pos == std::string_view::npos) ? s : s.substr(0, pos);
+
+    auto part_s = part;
+    while (!part_s.empty()) {
+      auto const semi_pos = part_s.find(';');
+      auto const val = (semi_pos == std::string_view::npos) ? part_s : part_s.substr(0, semi_pos);
+
+      auto const start = val.find_first_not_of(" \t\r\n");
+      if (start != std::string_view::npos) {
+        auto const end = val.find_last_not_of(" \t\r\n");
+        auto const trimmed = val.substr(start, end - start + 1);
+        if (boost::iequals(trimmed, "left") || boost::iequals(trimmed, "sharp_left") ||
+            boost::iequals(trimmed, "slight_left")) {
+          mask |= 1U;
+        } else if (boost::iequals(trimmed, "through")) {
+          mask |= 2U;
+        } else if (boost::iequals(trimmed, "right") || boost::iequals(trimmed, "sharp_right") ||
+                   boost::iequals(trimmed, "slight_right")) {
+          mask |= 4U;
+        }
+      }
+
+      if (semi_pos == std::string_view::npos) {
+        break;
+      }
+      part_s.remove_prefix(semi_pos + 1);
+    }
+
+    if (pos == std::string_view::npos) {
+      break;
+    }
+    s.remove_prefix(pos + 1);
+  }
+  return mask;
+}
+
+way_instruction_properties get_way_instruction_properties(tags const& t) {
+  auto ip = way_instruction_properties{};
+  const auto [h, l] = get_highway(t);
+  ip.highway_ = h;
+  ip.is_link_ = l;
+  ip.junction_ = get_junction(t);
+  ip.is_footway_crossing_ = ip.highway_ == footish ? is_foot_crossing(t) : false;
+
+  const auto [f, b] = get_lanes(t);
+  ip.lanes_forward_ = f;
+  ip.lanes_backward_ = b;
+
+  const auto [is_u, is_d] = get_stairs(t);
+  ip.is_stairs_down_ = is_d ? 1U : 0U;
+  ip.is_stairs_up_ = is_u ? 1U : 0U;
+
+  ip.turn_lanes_forward_ = parse_turn_lanes(t.turn_lanes_forward_) |
+                           parse_turn_lanes(t.turn_lanes_) |
+                           parse_turn_lanes(t.turn_lanes_both_ways_);
+  ip.turn_lanes_backward_ = parse_turn_lanes(t.turn_lanes_backward_) |
+                            parse_turn_lanes(t.turn_lanes_both_ways_);
+  return ip;
 }
 
 way_properties get_way_properties(
@@ -261,6 +443,8 @@ struct way_handler : public osm::handler::Handler {
       return;
     }
 
+    auto ip = get_way_instruction_properties(t);
+
     if (!t.has_level_ && it != end(rel_ways_)) {
       p.from_level_ = it->second.p_.from_level_;
       p.to_level_ = it->second.p_.to_level_;
@@ -307,6 +491,7 @@ struct way_handler : public osm::handler::Handler {
 
     w_.way_osm_idx_.push_back(osm_way_idx_t{w.positive_id()});
     w_.r_->way_properties_.emplace_back(p);
+    w_.way_instruction_properties_.emplace_back(ip);
 
     w_.way_polylines_.emplace_back(w.nodes() |
                                    std::views::transform(get_point));

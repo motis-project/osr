@@ -31,6 +31,8 @@ public:
     param(static_file_path_, "static,s", "Path to static files (ui/web)");
     param(threads_, "threads,t", "Number of routing threads");
     param(lock_, "lock,l", "Lock to memory");
+    param(provide_test_features_, "test_features",
+          "Adds additional endpoints used in the test framework");
   }
 
   fs::path data_dir_{"osr"};
@@ -39,6 +41,7 @@ public:
   std::string static_file_path_;
   bool lock_{true};
   unsigned threads_{std::thread::hardware_concurrency()};
+  bool provide_test_features_{false};
 };
 
 auto run(boost::asio::io_context& ioc) {
@@ -96,8 +99,14 @@ int main(int argc, char const* argv[]) {
 
   auto ioc = boost::asio::io_context{};
   auto pool = boost::asio::io_context{};
-  auto server = http_server{
-      ioc, pool, w, l, pl.get(), elevations.get(), opt.static_file_path_};
+  auto server = http_server{ioc,
+                            pool,
+                            w,
+                            l,
+                            pl.get(),
+                            elevations.get(),
+                            opt.static_file_path_,
+                            opt.provide_test_features_};
 
   auto work_guard = boost::asio::make_work_guard(pool);
   auto threads = std::vector<std::thread>(std::max(1U, opt.threads_));

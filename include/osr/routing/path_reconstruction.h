@@ -137,6 +137,7 @@ inline double add_path(typename P::parameters const& params,
     }
     segment.from_ = r.way_nodes_[way][start_idx];
     segment.to_ = r.way_nodes_[way][end_idx];
+    segment.is_reverse_ = is_reverse;
 
     for (auto const [osm_idx, coord] : infinite(
              reverse(utl::zip(w.way_osm_nodes_[way], w.way_polylines_[way]),
