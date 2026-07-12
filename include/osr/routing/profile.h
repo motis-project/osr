@@ -8,6 +8,7 @@
 #include <ostream>
 #include <string_view>
 #include <type_traits>
+#include <utility>
 
 #include "osr/elevation_storage.h"
 #include "osr/routing/mode.h"
@@ -59,13 +60,15 @@ concept IsEntry =
     requires(Entry const& entry, Node const node, path& p) {
       { entry.pred(node) } -> std::same_as<std::optional<Node>>;
       { entry.cost(node) } -> std::same_as<cost_t>;
+      { entry.duration(node) } -> std::same_as<duration_t>;
       { entry.write(node, p) } -> std::same_as<void>;
     } && requires(Entry entry,
                   Node const node,
                   Label const& label,
                   cost_t const cost,
+                  duration_t const duration,
                   path& p) {
-      { entry.update(label, node, cost, node) } -> std::same_as<bool>;
+      { entry.update(label, node, cost, node, duration) } -> std::same_as<bool>;
     };
 
 template <typename Hash, typename NodeKey>
@@ -103,28 +106,35 @@ concept Profile =
              ways::routing const& r,
              way_idx_t const w,
              direction const dir,
+             std::optional<routing_time_t> const start_time,
+             duration_t const current_duration,
              node_properties const n_props,
              way_properties const w_props,
              double const dist) {
       {
-        P::is_dest_reachable(params, r, node, w, dir, dir)
+        P::is_dest_reachable(params, r, node, w, dir, dir, start_time,
+                             current_duration)
       } -> std::same_as<bool>;
       {
-        P::way_cost(params, w_props, dir, std::declval<distance_t>())
-      } -> std::same_as<cost_t>;
-      { P::node_cost(params, n_props) } -> std::same_as<cost_t>;
+        P::way_cost(params, r, w, w_props, dir, std::declval<distance_t>(),
+                    start_time, current_duration, dir)
+      } -> std::same_as<cost_and_duration>;
+      { P::node_cost(params, n_props) } -> std::same_as<cost_and_duration>;
       { P::lower_bound_heuristic(params, dist) } -> std::same_as<double>;
       { P::upper_bound_heuristic(params, dist) } -> std::same_as<double>;
       { P::get_reverse(node) } -> std::same_as<typename P::node>;
     } &&
     requires(typename P::parameters const& params,
              typename P::node const n,
+             duration_t const current_duration,
+             std::optional<routing_time_t> const start_time,
              ways::routing const& r,
              bitvec<node_idx_t> const* blocked,
              sharing_data const* sharing,
              elevation_storage const* elevation,
              std::function<void(typename P::node const,
                                 std::uint32_t const,
+                                duration_t const,
                                 distance_t,
                                 way_idx_t const,
                                 std::uint16_t,
@@ -132,8 +142,9 @@ concept Profile =
                                 elevation_storage::elevation,
                                 bool const)> f) {
       {
-        P::template adjacent<direction::kBackward, false>(params, r, n, blocked,
-                                                          sharing, elevation, f)
+        P::template adjacent<direction::kBackward, false>(
+            params, r, n, current_duration, start_time, blocked, sharing,
+            elevation, f)
       } -> std::same_as<void>;
     };
 
@@ -167,6 +178,7 @@ enum class search_profile : std::uint8_t {
   kBikeElevationLow,
   kBikeElevationHigh,
   kCar,
+  kHgv,
   kCarDropOff,
   kCarDropOffWheelchair,
   kCarParking,
@@ -179,7 +191,7 @@ enum class search_profile : std::uint8_t {
 };
 
 constexpr auto const kNumProfiles =
-    static_cast<std::underlying_type_t<search_profile>>(16U);
+    static_cast<std::underlying_type_t<search_profile>>(17U);
 
 search_profile to_profile(std::string_view);
 

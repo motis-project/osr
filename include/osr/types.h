@@ -1,9 +1,12 @@
 #pragma once
 
 #include <cinttypes>
-#include <filesystem>
 
-#include "utl/for_each_bit_set.h"
+#include <chrono>
+#include <algorithm>
+#include <filesystem>
+#include <limits>
+#include <optional>
 
 #include "ankerl/cista_adapter.h"
 
@@ -16,7 +19,21 @@
 #include "cista/containers/vecvec.h"
 #include "cista/strong.h"
 
+#include "utl/for_each_bit_set.h"
+
 namespace osr {
+
+enum class access_value : std::uint8_t {
+  kUnknown,
+  kYes,
+  kDesignated,
+  kPermissive,
+  kPrivate,
+  kDelivery,
+  kDestination,
+  kNo,
+  kDiscouraged,
+};
 
 template <typename K, typename V, typename SizeType = cista::base_t<K>>
 using vecvec = cista::raw::vecvec<K, V, SizeType>;
@@ -81,6 +98,48 @@ using string_idx_t = cista::strong<std::uint32_t, struct string_idx_>;
 using osm_node_idx_t = cista::strong<std::uint64_t, struct osm_node_idx_>;
 using osm_way_idx_t = cista::strong<std::uint64_t, struct osm_way_idx_>;
 
+constexpr auto const kEncodedNegativeOsmIdBit = std::uint64_t{1U} << 63U;
+
+constexpr bool is_negative_encoded_osm_id(std::uint64_t const id) {
+  return (id & kEncodedNegativeOsmIdBit) != 0U;
+}
+
+constexpr std::uint64_t encode_osm_id(std::int64_t const id) {
+  return id >= 0 ? static_cast<std::uint64_t>(id)
+                 : (kEncodedNegativeOsmIdBit |
+                    static_cast<std::uint64_t>(-(id + 1)));
+}
+
+constexpr osm_node_idx_t to_osm_node_idx(std::int64_t const id) {
+  return osm_node_idx_t{encode_osm_id(id)};
+}
+
+constexpr osm_way_idx_t to_osm_way_idx(std::int64_t const id) {
+  return osm_way_idx_t{encode_osm_id(id)};
+}
+
+constexpr bool encoded_osm_id_less(std::uint64_t const lhs,
+                                   std::uint64_t const rhs) {
+  // Negative OSM ids are stored in the upper half of the uint64_t range but
+  // still need to compare before positive ids in their original signed order.
+  auto const lhs_negative = is_negative_encoded_osm_id(lhs);
+  auto const rhs_negative = is_negative_encoded_osm_id(rhs);
+  if (lhs_negative != rhs_negative) {
+    return lhs_negative;
+  }
+
+  if (!lhs_negative) {
+    return lhs < rhs;
+  }
+
+  return (lhs & ~kEncodedNegativeOsmIdBit) > (rhs & ~kEncodedNegativeOsmIdBit);
+}
+
+template <typename OsmIdx>
+constexpr bool osm_id_less(OsmIdx const lhs, OsmIdx const rhs) {
+  return encoded_osm_id_less(to_idx(lhs), to_idx(rhs));
+}
+
 using way_idx_t = cista::strong<std::uint32_t, struct way_idx_>;
 using node_idx_t = cista::strong<std::uint32_t, struct node_idx_>;
 
@@ -98,12 +157,82 @@ using elevation_monotonic_t =
 using way_pos_t = std::uint8_t;
 
 using cost_t = std::uint32_t;
+using duration_t = std::chrono::duration<std::uint16_t>;  // sec -> max ~18h
+using routing_time_t =
+    std::chrono::time_point<std::chrono::system_clock, std::chrono::seconds>;
 
 constexpr auto const kInfeasible = std::numeric_limits<cost_t>::max();
+constexpr auto const kMaxDuration =
+    duration_t{std::numeric_limits<duration_t::rep>::max()};
 
 template <typename T>
 constexpr cost_t clamp_cost(T const c) {
   return static_cast<cost_t>(std::min(c, static_cast<T>(kInfeasible)));
+}
+
+constexpr duration_t clamp_duration(std::uint64_t const seconds) {
+  return duration_t{static_cast<duration_t::rep>(
+      std::min(seconds, static_cast<std::uint64_t>(kMaxDuration.count())))};
+}
+
+constexpr duration_t clamp_add_duration(duration_t const a,
+                                        duration_t const b) {
+  return clamp_duration(static_cast<std::uint64_t>(a.count()) +
+                        static_cast<std::uint64_t>(b.count()));
+}
+
+constexpr duration_t clamp_sub_duration(duration_t const a,
+                                        duration_t const b) {
+  return duration_t{static_cast<duration_t::rep>(
+      a.count() > b.count() ? a.count() - b.count() : 0U)};
+}
+
+template <typename T>
+constexpr duration_t duration_from_cost(T const c) {
+  return clamp_duration(static_cast<std::uint64_t>(c));
+}
+
+struct cost_and_duration {
+  cost_t cost_{0U};
+  duration_t duration_{0U};
+
+  constexpr bool feasible() const noexcept { return cost_ != kInfeasible; }
+};
+
+constexpr cost_and_duration infeasible_cost_and_duration() {
+  return {.cost_ = kInfeasible, .duration_ = kMaxDuration};
+}
+
+constexpr cost_and_duration cost_and_duration_from_cost(cost_t const cost) {
+  return cost == kInfeasible
+             ? infeasible_cost_and_duration()
+             : cost_and_duration{.cost_ = cost,
+                                 .duration_ = duration_from_cost(cost)};
+}
+
+constexpr cost_and_duration clamp_add(cost_and_duration const a,
+                                      cost_and_duration const b) {
+  if (!a.feasible() || !b.feasible()) {
+    return infeasible_cost_and_duration();
+  }
+  return {.cost_ = clamp_cost(static_cast<std::uint64_t>(a.cost_) + b.cost_),
+          .duration_ = clamp_add_duration(a.duration_, b.duration_)};
+}
+
+constexpr cost_and_duration clamp_add(cost_and_duration const value,
+                                      cost_t const extra_cost,
+                                      duration_t const extra_duration) {
+  if (!value.feasible() || extra_cost == kInfeasible) {
+    return infeasible_cost_and_duration();
+  }
+  return {
+      .cost_ = clamp_cost(static_cast<std::uint64_t>(value.cost_) + extra_cost),
+      .duration_ = clamp_add_duration(value.duration_, extra_duration)};
+}
+
+constexpr cost_and_duration clamp_add(cost_and_duration const value,
+                                      cost_t const extra_cost) {
+  return clamp_add(value, extra_cost, duration_from_cost(extra_cost));
 }
 
 // direction
@@ -136,6 +265,17 @@ constexpr std::string_view to_str(direction const d) {
     case direction::kBackward: return "backward";
   }
   std::unreachable();
+}
+
+inline std::optional<routing_time_t> current_routing_time(
+    std::optional<routing_time_t> const start_time,
+    direction const dir,
+    duration_t const duration) {
+  if (!start_time.has_value()) {
+    return std::nullopt;
+  }
+  auto const delta = std::chrono::seconds{duration.count()};
+  return dir == direction::kForward ? *start_time + delta : *start_time - delta;
 }
 
 constexpr direction to_direction(std::string_view s) {

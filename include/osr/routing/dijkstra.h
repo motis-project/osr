@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+
 #include <algorithm>
 #include <vector>
 
@@ -46,8 +47,12 @@ struct dijkstra {
   }
 
   void add_start(ways const& w, label const l) {
+    add_start(w, l, duration_from_cost(l.cost()));
+  }
+
+  void add_start(ways const& w, label const l, duration_t const duration) {
     if (cost_[l.get_node().get_key()].update(l, l.get_node(), l.cost(),
-                                             node::invalid())) {
+                                             node::invalid(), duration)) {
       if constexpr (kDebug) {
         std::cout << "START ";
         l.get_node().print(std::cout, w);
@@ -80,6 +85,7 @@ struct dijkstra {
            ways const& w,
            ways::routing const& r,
            cost_t const max,
+           std::optional<routing_time_t> const start_time,
            bitvec<node_idx_t> const* blocked,
            sharing_data const* sharing,
            elevation_storage const* elevations) {
@@ -121,11 +127,14 @@ struct dijkstra {
       }
 
       auto const curr = l.get_node();
+      auto const curr_duration = cost_.at(curr.get_key()).duration(curr);
       P::template adjacent<SearchDir, WithBlocked>(
-          params, r, curr, blocked, sharing, elevations,
-          [&](node const neighbor, std::uint32_t const cost, distance_t,
-              way_idx_t const way, std::uint16_t, std::uint16_t,
-              elevation_storage::elevation, bool const track) {
+          params, r, curr, curr_duration, start_time, blocked, sharing,
+          elevations,
+          [&](node const neighbor, std::uint32_t const cost,
+              duration_t const duration, distance_t, way_idx_t const way,
+              std::uint16_t, std::uint16_t, elevation_storage::elevation,
+              bool const track) {
             if constexpr (kDebug) {
               std::cout << "  NEIGHBOR ";
               neighbor.print(std::cout, w);
@@ -136,8 +145,11 @@ struct dijkstra {
               max_reached_ = true;
               return;
             }
-            if (cost_[neighbor.get_key()].update(
-                    l, neighbor, static_cast<cost_t>(total), curr)) {
+            auto const total_duration =
+                clamp_add_duration(curr_duration, duration);
+            if (cost_[neighbor.get_key()].update(l, neighbor,
+                                                 static_cast<cost_t>(total),
+                                                 curr, total_duration)) {
               auto next = label{neighbor, static_cast<cost_t>(total)};
               next.track(l, r, way, neighbor.get_node(), track);
               pq_.push(std::move(next));
@@ -159,22 +171,26 @@ struct dijkstra {
            ways const& w,
            ways::routing const& r,
            cost_t const max,
+           std::optional<routing_time_t> const start_time,
            bitvec<node_idx_t> const* blocked,
            sharing_data const* sharing,
            elevation_storage const* elevations,
            direction const dir) {
     if (blocked == nullptr) {
       return dir == direction::kForward
-                 ? run<direction::kForward, false>(params, w, r, max, blocked,
-                                                   sharing, elevations)
-                 : run<direction::kBackward, false>(params, w, r, max, blocked,
+                 ? run<direction::kForward, false>(params, w, r, max,
+                                                   start_time, blocked, sharing,
+                                                   elevations)
+                 : run<direction::kBackward, false>(params, w, r, max,
+                                                    start_time, blocked,
                                                     sharing, elevations);
     } else {
       return dir == direction::kForward
-                 ? run<direction::kForward, true>(params, w, r, max, blocked,
-                                                  sharing, elevations)
-                 : run<direction::kBackward, true>(params, w, r, max, blocked,
-                                                   sharing, elevations);
+                 ? run<direction::kForward, true>(params, w, r, max, start_time,
+                                                  blocked, sharing, elevations)
+                 : run<direction::kBackward, true>(params, w, r, max,
+                                                   start_time, blocked, sharing,
+                                                   elevations);
     }
   }
 

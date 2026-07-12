@@ -111,10 +111,15 @@ struct bike {
       return cost_[get_index(n)];
     }
 
+    constexpr duration_t duration(node const n) const noexcept {
+      return duration_from_cost(cost(n));
+    }
+
     constexpr bool update(label const&,
                           node const n,
                           cost_t const c,
-                          node const pred) noexcept {
+                          node const pred,
+                          duration_t const) noexcept {
       auto const idx = get_index(n);
       if (c < cost_[idx]) {
         cost_[idx] = c;
@@ -173,14 +178,20 @@ struct bike {
                                 node,
                                 way_idx_t const way,
                                 direction const way_dir,
-                                direction) {
-    return way_cost(params, w.way_properties_[way], way_dir, 0U) != kInfeasible;
+                                direction const search_dir,
+                                std::optional<routing_time_t> const start_time,
+                                duration_t const current_duration) {
+    return way_cost(params, w, way, w.way_properties_[way], way_dir, 0U,
+                    start_time, current_duration, search_dir)
+               .cost_ != kInfeasible;
   }
 
   template <direction SearchDir, bool WithBlocked, typename Fn>
   static void adjacent(parameters const& params,
                        ways::routing const& w,
                        node const n,
+                       duration_t const current_duration,
+                       std::optional<routing_time_t> const start_time,
                        bitvec<node_idx_t> const* blocked,
                        sharing_data const*,
                        elevation_storage const* elevations,
@@ -197,12 +208,14 @@ struct bike {
           }
         }
         auto const target_node_prop = w.node_properties_[target_node];
-        if (node_cost(params, target_node_prop) == kInfeasible) {
+        if (node_cost(params, target_node_prop).cost_ == kInfeasible) {
           return;
         }
 
         auto const target_way_prop = w.way_properties_[way];
-        if (way_cost(params, target_way_prop, way_dir, 0U) == kInfeasible) {
+        if (way_cost(params, w, way, target_way_prop, way_dir, 0U, start_time,
+                     current_duration, SearchDir)
+                .cost_ == kInfeasible) {
           return;
         }
 
@@ -224,10 +237,13 @@ struct bike {
                                  ElevationExponentThousandth / 1000.0)
                        : ElevationUpCost * to_idx(elevation.up_) / dist)
                 : 0);
-        auto const cost = way_cost(params, target_way_prop, way_dir, dist) +
-                          node_cost(params, target_node_prop) + elevation_cost;
-        fn(node{target_node, way_dir}, static_cast<std::uint32_t>(cost), dist,
-           way, from, to, elevation, false);
+        auto const step = clamp_add(
+            clamp_add(way_cost(params, w, way, target_way_prop, way_dir, dist,
+                               start_time, current_duration, SearchDir),
+                      node_cost(params, target_node_prop)),
+            elevation_cost, duration_t{0});
+        fn(node{target_node, way_dir}, step.cost_, step.duration_, dist, way,
+           from, to, elevation, false);
       };
 
       if (i != 0U) {
@@ -239,26 +255,53 @@ struct bike {
     }
   }
 
-  static constexpr cost_t way_cost(parameters const& params,
-                                   way_properties const e,
-                                   direction const dir,
-                                   distance_t const dist) {
+  template <direction SearchDir, bool WithBlocked, typename Fn>
+  static void reverse_adjacent(parameters const& params,
+                               ways::routing const& w,
+                               node const n,
+                               duration_t const current_duration,
+                               std::optional<routing_time_t> const start_time,
+                               bitvec<node_idx_t> const* blocked,
+                               sharing_data const* sharing,
+                               elevation_storage const* elevations,
+                               Fn&& fn) {
+    adjacent<opposite(SearchDir), WithBlocked>(
+        params, w, n, current_duration, start_time, blocked, sharing,
+        elevations, std::forward<Fn>(fn));
+  }
+
+  static constexpr cost_and_duration way_cost(
+      parameters const& params,
+      ways::routing const&,
+      way_idx_t const,
+      way_properties const e,
+      direction const dir,
+      distance_t const dist,
+      std::optional<routing_time_t> const,
+      duration_t const,
+      direction const) {
     if (e.is_bike_accessible() &&
         (dir == direction::kForward || !e.is_oneway_bike())) {
-      return static_cast<cost_t>(
-          std::round(dist / (params.speed_meters_per_second_ +
-                             (Costing == bike_costing::kFast
-                                  ? 0
-                                  : (e.is_big_street_ ? -0.7 : 0) +
-                                        (e.motor_vehicle_no_ ? 0.5 : 0.0)))));
+      auto const cost = static_cast<cost_t>(
+          std::round(static_cast<double>(dist) /
+                     (params.speed_meters_per_second_ +
+                      (Costing == bike_costing::kFast
+                           ? 0
+                           : (e.is_big_street_ ? -0.7 : 0) +
+                                 (e.motor_vehicle_no_ ? 0.5 : 0.0)))));
+      return {
+          .cost_ = cost,
+          .duration_ = duration_from_cost(static_cast<cost_t>(std::round(
+              static_cast<double>(dist) / params.speed_meters_per_second_)))};
     } else {
-      return kInfeasible;
+      return infeasible_cost_and_duration();
     }
   }
 
-  static constexpr cost_t node_cost(parameters const&,
-                                    node_properties const n) {
-    return n.is_bike_accessible() ? 0U : kInfeasible;
+  static constexpr cost_and_duration node_cost(parameters const&,
+                                               node_properties const n) {
+    return n.is_bike_accessible() ? cost_and_duration_from_cost(0U)
+                                  : infeasible_cost_and_duration();
   }
 
   static constexpr double lower_bound_heuristic(parameters const& params,

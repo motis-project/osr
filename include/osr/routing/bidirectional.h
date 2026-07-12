@@ -80,11 +80,12 @@ struct bidirectional {
            direction const dir,
            cost_map& cost_map,
            dial<label, get_bucket>& d,
-           sharing_data const* sharing) {
+           sharing_data const* sharing,
+           duration_t const duration) {
     auto const heur = heuristic(params, w, l.n_, dir, sharing);
     if (l.cost() + heur < d.n_buckets() - 1U &&
         cost_map[l.get_node().get_key()].update(l, l.get_node(), l.cost(),
-                                                node::invalid())) {
+                                                node::invalid(), duration)) {
       auto const total = static_cast<cost_t>(l.cost() + heur);
       d.push(label{l.get_node(), total});
     }
@@ -94,22 +95,38 @@ struct bidirectional {
                  ways const& w,
                  label const l,
                  sharing_data const* sharing) {
+    add_start(params, w, l, sharing, duration_from_cost(l.cost()));
+  }
+
+  void add_start(P::parameters const& params,
+                 ways const& w,
+                 label const l,
+                 sharing_data const* sharing,
+                 duration_t const duration) {
     if (kDebug) {
       l.get_node().print(std::cout, w);
       std::cout << "starting" << l.get_node().n_ << std::endl;
     }
-    add(params, w, l, direction::kForward, cost1_, pq1_, sharing);
+    add(params, w, l, direction::kForward, cost1_, pq1_, sharing, duration);
   }
 
   void add_end(P::parameters const& params,
                ways const& w,
                label const l,
                sharing_data const* sharing) {
+    add_end(params, w, l, sharing, duration_from_cost(l.cost()));
+  }
+
+  void add_end(P::parameters const& params,
+               ways const& w,
+               label const l,
+               sharing_data const* sharing,
+               duration_t const duration) {
     if (kDebug) {
       l.get_node().print(std::cout, w);
       std::cout << "ending" << l.get_node().n_ << std::endl;
     }
-    add(params, w, l, direction::kBackward, cost2_, pq2_, sharing);
+    add(params, w, l, direction::kBackward, cost2_, pq2_, sharing, duration);
   }
 
   template <direction SearchDir>
@@ -180,6 +197,7 @@ struct bidirectional {
     auto const l = pq.pop();
     auto const curr = l.get_node();
     auto const curr_cost = get_cost<PathDir>(curr);
+    auto const curr_duration = costs.at(curr.get_key()).duration(curr);
     if (static_cast<std::int64_t>(curr_cost) <
         static_cast<std::int64_t>(l.cost()) -
             static_cast<std::int64_t>(
@@ -193,16 +211,20 @@ struct bidirectional {
     }
 
     P::template adjacent<SearchDir, WithBlocked>(
-        params, r, curr, blocked, sharing, elevations,
-        [&](node const neighbor, std::uint32_t const cost, distance_t,
-            way_idx_t const way, std::uint16_t, std::uint16_t,
-            elevation_storage::elevation const, bool const track) {
+        params, r, curr, curr_duration, std::nullopt, blocked, sharing,
+        elevations,
+        [&](node const neighbor, std::uint32_t const cost,
+            duration_t const duration, distance_t, way_idx_t const way,
+            std::uint16_t, std::uint16_t, elevation_storage::elevation const,
+            bool const track) {
           if constexpr (kDebug) {
             std::cout << "  NEIGHBOR ";
             neighbor.print(std::cout, w);
           }
           auto const total =
               clamp_cost(static_cast<std::uint64_t>(curr_cost) + cost);
+          auto const total_duration =
+              clamp_add_duration(curr_duration, duration);
           auto const heur =
               clamp_cost(static_cast<std::int64_t>(total) +
                          static_cast<std::int64_t>(heuristic(
@@ -215,9 +237,9 @@ struct bidirectional {
             }
             return;
           }
-          if (heur < max &&
-              costs[neighbor.get_key()].update(
-                  l, neighbor, static_cast<cost_t>(total), curr)) {
+          if (heur < max && costs[neighbor.get_key()].update(
+                                l, neighbor, static_cast<cost_t>(total), curr,
+                                total_duration)) {
 
             auto next = label{neighbor, static_cast<cost_t>(heur)};
             next.track(l, r, way, neighbor.get_node(), track);
@@ -272,9 +294,10 @@ struct bidirectional {
             return;
           }
           P::template adjacent<opposite(SearchDir), WithBlocked>(
-              params, r, curr, blocked, sharing, elevations,
-              [&](node const neighbor, std::uint32_t const, distance_t,
-                  way_idx_t const, std::uint16_t, std::uint16_t,
+              params, r, curr, curr_duration, std::nullopt, blocked, sharing,
+              elevations,
+              [&](node const neighbor, std::uint32_t const, duration_t const,
+                  distance_t, way_idx_t const, std::uint16_t, std::uint16_t,
                   elevation_storage::elevation const, bool const) {
                 if (neighbor.get_key() != pred->get_key()) {
                   return;
