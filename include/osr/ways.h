@@ -365,15 +365,13 @@ struct ways {
 
   std::optional<std::int64_t> get_osm_node(node_idx_t const n) const {
     return n != node_idx_t::invalid() && n < n_nodes()
-               ? std::optional{static_cast<std::int64_t>(
-                     to_idx(node_to_osm_[n]))}
+               ? std::optional{decode_osm_id(node_to_osm_[n])}
                : std::nullopt;
   }
 
   std::optional<std::int64_t> get_osm_way(way_idx_t const way) const {
     return way != way_idx_t::invalid()
-               ? std::optional{static_cast<std::int64_t>(
-                     to_idx(way_osm_idx_[way]))}
+               ? std::optional{decode_osm_id(way_osm_idx_[way])}
                : std::nullopt;
   }
 
