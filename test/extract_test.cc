@@ -23,17 +23,17 @@ constexpr auto const kNegativeIdsOsm =
   <node id="-2" lat="48.0000" lon="9.0010"/>
   <node id="-3" lat="48.0000" lon="9.0020"/>
   <node id="-4" lat="48.0010" lon="9.0020"/>
-  <way id="-11">
-    <nd ref="-1"/>
-    <nd ref="-2"/>
-    <tag k="highway" v="primary"/>
-    <tag k="name" v="Way -11"/>
-  </way>
   <way id="-10">
     <nd ref="-2"/>
     <nd ref="-3"/>
     <tag k="highway" v="primary"/>
     <tag k="name" v="Way -10"/>
+  </way>
+  <way id="-11">
+    <nd ref="-1"/>
+    <nd ref="-2"/>
+    <tag k="highway" v="primary"/>
+    <tag k="name" v="Way -11"/>
   </way>
   <way id="20">
     <nd ref="-3"/>

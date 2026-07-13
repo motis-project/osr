@@ -19,6 +19,10 @@ constexpr auto const kConditionalRestrictionsOsm =
   <node id="1" lat="48.0000" lon="9.0000"/>
   <node id="2" lat="48.0000" lon="9.0010"/>
   <node id="3" lat="48.0000" lon="9.0020"/>
+  <node id="4" lat="47.9990" lon="8.9990"/>
+  <node id="5" lat="47.9990" lon="9.0030"/>
+  <node id="6" lat="48.0010" lon="9.0030"/>
+  <node id="7" lat="48.0010" lon="8.9990"/>
   <way id="10">
     <nd ref="1"/>
     <nd ref="2"/>
@@ -37,6 +41,20 @@ constexpr auto const kConditionalRestrictionsOsm =
     <tag k="highway" v="primary"/>
     <tag k="access:conditional" v="no @ (PH)"/>
   </way>
+  <way id="100">
+    <nd ref="4"/>
+    <nd ref="5"/>
+    <nd ref="6"/>
+    <nd ref="7"/>
+    <nd ref="4"/>
+  </way>
+  <relation id="1000">
+    <member type="way" ref="100" role="outer"/>
+    <tag k="type" v="boundary"/>
+    <tag k="boundary" v="administrative"/>
+    <tag k="admin_level" v="4"/>
+    <tag k="timezone" v="Europe/Berlin"/>
+  </relation>
 </osm>)osm";
 
 constexpr auto const kHgvAccessOsm = R"osm(<osm version="0.6" generator="test">

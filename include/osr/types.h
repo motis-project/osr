@@ -130,7 +130,14 @@ std::int64_t decode_osm_id(OsmIdx const id) {
 constexpr bool encoded_osm_id_less(std::uint64_t const lhs,
                                    std::uint64_t const rhs) {
   // Negative OSM ids are stored in the upper half of the uint64_t range but
-  // still need to compare before positive ids in their original signed order.
+  // still need to compare before positive ids. Within each sign, OSM IDs are
+  // ordered by absolute value, matching osmium::id_order.
+  if (rhs == 0U) {
+    return false;
+  }
+  if (lhs == 0U) {
+    return true;
+  }
   auto const lhs_negative = is_negative_encoded_osm_id(lhs);
   auto const rhs_negative = is_negative_encoded_osm_id(rhs);
   if (lhs_negative != rhs_negative) {
@@ -141,7 +148,7 @@ constexpr bool encoded_osm_id_less(std::uint64_t const lhs,
     return lhs < rhs;
   }
 
-  return (lhs & ~kEncodedNegativeOsmIdBit) > (rhs & ~kEncodedNegativeOsmIdBit);
+  return (lhs & ~kEncodedNegativeOsmIdBit) < (rhs & ~kEncodedNegativeOsmIdBit);
 }
 
 template <typename OsmIdx>
