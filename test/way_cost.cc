@@ -8,11 +8,16 @@
 #include "osr/routing/profiles/foot.h"
 #include "osr/routing/profiles/hgv.h"
 
+osr::timezone_cache_t const& timezone_cache() {
+  static auto const timezones = osr::timezone_cache_t{};
+  return timezones;
+}
+
 osr::cost_t cost(const osr::way_properties p) {
   return osr::foot<false>::way_cost(
-             {}, osr::ways::routing{}, osr::way_idx_t::invalid(), p,
-             osr::direction::kForward, 1, std::nullopt, osr::duration_t{0},
-             osr::direction::kForward)
+             {}, osr::ways::routing{}, timezone_cache(),
+             osr::way_idx_t::invalid(), p, osr::direction::kForward, 1,
+             std::nullopt, osr::duration_t{0}, osr::direction::kForward)
       .cost_;
 }
 
@@ -81,21 +86,21 @@ osr::cost_t static_hgv_cost(osr::hgv_way_info const& info,
   routing.way_hgv_info_.emplace_back(way, info);
 
   auto const result = osr::hgv::way_cost(
-      params, routing, way, props, osr::direction::kForward, 1000U,
-      std::nullopt, osr::duration_t{0U}, osr::direction::kForward);
+      params, routing, timezone_cache(), way, props, osr::direction::kForward,
+      1000U, std::nullopt, osr::duration_t{0U}, osr::direction::kForward);
   return result.cost_;
 }
 
 osr::cost_t low_emission_zone_hgv_cost(osr::hgv::parameters const& params) {
   auto routing = osr::ways::routing{};
   auto const way = osr::way_idx_t{0U};
-  auto const props = hgv_way_properties();
+  auto props = hgv_way_properties();
+  props.is_in_low_emission_zone_ = true;
   routing.way_properties_.push_back(props);
-  routing.way_properties_[way].is_in_low_emission_zone_ = true;
 
   auto const result = osr::hgv::way_cost(
-      params, routing, way, props, osr::direction::kForward, 1000U,
-      std::nullopt, osr::duration_t{0U}, osr::direction::kForward);
+      params, routing, timezone_cache(), way, props, osr::direction::kForward,
+      1000U, std::nullopt, osr::duration_t{0U}, osr::direction::kForward);
   return result.cost_;
 }
 
@@ -114,7 +119,7 @@ osr::cost_t conditional_hgv_cost(std::string_view const key,
   routing.way_conditionals_.emplace_back(way, builder.way_);
 
   auto const result = osr::hgv::way_cost(
-      params, routing, way, props, osr::direction::kForward, 1000U,
+      osr::hgv::parameters{}, routing, timezone_cache(), way, props, dir, 1000U,
       osr::routing_time_t{}, osr::duration_t{0U}, osr::direction::kForward);
   return result.cost_;
 }
