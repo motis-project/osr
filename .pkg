@@ -50,6 +50,10 @@
   url=git@github.com:triptix-tech/rtree.c.git
   branch=master
   commit=855982edf7efbba1798bacfea12997bf541f5661
+[tg]
+  url=git@github.com:triptix-tech/tg.git
+  branch=main
+  commit=20c0f298b8ce58de29a790290f44dca7c4ecc364
 [fmt]
   url=git@github.com:motis-project/fmt.git
   branch=master
@@ -66,7 +70,3 @@
   url=git@github.com:motis-project/net.git
   branch=master
   commit=c2599102dcffa4babfdcf5320a6bd6f5c6e9b731
-[tzbounds]
-  url=git@github.com:motis-project/tzbounds.git
-  branch=master
-  commit=7d843f62791098b2aac49e5d04a5a180f8da7b13

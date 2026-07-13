@@ -115,7 +115,6 @@ target_compile_features(osr PUBLIC cxx_std_23)
 target_compile_options(osr PRIVATE ${osr-compile-options})
 set(osr-resource-libs
         ianatzdb-res
-        tzbounds_timezones-res
 )
 target_link_libraries(osr
         osmium
@@ -127,8 +126,8 @@ target_link_libraries(osr
         utl
         tiles-import-library
         date-tz
-        tzbounds
         rtree
+        tg
         unordered_dense
         boost-thread
         boost-iostreams
