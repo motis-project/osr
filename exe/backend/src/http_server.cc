@@ -1,5 +1,6 @@
 #include "osr/backend/http_server.h"
 
+#include <algorithm>
 #include <utility>
 
 #include "boost/algorithm/string.hpp"
@@ -30,6 +31,7 @@
 #include "osr/routing/profiles/foot.h"
 #include "osr/routing/route.h"
 #include "osr/routing/with_profile.h"
+#include "osr/types.h"
 
 using namespace net;
 using net::web_server;
@@ -198,8 +200,32 @@ struct http_server::impl {
     auto const max =
         geo::latlng{waypoints[3].as_double(), waypoints[2].as_double()};
 
+    auto parking_edges =
+        bitvec<parking_edge_idx_t>(w_.r_->parking_edges_.size());
+    auto const mark_parking_edges = [&](way_idx_t const w) {
+      for (auto const node_idx : w_.r_->way_nodes_[w]) {
+        if (w_.r_->has_parking_edges_.test(node_idx)) {
+          auto it = std::lower_bound(
+              begin(w_.r_->node_parking_edges_),
+              end(w_.r_->node_parking_edges_), node_idx,
+              [&](pair<node_idx_t, parking_edge_idx_t> const& p,
+                  node_idx_t const n) { return p.first < n; });
+          for (; it != end(w_.r_->node_parking_edges_) && it->first == node_idx;
+               ++it) {
+            // fmt::println("Found for way {}:  {} ({}) -> {}", w, node_idx,
+            //              w_.r_->node_positions_[node_idx], it->second);
+            parking_edges.set(it->second);
+          }
+        }
+      }
+    };
+
     auto gj = geojson_writer{.w_ = w_};
-    l_.find({min, max}, [&](way_idx_t const w) { gj.write_way(w); });
+    l_.find({min, max}, [&](way_idx_t const w) {
+      gj.write_way(w);
+      mark_parking_edges(w);
+    });
+    gj.write_parking_edges(parking_edges);
 
     with_profile(profile,
                  [&]<Profile P>(P&&) { send_graph_response<P>(req, cb, gj); });
