@@ -273,6 +273,7 @@ struct car_parking {
   template <direction SearchDir, bool WithBlocked, typename Fn>
   static void adjacent(parameters const& params,
                        ways::routing const& w,
+                       timezone_cache_t const& timezones,
                        node const n,
                        duration_t const current_duration,
                        std::optional<routing_time_t> const start_time,
@@ -291,8 +292,8 @@ struct car_parking {
 
     if (n.is_foot_node() || (kFwd && n.is_car_node() && is_parking)) {
       footp::template adjacent<SearchDir, WithBlocked>(
-          params.foot_, w, to_foot(n), current_duration, start_time, blocked,
-          nullptr, elevations,
+          params.foot_, w, timezones, to_foot(n), current_duration, start_time,
+          blocked, nullptr, elevations,
           [&](footp::node const neighbor, std::uint32_t const cost,
               duration_t const duration, distance_t const dist,
               way_idx_t const way, std::uint16_t const from,
@@ -310,8 +311,8 @@ struct car_parking {
 
     if (n.is_car_node() || (kBwd && n.is_foot_node() && is_parking)) {
       car::template adjacent<SearchDir, WithBlocked>(
-          params.car_, w, to_car(n), current_duration, start_time, blocked,
-          nullptr, elevations,
+          params.car_, w, timezones, to_car(n), current_duration, start_time,
+          blocked, nullptr, elevations,
           [&](car::node const neighbor, std::uint32_t const cost,
               duration_t const duration, distance_t const dist,
               way_idx_t const way, std::uint16_t const from,
@@ -352,6 +353,7 @@ struct car_parking {
 
   static bool is_dest_reachable(parameters const& params,
                                 ways::routing const& w,
+                                timezone_cache_t const& timezones,
                                 node const n,
                                 way_idx_t const way,
                                 direction const way_dir,
@@ -361,18 +363,19 @@ struct car_parking {
     return !UseParking || w.way_properties_[way].is_parking() ||
            (search_dir == direction::kForward
                 ? n.is_foot_node() &&
-                      footp::is_dest_reachable(params.foot_, w, to_foot(n), way,
-                                               way_dir, search_dir, start_time,
-                                               current_duration)
+                      footp::is_dest_reachable(
+                          params.foot_, w, timezones, to_foot(n), way, way_dir,
+                          search_dir, start_time, current_duration)
                 : n.is_car_node() &&
-                      car::is_dest_reachable(params.car_, w, to_car(n), way,
-                                             way_dir, search_dir, start_time,
-                                             current_duration));
+                      car::is_dest_reachable(
+                          params.car_, w, timezones, to_car(n), way, way_dir,
+                          search_dir, start_time, current_duration));
   }
 
   static constexpr cost_and_duration way_cost(
       parameters const& params,
       ways::routing const& w,
+      timezone_cache_t const& timezones,
       way_idx_t const way,
       way_properties const& e,
       direction const dir,
@@ -380,8 +383,8 @@ struct car_parking {
       std::optional<routing_time_t> const start_time,
       duration_t const current_duration,
       direction const search_dir) {
-    return footp::way_cost(params.foot_, w, way, e, dir, dist, start_time,
-                           current_duration, search_dir);
+    return footp::way_cost(params.foot_, w, timezones, way, e, dir, dist,
+                           start_time, current_duration, search_dir);
   }
 
   static constexpr cost_and_duration node_cost(parameters const& params,

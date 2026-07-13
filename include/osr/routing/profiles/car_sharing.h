@@ -371,6 +371,7 @@ struct car_sharing {
   template <direction SearchDir, bool WithBlocked, typename Fn>
   static void adjacent(parameters const& params,
                        ways::routing const& w,
+                       timezone_cache_t const& timezones,
                        node const n,
                        duration_t const current_duration,
                        std::optional<routing_time_t> const start_time,
@@ -394,8 +395,8 @@ struct car_sharing {
                                        bool const include_additional_edges,
                                        cost_t const switch_penalty = 0) {
       footp::template adjacent<SearchDir, WithBlocked>(
-          params.foot_, w, to_foot(n), current_duration, start_time, blocked,
-          nullptr, elevations,
+          params.foot_, w, timezones, to_foot(n), current_duration, start_time,
+          blocked, nullptr, elevations,
           [&](footp::node const neighbor, std::uint32_t const cost,
               duration_t const duration, distance_t const dist,
               way_idx_t const way, std::uint16_t const from,
@@ -416,10 +417,10 @@ struct car_sharing {
             handle_additional_edge(
                 ae, nt,
                 clamp_add(
-                    footp::way_cost(params.foot_, w, way_idx_t::invalid(),
-                                    kAdditionalWayProperties,
-                                    direction::kForward, ae.distance_,
-                                    start_time, current_duration, SearchDir),
+                    footp::way_cost(
+                        params.foot_, w, timezones, way_idx_t::invalid(),
+                        kAdditionalWayProperties, direction::kForward,
+                        ae.distance_, start_time, current_duration, SearchDir),
                     switch_penalty));
           }
         }
@@ -429,8 +430,8 @@ struct car_sharing {
     auto const& continue_with_vehicle = [&](bool const include_additional_edges,
                                             cost_t const switch_penalty = 0) {
       car::adjacent<SearchDir, WithBlocked>(
-          params.car_, w, to_rental(n), current_duration, start_time, blocked,
-          nullptr, elevations,
+          params.car_, w, timezones, to_rental(n), current_duration, start_time,
+          blocked, nullptr, elevations,
           [&](car::node const neighbor, std::uint32_t const cost,
               duration_t const duration, distance_t const dist,
               way_idx_t const way, std::uint16_t const from,
@@ -451,10 +452,10 @@ struct car_sharing {
             handle_additional_edge(
                 ae, node_type::kRental,
                 clamp_add(
-                    car::way_cost(params.car_, w, way_idx_t::invalid(),
-                                  kAdditionalWayProperties, direction::kForward,
-                                  ae.distance_, start_time, current_duration,
-                                  SearchDir),
+                    car::way_cost(
+                        params.car_, w, timezones, way_idx_t::invalid(),
+                        kAdditionalWayProperties, direction::kForward,
+                        ae.distance_, start_time, current_duration, SearchDir),
                     switch_penalty));
           }
         }
@@ -473,22 +474,22 @@ struct car_sharing {
                 is_allowed(sharing->start_allowed_, n.n_)) {
               handle_additional_edge(
                   ae, node_type::kRental,
-                  clamp_add(
-                      car::way_cost(params.car_, w, way_idx_t::invalid(),
-                                    kAdditionalWayProperties,
-                                    direction::kForward, ae.distance_,
-                                    start_time, current_duration, SearchDir),
-                      kStartSwitchPenalty));
+                  clamp_add(car::way_cost(
+                                params.car_, w, timezones, way_idx_t::invalid(),
+                                kAdditionalWayProperties, direction::kForward,
+                                ae.distance_, start_time, current_duration,
+                                SearchDir),
+                            kStartSwitchPenalty));
             } else if (n.is_rental_node() &&
                        is_allowed(sharing->end_allowed_, n.n_)) {
               handle_additional_edge(
                   ae, node_type::kTrailingFoot,
-                  clamp_add(
-                      footp::way_cost(params.foot_, w, way_idx_t::invalid(),
-                                      kAdditionalWayProperties,
-                                      direction::kForward, ae.distance_,
-                                      start_time, current_duration, SearchDir),
-                      kEndSwitchPenalty));
+                  clamp_add(footp::way_cost(
+                                params.foot_, w, timezones,
+                                way_idx_t::invalid(), kAdditionalWayProperties,
+                                direction::kForward, ae.distance_, start_time,
+                                current_duration, SearchDir),
+                            kEndSwitchPenalty));
             }
           }
         }
@@ -522,22 +523,22 @@ struct car_sharing {
                 is_allowed(sharing->end_allowed_, n.n_)) {
               handle_additional_edge(
                   ae, node_type::kRental,
-                  clamp_add(
-                      car::way_cost(params.car_, w, way_idx_t::invalid(),
-                                    kAdditionalWayProperties,
-                                    direction::kForward, ae.distance_,
-                                    start_time, current_duration, SearchDir),
-                      kEndSwitchPenalty));
+                  clamp_add(car::way_cost(
+                                params.car_, w, timezones, way_idx_t::invalid(),
+                                kAdditionalWayProperties, direction::kForward,
+                                ae.distance_, start_time, current_duration,
+                                SearchDir),
+                            kEndSwitchPenalty));
             } else if (n.is_rental_node() &&
                        is_allowed(sharing->start_allowed_, n.n_)) {
               handle_additional_edge(
                   ae, node_type::kInitialFoot,
-                  clamp_add(
-                      footp::way_cost(params.foot_, w, way_idx_t::invalid(),
-                                      kAdditionalWayProperties,
-                                      direction::kForward, ae.distance_,
-                                      start_time, current_duration, SearchDir),
-                      kStartSwitchPenalty));
+                  clamp_add(footp::way_cost(
+                                params.foot_, w, timezones,
+                                way_idx_t::invalid(), kAdditionalWayProperties,
+                                direction::kForward, ae.distance_, start_time,
+                                current_duration, SearchDir),
+                            kStartSwitchPenalty));
             }
           }
         }
@@ -562,6 +563,7 @@ struct car_sharing {
 
   static bool is_dest_reachable(parameters const& params,
                                 ways::routing const& w,
+                                timezone_cache_t const& timezones,
                                 node const n,
                                 way_idx_t const way,
                                 direction const way_dir,
@@ -569,13 +571,15 @@ struct car_sharing {
                                 std::optional<routing_time_t> const start_time,
                                 duration_t const current_duration) {
     return !n.is_rental_node() &&
-           footp::is_dest_reachable(params.foot_, w, to_foot(n), way, way_dir,
-                                    search_dir, start_time, current_duration);
+           footp::is_dest_reachable(params.foot_, w, timezones, to_foot(n), way,
+                                    way_dir, search_dir, start_time,
+                                    current_duration);
   }
 
   static constexpr cost_and_duration way_cost(
       parameters const& params,
       ways::routing const& w,
+      timezone_cache_t const& timezones,
       way_idx_t const way,
       way_properties const& e,
       direction const dir,
@@ -583,8 +587,8 @@ struct car_sharing {
       std::optional<routing_time_t> const start_time,
       duration_t const current_duration,
       direction const search_dir) {
-    return footp::way_cost(params.foot_, w, way, e, dir, dist, start_time,
-                           current_duration, search_dir);
+    return footp::way_cost(params.foot_, w, timezones, way, e, dir, dist,
+                           start_time, current_duration, search_dir);
   }
 
   static constexpr cost_and_duration node_cost(parameters const& params,

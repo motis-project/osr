@@ -10,6 +10,7 @@
 #endif
 #include <filesystem>
 #include <ranges>
+#include <vector>
 
 #include "fmt/ranges.h"
 #include "fmt/std.h"
@@ -33,7 +34,13 @@
 #include "osr/types.h"
 #include "osr/util/multi_counter.h"
 
+namespace date {
+class time_zone;
+}
+
 namespace osr {
+
+using timezone_cache_t = std::vector<date::time_zone const*>;
 
 struct resolved_restriction {
   enum class type { kNo, kOnly } type_;
@@ -558,6 +565,7 @@ struct ways {
   };
 
   cista::wrapped<routing> r_;
+  timezone_cache_t timezones_;
 
   mm_vec_map<node_idx_t, osm_node_idx_t> node_to_osm_;
   mm_vec_map<way_idx_t, osm_way_idx_t> way_osm_idx_;

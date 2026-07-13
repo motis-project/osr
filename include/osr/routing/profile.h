@@ -104,6 +104,7 @@ concept Profile =
     requires(typename P::parameters const& params,
              typename P::node const node,
              ways::routing const& r,
+             timezone_cache_t const& timezones,
              way_idx_t const w,
              direction const dir,
              std::optional<routing_time_t> const start_time,
@@ -112,12 +113,13 @@ concept Profile =
              way_properties const w_props,
              double const dist) {
       {
-        P::is_dest_reachable(params, r, node, w, dir, dir, start_time,
-                             current_duration)
+        P::is_dest_reachable(params, r, timezones, node, w, dir, dir,
+                             start_time, current_duration)
       } -> std::same_as<bool>;
       {
-        P::way_cost(params, r, w, w_props, dir, std::declval<distance_t>(),
-                    start_time, current_duration, dir)
+        P::way_cost(params, r, timezones, w, w_props, dir,
+                    std::declval<distance_t>(), start_time, current_duration,
+                    dir)
       } -> std::same_as<cost_and_duration>;
       { P::node_cost(params, n_props) } -> std::same_as<cost_and_duration>;
       { P::lower_bound_heuristic(params, dist) } -> std::same_as<double>;
@@ -129,6 +131,7 @@ concept Profile =
              duration_t const current_duration,
              std::optional<routing_time_t> const start_time,
              ways::routing const& r,
+             timezone_cache_t const& timezones,
              bitvec<node_idx_t> const* blocked,
              sharing_data const* sharing,
              elevation_storage const* elevation,
@@ -143,8 +146,8 @@ concept Profile =
                                 bool const)> f) {
       {
         P::template adjacent<direction::kBackward, false>(
-            params, r, n, current_duration, start_time, blocked, sharing,
-            elevation, f)
+            params, r, timezones, n, current_duration, start_time, blocked,
+            sharing, elevation, f)
       } -> std::same_as<void>;
     };
 

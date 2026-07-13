@@ -143,6 +143,7 @@ struct ferry {
   template <direction SearchDir, bool WithBlocked, typename Fn>
   static void adjacent(parameters const& params,
                        ways::routing const& w,
+                       timezone_cache_t const& timezones,
                        node const n,
                        duration_t const current_duration,
                        std::optional<routing_time_t> const start_time,
@@ -152,7 +153,7 @@ struct ferry {
                        Fn&& fn) {
     if (additional != nullptr) {
       for_each_additional_edge<ferry>(
-          params, w, n, additional,
+          params, w, timezones, n, additional,
           [&](additional_edge const& ae, cost_and_duration const edge_cost,
               direction const) {
             auto const target = node{ae.to_};
@@ -190,18 +191,18 @@ struct ferry {
         }
 
         auto const target_way_prop = w.way_properties_[way];
-        if (way_cost(params, w, way, target_way_prop, way_dir, 0U, start_time,
-                     current_duration, SearchDir)
+        if (way_cost(params, w, timezones, way, target_way_prop, way_dir, 0U,
+                     start_time, current_duration, SearchDir)
                 .cost_ == kInfeasible) {
           return;
         }
 
         auto const dist = w.get_way_node_distance(way, std::min(from, to));
         auto const target = node{target_node};
-        auto const step =
-            clamp_add(way_cost(params, w, way, target_way_prop, way_dir, dist,
-                               start_time, current_duration, SearchDir),
-                      node_cost(params, target_node_prop));
+        auto const step = clamp_add(
+            way_cost(params, w, timezones, way, target_way_prop, way_dir, dist,
+                     start_time, current_duration, SearchDir),
+            node_cost(params, target_node_prop));
         fn(target, step.cost_, step.duration_, dist, way, from, to,
            elevation_storage::elevation{}, false);
       };
@@ -217,6 +218,7 @@ struct ferry {
 
   static bool is_dest_reachable(parameters const& params,
                                 ways::routing const& w,
+                                timezone_cache_t const& timezones,
                                 node const,
                                 way_idx_t const way,
                                 direction const way_dir,
@@ -224,8 +226,8 @@ struct ferry {
                                 std::optional<routing_time_t> const start_time,
                                 duration_t const current_duration) {
     auto const target_way_prop = w.way_properties_[way];
-    if (way_cost(params, w, way, target_way_prop, way_dir, 0U, start_time,
-                 current_duration, search_dir)
+    if (way_cost(params, w, timezones, way, target_way_prop, way_dir, 0U,
+                 start_time, current_duration, search_dir)
             .cost_ == kInfeasible) {
       return false;
     }
@@ -236,6 +238,7 @@ struct ferry {
   static constexpr cost_and_duration way_cost(
       parameters const&,
       ways::routing const&,
+      timezone_cache_t const&,
       way_idx_t const,
       way_properties const& e,
       direction const,

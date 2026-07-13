@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cassert>
 #include <cstdint>
 
 #include <chrono>
@@ -58,14 +59,16 @@ inline constexpr bool compare_conditional_value(
 
 inline std::optional<conditional_wall_time> to_conditional_wall_time(
     std::optional<routing_time_t> const t,
-    std::optional<std::string_view> const timezone = std::nullopt) {
+    conditional_timezone_idx_t const timezone_idx,
+    timezone_cache_t const& timezones) {
   if (!t.has_value()) {
     return std::nullopt;
   }
   auto local_time = *t;
-  if (timezone.has_value()) {
-    auto const* tz = date::locate_zone(*timezone);
-    auto const zoned = date::zoned_time<routing_time_t::duration>{tz, *t};
+  if (timezone_idx != conditional_timezone_idx_t::invalid()) {
+    assert(to_idx(timezone_idx) < timezones.size());
+    auto const* timezone = timezones[to_idx(timezone_idx)];
+    auto const zoned = date::zoned_time<routing_time_t::duration>{timezone, *t};
     local_time = routing_time_t{zoned.get_local_time().time_since_epoch()};
   }
   auto const day = std::chrono::floor<std::chrono::days>(local_time);
@@ -76,18 +79,6 @@ inline std::optional<conditional_wall_time> to_conditional_wall_time(
       .date_ = to_conditional_wall_date(day),
       .previous_date_ = to_conditional_wall_date(day - std::chrono::days{1}),
       .minutes_ = static_cast<std::uint16_t>(minutes)};
-}
-
-inline std::optional<std::string_view> conditional_timezone_name(
-    ways::routing const& w, conditional_timezone_idx_t const idx) {
-  if (idx == conditional_timezone_idx_t::invalid()) {
-    return std::nullopt;
-  }
-  auto const i = to_idx(idx);
-  if (i >= w.timezones_.size()) {
-    return std::nullopt;
-  }
-  return w.timezones_[idx].view();
 }
 
 template <typename Range, typename Fn>
@@ -249,6 +240,7 @@ bool matches_conditional_condition_set(
 template <typename Fn>
 bool matches_conditional_condition_set_utc(
     ways::routing const& w,
+    timezone_cache_t const& timezones,
     conditional_condition_set_idx_t const idx,
     std::optional<routing_time_t> const utc_time,
     Fn&& fn) {
@@ -257,9 +249,7 @@ bool matches_conditional_condition_set_utc(
   }
   auto const& set = w.conditional_condition_sets_[to_idx(idx)];
   return matches_conditional_condition_set(
-      w, idx,
-      to_conditional_wall_time(utc_time,
-                               conditional_timezone_name(w, set.timezone_)),
+      w, idx, to_conditional_wall_time(utc_time, set.timezone_, timezones),
       std::forward<Fn>(fn));
 }
 

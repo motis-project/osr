@@ -257,13 +257,14 @@ struct hgv {
   template <direction SearchDir, bool WithBlocked, typename Fn>
   static void adjacent(parameters const& params,
                        ways::routing const& w,
+                       timezone_cache_t const& timezones,
                        node const n,
                        duration_t const current_duration,
                        bitvec<node_idx_t> const* blocked,
                        sharing_data const* additional,
                        elevation_storage const*,
                        Fn&& fn) {
-    adjacent<SearchDir, WithBlocked>(params, w, n, current_duration,
+    adjacent<SearchDir, WithBlocked>(params, w, timezones, n, current_duration,
                                      std::nullopt, blocked, additional, nullptr,
                                      std::forward<Fn>(fn));
   }
@@ -271,6 +272,7 @@ struct hgv {
   template <direction SearchDir, bool WithBlocked, typename Fn>
   static void adjacent(parameters const& params,
                        ways::routing const& w,
+                       timezone_cache_t const& timezones,
                        node const n,
                        duration_t const current_duration,
                        std::optional<routing_time_t> const start_time,
@@ -280,12 +282,13 @@ struct hgv {
                        Fn&& fn) {
     if (additional != nullptr) {
       for_each_additional_edge<hgv>(
-          params, w, n, additional, start_time, current_duration, SearchDir,
+          params, w, timezones, n, additional, start_time, current_duration,
+          SearchDir,
           [&](additional_edge const& ae, cost_and_duration const edge_cost,
               direction const edge_dir) {
             if (!additional->is_additional_node(n.n_)) {
               if (is_restricted<SearchDir>(
-                      params, w, n.n_, n.way_,
+                      params, w, timezones, n.n_, n.way_,
                       w.get_way_pos(n.n_, ae.underlying_way_), start_time,
                       current_duration, SearchDir)) {
                 return;
@@ -310,25 +313,27 @@ struct hgv {
     }
 
     for_each_adjacent_node<hgv, SearchDir, WithBlocked, true>(
-        params, w, n, blocked, params.uturn_penalty_, start_time,
+        params, w, timezones, n, blocked, params.uturn_penalty_, start_time,
         current_duration, SearchDir, fn);
   }
 
   template <direction SearchDir>
   static bool is_restricted(parameters const& params,
                             ways::routing const& w,
+                            timezone_cache_t const& timezones,
                             node_idx_t const n,
                             std::uint8_t const from,
                             std::uint8_t const to,
                             std::optional<routing_time_t> const start_time,
                             duration_t const current_duration,
                             direction const search_dir) {
-    return is_restricted(params, w, n, from, to, SearchDir, start_time,
-                         current_duration, search_dir);
+    return is_restricted(params, w, timezones, n, from, to, SearchDir,
+                         start_time, current_duration, search_dir);
   }
 
   static bool is_restricted(parameters const& params,
                             ways::routing const& w,
+                            timezone_cache_t const& timezones,
                             node_idx_t const n,
                             std::uint8_t const from,
                             std::uint8_t const to,
@@ -353,13 +358,14 @@ struct hgv {
         return false;
       }
       return x.condition_set_ == conditional_condition_set_idx_t::invalid() ||
-             matches_profile_condition_set_utc(params, w, x.condition_set_,
-                                               current_time);
+             matches_profile_condition_set_utc(params, w, timezones,
+                                               x.condition_set_, current_time);
     });
   }
 
   static bool is_dest_reachable(parameters const& params,
                                 ways::routing const& w,
+                                timezone_cache_t const& timezones,
                                 node const n,
                                 way_idx_t const way,
                                 direction const way_dir,
@@ -367,14 +373,15 @@ struct hgv {
                                 std::optional<routing_time_t> const start_time,
                                 duration_t const current_duration) {
     auto const target_way_prop = w.way_properties_[way];
-    if (way_cost(params, w, way, target_way_prop, way_dir, 0U, start_time,
-                 current_duration, search_dir)
+    if (way_cost(params, w, timezones, way, target_way_prop, way_dir, 0U,
+                 start_time, current_duration, search_dir)
             .cost_ == kInfeasible) {
       return false;
     }
 
-    if (is_restricted(params, w, n.n_, n.way_, w.get_way_pos(n.n_, way),
-                      search_dir, start_time, current_duration, search_dir)) {
+    if (is_restricted(params, w, timezones, n.n_, n.way_,
+                      w.get_way_pos(n.n_, way), search_dir, start_time,
+                      current_duration, search_dir)) {
       return false;
     }
 
@@ -384,6 +391,7 @@ struct hgv {
   static cost_and_duration way_cost(
       parameters const& params,
       ways::routing const& w,
+      timezone_cache_t const& timezones,
       way_idx_t const way,
       way_properties const& e,
       direction const dir,
@@ -422,7 +430,7 @@ struct hgv {
     }
 
     apply_conditional_restrictions(
-        params, w, way, dir,
+        params, w, timezones, way, dir,
         current_routing_time(start_time, search_dir, current_duration), state);
 
     if (!conditional_oneway_accessible(state.oneway_, dir)) {
@@ -526,10 +534,11 @@ struct hgv {
   static bool matches_profile_condition_set_utc(
       parameters const& params,
       ways::routing const& w,
+      timezone_cache_t const& timezones,
       conditional_condition_set_idx_t const idx,
       std::optional<routing_time_t> const t) {
     return matches_conditional_condition_set_utc(
-        w, idx, t, [&](conditional_condition const& c) {
+        w, timezones, idx, t, [&](conditional_condition const& c) {
           return matches_profile_condition(params, c);
         });
   }
@@ -716,6 +725,7 @@ struct hgv {
   static void apply_conditional_restrictions(
       parameters const& params,
       ways::routing const& w,
+      timezone_cache_t const& timezones,
       way_idx_t const way,
       direction const dir,
       std::optional<routing_time_t> const current_time,
@@ -727,24 +737,24 @@ struct hgv {
     for (auto i = conditionals->access_.begin_; i != conditionals->access_.end_;
          ++i) {
       auto const& r = w.conditional_access_[i];
-      if (matches_profile_condition_set_utc(params, w, r.condition_set_,
-                                            current_time)) {
+      if (matches_profile_condition_set_utc(params, w, timezones,
+                                            r.condition_set_, current_time)) {
         apply_access_condition(r, params, dir, state);
       }
     }
     for (auto i = conditionals->numeric_.begin_;
          i != conditionals->numeric_.end_; ++i) {
       auto const& r = w.conditional_numeric_[i];
-      if (matches_profile_condition_set_utc(params, w, r.condition_set_,
-                                            current_time)) {
+      if (matches_profile_condition_set_utc(params, w, timezones,
+                                            r.condition_set_, current_time)) {
         apply_numeric_condition(r, params, dir, state);
       }
     }
     for (auto i = conditionals->oneway_.begin_; i != conditionals->oneway_.end_;
          ++i) {
       auto const& r = w.conditional_oneway_[i];
-      if (matches_profile_condition_set_utc(params, w, r.condition_set_,
-                                            current_time)) {
+      if (matches_profile_condition_set_utc(params, w, timezones,
+                                            r.condition_set_, current_time)) {
         apply_oneway_condition(r, dir, state);
       }
     }

@@ -48,8 +48,8 @@ inline connecting_way find_connecting_way(
     cost_t const expected_cost) {
   auto conn = std::optional<connecting_way>{};
   P::template adjacent<SearchDir, WithBlocked>(
-      params, r, from, current_duration, start_time, blocked, sharing,
-      elevations,
+      params, r, w.timezones_, from, current_duration, start_time, blocked,
+      sharing, elevations,
       [&](typename P::node const target, std::uint32_t const cost,
           duration_t const, distance_t const dist, way_idx_t const way,
           std::uint16_t const a_idx, std::uint16_t const b_idx,

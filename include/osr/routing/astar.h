@@ -179,7 +179,7 @@ struct astar {
       }
 
       P::template adjacent<SearchDir, WithBlocked>(
-          params, r, curr_node,
+          params, r, w.timezones_, curr_node,
           cost_.at(curr_node.get_key()).duration(curr_node), start_time,
           blocked, sharing, elevations,
           [&](node const neighbor, std::uint32_t const cost,

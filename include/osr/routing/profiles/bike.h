@@ -175,20 +175,22 @@ struct bike {
 
   static bool is_dest_reachable(parameters const& params,
                                 ways::routing const& w,
+                                timezone_cache_t const& timezones,
                                 node,
                                 way_idx_t const way,
                                 direction const way_dir,
                                 direction const search_dir,
                                 std::optional<routing_time_t> const start_time,
                                 duration_t const current_duration) {
-    return way_cost(params, w, way, w.way_properties_[way], way_dir, 0U,
-                    start_time, current_duration, search_dir)
+    return way_cost(params, w, timezones, way, w.way_properties_[way], way_dir,
+                    0U, start_time, current_duration, search_dir)
                .cost_ != kInfeasible;
   }
 
   template <direction SearchDir, bool WithBlocked, typename Fn>
   static void adjacent(parameters const& params,
                        ways::routing const& w,
+                       timezone_cache_t const& timezones,
                        node const n,
                        duration_t const current_duration,
                        std::optional<routing_time_t> const start_time,
@@ -213,8 +215,8 @@ struct bike {
         }
 
         auto const target_way_prop = w.way_properties_[way];
-        if (way_cost(params, w, way, target_way_prop, way_dir, 0U, start_time,
-                     current_duration, SearchDir)
+        if (way_cost(params, w, timezones, way, target_way_prop, way_dir, 0U,
+                     start_time, current_duration, SearchDir)
                 .cost_ == kInfeasible) {
           return;
         }
@@ -238,9 +240,10 @@ struct bike {
                        : ElevationUpCost * to_idx(elevation.up_) / dist)
                 : 0);
         auto const step = clamp_add(
-            clamp_add(way_cost(params, w, way, target_way_prop, way_dir, dist,
-                               start_time, current_duration, SearchDir),
-                      node_cost(params, target_node_prop)),
+            clamp_add(
+                way_cost(params, w, timezones, way, target_way_prop, way_dir,
+                         dist, start_time, current_duration, SearchDir),
+                node_cost(params, target_node_prop)),
             elevation_cost, duration_t{0});
         fn(node{target_node, way_dir}, step.cost_, step.duration_, dist, way,
            from, to, elevation, false);
@@ -258,6 +261,7 @@ struct bike {
   template <direction SearchDir, bool WithBlocked, typename Fn>
   static void reverse_adjacent(parameters const& params,
                                ways::routing const& w,
+                               timezone_cache_t const& timezones,
                                node const n,
                                duration_t const current_duration,
                                std::optional<routing_time_t> const start_time,
@@ -266,13 +270,14 @@ struct bike {
                                elevation_storage const* elevations,
                                Fn&& fn) {
     adjacent<opposite(SearchDir), WithBlocked>(
-        params, w, n, current_duration, start_time, blocked, sharing,
+        params, w, timezones, n, current_duration, start_time, blocked, sharing,
         elevations, std::forward<Fn>(fn));
   }
 
   static constexpr cost_and_duration way_cost(
       parameters const& params,
       ways::routing const&,
+      timezone_cache_t const&,
       way_idx_t const,
       way_properties const e,
       direction const dir,
