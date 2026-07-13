@@ -42,6 +42,7 @@ struct car_sharing {
                      .speed_limit_ = speed_limit::kmh_10,
                      .is_platform_ = 0,
                      .is_parking_ = false,
+                     .is_bike_parking_ = false,
                      .is_ramp_ = false,
                      .is_sidewalk_separate_ = false,
                      .motor_vehicle_no_ = false,
@@ -70,6 +71,7 @@ struct car_sharing {
                       .is_entrance_ = false,
                       .is_multi_level_ = false,
                       .is_parking_ = false,
+                      .is_bike_parking_ = false,
                       .to_level_ = 0,
                       .is_bus_accessible_with_penalty_ = false};
 

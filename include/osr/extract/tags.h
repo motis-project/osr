@@ -50,6 +50,7 @@ struct tags {
         case cista::hash("amenity"):
           is_parking_ |=
               (t.value() == "parking"sv || t.value() == "parking_entrance"sv);
+          is_bike_parking_ |= (t.value() == "bicycle_parking"sv);
           break;
         case cista::hash("building"):
           is_parking_ |= t.value() == "parking"sv;
@@ -370,6 +371,9 @@ struct tags {
 
   // https://wiki.openstreetmap.org/wiki/Tag:amenity%3Dparking
   bool is_parking_{false};
+
+  // https://wiki.openstreetmap.org/wiki/Tag:amenity%3Dbicycle_parking
+  bool is_bike_parking_{false};
 
   // https://wiki.openstreetmap.org/wiki/Key:level
   bool has_level_{false};

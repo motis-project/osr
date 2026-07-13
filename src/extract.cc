@@ -276,6 +276,7 @@ way_properties get_way_properties(
   p.is_elevator_ = t.is_elevator_;
   p.is_steps_ = (t.highway_ == "steps"sv);
   p.is_parking_ = t.is_parking_;
+  p.is_parking_ = t.is_bike_parking_;
   p.speed_limit_ = get_speed_limit(t);
   p.from_level_ = to_idx(from);
   p.to_level_ = to_idx(to);
@@ -309,6 +310,7 @@ std::pair<node_properties, level_bits_t> get_node_properties(tags const& t) {
   p.is_entrance_ = t.is_entrance_;
   p.is_multi_level_ = is_multi;
   p.is_parking_ = t.is_parking_;
+  p.is_bike_parking_ = t.is_bike_parking_;
   p.to_level_ = to_idx(to);
   p.is_bus_accessible_with_penalty_ =
       is_accessible_with_penalty<bus_profile>(t, osm_obj_type::kNode);

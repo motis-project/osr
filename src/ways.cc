@@ -2,6 +2,7 @@
 
 #include <algorithm>
 
+#include "osr/types.h"
 #include "utl/parallel_for.h"
 
 #include "cista/io.h"
@@ -185,6 +186,17 @@ void ways::compute_big_street_neighbors() {
         expand(way, true, expand);
         pt->update_monotonic(i);
       });
+}
+
+void ways::add_bike_parkings() {
+  for (auto const [i, p] : utl::enumerate(r_->way_properties_)) {
+    if (p.is_bike_parking_) {
+      auto w = way_idx_t{i};
+      for (auto& n : r_->way_nodes_[w]) {
+        r_->node_properties_[n].is_bike_parking_ = 1;
+      }
+    }
+  }
 }
 
 void ways::connect_ways() {

@@ -211,6 +211,7 @@ struct way_properties {
   std::uint8_t speed_limit_ : 3;
   std::uint8_t is_platform_ : 1;  // only used during extract
   std::uint8_t is_parking_ : 1;
+  std::uint8_t is_bike_parking_ : 1;
   std::uint8_t is_ramp_ : 1;
   std::uint8_t is_sidewalk_separate_ : 1;
   std::uint8_t motor_vehicle_no_ : 1;
@@ -273,6 +274,7 @@ struct node_properties {
   std::uint8_t is_entrance_ : 1;
   std::uint8_t is_multi_level_ : 1;
   std::uint8_t is_parking_ : 1;
+  std::uint8_t is_bike_parking_ : 1;
 
   std::uint8_t to_level_ : 6;
   std::uint8_t is_bus_accessible_with_penalty_ : 1;
@@ -322,6 +324,8 @@ struct ways {
   point get_node_pos(node_idx_t const i) const {
     return r_->node_positions_.at(i);
   }
+
+  void add_bike_parkings();
 
   std::size_t get_polyline_node_idx(
       way_idx_t const way, std::uint16_t const target_routing_idx) const;
