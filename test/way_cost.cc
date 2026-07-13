@@ -118,9 +118,10 @@ osr::cost_t conditional_hgv_cost(std::string_view const key,
   routing.way_properties_.push_back(props);
   routing.way_conditionals_.emplace_back(way, builder.way_);
 
-  auto const result = osr::hgv::way_cost(
-      osr::hgv::parameters{}, routing, timezone_cache(), way, props, dir, 1000U,
-      osr::routing_time_t{}, osr::duration_t{0U}, osr::direction::kForward);
+  auto const result =
+      osr::hgv::way_cost(params, routing, timezone_cache(), way, props,
+                         osr::direction::kForward, 1000U, osr::routing_time_t{},
+                         osr::duration_t{0U}, osr::direction::kForward);
   return result.cost_;
 }
 
