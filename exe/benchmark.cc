@@ -21,7 +21,12 @@
 #include "osr/elevation_storage.h"
 #include "osr/location.h"
 #include "osr/lookup.h"
+#include <fstream>
+
+#include "routingkit/contraction_hierarchy.h"
+
 #include "osr/routing/bidirectional.h"
+#include "osr/routing/ch.h"
 #include "osr/routing/dijkstra.h"
 #include "osr/routing/profile.h"
 #include "osr/routing/profiles/car.h"
@@ -43,8 +48,11 @@ public:
     param(from_coords_, "matching,m", "Include node matching to coords");
     param(speed_, "speed,s", "Walking speed");
     param(mem_usage_, "mem", "Track memory usage");
+    param(ch_, "ch", "Run CH materialization test (foot) and exit");
+    param(stops_file_, "stops_file", "CSV of real stop lat,lon for Bucket-CH");
   }
 
+  std::string stops_file_{};
   fs::path data_dir_{"osr"};
   unsigned n_queries_{50};
   unsigned max_dist_{32768};
@@ -52,6 +60,7 @@ public:
   unsigned threads_{std::thread::hardware_concurrency()};
   float speed_{1.2F};
   bool mem_usage_{false};
+  bool ch_{false};
 };
 
 struct benchmark_result {
@@ -192,6 +201,411 @@ int main(int argc, char const* argv[]) {
   auto const w = ways{opt.data_dir_, cista::mmap::protection::READ};
   auto const l = osr::lookup{w, opt.data_dir_, cista::mmap::protection::READ};
   auto const elevations = elevation_storage::try_open(opt.data_dir_);
+
+  if (opt.ch_) {
+    auto const ms = [](auto a, auto b) {
+      return std::chrono::duration<double, std::milli>(b - a).count();
+    };
+    auto const now = std::chrono::steady_clock::now;
+
+    auto t0 = now();
+    auto const g = materialize_foot(w);
+    fmt::println("foot graph: {} vertices, {} edges (materialize {:.0f}ms)",
+                 g.n_vertices(), g.n_edges(), ms(t0, now()));
+
+    // CSR -> tail/head/weight for RoutingKit
+    auto const n = static_cast<unsigned>(g.n_vertices());
+    auto tail = std::vector<unsigned>{};
+    auto head = std::vector<unsigned>{};
+    auto weight = std::vector<unsigned>{};
+    tail.reserve(g.n_edges());
+    head.reserve(g.n_edges());
+    weight.reserve(g.n_edges());
+    for (auto u = 0U; u != n; ++u) {
+      for (auto e = g.first_out_[u]; e != g.first_out_[u + 1U]; ++e) {
+        tail.push_back(u);
+        head.push_back(g.edge_target_[e]);
+        weight.push_back(g.edge_cost_[e]);
+      }
+    }
+
+    t0 = now();
+    auto const rkch =
+        RoutingKit::ContractionHierarchy::build(n, tail, head, weight);
+    fmt::println("RoutingKit CH built (contraction {:.0f}ms)", ms(t0, now()));
+
+    auto q = RoutingKit::ContractionHierarchyQuery{rkch};
+    auto targets = std::vector<unsigned>(n);
+    std::iota(begin(targets), end(targets), 0U);
+    q.pin_targets(targets);
+
+    // correctness gate: RoutingKit one-to-all vs Dijkstra (every vertex)
+    auto hh = cista::BASE_HASH;
+    auto nn = 0U;
+    auto mismatches = 0ULL, checked = 0ULL;
+    for (auto qi = 0U; qi != 3U; ++qi) {
+      auto const s = static_cast<unsigned>(cista::hash_combine(hh, ++nn) % n);
+      auto const dd = dijkstra_all(g, s, kInfeasible);
+      q.reset_source().add_source(s).run_to_pinned_targets();
+      auto const rk = q.get_distances_to_targets();
+      for (auto v = 0U; v != n; ++v) {
+        ++checked;
+        auto const a_inf = dd[v] == kInfeasible;
+        auto const b_inf = rk[v] >= RoutingKit::inf_weight;
+        if (a_inf != b_inf || (!a_inf && dd[v] != rk[v])) {
+          ++mismatches;
+        }
+      }
+    }
+    fmt::println("correctness: {} / {} vertices mismatch (must be 0)",
+                 mismatches, checked);
+
+    // last-mile setup: same CH, reverse query; oracle = transposed Dijkstra
+    auto const grev = transpose(g);
+    auto q2 = RoutingKit::ContractionHierarchyQuery{rkch};
+    q2.pin_sources(targets);
+    {
+      auto rmism = 0ULL, rchk = 0ULL;
+      for (auto qi = 0U; qi != 3U; ++qi) {
+        auto const d = static_cast<unsigned>(cista::hash_combine(hh, ++nn) % n);
+        auto const dd = dijkstra_all(grev, d, kInfeasible);
+        q2.reset_target().add_target(d).run_to_pinned_sources();
+        auto const rk = q2.get_distances_to_sources();
+        for (auto v = 0U; v != n; ++v) {
+          ++rchk;
+          auto const a_inf = dd[v] == kInfeasible;
+          auto const b_inf = rk[v] >= RoutingKit::inf_weight;
+          if (a_inf != b_inf || (!a_inf && dd[v] != rk[v])) {
+            ++rmism;
+          }
+        }
+      }
+      fmt::println("last-mile correctness: {} / {} mismatch (must be 0)", rmism,
+                   rchk);
+    }
+
+    // radius sweep: first- and last-mile, Dijkstra (radius-bounded) vs CH
+    fmt::println(
+        "\n radius |   first-mile: Dijkstra       CH  speedup |    last-mile: "
+        "Dijkstra       CH  speedup");
+    fmt::println(
+        "--------+-------------------------------------------+---------------"
+        "----------------------------");
+    for (auto const R : {900U, 1800U, 3600U, 7200U, 14400U, 32768U}) {
+      auto fdj = 0.0, fch = 0.0, ldj = 0.0, lch = 0.0;
+      for (auto qi = 0U; qi != opt.n_queries_; ++qi) {
+        auto const s = static_cast<unsigned>(cista::hash_combine(hh, ++nn) % n);
+        auto a = now();
+        auto const d1 = dijkstra_all(g, s, R);
+        fdj += ms(a, now());
+        a = now();
+        q.reset_source().add_source(s).run_to_pinned_targets();
+        auto const r1 = q.get_distances_to_targets();
+        fch += ms(a, now());
+
+        auto const d = static_cast<unsigned>(cista::hash_combine(hh, ++nn) % n);
+        a = now();
+        auto const d2 = dijkstra_all(grev, d, R);
+        ldj += ms(a, now());
+        a = now();
+        q2.reset_target().add_target(d).run_to_pinned_sources();
+        auto const r2 = q2.get_distances_to_sources();
+        lch += ms(a, now());
+      }
+      auto const N = static_cast<double>(opt.n_queries_);
+      fmt::println(
+          "{:>6}s | {:>9.3f}ms {:>8.3f}ms {:>6.2f}x | {:>9.3f}ms {:>8.3f}ms "
+          "{:>6.2f}x",
+          R, fdj / N, fch / N, fdj / std::max(1e-9, fch), ldj / N, lch / N,
+          ldj / std::max(1e-9, lch));
+    }
+
+    // ================= Bucket-CH on a realistic stop-subset =================
+    auto const K = std::min(2000U, n);
+    auto stops = std::vector<unsigned>{};
+    stops.reserve(K);
+    for (auto i = 0U; i != K; ++i) {
+      stops.push_back(static_cast<unsigned>(cista::hash_combine(hh, ++nn) % n));
+    }
+    auto const INF = RoutingKit::inf_weight;
+
+    // upward CH search WITH STALL-ON-DEMAND. `main` = search-direction graph,
+    // `stall` = opposite-direction graph (used to prune sub-optimally-settled
+    // nodes, the dominant Bucket-CH optimization).
+    auto up_search = [&](auto const& main, auto const& stall, unsigned const src,
+                         std::vector<unsigned>& dist,
+                         std::vector<unsigned>& touched) {
+      using qe = std::pair<unsigned, unsigned>;
+      auto pq = std::priority_queue<qe, std::vector<qe>, std::greater<>>{};
+      dist[src] = 0U;
+      touched.push_back(src);
+      pq.push({0U, src});
+      while (!pq.empty()) {
+        auto const [d, u] = pq.top();
+        pq.pop();
+        if (d > dist[u]) continue;
+        // stall-on-demand: a neighbor in the opposite graph offering a shorter
+        // path into u means u is settled sub-optimally -> do not expand it.
+        auto stalled = false;
+        for (auto e = stall.first_out[u]; e != stall.first_out[u + 1U]; ++e) {
+          auto const v = stall.head[e];
+          if (dist[v] != INF && dist[v] + stall.weight[e] < d) {
+            stalled = true;
+            break;
+          }
+        }
+        if (stalled) continue;
+        for (auto e = main.first_out[u]; e != main.first_out[u + 1U]; ++e) {
+          auto const v = main.head[e];
+          auto const nd = d + main.weight[e];
+          if (nd < dist[v]) {
+            dist[v] = nd;
+            touched.push_back(v);
+            pq.push({nd, v});
+          }
+        }
+      }
+    };
+
+    // ---- memory-scaling measurement: linear in #stops? radius-cappable? ----
+    fmt::println("\nBucket-CH memory scaling (foot graph n={}):", n);
+    fmt::println(
+        "  #stops |   entries  entries/stop   full MB | <=30min MB  <=15min MB");
+    fmt::println(
+        "---------+--------------------------------------+--------------------"
+        "--");
+    {
+      auto db = std::vector<unsigned>(n, INF);
+      auto tou = std::vector<unsigned>{};
+      for (auto const KK : {2000U, 8000U, 32000U, 128000U}) {
+        if (KK > n) break;
+        auto ent = 0ULL, cap30 = 0ULL, cap15 = 0ULL;
+        auto hs = cista::BASE_HASH;
+        auto cnt = 0U;
+        for (auto i = 0U; i != KK; ++i) {
+          auto const s =
+              static_cast<unsigned>(cista::hash_combine(hs, ++cnt) % n);
+          up_search(rkch.backward, rkch.forward, rkch.rank[s], db, tou);
+          for (auto const v : tou) {
+            ++ent;
+            if (db[v] <= 1800U) ++cap30;
+            if (db[v] <= 900U) ++cap15;
+            db[v] = INF;
+          }
+          tou.clear();
+        }
+        fmt::println("{:>8} | {:>9} {:>10.0f}  {:>9.1f} | {:>9.1f}  {:>9.1f}",
+                     KK, ent, static_cast<double>(ent) / KK, ent * 8.0 / 1e6,
+                     cap30 * 8.0 / 1e6, cap15 * 8.0 / 1e6);
+      }
+    }
+
+    // ---- REAL stops (match GTFS stop coords to graph nodes, then measure) ----
+    if (!opt.stops_file_.empty()) {
+      auto real_stops = std::vector<unsigned>{};
+      auto f = std::ifstream{opt.stops_file_};
+      auto line = std::string{};
+      auto const fp = typename foot<false>::parameters{};
+      auto total = 0U;
+      while (std::getline(f, line)) {
+        auto const comma = line.find(',');
+        if (comma == std::string::npos) continue;
+        ++total;
+        auto const lat = std::stod(line.substr(0, comma));
+        auto const lon = std::stod(line.substr(comma + 1));
+        auto const m = l.match<foot<false>>(
+            fp, location{geo::latlng{lat, lon}, level_t{0.F}}, false,
+            direction::kForward, 100.0, nullptr);
+        if (m.empty()) continue;
+        auto const& nc = m.front().left_.valid() ? m.front().left_ : m.front().right_;
+        if (nc.valid()) real_stops.push_back(to_idx(nc.node_));
+      }
+      auto db = std::vector<unsigned>(n, INF);
+      auto tou = std::vector<unsigned>{};
+      auto ent = 0ULL, cap30 = 0ULL, cap15 = 0ULL;
+      for (auto const s : real_stops) {
+        up_search(rkch.backward, rkch.forward, rkch.rank[s], db, tou);
+        for (auto const v : tou) {
+          ++ent;
+          if (db[v] <= 1800U) ++cap30;
+          if (db[v] <= 900U) ++cap15;
+          db[v] = INF;
+        }
+        tou.clear();
+      }
+      fmt::println(
+          "\nREAL stops ({}): {} of {} matched to graph nodes", opt.stops_file_,
+          real_stops.size(), total);
+      fmt::println(
+          "  {} real stops | {} entries {:.0f}/stop  full {:.1f} MB | "
+          "<=30min {:.1f} MB  <=15min {:.1f} MB",
+          real_stops.size(), ent,
+          static_cast<double>(ent) / std::max<std::size_t>(1, real_stops.size()),
+          ent * 8.0 / 1e6, cap30 * 8.0 / 1e6, cap15 * 8.0 / 1e6);
+    }
+
+    // build buckets: for each stop, backward up-search; bucket[v] += (dist, i).
+    // Sorted by distance so the query can break early under a radius bound.
+    auto bucket = std::vector<std::vector<std::pair<unsigned, unsigned>>>(n);
+    {
+      auto db = std::vector<unsigned>(n, INF);
+      auto tou = std::vector<unsigned>{};
+      auto const tb = now();
+      for (auto i = 0U; i != K; ++i) {
+        up_search(rkch.backward, rkch.forward, rkch.rank[stops[i]], db, tou);
+        for (auto const v : tou) {
+          bucket[v].push_back({db[v], i});
+          db[v] = INF;
+        }
+        tou.clear();
+      }
+      for (auto& b : bucket) {
+        std::sort(begin(b), end(b));
+      }
+      auto const build_ms = ms(tb, now());
+      auto entries = 0ULL, nonempty = 0ULL;
+      for (auto const& b : bucket) {
+        entries += b.size();
+        nonempty += b.empty() ? 0U : 1U;
+      }
+      auto const ch_edges = rkch.forward.head.size() + rkch.backward.head.size();
+      fmt::println(
+          "\nBucket-CH: {} stops built in {:.0f}ms\n"
+          "  buckets: {} entries = {:.1f} MB  ({:.0f}/stop, {} of {} nodes "
+          "non-empty)\n"
+          "  CH graph: {} edges = {:.1f} MB   (base graph: {} edges = {:.1f} "
+          "MB)",
+          K, build_ms, entries, entries * 8.0 / 1e6,
+          static_cast<double>(entries) / K, nonempty, n, ch_edges,
+          ch_edges * 8.0 / 1e6, g.n_edges(), g.n_edges() * 8.0 / 1e6);
+    }
+
+    // last-mile buckets: forward up-search from each stop (stop -> node up)
+    auto bucket_lm = std::vector<std::vector<std::pair<unsigned, unsigned>>>(n);
+    {
+      auto db = std::vector<unsigned>(n, INF);
+      auto tl = std::vector<unsigned>{};
+      for (auto i = 0U; i != K; ++i) {
+        up_search(rkch.forward, rkch.backward, rkch.rank[stops[i]], db, tl);
+        for (auto const v : tl) {
+          bucket_lm[v].push_back({db[v], i});
+          db[v] = INF;
+        }
+        tl.clear();
+      }
+      for (auto& b : bucket_lm) {
+        std::sort(begin(b), end(b));
+      }
+    }
+
+    // Bucket-CH query with radius R: forward up-search (stall) + pruned sweep.
+    auto df = std::vector<unsigned>(n, INF);
+    auto tou = std::vector<unsigned>{};
+    auto res = std::vector<unsigned>(K);
+    auto bucket_query = [&](unsigned const s, unsigned const R) {
+      std::fill(begin(res), end(res), INF);
+      up_search(rkch.forward, rkch.backward, rkch.rank[s], df, tou);
+      for (auto const u : tou) {
+        auto const du = df[u];
+        for (auto const& [dbk, i] : bucket[u]) {
+          auto const c = du + dbk;
+          if (c >= R) break;  // sorted -> remaining stops are farther
+          if (c < res[i]) res[i] = c;
+        }
+        df[u] = INF;
+      }
+      tou.clear();
+    };
+
+    // last-mile query: backward up-search from dest, scan last-mile buckets
+    auto res_lm = std::vector<unsigned>(K);
+    auto last_mile_query = [&](unsigned const d, unsigned const R) {
+      std::fill(begin(res_lm), end(res_lm), INF);
+      up_search(rkch.backward, rkch.forward, rkch.rank[d], df, tou);
+      for (auto const u : tou) {
+        auto const du = df[u];
+        for (auto const& [dbk, i] : bucket_lm[u]) {
+          auto const c = du + dbk;
+          if (c >= R) break;
+          if (c < res_lm[i]) res_lm[i] = c;
+        }
+        df[u] = INF;
+      }
+      tou.clear();
+    };
+
+    // correctness vs RoutingKit-pinned
+    auto qp = RoutingKit::ContractionHierarchyQuery{rkch};
+    qp.pin_targets(stops);
+    auto qp_lm = RoutingKit::ContractionHierarchyQuery{rkch};
+    qp_lm.pin_sources(stops);
+    {
+      auto bmism = 0ULL;
+      for (auto qi = 0U; qi != 5U; ++qi) {
+        auto const s = static_cast<unsigned>(cista::hash_combine(hh, ++nn) % n);
+        bucket_query(s, INF);
+        qp.reset_source().add_source(s).run_to_pinned_targets();
+        auto const ref = qp.get_distances_to_targets();
+        for (auto i = 0U; i != K; ++i) {
+          if (res[i] != ref[i]) ++bmism;
+        }
+      }
+      fmt::println("Bucket-CH correctness vs RK-pinned: {} mismatch (must be 0)",
+                   bmism);
+    }
+
+    // last-mile correctness vs RoutingKit reverse
+    {
+      auto bmism = 0ULL;
+      for (auto qi = 0U; qi != 5U; ++qi) {
+        auto const d = static_cast<unsigned>(cista::hash_combine(hh, ++nn) % n);
+        last_mile_query(d, INF);
+        qp_lm.reset_target().add_target(d).run_to_pinned_sources();
+        auto const ref = qp_lm.get_distances_to_sources();
+        for (auto i = 0U; i != K; ++i) {
+          if (res_lm[i] != ref[i]) ++bmism;
+        }
+      }
+      fmt::println("Bucket-CH last-mile correctness vs RK: {} mismatch (0 ok)",
+                   bmism);
+    }
+
+    // ===== presentation sweep: Dijkstra vs Bucket-CH, first & last mile =====
+    fmt::println("\n radius |          first mile             |          last mile");
+    fmt::println(
+        "  (min) |  Dijkstra   Bucket-CH  speedup  |  Dijkstra   Bucket-CH  "
+        "speedup");
+    fmt::println(
+        "--------+---------------------------------+-------------------------"
+        "--------");
+    for (auto const R : {300U, 600U, 900U, 1200U, 1800U, 2400U, 3000U, 3600U,
+                         5400U, 7200U, 10800U, 14400U, 21600U, 32768U}) {
+      auto fdj = 0.0, fb = 0.0, ldj = 0.0, lb = 0.0;
+      for (auto qi = 0U; qi != opt.n_queries_; ++qi) {
+        auto const s = static_cast<unsigned>(cista::hash_combine(hh, ++nn) % n);
+        auto a = now();
+        auto const d1 = dijkstra_all(g, s, R);
+        fdj += ms(a, now());
+        a = now();
+        bucket_query(s, R);
+        fb += ms(a, now());
+        auto const d = static_cast<unsigned>(cista::hash_combine(hh, ++nn) % n);
+        a = now();
+        auto const d2 = dijkstra_all(grev, d, R);
+        ldj += ms(a, now());
+        a = now();
+        last_mile_query(d, R);
+        lb += ms(a, now());
+      }
+      auto const N = static_cast<double>(opt.n_queries_);
+      fmt::println(
+          "{:>5.0f}m | {:>8.3f}ms {:>9.3f}ms {:>6.1f}x  | {:>8.3f}ms {:>9.3f}ms "
+          "{:>6.1f}x",
+          R / 60.0, fdj / N, fb / N, fdj / std::max(1e-9, fb), ldj / N, lb / N,
+          ldj / std::max(1e-9, lb));
+    }
+    return 0;
+  }
 
   auto threads = std::vector<std::thread>(std::max(1U, opt.threads_));
   auto results = std::vector<benchmark_result>{};

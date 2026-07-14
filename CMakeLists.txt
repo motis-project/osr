@@ -133,7 +133,8 @@ add_executable(osr-extract exe/extract.cc)
 target_link_libraries(osr-extract osr)
 
 add_executable(osr-benchmark exe/benchmark.cc)
-target_link_libraries(osr-benchmark osr)
+target_include_directories(osr-benchmark PRIVATE $ENV{HOME}/RoutingKit/include)
+target_link_libraries(osr-benchmark osr $ENV{HOME}/RoutingKit/chlib/libroutingkit_ch.a)
 
 file(GLOB_RECURSE osr-backend-src exe/backend/*.cc)
 add_executable(osr-backend ${osr-backend-src})
