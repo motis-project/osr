@@ -6,6 +6,7 @@
 #include <unordered_map>
 #include <vector>
 
+#include "osr/routing/profiles/car.h"
 #include "osr/routing/profiles/foot.h"
 #include "osr/types.h"
 #include "osr/ways.h"
@@ -92,6 +93,74 @@ inline ch_graph materialize_foot(ways const& w) {
 
   // build CSR over V = n_nodes + #extra vertices
   auto const V = static_cast<std::uint32_t>(vert.size());
+  auto first_out = std::vector<std::uint32_t>(V + 1U, 0U);
+  for (auto const s : src_of) {
+    ++first_out[s + 1U];
+  }
+  for (auto i = 0U; i != V; ++i) {
+    first_out[i + 1U] += first_out[i];
+  }
+  auto tgt = std::vector<std::uint32_t>(edge_target.size());
+  auto cst = std::vector<cost_t>(edge_cost.size());
+  auto pos = first_out;
+  for (auto e = 0U; e != src_of.size(); ++e) {
+    auto const p = pos[src_of[e]]++;
+    tgt[p] = edge_target[e];
+    cst[p] = edge_cost[e];
+  }
+  return ch_graph{.first_out_ = std::move(first_out),
+                  .edge_target_ = std::move(tgt),
+                  .edge_cost_ = std::move(cst)};
+}
+
+// Materialize osr's EXACT turn-expanded car graph. Vertices are (node, way,
+// direction) states -- the same states osr's car router uses (turn restrictions
+// modelled). Contiguous ids: id(node,way,dir) = base[node] + way*2 + dir.
+inline ch_graph materialize_car(ways const& w) {
+  using P = car;  // generic_car<false>
+  using cnode = typename P::node;
+  auto const& r = *w.r_;
+  auto const n = static_cast<std::uint32_t>(w.n_nodes());
+  auto const params = typename P::parameters{};
+
+  // per-node vertex block = (#ways * 2 directions); prefix-sum for contiguous id
+  auto id_base = std::vector<std::uint32_t>(n + 1U, 0U);
+  for (auto i = 0U; i != n; ++i) {
+    auto const nways =
+        static_cast<std::uint32_t>(r.node_ways_[node_idx_t{i}].size());
+    id_base[i + 1U] = id_base[i] + nways * 2U;
+  }
+  auto const vid = [&](cnode const nd) -> std::uint32_t {
+    return id_base[to_idx(nd.n_)] + static_cast<std::uint32_t>(nd.way_) * 2U +
+           (nd.dir_ == direction::kForward ? 0U : 1U);
+  };
+
+  auto src_of = std::vector<std::uint32_t>{};
+  auto edge_target = std::vector<std::uint32_t>{};
+  auto edge_cost = std::vector<cost_t>{};
+  for (auto i = 0U; i != n; ++i) {
+    auto const nways =
+        static_cast<std::uint32_t>(r.node_ways_[node_idx_t{i}].size());
+    for (auto way = 0U; way != nways; ++way) {
+      for (auto d = 0U; d != 2U; ++d) {
+        auto const dir = d == 0U ? direction::kForward : direction::kBackward;
+        auto const src =
+            cnode{node_idx_t{i}, static_cast<way_pos_t>(way), dir};
+        auto const src_id = vid(src);
+        P::template adjacent<direction::kForward, false>(
+            params, r, src, nullptr, nullptr, nullptr,
+            [&](cnode const nb, std::uint32_t const cost, distance_t, way_idx_t,
+                std::uint16_t, std::uint16_t, elevation_storage::elevation,
+                bool) {
+              src_of.push_back(src_id);
+              edge_target.push_back(vid(nb));
+              edge_cost.push_back(static_cast<cost_t>(cost));
+            });
+      }
+    }
+  }
+
+  auto const V = id_base[n];
   auto first_out = std::vector<std::uint32_t>(V + 1U, 0U);
   for (auto const s : src_of) {
     ++first_out[s + 1U];

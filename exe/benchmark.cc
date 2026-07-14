@@ -49,9 +49,11 @@ public:
     param(speed_, "speed,s", "Walking speed");
     param(mem_usage_, "mem", "Track memory usage");
     param(ch_, "ch", "Run CH materialization test (foot) and exit");
+    param(car_, "car", "Use car (turn-expanded) graph instead of foot for --ch");
     param(stops_file_, "stops_file", "CSV of real stop lat,lon for Bucket-CH");
   }
 
+  bool car_{false};
   std::string stops_file_{};
   fs::path data_dir_{"osr"};
   unsigned n_queries_{50};
@@ -209,15 +211,17 @@ int main(int argc, char const* argv[]) {
     auto const now = std::chrono::steady_clock::now;
 
     auto t0 = now();
-    auto const g = materialize_foot(w);
-    fmt::println("foot graph: {} vertices, {} edges (materialize {:.0f}ms)",
-                 g.n_vertices(), g.n_edges(), ms(t0, now()));
+    auto const g = opt.car_ ? materialize_car(w) : materialize_foot(w);
+    fmt::println("{} graph: {} vertices, {} edges (materialize {:.0f}ms)",
+                 opt.car_ ? "car" : "foot", g.n_vertices(), g.n_edges(),
+                 ms(t0, now()));
 
     // CSR -> tail/head/weight for RoutingKit
     auto const n = static_cast<unsigned>(g.n_vertices());
-    // real graph nodes = base vertices [0, n_src); extra (node,level) states are
-    // ids >= n_src. Sources/stops must be real nodes so osr's route() can match.
-    auto const n_src = static_cast<unsigned>(w.n_nodes());
+    // foot: base vertices [0, n_src) are real nodes (osr can match to them).
+    // car: vertices are (node,way,dir) turn states, not nodes -> use all as ids.
+    auto const n_src =
+        opt.car_ ? n : static_cast<unsigned>(w.n_nodes());
     auto tail = std::vector<unsigned>{};
     auto head = std::vector<unsigned>{};
     auto weight = std::vector<unsigned>{};
@@ -405,7 +409,7 @@ int main(int argc, char const* argv[]) {
     }
 
     // ---- REAL stops (match GTFS stop coords to graph nodes, then measure) ----
-    if (!opt.stops_file_.empty()) {
+    if (!opt.stops_file_.empty() && !opt.car_) {
       auto real_stops = std::vector<unsigned>{};
       auto f = std::ifstream{opt.stops_file_};
       auto line = std::string{};
@@ -612,7 +616,8 @@ int main(int argc, char const* argv[]) {
     // ===== Bucket-CH vs osr PRODUCTION dial-Dijkstra (what MOTIS runs) =====
     // osr's route() one-to-many uses this dijkstra<foot> (dial queue, on-the-fly
     // (node,level) expansion). Same source -> same K stops, same radius.
-    {
+    // (foot only: car uses a different (node,way,dir) key; see note below.)
+    if (!opt.car_) {
       auto d = dijkstra<foot<false>>{};
       auto const fpar = typename foot<false>::parameters{};
       fmt::println(
@@ -653,6 +658,60 @@ int main(int argc, char const* argv[]) {
                     dcost[i], res[i], dj_in, bk_in);
               }
             }
+          }
+        }
+        auto const N = static_cast<double>(opt.n_queries_);
+        fmt::println("{:>6}s | {:>10.3f}ms {:>10.3f}ms {:>6.1f}x | {}", R,
+                     tdj / N, tb / N, tdj / std::max(1e-9, tb), mism);
+      }
+    } else {
+      // car: Bucket-CH vs osr PRODUCTION car dial-Dijkstra, vertex -> vertices
+      // on the exact turn-expanded graph. vmap[id] = the (node,way,dir) state.
+      auto vmap = std::vector<car::node>{};
+      vmap.reserve(n);
+      for (auto i = 0U; i != static_cast<unsigned>(w.n_nodes()); ++i) {
+        auto const nways = w.r_->node_ways_[node_idx_t{i}].size();
+        for (auto way = 0U; way != nways; ++way) {
+          for (auto dd = 0U; dd != 2U; ++dd) {
+            vmap.push_back(car::node{node_idx_t{i}, static_cast<way_pos_t>(way),
+                                     dd == 0U ? direction::kForward
+                                              : direction::kBackward});
+          }
+        }
+      }
+      auto d = dijkstra<car>{};
+      auto const cpar = typename car::parameters{};
+      fmt::println(
+          "\nBucket-CH vs osr PRODUCTION car dial-Dijkstra (vertex -> {} "
+          "stops):",
+          K);
+      fmt::println("  radius | osr-Dijkstra   Bucket-CH   speedup | mismatch");
+      fmt::println("--------+---------------------------------+---------");
+      for (auto const R : {900U, 1800U, 3600U, 7200U, 14400U}) {
+        auto tdj = 0.0, tb = 0.0;
+        auto mism = 0ULL;
+        for (auto qi = 0U; qi != opt.n_queries_; ++qi) {
+          auto s = 0U;
+          do {
+            s = static_cast<unsigned>(cista::hash_combine(hh, ++nn) % n);
+          } while (g.first_out_[s] == g.first_out_[s + 1U]);
+          auto a = now();
+          d.reset(R);
+          d.add_start(w, car::label{vmap[s], 0U});
+          d.template run<direction::kForward, false>(cpar, w, *w.r_, R, nullptr,
+                                                     nullptr, nullptr);
+          auto dcost = std::vector<cost_t>(K);
+          for (auto i = 0U; i != K; ++i) {
+            dcost[i] = d.get_cost(vmap[stops[i]]);
+          }
+          tdj += ms(a, now());
+          a = now();
+          bucket_query(s, R);
+          tb += ms(a, now());
+          for (auto i = 0U; i != K; ++i) {
+            auto const dj_in = dcost[i] != kInfeasible && dcost[i] < R;
+            auto const bk_in = res[i] != INF;
+            if (dj_in != bk_in || (dj_in && dcost[i] != res[i])) ++mism;
           }
         }
         auto const N = static_cast<double>(opt.n_queries_);
