@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <limits>
 #include <queue>
+#include <unordered_map>
 #include <vector>
 
 #include "osr/routing/profiles/foot.h"
@@ -35,46 +36,80 @@ struct ch_graph {
   std::vector<cost_t> edge_cost_;           // edge weight (seconds)
 };
 
-// Materialize the foot (pedestrian) routing graph into an explicit CSR graph.
+// Materialize osr's EXACT (node, level) foot routing graph into a CSR graph.
+// Vertices [0, n_nodes) are the base (node, level-0/kNoLevel) states; extra
+// (node, level>0) states (elevators / multi-level structures) get appended ids
+// as they are discovered through the same adjacent() osr routes with -- so the
+// CH is built on osr's exact graph, not a level-collapsed approximation.
 inline ch_graph materialize_foot(ways const& w) {
   using P = foot<false>;
+  using fnode = typename P::node;
   auto const& r = *w.r_;
   auto const n = static_cast<std::uint32_t>(w.n_nodes());
   auto const params = typename P::parameters{};
 
-  auto first_out = std::vector<std::uint32_t>(n + 1U, 0U);
-  for (auto from = 0U; from != n; ++from) {
-    P::template adjacent<direction::kForward, false>(
-        params, r, typename P::node{node_idx_t{from}, kNoLevel}, nullptr,
-        nullptr, nullptr,
-        [&](typename P::node const, std::uint32_t const, distance_t,
-            way_idx_t const, std::uint16_t, std::uint16_t,
-            elevation_storage::elevation, bool) { ++first_out[from + 1U]; });
-  }
+  auto const is_base = [](fnode const nd) {
+    return nd.lvl_ == kNoLevel || to_idx(nd.lvl_) == 0U;
+  };
+  auto extra = std::unordered_map<std::uint64_t, std::uint32_t>{};
+  auto vert = std::vector<fnode>{};
+  vert.reserve(n);
   for (auto i = 0U; i != n; ++i) {
-    first_out[i + 1U] += first_out[i];
+    vert.push_back(fnode{node_idx_t{i}, kNoLevel});
   }
+  auto next_id = n;
+  auto const get_id = [&](fnode const nd) -> std::uint32_t {
+    if (is_base(nd)) {
+      return to_idx(nd.get_node());
+    }
+    auto const key = (static_cast<std::uint64_t>(to_idx(nd.get_node())) << 8) |
+                     to_idx(nd.lvl_);
+    auto const it = extra.find(key);
+    if (it != extra.end()) {
+      return it->second;
+    }
+    auto const id = next_id++;
+    extra.emplace(key, id);
+    vert.push_back(nd);
+    return id;
+  };
 
-  auto const m = first_out.back();
-  auto edge_target = std::vector<std::uint32_t>(m);
-  auto edge_cost = std::vector<cost_t>(m);
-  auto pos = first_out;  // insertion cursor
-  for (auto from = 0U; from != n; ++from) {
+  // discover all edges (vert grows as extra (node,level) states appear)
+  auto src_of = std::vector<std::uint32_t>{};
+  auto edge_target = std::vector<std::uint32_t>{};
+  auto edge_cost = std::vector<cost_t>{};
+  for (auto id = 0U; id < vert.size(); ++id) {
+    auto const src = vert[id];  // copy: get_id may reallocate vert
     P::template adjacent<direction::kForward, false>(
-        params, r, typename P::node{node_idx_t{from}, kNoLevel}, nullptr,
-        nullptr, nullptr,
-        [&](typename P::node const nb, std::uint32_t const cost, distance_t,
-            way_idx_t const, std::uint16_t, std::uint16_t,
-            elevation_storage::elevation, bool) {
-          auto const p = pos[from]++;
-          edge_target[p] = to_idx(nb.get_node());
-          edge_cost[p] = static_cast<cost_t>(cost);
+        params, r, src, nullptr, nullptr, nullptr,
+        [&](fnode const nb, std::uint32_t const cost, distance_t, way_idx_t,
+            std::uint16_t, std::uint16_t, elevation_storage::elevation, bool) {
+          src_of.push_back(id);
+          edge_target.push_back(get_id(nb));
+          edge_cost.push_back(static_cast<cost_t>(cost));
         });
   }
 
+  // build CSR over V = n_nodes + #extra vertices
+  auto const V = static_cast<std::uint32_t>(vert.size());
+  auto first_out = std::vector<std::uint32_t>(V + 1U, 0U);
+  for (auto const s : src_of) {
+    ++first_out[s + 1U];
+  }
+  for (auto i = 0U; i != V; ++i) {
+    first_out[i + 1U] += first_out[i];
+  }
+  auto tgt = std::vector<std::uint32_t>(edge_target.size());
+  auto cst = std::vector<cost_t>(edge_cost.size());
+  auto pos = first_out;
+  for (auto e = 0U; e != src_of.size(); ++e) {
+    auto const p = pos[src_of[e]]++;
+    tgt[p] = edge_target[e];
+    cst[p] = edge_cost[e];
+  }
   return ch_graph{.first_out_ = std::move(first_out),
-                  .edge_target_ = std::move(edge_target),
-                  .edge_cost_ = std::move(edge_cost)};
+                  .edge_target_ = std::move(tgt),
+                  .edge_cost_ = std::move(cst)};
 }
 
 // Plain Dijkstra one-to-all on the CSR graph (baseline + verification oracle).

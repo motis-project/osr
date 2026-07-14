@@ -215,6 +215,9 @@ int main(int argc, char const* argv[]) {
 
     // CSR -> tail/head/weight for RoutingKit
     auto const n = static_cast<unsigned>(g.n_vertices());
+    // real graph nodes = base vertices [0, n_src); extra (node,level) states are
+    // ids >= n_src. Sources/stops must be real nodes so osr's route() can match.
+    auto const n_src = static_cast<unsigned>(w.n_nodes());
     auto tail = std::vector<unsigned>{};
     auto head = std::vector<unsigned>{};
     auto weight = std::vector<unsigned>{};
@@ -325,7 +328,8 @@ int main(int argc, char const* argv[]) {
     auto stops = std::vector<unsigned>{};
     stops.reserve(K);
     for (auto i = 0U; i != K; ++i) {
-      stops.push_back(static_cast<unsigned>(cista::hash_combine(hh, ++nn) % n));
+      stops.push_back(
+          static_cast<unsigned>(cista::hash_combine(hh, ++nn) % n_src));
     }
     auto const INF = RoutingKit::inf_weight;
 
@@ -603,6 +607,58 @@ int main(int argc, char const* argv[]) {
           "{:>6.1f}x",
           R / 60.0, fdj / N, fb / N, fdj / std::max(1e-9, fb), ldj / N, lb / N,
           ldj / std::max(1e-9, lb));
+    }
+
+    // ===== Bucket-CH vs osr PRODUCTION dial-Dijkstra (what MOTIS runs) =====
+    // osr's route() one-to-many uses this dijkstra<foot> (dial queue, on-the-fly
+    // (node,level) expansion). Same source -> same K stops, same radius.
+    {
+      auto d = dijkstra<foot<false>>{};
+      auto const fpar = typename foot<false>::parameters{};
+      fmt::println(
+          "\nBucket-CH vs osr PRODUCTION dial-Dijkstra (source -> {} stops):", K);
+      fmt::println(
+          "  radius | osr-Dijkstra   Bucket-CH   speedup | mismatch");
+      fmt::println(
+          "--------+---------------------------------+---------");
+      for (auto const R : {900U, 1800U, 3600U, 7200U, 14400U}) {
+        auto tdj = 0.0, tb = 0.0;
+        auto mism = 0ULL;
+        for (auto qi = 0U; qi != opt.n_queries_; ++qi) {
+          auto const s =
+              static_cast<unsigned>(cista::hash_combine(hh, ++nn) % n_src);
+          auto a = now();
+          d.reset(R);
+          set_start<foot<false>>(d, w, node_idx_t{s});
+          d.template run<direction::kForward, false>(fpar, w, *w.r_, R, nullptr,
+                                                     nullptr, elevations.get());
+          auto dcost = std::vector<cost_t>(K);
+          for (auto i = 0U; i != K; ++i) {
+            dcost[i] = d.get_cost(typename foot<false>::node{node_idx_t{stops[i]}});
+          }
+          tdj += ms(a, now());
+          a = now();
+          bucket_query(s, R);
+          tb += ms(a, now());
+          for (auto i = 0U; i != K; ++i) {
+            auto const dj_in = dcost[i] != kInfeasible && dcost[i] < R;
+            auto const bk_in = res[i] != INF;
+            if (dj_in != bk_in || (dj_in && dcost[i] != res[i])) {
+              ++mism;
+              if (mism <= 3) {
+                fmt::println(
+                    "   MISMATCH R={} src_node={} stop_node={} osm={} "
+                    "osr(lvl0)={} bucketCH={} (dj_in={} bk_in={})",
+                    R, s, stops[i], to_idx(w.node_to_osm_[node_idx_t{stops[i]}]),
+                    dcost[i], res[i], dj_in, bk_in);
+              }
+            }
+          }
+        }
+        auto const N = static_cast<double>(opt.n_queries_);
+        fmt::println("{:>6}s | {:>10.3f}ms {:>10.3f}ms {:>6.1f}x | {}", R,
+                     tdj / N, tb / N, tdj / std::max(1e-9, tb), mism);
+      }
     }
     return 0;
   }
