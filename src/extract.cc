@@ -26,7 +26,6 @@
 #include "utl/progress_tracker.h"
 
 #include "tiles/osm/hybrid_node_idx.h"
-#include "tiles/osm/tmp_file.h"
 
 #include "osr/elevation_storage.h"
 #include "osr/extract/tags.h"
@@ -566,12 +565,11 @@ void extract(bool const with_platforms,
 
   auto pt = utl::get_active_progress_tracker_or_activate("osr");
 
-  auto const node_idx_file =
-      tiles::tmp_file{(out / "idx.bin").generic_string()};
-  auto const node_dat_file =
-      tiles::tmp_file{(out / "dat.bin").generic_string()};
-  auto node_idx =
-      tiles::hybrid_node_idx{node_idx_file.fileno(), node_dat_file.fileno()};
+  auto node_idx = tiles::hybrid_node_idx{
+      cista::mmap{out.generic_string().c_str(),
+                  cista::mmap::protection::TMPFILE},
+      cista::mmap{out.generic_string().c_str(),
+                  cista::mmap::protection::TMPFILE}};
 
   auto rel_ways = rel_ways_t{};
   auto w = ways{out, cista::mmap::protection::WRITE};
