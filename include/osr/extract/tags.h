@@ -1,9 +1,13 @@
 #pragma once
 
+#include <string_view>
+#include <vector>
+
 #include "cista/hash.h"
 
 #include "osmium/osm/object.hpp"
 
+#include "osr/conditional.h"
 #include "osr/types.h"
 
 namespace osr {
@@ -30,7 +34,12 @@ struct tags {
     auto circular = false;
     auto oneway_defined = false;
     for (auto const& t : o.tags()) {
-      switch (cista::hash(std::string_view{t.key()})) {
+      auto const key = std::string_view{t.key()};
+      if (is_supported_conditional_restriction_key(key)) {
+        conditional_tags_.emplace_back(key, std::string_view{t.value()});
+      }
+
+      switch (cista::hash(key)) {
         using namespace std::string_view_literals;
         case cista::hash("ramp"): is_ramp_ |= t.value() != "no"sv; break;
         case cista::hash("type"):
@@ -77,6 +86,10 @@ struct tags {
           motor_vehicle_ = t.value();
           is_destination_ |= motor_vehicle_ == "destination"sv;
           break;
+        case cista::hash("hgv"): hgv_ = t.value(); break;
+        case cista::hash("hgv:trailer"): hgv_trailer_ = t.value(); break;
+        case cista::hash("hazmat"): hazmat_ = t.value(); break;
+        case cista::hash("hazmat:water"): hazmat_water_ = t.value(); break;
         case cista::hash("foot"): foot_ = t.value(); break;
         case cista::hash("bicycle"): bicycle_ = t.value(); break;
         case cista::hash("highway"):
@@ -178,6 +191,20 @@ struct tags {
           }
         } break;
         case cista::hash("maxspeed"): max_speed_ = t.value(); break;
+        case cista::hash("maxspeed:hgv"): max_speed_hgv_ = t.value(); break;
+        case cista::hash("maxlength"): max_length_ = t.value(); break;
+        case cista::hash("maxlength:hgv"): max_length_hgv_ = t.value(); break;
+        case cista::hash("maxweightrating"):
+          max_weightrating_ = t.value();
+          break;
+        case cista::hash("maxweightrating:hgv"):
+          max_weightrating_hgv_ = t.value();
+          break;
+        case cista::hash("maxheight"): max_height_ = t.value(); break;
+        case cista::hash("maxwidth"): max_width_ = t.value(); break;
+        case cista::hash("maxweight"): max_weight_ = t.value(); break;
+        case cista::hash("maxaxleload"): max_axle_load_ = t.value(); break;
+        case cista::hash("maxaxles"): max_axles_ = t.value(); break;
         case cista::hash("toll"): toll_ = t.value() == "yes"sv; break;
         case cista::hash("incline"): {
           has_incline_ = true;
@@ -243,6 +270,18 @@ struct tags {
   // https://wiki.openstreetmap.org/wiki/Key:motor_vehicle
   std::string_view motor_vehicle_;
 
+  // https://wiki.openstreetmap.org/wiki/Key:hgv
+  std::string_view hgv_;
+
+  // https://wiki.openstreetmap.org/wiki/Key:hgv:trailer
+  std::string_view hgv_trailer_;
+
+  // https://wiki.openstreetmap.org/wiki/Key:hazmat
+  std::string_view hazmat_;
+
+  // https://wiki.openstreetmap.org/wiki/Key:hazmat:water
+  std::string_view hazmat_water_;
+
   // https://wiki.openstreetmap.org/wiki/Key:foot
   std::string_view foot_;
 
@@ -263,6 +302,36 @@ struct tags {
 
   // https://wiki.openstreetmap.org/wiki/Key:maxspeed
   std::string_view max_speed_;
+
+  // https://wiki.openstreetmap.org/wiki/Key:maxspeed:hgv
+  std::string_view max_speed_hgv_;
+
+  // https://wiki.openstreetmap.org/wiki/Key:maxlength
+  std::string_view max_length_;
+
+  // https://wiki.openstreetmap.org/wiki/Key:maxlength:hgv
+  std::string_view max_length_hgv_;
+
+  // https://wiki.openstreetmap.org/wiki/Key:maxweightrating
+  std::string_view max_weightrating_;
+
+  // https://wiki.openstreetmap.org/wiki/Key:maxweightrating:hgv
+  std::string_view max_weightrating_hgv_;
+
+  // https://wiki.openstreetmap.org/wiki/Key:maxheight
+  std::string_view max_height_;
+
+  // https://wiki.openstreetmap.org/wiki/Key:maxwidth
+  std::string_view max_width_;
+
+  // https://wiki.openstreetmap.org/wiki/Key:maxweight
+  std::string_view max_weight_;
+
+  // https://wiki.openstreetmap.org/wiki/Key:maxaxleload
+  std::string_view max_axle_load_;
+
+  // https://wiki.openstreetmap.org/wiki/Key:maxaxles
+  std::string_view max_axles_;
 
   // https://wiki.openstreetmap.org/wiki/Key:name
   std::string_view name_;
@@ -316,6 +385,7 @@ struct tags {
 
   // https://wiki.openstreetmap.org/wiki/Conditional_restrictions
   std::string_view access_conditional_no_;
+  std::vector<std::pair<std::string_view, std::string_view>> conditional_tags_;
 
   // https://wiki.openstreetmap.org/wiki/Key:service
   std::string_view service_;

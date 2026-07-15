@@ -116,9 +116,10 @@ void ways::add_restriction(std::vector<resolved_restriction>& rs) {
 
         for (auto const& x : range) {
           if (x.type_ == resolved_restriction::type::kNo) {
-            r_->node_restrictions_[x.via_].push_back(
-                restriction{r_->get_way_pos(x.via_, x.from_),
-                            r_->get_way_pos(x.via_, x.to_), x.applies_to_bus_});
+            r_->node_restrictions_[x.via_].push_back(restriction{
+                r_->get_way_pos(x.via_, x.from_),
+                r_->get_way_pos(x.via_, x.to_), x.applies_to_default_,
+                x.applies_to_bus_, x.applies_to_hgv_, x.condition_set_});
           } else /* kOnly */ {
             for (auto const [i, from] :
                  utl::enumerate(r_->node_ways_[x.via_])) {
@@ -127,7 +128,8 @@ void ways::add_restriction(std::vector<resolved_restriction>& rs) {
                 if (x.from_ == from && x.to_ != to) {
                   r_->node_restrictions_[x.via_].push_back(restriction{
                       static_cast<way_pos_t>(i), static_cast<way_pos_t>(j),
-                      x.applies_to_bus_});
+                      x.applies_to_default_, x.applies_to_bus_,
+                      x.applies_to_hgv_, x.condition_set_});
                 }
               }
             }
@@ -194,7 +196,7 @@ void ways::connect_ways() {
         .out_bounds(40, 50);
 
     auto node_idx = node_idx_t{0U};
-    node_way_counter_.multi_.for_each_set_bit([&](std::uint64_t const b_idx) {
+    node_way_counter_.for_each_multi([&](std::uint64_t const b_idx) {
       auto const i = osm_node_idx_t{b_idx};
       node_to_osm_.push_back(i);
       ++node_idx;

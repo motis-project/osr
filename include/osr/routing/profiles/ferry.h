@@ -84,10 +84,15 @@ struct ferry {
 
     constexpr cost_t cost(node const) const noexcept { return cost_; }
 
+    constexpr duration_t duration(node const n) const noexcept {
+      return duration_from_cost(cost(n));
+    }
+
     constexpr bool update(label const&,
                           node const,
                           cost_t const c,
-                          node const pred) noexcept {
+                          node const pred,
+                          duration_t const) noexcept {
       if (c < cost_) {
         cost_ = c;
         pred_ = pred.n_;
@@ -139,6 +144,8 @@ struct ferry {
   static void adjacent(parameters const& params,
                        ways::routing const& w,
                        node const n,
+                       duration_t const current_duration,
+                       std::optional<routing_time_t> const start_time,
                        bitvec<node_idx_t> const* blocked,
                        sharing_data const* additional,
                        elevation_storage const*,
@@ -146,18 +153,18 @@ struct ferry {
     if (additional != nullptr) {
       for_each_additional_edge<ferry>(
           params, w, n, additional,
-          [&](additional_edge const& ae, cost_t const edge_cost,
+          [&](additional_edge const& ae, cost_and_duration const edge_cost,
               direction const) {
             auto const target = node{ae.to_};
-            auto cost = edge_cost;
+            auto total = edge_cost;
 
             if (!additional->is_additional_node(ae.to_)) {
-              cost = clamp_cost(static_cast<std::uint64_t>(cost) +
+              total = clamp_add(total,
                                 node_cost(params, w.node_properties_[ae.to_]));
             }
 
-            fn(target, cost, ae.distance_, ae.underlying_way_, 0, 0,
-               elevation_storage::elevation{}, false);
+            fn(target, total.cost_, total.duration_, ae.distance_,
+               ae.underlying_way_, 0, 0, elevation_storage::elevation{}, false);
           });
 
       if (additional->is_additional_node(n.n_)) {
@@ -178,21 +185,25 @@ struct ferry {
         }
 
         auto const target_node_prop = w.node_properties_[target_node];
-        if (node_cost(params, target_node_prop) == kInfeasible) {
+        if (node_cost(params, target_node_prop).cost_ == kInfeasible) {
           return;
         }
 
         auto const target_way_prop = w.way_properties_[way];
-        if (way_cost(params, target_way_prop, way_dir, 0U) == kInfeasible) {
+        if (way_cost(params, w, way, target_way_prop, way_dir, 0U, start_time,
+                     current_duration, SearchDir)
+                .cost_ == kInfeasible) {
           return;
         }
 
         auto const dist = w.get_way_node_distance(way, std::min(from, to));
         auto const target = node{target_node};
-        auto const cost = way_cost(params, target_way_prop, way_dir, dist) +
-                          node_cost(params, target_node_prop);
-        fn(target, cost, dist, way, from, to, elevation_storage::elevation{},
-           false);
+        auto const step =
+            clamp_add(way_cost(params, w, way, target_way_prop, way_dir, dist,
+                               start_time, current_duration, SearchDir),
+                      node_cost(params, target_node_prop));
+        fn(target, step.cost_, step.duration_, dist, way, from, to,
+           elevation_storage::elevation{}, false);
       };
 
       if (i != 0U) {
@@ -209,28 +220,39 @@ struct ferry {
                                 node const,
                                 way_idx_t const way,
                                 direction const way_dir,
-                                direction const) {
+                                direction const search_dir,
+                                std::optional<routing_time_t> const start_time,
+                                duration_t const current_duration) {
     auto const target_way_prop = w.way_properties_[way];
-    if (way_cost(params, target_way_prop, way_dir, 0U) == kInfeasible) {
+    if (way_cost(params, w, way, target_way_prop, way_dir, 0U, start_time,
+                 current_duration, search_dir)
+            .cost_ == kInfeasible) {
       return false;
     }
 
     return true;
   }
 
-  static constexpr cost_t way_cost(parameters const&,
-                                   way_properties const& e,
-                                   direction const,
-                                   distance_t const dist) {
+  static constexpr cost_and_duration way_cost(
+      parameters const&,
+      ways::routing const&,
+      way_idx_t const,
+      way_properties const& e,
+      direction const,
+      distance_t const dist,
+      std::optional<routing_time_t> const,
+      duration_t const,
+      direction const) {
     if (e.is_ferry_accessible()) {
-      return static_cast<cost_t>((dist / 10));
+      return cost_and_duration_from_cost(static_cast<cost_t>(dist / 10U));
     } else {
-      return kInfeasible;
+      return infeasible_cost_and_duration();
     }
   }
 
-  static constexpr cost_t node_cost(parameters const&, node_properties const&) {
-    return 0U;
+  static constexpr cost_and_duration node_cost(parameters const&,
+                                               node_properties const&) {
+    return cost_and_duration_from_cost(0U);
   }
 
   static constexpr double lower_bound_heuristic(parameters const&,

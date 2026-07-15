@@ -116,7 +116,7 @@ match_t lookup::match(profile_parameters const& params,
                           raw_way_candidates) const {
   return with_profile(p, [&]<Profile P>(P&&) {
     return match<P>(std::get<typename P::parameters>(params), query, reverse,
-                    search_dir, max_match_distance, blocked,
+                    search_dir, max_match_distance, blocked, std::nullopt,
                     raw_way_candidates);
   });
 }

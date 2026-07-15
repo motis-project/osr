@@ -34,21 +34,25 @@ struct connecting_way {
 };
 
 template <direction SearchDir, bool WithBlocked, Profile P>
-inline connecting_way find_connecting_way(typename P::parameters const& params,
-                                          ways const& w,
-                                          ways::routing const& r,
-                                          bitvec<node_idx_t> const* blocked,
-                                          sharing_data const* sharing,
-                                          elevation_storage const* elevations,
-                                          typename P::node const from,
-                                          typename P::node const to,
-                                          cost_t const expected_cost) {
+inline connecting_way find_connecting_way(
+    typename P::parameters const& params,
+    ways const& w,
+    ways::routing const& r,
+    bitvec<node_idx_t> const* blocked,
+    sharing_data const* sharing,
+    elevation_storage const* elevations,
+    typename P::node const from,
+    typename P::node const to,
+    duration_t const current_duration,
+    std::optional<routing_time_t> const start_time,
+    cost_t const expected_cost) {
   auto conn = std::optional<connecting_way>{};
   P::template adjacent<SearchDir, WithBlocked>(
-      params, r, from, blocked, sharing, elevations,
+      params, r, from, current_duration, start_time, blocked, sharing,
+      elevations,
       [&](typename P::node const target, std::uint32_t const cost,
-          distance_t const dist, way_idx_t const way, std::uint16_t const a_idx,
-          std::uint16_t const b_idx,
+          duration_t const, distance_t const dist, way_idx_t const way,
+          std::uint16_t const a_idx, std::uint16_t const b_idx,
           elevation_storage::elevation const elevation, bool) {
         if (target == to && cost == expected_cost) {
           auto const is_loop = way != way_idx_t::invalid() && r.is_loop(way) &&
@@ -70,24 +74,27 @@ inline connecting_way find_connecting_way(typename P::parameters const& params,
 }
 
 template <Profile P>
-inline connecting_way find_connecting_way(typename P::parameters const& params,
-                                          ways const& w,
-                                          bitvec<node_idx_t> const* blocked,
-                                          sharing_data const* sharing,
-                                          elevation_storage const* elevations,
-                                          typename P::node const from,
-                                          typename P::node const to,
-                                          cost_t const expected_cost,
-                                          direction const dir) {
+inline connecting_way find_connecting_way(
+    typename P::parameters const& params,
+    ways const& w,
+    bitvec<node_idx_t> const* blocked,
+    sharing_data const* sharing,
+    elevation_storage const* elevations,
+    typename P::node const from,
+    typename P::node const to,
+    duration_t const current_duration,
+    std::optional<routing_time_t> const start_time,
+    cost_t const expected_cost,
+    direction const dir) {
   auto const call = [&]<bool WithBlocked>() {
     if (dir == direction::kForward) {
       return find_connecting_way<direction::kForward, WithBlocked, P>(
           params, w, *w.r_, blocked, sharing, elevations, from, to,
-          expected_cost);
+          current_duration, start_time, expected_cost);
     } else {
       return find_connecting_way<direction::kBackward, WithBlocked, P>(
           params, w, *w.r_, blocked, sharing, elevations, from, to,
-          expected_cost);
+          current_duration, start_time, expected_cost);
     }
   };
 
@@ -107,12 +114,15 @@ inline double add_path(typename P::parameters const& params,
                        elevation_storage const* elevations,
                        typename P::node const from,
                        typename P::node const to,
+                       duration_t const current_duration,
+                       std::optional<routing_time_t> const start_time,
                        cost_t const expected_cost,
+                       duration_t const expected_duration,
                        std::vector<path::segment>& path,
                        direction const dir) {
   auto const& [way, from_idx, to_idx, is_loop, distance, elevation] =
       find_connecting_way<P>(params, w, blocked, sharing, elevations, from, to,
-                             expected_cost, dir);
+                             current_duration, start_time, expected_cost, dir);
 
   auto j = 0U;
   auto active = false;
@@ -120,6 +130,7 @@ inline double add_path(typename P::parameters const& params,
   segment.way_ = way;
   segment.dist_ = distance;
   segment.cost_ = expected_cost;
+  segment.duration_ = expected_duration;
   segment.elevation_ = elevation;
   segment.mode_ = to.get_mode();
 
@@ -180,6 +191,24 @@ inline double add_path(typename P::parameters const& params,
   }
 
   return distance;
+}
+
+template <Profile P>
+inline double add_path(typename P::parameters const& params,
+                       ways const& w,
+                       ways::routing const& r,
+                       bitvec<node_idx_t> const* blocked,
+                       sharing_data const* sharing,
+                       elevation_storage const* elevations,
+                       typename P::node const from,
+                       typename P::node const to,
+                       cost_t const expected_cost,
+                       std::vector<path::segment>& path,
+                       direction const dir) {
+  return add_path<P>(params, w, r, blocked, sharing, elevations, from, to,
+                     duration_from_cost(expected_cost), std::nullopt,
+                     expected_cost, duration_from_cost(expected_cost), path,
+                     dir);
 }
 
 }  // namespace osr

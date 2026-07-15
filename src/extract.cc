@@ -4,6 +4,13 @@
 #include <windows.h>
 #endif
 
+#include <cstdint>
+#include <algorithm>
+#include <iostream>
+#include <limits>
+#include <memory>
+#include <optional>
+#include <string>
 #include "osr/extract/extract.h"
 
 #include "boost/thread/tss.hpp"
@@ -21,6 +28,7 @@
 #include "osmium/io/xml_input.hpp"
 
 #include "utl/enumerate.h"
+#include "utl/get_or_create.h"
 #include "utl/helpers/algorithm.h"
 #include "utl/parser/arg_parser.h"
 #include "utl/progress_tracker.h"
@@ -28,7 +36,13 @@
 #include "tiles/osm/hybrid_node_idx.h"
 #include "tiles/osm/tmp_file.h"
 
+#include "tzbounds/timezones.h"
+
+#include "geo/box.h"
+
 #include "osr/elevation_storage.h"
+#include "osr/extract/conditional_parser.h"
+#include "osr/extract/tag_parser.h"
 #include "osr/extract/tags.h"
 #include "osr/lookup.h"
 #include "osr/platforms.h"
@@ -55,9 +69,127 @@ struct osm_restriction {
   osm_node_idx_t via_{osm_node_idx_t::invalid()};
 };
 
+struct conditional_turn_restriction {
+  resolved_restriction::type type_{};
+  std::string_view condition_{};
+};
+
 bool is_number(std::string_view s) {
   return !s.empty() &&
          utl::all_of(s, [](char const c) { return std::isdigit(c); });
+}
+
+std::optional<resolved_restriction::type> parse_turn_restriction_type(
+    std::string_view const value) {
+  if (value.starts_with("no"sv)) {
+    return resolved_restriction::type::kNo;
+  }
+  if (value.starts_with("only"sv)) {
+    return resolved_restriction::type::kOnly;
+  }
+  return std::nullopt;
+}
+
+std::optional<conditional_turn_restriction> parse_conditional_turn_restriction(
+    std::string_view const value) {
+  auto const at = value.find('@');
+  if (at == std::string_view::npos) {
+    return std::nullopt;
+  }
+
+  auto const type = parse_turn_restriction_type(trim(value.substr(0U, at)));
+  auto const condition = trim(value.substr(at + 1U));
+  if (!type.has_value() || condition.empty()) {
+    return std::nullopt;
+  }
+  return conditional_turn_restriction{*type, condition};
+}
+
+template <typename T, typename Value>
+void set_hgv_info_value(hgv_way_info& info,
+                        hgv_info_field const field,
+                        T hgv_way_info::* member,
+                        std::optional<Value> const value) {
+  if (!value.has_value()) {
+    return;
+  }
+  info.fields_ |= to_mask(field);
+  info.*member = *value;
+}
+
+std::string_view pick_hgv_variant(std::string_view base, std::string_view hgv) {
+  return hgv.empty() ? base : hgv;
+}
+
+std::optional<access_value> get_access_value(std::string_view value) {
+  switch (cista::hash(value)) {
+    case cista::hash("yes"): return access_value::kYes;
+    case cista::hash("designated"): return access_value::kDesignated;
+    case cista::hash("permissive"): return access_value::kPermissive;
+    case cista::hash("private"): return access_value::kPrivate;
+    case cista::hash("delivery"): return access_value::kDelivery;
+    case cista::hash("destination"): return access_value::kDestination;
+    case cista::hash("no"): return access_value::kNo;
+    case cista::hash("discouraged"): return access_value::kDiscouraged;
+    default: return std::nullopt;
+  }
+}
+
+std::optional<hgv_way_info> get_hgv_way_info(tags const& t) {
+  auto info = hgv_way_info{};
+
+  if (auto const access = get_access_value(t.hgv_); access.has_value()) {
+    info.fields_ |= to_mask(hgv_info_field::kAccess);
+    info.hgv_access_ = static_cast<std::uint8_t>(*access);
+  }
+
+  set_hgv_info_value(
+      info, hgv_info_field::kMaxSpeed, &hgv_way_info::maxspeed_km_h_,
+      to_integer<std::uint8_t>(parse_speed_km_h(t.max_speed_hgv_)));
+  set_hgv_info_value(
+      info, hgv_info_field::kMaxLength, &hgv_way_info::maxlength_cm_,
+      to_integer<std::uint16_t>(
+          parse_length_m(pick_hgv_variant(t.max_length_, t.max_length_hgv_)),
+          100.0));
+  set_hgv_info_value(info, hgv_info_field::kMaxWeightRating,
+                     &hgv_way_info::maxweightrating_100kg_,
+                     to_integer<std::uint16_t>(
+                         parse_weight_t(pick_hgv_variant(
+                             t.max_weightrating_, t.max_weightrating_hgv_)),
+                         10.0));
+  set_hgv_info_value(
+      info, hgv_info_field::kMaxHeight, &hgv_way_info::maxheight_cm_,
+      to_integer<std::uint16_t>(parse_length_m(t.max_height_), 100.0));
+  set_hgv_info_value(
+      info, hgv_info_field::kMaxWidth, &hgv_way_info::maxwidth_cm_,
+      to_integer<std::uint16_t>(parse_length_m(t.max_width_), 100.0));
+  set_hgv_info_value(
+      info, hgv_info_field::kMaxWeight, &hgv_way_info::maxweight_100kg_,
+      to_integer<std::uint16_t>(parse_weight_t(t.max_weight_), 10.0));
+  set_hgv_info_value(
+      info, hgv_info_field::kMaxAxleLoad, &hgv_way_info::maxaxleload_100kg_,
+      to_integer<std::uint16_t>(parse_weight_t(t.max_axle_load_), 10.0));
+  set_hgv_info_value(info, hgv_info_field::kMaxAxles, &hgv_way_info::maxaxles_,
+                     to_integer<std::uint8_t>(parse_unitless(t.max_axles_)));
+
+  if (auto const hazmat = get_access_value(t.hazmat_); hazmat.has_value()) {
+    info.fields_ |= to_mask(hgv_info_field::kHazmat);
+    info.hazmat_access_ = static_cast<std::uint8_t>(*hazmat);
+  }
+
+  if (auto const hazmat_water = get_access_value(t.hazmat_water_);
+      hazmat_water.has_value()) {
+    info.fields_ |= to_mask(hgv_info_field::kHazmatWater);
+    info.hazmat_water_access_ = static_cast<std::uint8_t>(*hazmat_water);
+  }
+
+  if (auto const trailer = get_access_value(t.hgv_trailer_);
+      trailer.has_value()) {
+    info.fields_ |= to_mask(hgv_info_field::kTrailer);
+    info.trailer_access_ = static_cast<std::uint8_t>(*trailer);
+  }
+
+  return info.fields_ == 0U ? std::nullopt : std::optional{info};
 }
 
 bool is_big_street(tags const& t) {
@@ -78,9 +210,8 @@ bool is_big_street(tags const& t) {
 }
 
 speed_limit get_speed_limit(tags const& t) {
-  if (is_number(t.max_speed_) /* TODO: support units (kmh/mph) */) {
-    return get_speed_limit(
-        static_cast<unsigned>(utl::parse<unsigned>(t.max_speed_) * 0.9));
+  if (auto const speed = parse_speed_km_h(t.max_speed_); speed.has_value()) {
+    return get_speed_limit(static_cast<unsigned>(speed.value()));
   } else {
     switch (cista::hash(t.highway_)) {
       case cista::hash("motorway"): return get_speed_limit(100);
@@ -228,7 +359,7 @@ struct way_handler : public osm::handler::Handler {
   }
 
   void way(osm::Way const& w) {
-    auto const osm_way_idx = osm_way_idx_t{w.positive_id()};
+    auto const osm_way_idx = to_osm_way_idx(w.id());
     auto const it = rel_ways_.find(osm_way_idx);
     auto t = tags{w};
 
@@ -236,7 +367,7 @@ struct way_handler : public osm::handler::Handler {
       if (w.nodes().front() != w.nodes().back()) {
         return;  // way elevators have to be loops
       }
-      auto const first_node = osm_node_idx_t{w.nodes().front().positive_ref()};
+      auto const first_node = to_osm_node_idx(w.nodes().front().ref());
       auto const l = std::scoped_lock{elevator_nodes_mutex_};
       elevator_nodes_.emplace(first_node, t.level_bits_);
     }
@@ -251,15 +382,14 @@ struct way_handler : public osm::handler::Handler {
     }
 
     auto const in_route = it != end(rel_ways_) && it->second.p_.in_route_;
+    auto const hgv_info = get_hgv_way_info(t);
 
     auto p = (t.is_platform() || t.is_parking_ || !t.highway_.empty() ||
               (!t.railway_.empty() && (in_route || it == end(rel_ways_))) ||
               t.is_ferry_route_)
                  ? get_way_properties(t)
                  : it->second.p_;
-    if (!p.is_accessible()) {
-      return;
-    }
+    p.has_hgv_info_ = hgv_info.has_value();
 
     if (!t.has_level_ && it != end(rel_ways_)) {
       p.from_level_ = it->second.p_.from_level_;
@@ -275,8 +405,9 @@ struct way_handler : public osm::handler::Handler {
     };
 
     auto const get_node_id = [&](osmium::NodeRef const& n) {
-      w_.node_way_counter_.increment(n.positive_ref());
-      return osm_node_idx_t{n.positive_ref()};
+      auto const idx = to_osm_node_idx(n.ref());
+      w_.node_way_counter_.increment(to_idx(idx));
+      return idx;
     };
 
     auto const register_string = [&](std::string_view s) {
@@ -292,8 +423,46 @@ struct way_handler : public osm::handler::Handler {
       return str_idx;
     };
 
+    auto const register_timezone = [&](std::string_view s) {
+      return utl::get_or_create(timezone_idx_by_name_, s, [&]() {
+        auto const idx = conditional_timezone_idx_t{
+            static_cast<std::uint16_t>(w_.r_->timezones_.size())};
+        w_.r_->timezones_.emplace_back(s);
+        return idx;
+      });
+    };
+
+    auto const get_timezone = [&]() {
+      if (t.conditional_tags_.empty()) {
+        return conditional_timezone_idx_t::invalid();
+      }
+      if (timezone_lookup_ == nullptr) {
+        timezone_lookup_ = std::make_unique<tzbounds::timezone_lookup>();
+      }
+      auto b = geo::box{};
+      for (auto const& n : w.nodes()) {
+        b.extend(point::from_location(n.location()).as_latlng());
+      }
+      auto const tz = timezone_lookup_->lookup(b.centroid());
+      return tz.has_value() ? register_timezone(*tz)
+                            : conditional_timezone_idx_t::invalid();
+    };
+
     auto l = std::scoped_lock{mutex_};
     auto const way_idx = way_idx_t{w_.way_osm_idx_.size()};
+
+    auto conditional_builder = conditional_storage_builder{
+        .routing_ = *w_.r_, .timezone_ = get_timezone()};
+    for (auto const& [key, value] : t.conditional_tags_) {
+      if (!parse_conditional_restriction_tag(key, value, conditional_builder)) {
+        std::clog << "osr: ignored unsupported conditional restriction on way "
+                  << to_idx(osm_way_idx) << ": " << key << '=' << value << '\n';
+      }
+    }
+    p.has_conditionals_ = !conditional_builder.way_.empty();
+    if (!p.is_accessible()) {
+      return;
+    }
 
     if (platforms_ != nullptr &&
         (t.is_platform() || p.is_platform_ ||
@@ -305,8 +474,14 @@ struct way_handler : public osm::handler::Handler {
       platforms_->platform_ref_[it->second.pl_].push_back(to_value(way_idx));
     }
 
-    w_.way_osm_idx_.push_back(osm_way_idx_t{w.positive_id()});
+    w_.way_osm_idx_.push_back(to_osm_way_idx(w.id()));
     w_.r_->way_properties_.emplace_back(p);
+    if (hgv_info.has_value()) {
+      w_.r_->way_hgv_info_.emplace_back(way_idx, *hgv_info);
+    }
+    if (p.has_conditionals()) {
+      w_.r_->way_conditionals_.emplace_back(way_idx, conditional_builder.way_);
+    }
 
     w_.way_polylines_.emplace_back(w.nodes() |
                                    std::views::transform(get_point));
@@ -335,6 +510,8 @@ struct way_handler : public osm::handler::Handler {
   ways& w_;
   platforms* platforms_;
   rel_ways_t const& rel_ways_;
+  std::unique_ptr<tzbounds::timezone_lookup> timezone_lookup_;
+  hash_map<std::string, conditional_timezone_idx_t> timezone_idx_by_name_;
 
   std::mutex elevator_nodes_mutex_;
   hash_map<osm_node_idx_t, level_bits_t>& elevator_nodes_;
@@ -359,7 +536,7 @@ struct node_handler : public osm::handler::Handler {
   }
 
   void node(osm::Node const& n) {
-    auto const osm_node_idx = osm_node_idx_t{n.id()};
+    auto const osm_node_idx = to_osm_node_idx(n.id());
     if (auto const node_idx = w_.find_node_idx(osm_node_idx);
         node_idx.has_value()) {
       auto const t = tags{n};
@@ -404,30 +581,29 @@ struct node_handler : public osm::handler::Handler {
     }
 
     auto const restriction_ptr = r.tags()["restriction"];
-    if (restriction_ptr == nullptr) {
+    auto const hgv_restriction_ptr = r.tags()["restriction:hgv"];
+    auto const conditional_restriction_ptr =
+        r.tags()["restriction:conditional"];
+    auto const hgv_conditional_restriction_ptr =
+        r.tags()["restriction:hgv:conditional"];
+    if (restriction_ptr == nullptr && hgv_restriction_ptr == nullptr &&
+        conditional_restriction_ptr == nullptr &&
+        hgv_conditional_restriction_ptr == nullptr) {
       return;
     }
 
-    auto const restriction_sv = std::string_view{restriction_ptr};
-    auto restriction_type = resolved_restriction::type::kNo;
-    if (restriction_sv.starts_with("no")) {
-      restriction_type = resolved_restriction::type::kNo;
-    } else if (restriction_sv.starts_with("only")) {
-      restriction_type = resolved_restriction::type::kOnly;
-    } else {
-      return;
-    }
-
+    auto applies_to_hgv = true;
     auto applies_to_bus = true;
     if (auto const except_ptr = r.tags()["except"]; except_ptr != nullptr) {
       auto val = std::string_view{except_ptr};
       while (!val.empty()) {
         auto const sep = val.find(';');
         auto const token =
-            sep == std::string_view::npos ? val : val.substr(0, sep);
+            trim(sep == std::string_view::npos ? val : val.substr(0, sep));
         if (token == "bus"sv || token == "psv"sv) {
           applies_to_bus = false;
-          break;
+        } else if (token == "hgv"sv) {
+          applies_to_hgv = false;
         }
         val.remove_prefix(sep == std::string_view::npos ? val.size()
                                                         : sep + 1U);
@@ -438,7 +614,7 @@ struct node_handler : public osm::handler::Handler {
     for (auto const& m : r.members()) {
       switch (cista::hash(std::string_view{m.role()})) {
         case cista::hash("to"): {
-          auto const to = w_.find_way(osm_way_idx_t{m.positive_ref()});
+          auto const to = w_.find_way(to_osm_way_idx(m.ref()));
           if (to.has_value()) {
             c->to_.emplace_back(*to);
           }
@@ -446,7 +622,7 @@ struct node_handler : public osm::handler::Handler {
         }
 
         case cista::hash("from"): {
-          auto const from = w_.find_way(osm_way_idx_t{m.positive_ref()});
+          auto const from = w_.find_way(to_osm_way_idx(m.ref()));
           if (from.has_value()) {
             c->from_.emplace_back(*from);
           }
@@ -455,7 +631,7 @@ struct node_handler : public osm::handler::Handler {
 
         case cista::hash("via"):
           if (m.type() == osmium::item_type::node) {
-            auto const v = w_.find_node_idx(osm_node_idx_t{m.positive_ref()});
+            auto const v = w_.find_node_idx(to_osm_node_idx(m.ref()));
             if (v.has_value()) {
               via = *v;
             }
@@ -469,12 +645,78 @@ struct node_handler : public osm::handler::Handler {
     }
 
     auto const l = std::scoped_lock{r_mutex_};
-    for (auto const& from : c->from_) {
-      for (auto const& to : c->to_) {
-        r_.emplace_back(resolved_restriction{restriction_type, from, to, via,
-                                             applies_to_bus});
+    auto conditional_builder = conditional_storage_builder{.routing_ = *w_.r_};
+
+    auto const append_restriction =
+        [&](resolved_restriction::type const restriction_type,
+            bool const applies_to_default, bool const applies_to_bus_value,
+            bool const applies_to_hgv_value,
+            conditional_condition_set_idx_t const condition_set) {
+          if (!applies_to_default && !applies_to_bus_value &&
+              !applies_to_hgv_value) {
+            return;
+          }
+          for (auto const& from : c->from_) {
+            for (auto const& to : c->to_) {
+              r_.emplace_back(resolved_restriction{
+                  restriction_type, from, to, via, applies_to_default,
+                  applies_to_bus_value, applies_to_hgv_value, condition_set});
+            }
+          }
+        };
+
+    if (restriction_ptr != nullptr) {
+      if (auto const restriction_type =
+              parse_turn_restriction_type(std::string_view{restriction_ptr});
+          restriction_type.has_value()) {
+        append_restriction(*restriction_type, true, applies_to_bus,
+                           applies_to_hgv,
+                           conditional_condition_set_idx_t::invalid());
       }
     }
+
+    if (hgv_restriction_ptr != nullptr && applies_to_hgv) {
+      if (auto const restriction_type = parse_turn_restriction_type(
+              std::string_view{hgv_restriction_ptr});
+          restriction_type.has_value()) {
+        append_restriction(*restriction_type, false, false, true,
+                           conditional_condition_set_idx_t::invalid());
+      }
+    }
+
+    auto const append_conditional = [&](char const* key, char const* value,
+                                        bool const applies_to_hgv_value) {
+      if (value == nullptr || !applies_to_hgv_value) {
+        return;
+      }
+      auto const parsed =
+          parse_conditional_turn_restriction(std::string_view{value});
+      if (!parsed.has_value()) {
+        log_conditional_turn_restriction_parse_error(r.id(), key, value);
+        return;
+      }
+      auto const condition_set = parse_conditional_condition_set(
+          parsed->condition_, conditional_builder);
+      if (!condition_set.has_value()) {
+        log_conditional_turn_restriction_parse_error(r.id(), key, value);
+        return;
+      }
+      append_restriction(parsed->type_, false, false, true, *condition_set);
+    };
+
+    append_conditional("restriction:conditional", conditional_restriction_ptr,
+                       applies_to_hgv);
+    append_conditional("restriction:hgv:conditional",
+                       hgv_conditional_restriction_ptr, applies_to_hgv);
+  }
+
+  void log_conditional_turn_restriction_parse_error(
+      std::int64_t const rel,
+      std::string_view const key,
+      std::string_view const value) {
+    std::clog << "osr: ignored unsupported conditional turn restriction on "
+                 "relation "
+              << rel << ": " << key << '=' << value << '\n';
   }
 
   std::mutex platforms_mutex_;
@@ -501,12 +743,12 @@ struct mark_inaccessible_handler : public osm::handler::Handler {
         is_accessible<bike_profile>(t, osm_obj_type::kNode) &&
         is_accessible<foot_profile>(t, osm_obj_type::kNode);
     if (!accessible || t.is_elevator_ || t.is_platform()) {
-      w_.node_way_counter_.increment(n.positive_id());
+      w_.node_way_counter_.increment(to_idx(to_osm_node_idx(n.id())));
     }
 
     if (track_platforms_ && t.is_platform()) {
-      // Wnsure nodes are created even if they are not part of a routable way.
-      w_.node_way_counter_.increment(n.positive_id());
+      // Ensure nodes are created even if they are not part of a routable way.
+      w_.node_way_counter_.increment(to_idx(to_osm_node_idx(n.id())));
     }
   }
 
@@ -530,8 +772,8 @@ struct rel_ways_handler : public osm::handler::Handler {
 
     for (auto const& m : r.members()) {
       if (m.type() == osm::item_type::way) {
-        auto rw = rel_ways_.emplace(osm_way_idx_t{m.positive_ref()},
-                                    rel_way{p, platform});
+        auto rw =
+            rel_ways_.emplace(to_osm_way_idx(m.ref()), rel_way{p, platform});
         if (!rw.second) {
           rw.first->second.p_.in_route_ |= p.in_route_;
         }
@@ -580,7 +822,7 @@ void extract(bool const with_platforms,
     pl = std::make_unique<platforms>(out, cista::mmap::protection::WRITE);
   }
 
-  w.node_way_counter_.reserve(12000000000);
+  w.node_way_counter_.reserve(14'000'000'000);
   {  // Collect node coordinates.
     pt->status("Load OSM / Coordinates").in_high(file_size).out_bounds(0, 15);
 
