@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<osm version="0.6" generator="osr-test">
+  <node id="1" lat="49.0" lon="8.0"/>
+  <node id="2" lat="49.0001" lon="8.0"/>
+  <node id="3" lat="49.0002" lon="8.0"/>
+  <node id="4" lat="49.0003" lon="8.0"/>
+
+  <way id="1">
+    <nd ref="1"/>
+    <nd ref="2"/>
+    <tag k="highway" v="footway"/>
+    <tag k="incline" v="up"/>
+  </way>
+  <way id="2">
+    <nd ref="2"/>
+    <nd ref="3"/>
+    <tag k="highway" v="footway"/>
+  </way>
+  <way id="3">
+    <nd ref="3"/>
+    <nd ref="4"/>
+    <tag k="highway" v="path"/>
+    <tag k="incline" v="up"/>
+  </way>
+</osm>

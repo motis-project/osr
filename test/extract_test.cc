@@ -155,6 +155,27 @@ TEST(extract, bus_only_on_highway) {
   ASSERT_TRUE(wp.is_foot_accessible());
 }
 
+TEST(extract, standalone_ramp) {
+  auto p = fs::temp_directory_path() / "osr_standalone_ramp_test";
+  auto ec = std::error_code{};
+  fs::remove_all(p, ec);
+  fs::create_directories(p, ec);
+
+  extract(false, "test/standalone-ramp.osm", p, {});
+
+  auto w = ways{p, cista::mmap::protection::READ};
+  auto const ramp = w.find_way(osm_way_idx_t{1});
+  auto const flat_footway = w.find_way(osm_way_idx_t{2});
+  auto const inclined_path = w.find_way(osm_way_idx_t{3});
+  ASSERT_TRUE(ramp.has_value());
+  ASSERT_TRUE(flat_footway.has_value());
+  ASSERT_TRUE(inclined_path.has_value());
+
+  EXPECT_TRUE(w.r_->way_properties_[*ramp].is_ramp());
+  EXPECT_FALSE(w.r_->way_properties_[*flat_footway].is_ramp());
+  EXPECT_FALSE(w.r_->way_properties_[*inclined_path].is_ramp());
+}
+
 TEST(extract, supports_negative_custom_ids) {
   auto const osm_path = write_osm("osr_negative_ids.osm", kNegativeIdsOsm);
   auto const dir = fs::temp_directory_path() / "osr_negative_ids_dir";

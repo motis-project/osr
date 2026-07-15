@@ -1,4 +1,5 @@
 #include <filesystem>
+#include <fstream>
 
 #include "gtest/gtest.h"
 #include "osr/geojson.h"
@@ -191,6 +192,105 @@ TEST(routing, ballwil_shortcut) {
       R"({"type":"FeatureCollection","metadata":{},"features":[{"type":"Feature","properties":{"level":0E0,"osm_way_id":0,"cost":7,"distance":104},"geometry":{"type":"LineString","coordinates":[[8.315623672478951E0,4.715570128880367E1],[8.315628E0,4.71556617E1],[8.3156385E0,4.71556178E1],[8.3156641E0,4.71555631E1],[8.3157083E0,4.71554997E1],[8.3158538E0,4.71552882E1],[8.3160479E0,4.71549502E1],[8.3161126E0,4.71548364E1]]}},{"type":"Feature","properties":{"level":0E0,"osm_way_id":30743688,"cost":6,"distance":80},"geometry":{"type":"LineString","coordinates":[[8.3161126E0,4.71548364E1],[8.316494E0,4.71541641E1]]}},{"type":"Feature","properties":{"level":0E0,"osm_way_id":30743688,"cost":4,"distance":51},"geometry":{"type":"LineString","coordinates":[[8.316494E0,4.71541641E1],[8.3167335E0,4.71537386E1]]}},{"type":"Feature","properties":{"level":0E0,"osm_way_id":0,"cost":2,"distance":32},"geometry":{"type":"LineString","coordinates":[[8.3167335E0,4.71537386E1],[8.316879613965764E0,4.715347805943454E1]]}}]})",
       extract_and_route("test/ballwill-shortcut.osm.pbf", from, to,
                         osr::car::parameters{}, osr::search_profile::kCar));
+}
+
+TEST(routing, aplerbeck_levels) {
+  auto const debug = false;
+
+  auto const station = osr::location{51.4935, 7.55604, osr::level_t{1.F}};
+  auto const south = osr::location{51.493164, 7.556224, osr::kNoLevel};
+
+  auto const dir = fs::temp_directory_path() / "test/aplerbeck";
+  auto ec = std::error_code{};
+  fs::remove_all(dir, ec);
+  fs::create_directories(dir, ec);
+  osr::extract(false, "test/aplerbeck.osm.pbf", dir, {});
+
+  auto w = osr::ways{dir, cista::mmap::protection::READ};
+  auto l = osr::lookup{w, dir, cista::mmap::protection::READ};
+
+  using foot_t = osr::foot<false, osr::elevator_tracking>;
+  auto const foot_params = foot_t::parameters{};
+
+  auto const bbox = geo::box{geo::latlng{51.4870721, 7.5271668},
+                             geo::latlng{51.5088094, 7.5741282}};
+
+  auto const write_graph = [&](std::string const& label) {
+    if (!debug) {
+      return;
+    }
+    auto gj = osr::geojson_writer{.w_ = w};
+    l.find(bbox, [&](osr::way_idx_t const way) { gj.write_way(way); });
+    gj.finish(&osr::get_dijkstra<foot_t>());
+    auto const path = dir / (label + ".geojson");
+    std::ofstream{path} << boost::json::serialize(gj.json());
+    std::cout << "  wrote " << path << std::endl;
+  };
+
+  auto const gj = [&](auto const& r) {
+    return osr::to_featurecollection(w, r, false);
+  };
+
+  auto const route_fwd =
+      osr::route(foot_params, w, l, osr::search_profile::kFoot, station, south,
+                 900, osr::direction::kForward, 250.0, nullptr, nullptr,
+                 nullptr, osr::routing_algorithm::kDijkstra);
+  EXPECT_TRUE(route_fwd.has_value());
+  if (debug) {
+    std::cout << "\n=== FORWARD (station lvl=1 -> south) ===\n"
+              << (route_fwd.has_value() ? gj(route_fwd) : "NO ROUTE")
+              << std::endl;
+  }
+  write_graph("forward_kNoLevel");
+
+  auto const route_bwd =
+      osr::route(foot_params, w, l, osr::search_profile::kFoot, south, station,
+                 900, osr::direction::kBackward, 250.0, nullptr, nullptr,
+                 nullptr, osr::routing_algorithm::kDijkstra);
+  EXPECT_TRUE(route_bwd.has_value());
+  if (debug) {
+    std::cout << "\n=== BACKWARD (south -> station lvl=1) ===\n"
+              << (route_bwd.has_value() ? gj(route_bwd) : "NO ROUTE")
+              << std::endl;
+  }
+  write_graph("backward_kNoLevel");
+
+  if (route_fwd.has_value() && route_bwd.has_value()) {
+    EXPECT_EQ(gj(route_fwd), gj(route_bwd));
+  }
+
+  auto const south_lvl0 = osr::location{51.493164, 7.556224, osr::level_t{0.F}};
+
+  auto const route_fwd_lvl0 =
+      osr::route(foot_params, w, l, osr::search_profile::kFoot, station,
+                 south_lvl0, 900, osr::direction::kForward, 250.0, nullptr,
+                 nullptr, nullptr, osr::routing_algorithm::kDijkstra);
+  EXPECT_TRUE(route_fwd_lvl0.has_value());
+  if (debug) {
+    std::cout << "\n=== FORWARD (station lvl=1 -> south lvl=0) ===\n"
+              << (route_fwd_lvl0.has_value() ? gj(route_fwd_lvl0) : "NO ROUTE")
+              << std::endl;
+  }
+  write_graph("forward_lvl0");
+
+  auto const route_bwd_lvl0 =
+      osr::route(foot_params, w, l, osr::search_profile::kFoot, south_lvl0,
+                 station, 900, osr::direction::kBackward, 250.0, nullptr,
+                 nullptr, nullptr, osr::routing_algorithm::kDijkstra);
+  EXPECT_TRUE(route_bwd_lvl0.has_value());
+  if (debug) {
+    std::cout << "\n=== BACKWARD (south lvl=0 -> station lvl=1) ===\n"
+              << (route_bwd_lvl0.has_value() ? gj(route_bwd_lvl0) : "NO ROUTE")
+              << std::endl;
+  }
+  write_graph("backward_lvl0");
+
+  if (route_fwd_lvl0.has_value() && route_bwd_lvl0.has_value()) {
+    EXPECT_EQ(gj(route_fwd_lvl0), gj(route_bwd_lvl0));
+  }
+  if (route_fwd.has_value() && route_fwd_lvl0.has_value()) {
+    EXPECT_EQ(gj(route_fwd), gj(route_fwd_lvl0));
+  }
 }
 
 TEST(routing, bus_platform) {
