@@ -150,7 +150,7 @@ way_properties get_way_properties(
   p.to_level_ = to_idx(to);
   p.is_incline_down_ = t.is_incline_down_;
   p.is_platform_ = t.is_platform();
-  p.is_ramp_ = t.is_ramp_;
+  p.is_ramp_ = t.is_ramp_ || (t.highway_ == "footway"sv && t.has_incline_);
   p.is_sidewalk_separate_ = t.sidewalk_separate_;
   p.motor_vehicle_no_ =
       (t.motor_vehicle_ == "no"sv) || (t.vehicle_ == override::kBlacklist);
