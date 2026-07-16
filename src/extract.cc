@@ -825,11 +825,11 @@ void extract(bool const with_platforms,
 
   auto pt = utl::get_active_progress_tracker_or_activate("osr");
 
-  auto node_idx = tiles::hybrid_node_idx{
-      cista::mmap{out.generic_string().c_str(),
-                  cista::mmap::protection::TMPFILE},
-      cista::mmap{out.generic_string().c_str(),
-                  cista::mmap::protection::TMPFILE}};
+  auto node_idx =
+      tiles::hybrid_node_idx{cista::mmap{out.generic_string().c_str(),
+                                         cista::mmap::protection::TMPFILE},
+                             cista::mmap{out.generic_string().c_str(),
+                                         cista::mmap::protection::TMPFILE}};
 
   auto rel_ways = rel_ways_t{};
   auto w = ways{out, cista::mmap::protection::WRITE};
