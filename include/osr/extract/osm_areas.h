@@ -20,7 +20,13 @@ struct osm_areas {
 
   void add_area(osmium::Area const& area);
 
-  bool is_in_low_emission_zone(osmium::Way const& way) const;
+  // Deferred annotation, called once after all areas were added and all ways
+  // are stored (areas are assembled in the same pass that extracts the ways,
+  // so they cannot be queried during the pass): sets the low-emission-zone
+  // bit on every intersecting way and patches the timezone into the condition
+  // sets of all conditional restrictions.
+  void annotate_ways();
+
   conditional_timezone_idx_t get_timezone(geo::latlng const&) const;
 
   struct impl;

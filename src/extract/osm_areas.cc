@@ -16,11 +16,13 @@
 
 #include "date/tz.h"
 
+#include "geo/box.h"
+
 #include "osmium/osm/area.hpp"
 #include "osmium/osm/way.hpp"
 
+#include "utl/parallel_for.h"
 #include "utl/parser/arg_parser.h"
-#include "utl/to_vec.h"
 #include "utl/verify.h"
 
 #include "rtree.h"
@@ -39,12 +41,8 @@ struct geom_deleter {
 
 using geom_ptr = std::unique_ptr<tg_geom, geom_deleter>;
 
-geom_ptr make_way_geom(osmium::Way const& way) {
-  assert(way.nodes().size() >= 2U);
-
-  auto const points = utl::to_vec(way.nodes(), [](auto const& n) {
-    return tg_point{n.location().lon(), n.location().lat()};
-  });
+geom_ptr make_line_geom(std::vector<tg_point> const& points) {
+  assert(points.size() >= 2U);
 
   auto* line = tg_line_new_ix(points.data(), static_cast<int>(points.size()),
                               TG_NATURAL);
@@ -234,52 +232,96 @@ osm_areas::~osm_areas() = default;
 
 void osm_areas::add_area(osmium::Area const& area) { impl_->add_area(area); }
 
-bool osm_areas::is_in_low_emission_zone(osmium::Way const& way) const {
-  if (rtree_count(impl_->low_emission_zone_rtree_) == 0U) {
-    return false;
+void osm_areas::annotate_ways() {
+  auto& w = impl_->w_;
+
+  if (rtree_count(impl_->low_emission_zone_rtree_) != 0U) {
+    utl::parallel_for_run_threadlocal<std::vector<tg_point>>(
+        w.n_ways(), [&](std::vector<tg_point>& tmp, std::size_t const i) {
+          auto const way = way_idx_t{static_cast<way_idx_t::value_t>(i)};
+          auto const polyline = w.way_polylines_[way];
+          if (polyline.size() < 2U) {
+            return;
+          }
+
+          auto min = std::array{std::numeric_limits<double>::max(),
+                                std::numeric_limits<double>::max()};
+          auto max = std::array{std::numeric_limits<double>::lowest(),
+                                std::numeric_limits<double>::lowest()};
+          tmp.clear();
+          for (auto const& p : polyline) {
+            auto const pos = p.as_latlng();
+            tmp.emplace_back(tg_point{pos.lng(), pos.lat()});
+            min[0] = std::min(min[0], pos.lng());
+            min[1] = std::min(min[1], pos.lat());
+            max[0] = std::max(max[0], pos.lng());
+            max[1] = std::max(max[1], pos.lat());
+          }
+
+          struct search_state {
+            impl const& impl_;
+            std::vector<tg_point> const& points_;
+            geom_ptr way_geom_;
+            bool intersects_{false};
+          } state{*impl_, tmp, nullptr, false};
+          rtree_search(
+              impl_->low_emission_zone_rtree_, min.data(), max.data(),
+              [](auto, auto, void const* item, void* udata) {
+                auto& s = *static_cast<search_state*>(udata);
+
+                // Build way geometry lazily and only once.
+                if (s.way_geom_ == nullptr) {
+                  s.way_geom_ = make_line_geom(s.points_);
+                  if (s.way_geom_ == nullptr) {
+                    return false;
+                  }
+                }
+
+                // Intersects with at least one LEZ -> stop
+                auto const idx = reinterpret_cast<std::size_t>(item);
+                assert(idx < s.impl_.areas_.size());
+                if (tg_geom_intersects(s.impl_.areas_[idx].geom_,
+                                       s.way_geom_.get())) {
+                  s.intersects_ = true;
+                  return false;
+                }
+
+                // No intersection -> continue
+                return true;
+              },
+              &state);
+
+          if (state.intersects_) {
+            w.r_->way_properties_[way].is_in_low_emission_zone_ = true;
+          }
+        });
   }
 
-  auto min = std::array{std::numeric_limits<double>::max(),
-                        std::numeric_limits<double>::max()};
-  auto max = std::array{std::numeric_limits<double>::lowest(),
-                        std::numeric_limits<double>::lowest()};
+  if (rtree_count(impl_->timezone_rtree_) != 0U) {
+    for (auto& [way, restrictions] : w.r_->way_conditionals_) {
+      auto b = geo::box{};
+      for (auto const& p : w.way_polylines_[way]) {
+        b.extend(p.as_latlng());
+      }
 
-  for (auto const& n : way.nodes()) {
-    if (!n.location().valid()) {
-      return false;
-    }
-    min[0] = std::min(min[0], n.location().lon());
-    min[1] = std::min(min[1], n.location().lat());
-    max[0] = std::max(max[0], n.location().lon());
-    max[1] = std::max(max[1], n.location().lat());
-  }
+      auto const tz = get_timezone(b.centroid());
+      if (tz == conditional_timezone_idx_t::invalid()) {
+        continue;
+      }
 
-  struct search_state {
-    impl const& impl_;
-    osmium::Way const& way_;
-    geom_ptr way_geom_;
-    bool intersects_{false};
-  } state{*impl_, way, nullptr, false};
-  rtree_search(
-      impl_->low_emission_zone_rtree_, min.data(), max.data(),
-      [](double const*, double const*, void const* item, void* udata) {
-        auto& s = *static_cast<search_state*>(udata);
-        if (s.way_geom_ == nullptr) {
-          s.way_geom_ = make_way_geom(s.way_);
-          if (s.way_geom_ == nullptr) {
-            return false;
+      auto const patch = [&](conditional_range const& r, auto const& v) {
+        for (auto i = r.begin_; i != r.end_; ++i) {
+          auto const cs = v[i].condition_set_;
+          if (cs != conditional_condition_set_idx_t::invalid()) {
+            w.r_->conditional_condition_sets_[to_idx(cs)].timezone_ = tz;
           }
         }
-        auto const idx = reinterpret_cast<std::size_t>(item);
-        assert(idx < s.impl_.areas_.size());
-        if (tg_geom_intersects(s.impl_.areas_[idx].geom_, s.way_geom_.get())) {
-          s.intersects_ = true;
-          return false;
-        }
-        return true;
-      },
-      &state);
-  return state.intersects_;
+      };
+      patch(restrictions.access_, w.r_->conditional_access_);
+      patch(restrictions.oneway_, w.r_->conditional_oneway_);
+      patch(restrictions.numeric_, w.r_->conditional_numeric_);
+    }
+  }
 }
 
 conditional_timezone_idx_t osm_areas::get_timezone(

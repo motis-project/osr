@@ -367,12 +367,10 @@ struct way_handler : public osm::handler::Handler {
   way_handler(ways& w,
               platforms* platforms,
               rel_ways_t const& rel_ways,
-              osm_areas const& areas,
               hash_map<osm_node_idx_t, level_bits_t>& elevator_nodes)
       : w_{w},
         platforms_{platforms},
         rel_ways_{rel_ways},
-        areas_{areas},
         elevator_nodes_{elevator_nodes} {
     strings_set_.hash_function().strings_ = &w_.strings_;
     strings_set_.key_eq().strings_ = &w_.strings_;
@@ -450,22 +448,12 @@ struct way_handler : public osm::handler::Handler {
       return str_idx;
     };
 
-    auto const get_timezone = [&]() {
-      if (t.conditional_tags_.empty()) {
-        return conditional_timezone_idx_t::invalid();
-      }
-      auto b = geo::box{};
-      for (auto const& n : w.nodes()) {
-        b.extend(point::from_location(n.location()).as_latlng());
-      }
-      return areas_.get_timezone(b.centroid());
-    };
-
     auto l = std::scoped_lock{mutex_};
     auto const way_idx = way_idx_t{w_.way_osm_idx_.size()};
 
-    auto conditional_builder = conditional_storage_builder{
-        .routing_ = *w_.r_, .timezone_ = get_timezone()};
+    // Timezones are not known yet (areas are assembled in the same pass) -
+    // they are patched into the condition sets by osm_areas::annotate_ways().
+    auto conditional_builder = conditional_storage_builder{.routing_ = *w_.r_};
     for (auto const& [key, value] : t.conditional_tags_) {
       if (!parse_conditional_restriction_tag(key, value, conditional_builder)) {
         std::clog << "osr: ignored unsupported conditional restriction on way "
@@ -485,10 +473,6 @@ struct way_handler : public osm::handler::Handler {
 
     if (it != end(rel_ways_) && it->second.pl_ != platform_idx_t::invalid()) {
       platforms_->platform_ref_[it->second.pl_].push_back(to_value(way_idx));
-    }
-
-    if (areas_.is_in_low_emission_zone(w)) {
-      p.is_in_low_emission_zone_ = true;
     }
 
     w_.way_osm_idx_.push_back(to_osm_way_idx(w.id()));
@@ -527,7 +511,6 @@ struct way_handler : public osm::handler::Handler {
   ways& w_;
   platforms* platforms_;
   rel_ways_t const& rel_ways_;
-  osm_areas const& areas_;
 
   std::mutex elevator_nodes_mutex_;
   hash_map<osm_node_idx_t, level_bits_t>& elevator_nodes_;
@@ -864,12 +847,14 @@ void extract(bool const with_platforms,
     node_idx_builder.finish();
   }
 
-  {  // Extract timezone and low emission zone polygons.
-    pt->status("Load OSM / Areas").in_high(file_size).out_bounds(15, 20);
+  auto elevator_nodes = hash_map<osm_node_idx_t, level_bits_t>{};
+  {  // Extract streets, places; assemble timezone + low emission zone areas.
+    pt->status("Load OSM / Ways").in_high(file_size).out_bounds(15, 38);
 
+    auto area_h = osm_area_handler{areas};
+    auto h = way_handler{w, pl.get(), rel_ways, elevator_nodes};
     auto reader =
         osm_io::Reader{input_file, osm_eb::way, osmium::io::read_meta::no};
-    auto h = osm_area_handler{areas};
 
     oneapi::tbb::parallel_pipeline(
         std::thread::hardware_concurrency() * 4U,
@@ -892,47 +877,21 @@ void extract(bool const with_platforms,
             oneapi::tbb::make_filter<osm_mem::Buffer, void>(
                 oneapi::tbb::filter_mode::serial_in_order,
                 [&](osm_mem::Buffer&& buf) {
-                  osm::apply(buf, area_manager.handler([&](auto&& area_buf) {
-                    osm::apply(area_buf, h);
-                  }));
+                  osm::apply(buf,
+                             area_manager.handler([&](auto&& area_buf) {
+                               osm::apply(area_buf, area_h);
+                             }),
+                             h);
                 }));
 
     pt->update(pt->in_high_);
     reader.close();
   }
 
-  auto elevator_nodes = hash_map<osm_node_idx_t, level_bits_t>{};
-  {  // Extract streets, places, and areas.
-    pt->status("Load OSM / Ways").in_high(file_size).out_bounds(20, 40);
-
-    auto h = way_handler{w, pl.get(), rel_ways, areas, elevator_nodes};
-    auto reader =
-        osm_io::Reader{input_file, osm_eb::way, osmium::io::read_meta::no};
-
-    oneapi::tbb::parallel_pipeline(
-        std::thread::hardware_concurrency() * 4U,
-        oneapi::tbb::make_filter<void, osm_mem::Buffer>(
-            oneapi::tbb::filter_mode::serial_in_order,
-            [&](oneapi::tbb::flow_control& fc) {
-              auto buf = reader.read();
-              pt->update(reader.offset());
-              if (!buf) {
-                fc.stop();
-              }
-              return buf;
-            }) &
-            oneapi::tbb::make_filter<osm_mem::Buffer, osm_mem::Buffer>(
-                oneapi::tbb::filter_mode::parallel,
-                [&](osm_mem::Buffer&& buf) {
-                  update_locations(node_idx, buf);
-                  return std::move(buf);
-                }) &
-            oneapi::tbb::make_filter<osm_mem::Buffer, void>(
-                oneapi::tbb::filter_mode::serial_in_order,
-                [&](osm_mem::Buffer&& buf) { osm::apply(buf, h); }));
-
+  {  // Set way properties that depend on the assembled areas.
+    pt->status("Annotate Areas").in_high(1).out_bounds(38, 40);
+    areas.annotate_ways();
     pt->update(pt->in_high_);
-    reader.close();
   }
 
   w.r_->write(out);
