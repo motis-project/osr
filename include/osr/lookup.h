@@ -72,6 +72,7 @@ struct way_candidate {
   node_candidate left_{}, right_{};
   geo::latlng closest_point_on_way_{};
   unsigned segment_idx_{};
+  bool exact_return_{};
 };
 
 struct raw_way_candidate {
@@ -186,6 +187,17 @@ struct lookup {
                 std::optional<std::span<raw_way_candidate const>>
                     raw_way_candidates = std::nullopt) const;
 
+  match_t match_endpoint(profile_parameters const& params,
+                         location const& query,
+                         bool reverse,
+                         direction search_dir,
+                         double max_match_distance,
+                         bitvec<node_idx_t> const* blocked,
+                         search_profile,
+                         bool exact_return_allowed,
+                         std::optional<std::span<raw_way_candidate const>>
+                             raw_way_candidates = std::nullopt) const;
+
   template <Profile P>
   match_t match(P::parameters const& params,
                 location const& query,
@@ -212,6 +224,41 @@ struct lookup {
                                 max_match_distance, blocked, start_time);
     }
     return way_candidates;
+  }
+
+  template <Profile P>
+  match_t match_endpoint(
+      P::parameters const& params,
+      location const& query,
+      bool const reverse,
+      direction const search_dir,
+      double const max_match_distance,
+      bitvec<node_idx_t> const* blocked,
+      bool const exact_return_allowed,
+      std::optional<routing_time_t> const start_time = std::nullopt,
+      std::optional<std::span<raw_way_candidate const>> raw_way_candidates =
+          std::nullopt) const {
+    auto matches =
+        match<P>(params, query, reverse, search_dir, max_match_distance,
+                 blocked, start_time, raw_way_candidates);
+    if constexpr (SharingProfile<P>) {
+      if (exact_return_allowed) {
+        auto exact = match<typename P::vehiclep>(
+            P::vehicle_parameters(params), query, reverse, search_dir,
+            max_match_distance, blocked, start_time, raw_way_candidates);
+        for (auto& candidate : exact) {
+          candidate.exact_return_ = true;
+          std::erase_if(matches, [&](way_candidate const& regular) {
+            return regular.way_ == candidate.way_ &&
+                   regular.segment_idx_ == candidate.segment_idx_;
+          });
+        }
+        matches.insert(end(matches), std::make_move_iterator(begin(exact)),
+                       std::make_move_iterator(end(exact)));
+        utl::sort(matches);
+      }
+    }
+    return matches;
   }
 
   template <typename Fn>

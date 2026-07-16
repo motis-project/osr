@@ -170,6 +170,42 @@ concept WayAwareProfile = Profile<P> &&
                             } -> std::same_as<way_idx_t>;
                           };
 
+template <typename P>
+concept SharingProfile =
+    Profile<P> && Profile<typename P::vehiclep> &&
+    requires(typename P::parameters const& params,
+             ways::routing const& routing,
+             timezone_cache_t const& timezones,
+             way_idx_t const way,
+             way_properties const& properties,
+             typename P::node const profile_node,
+             node_idx_t const node,
+             level_t const level,
+             direction const way_dir,
+             direction const search_dir,
+             distance_t const distance,
+             std::optional<routing_time_t> const start_time,
+             duration_t const current_duration,
+             std::function<void(typename P::node const)> fn) {
+      {
+        P::vehicle_parameters(params)
+      } -> std::same_as<typename P::vehiclep::parameters const&>;
+      { P::kMatchTolerance } -> std::convertible_to<double>;
+      {
+        P::resolve_exact_return_node(routing, way, node, level, search_dir, fn)
+      } -> std::same_as<void>;
+      {
+        P::is_exact_return_reachable(params, routing, timezones, profile_node,
+                                     way, way_dir, search_dir, start_time,
+                                     current_duration)
+      } -> std::same_as<bool>;
+      {
+        P::exact_return_way_cost(params, routing, timezones, way, properties,
+                                 way_dir, distance, start_time,
+                                 current_duration, search_dir)
+      } -> std::same_as<cost_and_duration>;
+    };
+
 template <typename Parameters>
 concept ProfileParameters = Profile<typename Parameters::profile_t>;
 

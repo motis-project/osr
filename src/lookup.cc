@@ -139,6 +139,24 @@ match_t lookup::match(profile_parameters const& params,
   });
 }
 
+match_t lookup::match_endpoint(profile_parameters const& params,
+                               location const& query,
+                               bool const reverse,
+                               direction const search_dir,
+                               double const max_match_distance,
+                               bitvec<node_idx_t> const* blocked,
+                               search_profile const p,
+                               bool const exact_return_allowed,
+                               std::optional<std::span<raw_way_candidate const>>
+                                   raw_way_candidates) const {
+  return with_profile(p, [&]<Profile P>(P&&) {
+    return match_endpoint<P>(std::get<typename P::parameters>(params), query,
+                             reverse, search_dir, max_match_distance, blocked,
+                             exact_return_allowed, std::nullopt,
+                             raw_way_candidates);
+  });
+}
+
 hash_set<node_idx_t> lookup::find_elevators(geo::box const& b) const {
   auto elevators = hash_set<node_idx_t>{};
   find(b, [&](way_idx_t const way) {

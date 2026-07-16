@@ -132,7 +132,12 @@ inline double add_path(typename P::parameters const& params,
   segment.cost_ = expected_cost;
   segment.duration_ = expected_duration;
   segment.elevation_ = elevation;
-  segment.mode_ = to.get_mode();
+  auto const is_same_node_mode_switch = distance == distance_t{0U} &&
+                                        from.get_node() == to.get_node() &&
+                                        from.get_mode() != to.get_mode();
+  segment.mode_ = is_same_node_mode_switch && dir == direction::kForward
+                      ? from.get_mode()
+                      : to.get_mode();
 
   if (way != way_idx_t::invalid()) {
     auto const start_idx = dir == direction::kBackward ? to_idx : from_idx;

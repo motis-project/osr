@@ -24,11 +24,13 @@ namespace osr {
 struct bike_sharing {
   using footp = foot<false>;
   using bikep = bike<bike_costing::kSafe, kElevationNoCost>;
+  using vehiclep = bikep;
 
   // initial foot -> bike
   static constexpr auto const kStartSwitchPenalty = cost_t{30U};
   // bike -> trailing foot
   static constexpr auto const kEndSwitchPenalty = cost_t{30U};
+  static constexpr auto const kMatchTolerance = 50.0;
 
   static constexpr auto const kAdditionalWayProperties =
       way_properties{.is_foot_accessible_ = true,
@@ -98,6 +100,11 @@ struct bike_sharing {
     bikep::parameters const bike_{};
     footp::parameters const foot_{};
   };
+
+  static vehiclep::parameters const& vehicle_parameters(
+      parameters const& params) {
+    return params.bike_;
+  }
 
   struct key {
     friend bool operator==(key const a, key const b) {
@@ -306,6 +313,51 @@ struct bike_sharing {
     });
   }
 
+  template <typename Fn>
+  static void resolve_exact_return_node(ways::routing const& w,
+                                        way_idx_t const way,
+                                        node_idx_t const n,
+                                        level_t const,
+                                        direction const search_dir,
+                                        Fn&& f) {
+    bikep::resolve_start_node(
+        w, way, n, kNoLevel, search_dir,
+        [&](bikep::node const bn) { f(to_node(bn, kNoLevel)); });
+  }
+
+  static bool is_exact_return_reachable(
+      parameters const& params,
+      ways::routing const& w,
+      timezone_cache_t const& timezones,
+      node const n,
+      way_idx_t const way,
+      direction const way_dir,
+      direction const search_dir,
+      std::optional<routing_time_t> const start_time,
+      duration_t const current_duration) {
+    return n.is_bike_node() &&
+           bikep::is_dest_reachable(params.bike_, w, timezones, to_bike(n), way,
+                                    way_dir, search_dir, start_time,
+                                    current_duration);
+  }
+
+  static cost_and_duration exact_return_way_cost(
+      parameters const& params,
+      ways::routing const& w,
+      timezone_cache_t const& timezones,
+      way_idx_t const way,
+      way_properties const& properties,
+      direction const way_dir,
+      distance_t const distance,
+      std::optional<routing_time_t> const start_time,
+      duration_t const current_duration,
+      direction const search_dir) {
+    return clamp_add(
+        bikep::way_cost(params.bike_, w, timezones, way, properties, way_dir,
+                        distance, start_time, current_duration, search_dir),
+        kEndSwitchPenalty);
+  }
+
   template <direction SearchDir, bool WithBlocked, typename Fn>
   static void adjacent(parameters const& params,
                        ways::routing const& w,
@@ -397,6 +449,15 @@ struct bike_sharing {
       }
     };
 
+    auto const& switch_at_node = [&](node_type const nt,
+                                     cost_t const switch_penalty) {
+      fn(node{.n_ = n.n_,
+              .type_ = nt,
+              .lvl_ = nt == node_type::kBike ? kNoLevel : n.lvl_},
+         switch_penalty, duration_from_cost(switch_penalty), distance_t{0U},
+         way_idx_t::invalid(), 0, 0, elevation_storage::elevation{}, false);
+    };
+
     if (SearchDir == direction::kForward) {
 
       if (n.is_additional_node(sharing)) {
@@ -435,8 +496,7 @@ struct bike_sharing {
           continue_on_bike(true);
           if (is_allowed(sharing->end_allowed_, n.n_)) {
             // switch to foot
-            continue_on_foot(node_type::kTrailingFoot, false,
-                             kEndSwitchPenalty);
+            switch_at_node(node_type::kTrailingFoot, kEndSwitchPenalty);
           }
         }
       }
@@ -478,7 +538,7 @@ struct bike_sharing {
           if (n.is_trailing_foot_node() &&
               is_allowed(sharing->end_allowed_, n.n_)) {
             // switch to bike
-            continue_on_bike(false, kEndSwitchPenalty);
+            switch_at_node(node_type::kBike, kEndSwitchPenalty);
           }
         } else if (n.is_bike_node()) {
           continue_on_bike(true);

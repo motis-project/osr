@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<osm version="0.6" generator="osr-test">
+  <node id="1" lat="49.000000" lon="8.000000"/>
+  <node id="2" lat="49.000000" lon="8.001000"/>
+  <node id="3" lat="49.000000" lon="8.002000"/>
+  <node id="4" lat="49.000000" lon="8.003000"/>
+  <node id="12" lat="49.000050" lon="8.002000"/>
+  <node id="13" lat="49.000050" lon="8.003000"/>
+  <node id="21" lat="48.999500" lon="8.000000"/>
+  <node id="24" lat="48.999500" lon="8.003000"/>
+
+  <way id="100">
+    <nd ref="1"/>
+    <nd ref="2"/>
+    <nd ref="3"/>
+    <nd ref="4"/>
+    <tag k="highway" v="residential"/>
+  </way>
+
+  <way id="101">
+    <nd ref="21"/>
+    <nd ref="1"/>
+    <tag k="highway" v="cycleway"/>
+    <tag k="foot" v="no"/>
+  </way>
+
+  <way id="104">
+    <nd ref="4"/>
+    <nd ref="24"/>
+    <tag k="highway" v="cycleway"/>
+    <tag k="foot" v="no"/>
+  </way>
+
+  <way id="200">
+    <nd ref="2"/>
+    <nd ref="12"/>
+    <nd ref="13"/>
+    <tag k="highway" v="footway"/>
+    <tag k="footway" v="sidewalk"/>
+  </way>
+</osm>

@@ -24,11 +24,13 @@ namespace osr {
 template <typename Tracking = noop_tracking>
 struct car_sharing {
   using footp = foot<false>;
+  using vehiclep = car;
 
   // initial foot -> rental
   static constexpr auto const kStartSwitchPenalty = cost_t{30U};
   // rental -> trailing foot
   static constexpr auto const kEndSwitchPenalty = cost_t{30U};
+  static constexpr auto const kMatchTolerance = 50.0;
 
   static constexpr auto const kAdditionalWayProperties =
       way_properties{.is_foot_accessible_ = true,
@@ -98,6 +100,11 @@ struct car_sharing {
     car::parameters const car_{};
     footp::parameters const foot_{};
   };
+
+  static vehiclep::parameters const& vehicle_parameters(
+      parameters const& params) {
+    return params.car_;
+  }
 
   struct key {
     friend bool operator==(key const a, key const b) {
@@ -368,6 +375,51 @@ struct car_sharing {
     });
   }
 
+  template <typename Fn>
+  static void resolve_exact_return_node(ways::routing const& w,
+                                        way_idx_t const way,
+                                        node_idx_t const n,
+                                        level_t const,
+                                        direction const search_dir,
+                                        Fn&& f) {
+    car::resolve_start_node(
+        w, way, n, kNoLevel, search_dir,
+        [&](car::node const cn) { f(to_node(cn, kNoLevel)); });
+  }
+
+  static bool is_exact_return_reachable(
+      parameters const& params,
+      ways::routing const& w,
+      timezone_cache_t const& timezones,
+      node const n,
+      way_idx_t const way,
+      direction const way_dir,
+      direction const search_dir,
+      std::optional<routing_time_t> const start_time,
+      duration_t const current_duration) {
+    return n.is_rental_node() &&
+           car::is_dest_reachable(params.car_, w, timezones, to_rental(n), way,
+                                  way_dir, search_dir, start_time,
+                                  current_duration);
+  }
+
+  static cost_and_duration exact_return_way_cost(
+      parameters const& params,
+      ways::routing const& w,
+      timezone_cache_t const& timezones,
+      way_idx_t const way,
+      way_properties const& properties,
+      direction const way_dir,
+      distance_t const distance,
+      std::optional<routing_time_t> const start_time,
+      duration_t const current_duration,
+      direction const search_dir) {
+    return clamp_add(
+        car::way_cost(params.car_, w, timezones, way, properties, way_dir,
+                      distance, start_time, current_duration, search_dir),
+        kEndSwitchPenalty);
+  }
+
   template <direction SearchDir, bool WithBlocked, typename Fn>
   static void adjacent(parameters const& params,
                        ways::routing const& w,
@@ -459,6 +511,25 @@ struct car_sharing {
       }
     };
 
+    auto const& switch_to_foot_at_node = [&]() {
+      fn(node{.n_ = n.n_, .type_ = node_type::kTrailingFoot, .lvl_ = n.lvl_},
+         kEndSwitchPenalty, duration_from_cost(kEndSwitchPenalty),
+         distance_t{0U}, way_idx_t::invalid(), 0, 0,
+         elevation_storage::elevation{}, true);
+    };
+
+    auto const& switch_to_vehicle_at_node = [&]() {
+      if (car::node_cost(params.car_, w.node_properties_[n.n_]).cost_ ==
+          kInfeasible) {
+        return;
+      }
+      car::resolve_all(w, n.n_, n.lvl_, [&](car::node const cn) {
+        fn(to_node(cn, kNoLevel), kEndSwitchPenalty,
+           duration_from_cost(kEndSwitchPenalty), distance_t{0U},
+           way_idx_t::invalid(), 0, 0, elevation_storage::elevation{}, true);
+      });
+    };
+
     if (SearchDir == direction::kForward) {
 
       if (n.is_additional_node(sharing)) {
@@ -502,8 +573,7 @@ struct car_sharing {
           continue_with_vehicle(true);
           if (is_allowed(sharing->end_allowed_, n.n_)) {
             // switch to foot
-            continue_on_foot(node_type::kTrailingFoot, false,
-                             kEndSwitchPenalty);
+            switch_to_foot_at_node();
           }
         }
       }
@@ -545,7 +615,7 @@ struct car_sharing {
           if (n.is_trailing_foot_node() &&
               is_allowed(sharing->end_allowed_, n.n_)) {
             // switch to vehicle
-            continue_with_vehicle(false, kEndSwitchPenalty);
+            switch_to_vehicle_at_node();
           }
         } else if (n.is_rental_node()) {
           continue_with_vehicle(true);
