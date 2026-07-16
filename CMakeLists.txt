@@ -118,6 +118,7 @@ set(osr-resource-libs
 )
 target_link_libraries(osr
         osmium
+        TBB::tbb
         zlibstatic
         protozero
         expat
