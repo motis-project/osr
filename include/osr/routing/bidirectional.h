@@ -237,13 +237,21 @@ struct bidirectional {
             }
             return;
           }
-          if (heur < max && costs[neighbor.get_key()].update(
-                                l, neighbor, static_cast<cost_t>(total), curr,
-                                total_duration)) {
-
+          auto const updated = [&]() {
+            if (heur >= max) {
+              return false;
+            }
             auto next = label{neighbor, static_cast<cost_t>(heur)};
             next.track(l, r, way, neighbor.get_node(), track);
+            if (!costs[neighbor.get_key()].update(next, neighbor,
+                                                  static_cast<cost_t>(total),
+                                                  curr, total_duration)) {
+              return false;
+            }
             pq.push(std::move(next));
+            return true;
+          }();
+          if (updated) {
 
             if constexpr (kDebug) {
               std::cout << " -> PUSH\n";
