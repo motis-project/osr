@@ -37,7 +37,7 @@
 [tiles]
   url=git@github.com:motis-project/tiles.git
   branch=master
-  commit=fb8187e7b1ff30f0fffa6e508575b6b1d6c33791
+  commit=f9aa90cb9c5f43d17db2495d8e8a0291344de05d
 [mimalloc]
   url=git@github.com:motis-project/mimalloc.git
   branch=master

@@ -118,7 +118,6 @@ set(osr-resource-libs
 )
 target_link_libraries(osr
         osmium
-        TBB::tbb
         zlibstatic
         protozero
         expat
@@ -133,6 +132,7 @@ target_link_libraries(osr
         boost-thread
         boost-iostreams
         boost-json
+        TBB::tbb
         ${osr-resource-libs}
 )
 
