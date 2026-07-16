@@ -553,11 +553,27 @@ bool parse_month_token(std::vector<std::string_view> const& tokens,
   if (next_dash != std::string_view::npos) {
     auto const after_dash = next.substr(next_dash + 1U);
     if (!after_dash.empty() && is_digit(after_dash.front())) {
-      auto const to_day = parse_u32(after_dash);
-      if (!to_day.has_value() || *to_day == 0U || *to_day > 31U) {
-        return false;
+      if (after_dash.size() == 4U && i + 2U < tokens.size()) {
+        auto const to_year = parse_u32(after_dash);
+        auto const to_month = month(tokens[i + 1U]);
+        auto const to_day = parse_u32(tokens[i + 2U]);
+        if (!to_year.has_value() ||
+            *to_year > std::numeric_limits<std::uint16_t>::max() ||
+            to_month == 0U || !to_day.has_value() || *to_day == 0U ||
+            *to_day > 31U) {
+          return false;
+        }
+        range.to_.year_ = static_cast<std::uint16_t>(*to_year);
+        range.to_.month_ = to_month;
+        range.to_.day_ = static_cast<std::uint8_t>(*to_day);
+        i += 2U;
+      } else {
+        auto const to_day = parse_u32(after_dash);
+        if (!to_day.has_value() || *to_day == 0U || *to_day > 31U) {
+          return false;
+        }
+        range.to_.day_ = static_cast<std::uint8_t>(*to_day);
       }
-      range.to_.day_ = static_cast<std::uint8_t>(*to_day);
     } else {
       auto const to_month = month(after_dash);
       if (to_month == 0U || i + 1U >= tokens.size()) {

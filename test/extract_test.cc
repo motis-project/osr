@@ -23,17 +23,17 @@ constexpr auto const kNegativeIdsOsm =
   <node id="-2" lat="48.0000" lon="9.0010"/>
   <node id="-3" lat="48.0000" lon="9.0020"/>
   <node id="-4" lat="48.0010" lon="9.0020"/>
-  <way id="-11">
-    <nd ref="-1"/>
-    <nd ref="-2"/>
-    <tag k="highway" v="primary"/>
-    <tag k="name" v="Way -11"/>
-  </way>
   <way id="-10">
     <nd ref="-2"/>
     <nd ref="-3"/>
     <tag k="highway" v="primary"/>
     <tag k="name" v="Way -10"/>
+  </way>
+  <way id="-11">
+    <nd ref="-1"/>
+    <nd ref="-2"/>
+    <tag k="highway" v="primary"/>
+    <tag k="name" v="Way -11"/>
   </way>
   <way id="20">
     <nd ref="-3"/>
@@ -60,6 +60,51 @@ constexpr auto const kHugePositiveIdsOsm =
     <nd ref="35184372088824"/>
     <tag k="highway" v="primary"/>
   </way>
+</osm>)osm";
+
+constexpr auto const kLowEmissionZoneOsm =
+    R"osm(<osm version="0.6" generator="test">
+  <node id="1" lat="0.0000" lon="0.0000"/>
+  <node id="2" lat="0.0000" lon="0.0100"/>
+  <node id="3" lat="0.0100" lon="0.0100"/>
+  <node id="4" lat="0.0100" lon="0.0000"/>
+  <node id="5" lat="0.0050" lon="0.0020"/>
+  <node id="6" lat="0.0050" lon="0.0080"/>
+  <node id="7" lat="0.0200" lon="0.0200"/>
+  <node id="8" lat="0.0200" lon="0.0300"/>
+  <node id="9" lat="0.0050" lon="-0.0020"/>
+  <node id="10" lat="0.0050" lon="0.0120"/>
+  <way id="10">
+    <nd ref="5"/>
+    <nd ref="6"/>
+    <tag k="highway" v="primary"/>
+    <tag k="name" v="Inside"/>
+  </way>
+  <way id="20">
+    <nd ref="7"/>
+    <nd ref="8"/>
+    <tag k="highway" v="primary"/>
+    <tag k="name" v="Outside"/>
+  </way>
+  <way id="30">
+    <nd ref="9"/>
+    <nd ref="10"/>
+    <tag k="highway" v="primary"/>
+    <tag k="name" v="Crossing"/>
+  </way>
+  <way id="100">
+    <nd ref="1"/>
+    <nd ref="2"/>
+    <nd ref="3"/>
+    <nd ref="4"/>
+    <nd ref="1"/>
+  </way>
+  <relation id="1000">
+    <member type="way" ref="100" role="outer"/>
+    <tag k="type" v="boundary"/>
+    <tag k="boundary" v="low_emission_zone"/>
+    <tag k="name" v="Test LEZ"/>
+  </relation>
 </osm>)osm";
 
 fs::path write_osm(std::string_view const name,
@@ -178,4 +223,28 @@ TEST(extract, supports_huge_positive_custom_ids) {
   ASSERT_TRUE(second_way.has_value());
   ASSERT_TRUE(shared_node.has_value());
   EXPECT_EQ("Huge Positive Way", w.strings_[w.way_names_[*sparse_way]].view());
+}
+
+TEST(extract, marks_low_emission_zone_ways) {
+  auto const osm_path =
+      write_osm("osr_low_emission_zone.osm", kLowEmissionZoneOsm);
+  auto const dir = fs::temp_directory_path() / "osr_low_emission_zone_dir";
+  auto ec = std::error_code{};
+  fs::remove_all(dir, ec);
+  fs::create_directories(dir, ec);
+
+  extract(false, osm_path.generic_string(), dir, {});
+
+  auto w = ways{dir, cista::mmap::protection::READ};
+  auto const inside = w.find_way(osm_way_idx_t{10});
+  auto const outside = w.find_way(osm_way_idx_t{20});
+  auto const crossing = w.find_way(osm_way_idx_t{30});
+
+  ASSERT_TRUE(inside.has_value());
+  ASSERT_TRUE(outside.has_value());
+  ASSERT_TRUE(crossing.has_value());
+
+  EXPECT_TRUE(w.r_->way_properties_[*inside].is_in_low_emission_zone());
+  EXPECT_FALSE(w.r_->way_properties_[*outside].is_in_low_emission_zone());
+  EXPECT_TRUE(w.r_->way_properties_[*crossing].is_in_low_emission_zone());
 }

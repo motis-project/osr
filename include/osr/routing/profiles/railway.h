@@ -218,6 +218,7 @@ struct railway {
   template <direction SearchDir, bool WithBlocked, typename Fn>
   static void adjacent(parameters const& params,
                        ways::routing const& w,
+                       timezone_cache_t const& timezones,
                        node const n,
                        duration_t const,
                        std::optional<routing_time_t> const start_time,
@@ -227,7 +228,8 @@ struct railway {
                        Fn&& fn) {
     if (additional != nullptr) {
       for_each_additional_edge<railway>(
-          params, w, n, additional, start_time, duration_t{0}, SearchDir,
+          params, w, timezones, n, additional, start_time, duration_t{0},
+          SearchDir,
           [&](additional_edge const& ae, cost_and_duration const edge_cost,
               direction const edge_dir) {
             auto const [target, cost, duration] =
@@ -248,12 +250,13 @@ struct railway {
     }
 
     for_each_adjacent_node<railway, SearchDir, WithBlocked, false>(
-        params, w, n, blocked, kUturnPenalty, start_time, duration_t{0},
-        SearchDir, fn);
+        params, w, timezones, n, blocked, kUturnPenalty, start_time,
+        duration_t{0}, SearchDir, fn);
   }
 
   static bool is_dest_reachable(parameters const& params,
                                 ways::routing const& w,
+                                timezone_cache_t const& timezones,
                                 node const,
                                 way_idx_t const way,
                                 direction const way_dir,
@@ -261,8 +264,8 @@ struct railway {
                                 std::optional<routing_time_t> const start_time,
                                 duration_t const current_duration) {
     auto const target_way_prop = w.way_properties_[way];
-    if (way_cost(params, w, way, target_way_prop, way_dir, 0U, start_time,
-                 current_duration, search_dir)
+    if (way_cost(params, w, timezones, way, target_way_prop, way_dir, 0U,
+                 start_time, current_duration, search_dir)
             .cost_ == kInfeasible) {
       return false;
     }
@@ -273,6 +276,7 @@ struct railway {
   static constexpr cost_and_duration way_cost(
       parameters const&,
       ways::routing const&,
+      timezone_cache_t const&,
       way_idx_t const,
       way_properties const& e,
       direction const dir,
@@ -283,7 +287,7 @@ struct railway {
     auto const accessible = e.is_railway_accessible();
     auto const accessible_with_penalty = e.is_railway_accessible_with_penalty();
     if ((accessible || accessible_with_penalty) &&
-        (dir == direction::kForward || !e.is_oneway_bus_psv())) {
+        e.is_bus_psv_direction_allowed(dir)) {
       auto cost = static_cast<cost_t>(dist);
       if (accessible_with_penalty) {
         cost *= e.in_route() ? 2U : 4U;

@@ -2,7 +2,10 @@
 
 #include <algorithm>
 
+#include "date/tz.h"
+
 #include "utl/parallel_for.h"
+#include "utl/to_vec.h"
 
 #include "cista/io.h"
 
@@ -54,6 +57,9 @@ ways::ways(std::filesystem::path p, cista::mmap::protection const mode)
       r_{mode == cista::mmap::protection::READ
              ? routing::read(p_)
              : cista::wrapped<routing>{cista::raw::make_unique<routing>()}},
+      timezones_{utl::to_vec(
+          r_->timezones_,
+          [](auto const& tz) { return date::locate_zone(tz.view()); })},
       node_to_osm_{mm("node_to_osm.bin")},
       way_osm_idx_{mm("way_osm_idx.bin")},
       way_polylines_{mm_vec<point>{mm("way_polylines_data.bin")},

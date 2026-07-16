@@ -498,8 +498,11 @@ inline void add_hgv_way_info_properties(boost::json::object& properties,
     return;
   }
 
-  if (hgv_info->has(hgv_info_field::kAccess)) {
-    properties["hgv_access"] = to_string(hgv_info->hgv_access());
+  if (hgv_info->has(hgv_info_field::kAccessFwd)) {
+    properties["hgv_access_fwd"] = to_string(hgv_info->hgv_access_fwd());
+  }
+  if (hgv_info->has(hgv_info_field::kAccessBwd)) {
+    properties["hgv_access_bwd"] = to_string(hgv_info->hgv_access_bwd());
   }
   if (hgv_info->has(hgv_info_field::kHazmat)) {
     properties["hazmat_access"] = to_string(hgv_info->hazmat_access());
@@ -586,11 +589,13 @@ struct geojson_writer {
           {"railway", p.is_railway_accessible()},
           {"railway_with_penalty", p.is_railway_accessible_with_penalty()},
           {"ferry", p.is_ferry_accessible()},
+          {"low_emission_zone", p.is_in_low_emission_zone()},
           {"is_big_street", p.is_big_street()},
           {"is_destination", p.is_destination()},
           {"oneway_car", p.is_oneway_car()},
           {"oneway_bike", p.is_oneway_bike()},
           {"oneway_bus_psv", p.is_oneway_bus_psv()},
+          {"oneway_reverse", p.is_oneway_reverse()},
           {"max_speed", p.max_speed_km_per_h()},
           {"speed_limit", p.speed_limit_},
           {"from_level", p.from_level().to_float()},
@@ -600,7 +605,8 @@ struct geojson_writer {
           {"is_steps", p.is_steps()},
           {"is_parking", p.is_parking()},
           {"is_ramp", p.is_ramp()},
-          {"in_route", p.in_route()}};
+          {"in_route", p.in_route()},
+          {"is_detour", p.is_detour()}};
       add_hgv_way_info_properties(properties, *w_.r_, i, p);
       add_conditional_properties(properties, w_, i, p);
       features_.emplace_back(boost::json::value{
@@ -623,11 +629,13 @@ struct geojson_writer {
         {"railway", p.is_railway_accessible()},
         {"railway_with_penalty", p.is_railway_accessible_with_penalty()},
         {"ferry", p.is_ferry_accessible()},
+        {"low_emission_zone", p.is_in_low_emission_zone()},
         {"is_destination", p.is_destination()},
         {"is_big_street", p.is_big_street()},
         {"oneway_car", p.is_oneway_car()},
         {"oneway_bike", p.is_oneway_bike()},
         {"oneway_bus_psv", p.is_oneway_bus_psv()},
+        {"oneway_reverse", p.is_oneway_reverse()},
         {"max_speed", p.max_speed_km_per_h()},
         {"speed_limit", p.speed_limit_},
         {"from_level", p.from_level().to_float()},
@@ -637,7 +645,8 @@ struct geojson_writer {
         {"is_steps", p.is_steps()},
         {"is_parking", p.is_parking()},
         {"is_ramp", p.is_ramp()},
-        {"in_route", p.in_route()}};
+        {"in_route", p.in_route()},
+        {"is_detour", p.is_detour()}};
     add_hgv_way_info_properties(properties, *w_.r_, i, p);
     add_conditional_properties(properties, w_, i, p);
 

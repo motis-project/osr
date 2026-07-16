@@ -211,8 +211,8 @@ struct bidirectional {
     }
 
     P::template adjacent<SearchDir, WithBlocked>(
-        params, r, curr, curr_duration, std::nullopt, blocked, sharing,
-        elevations,
+        params, r, w.timezones_, curr, curr_duration, std::nullopt, blocked,
+        sharing, elevations,
         [&](node const neighbor, std::uint32_t const cost,
             duration_t const duration, distance_t, way_idx_t const way,
             std::uint16_t, std::uint16_t, elevation_storage::elevation const,
@@ -294,8 +294,8 @@ struct bidirectional {
             return;
           }
           P::template adjacent<opposite(SearchDir), WithBlocked>(
-              params, r, curr, curr_duration, std::nullopt, blocked, sharing,
-              elevations,
+              params, r, w.timezones_, curr, curr_duration, std::nullopt,
+              blocked, sharing, elevations,
               [&](node const neighbor, std::uint32_t const, duration_t const,
                   distance_t, way_idx_t const, std::uint16_t, std::uint16_t,
                   elevation_storage::elevation const, bool const) {

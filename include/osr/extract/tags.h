@@ -62,7 +62,8 @@ struct tags {
           break;
         case cista::hash("oneway"):
           oneway_defined = true;
-          oneway_ |= t.value() == "yes"sv;
+          oneway_reverse_ |= t.value() == "-1"sv;
+          oneway_ |= t.value() == "yes"sv || oneway_reverse_;
           break;
         case cista::hash("junction"):
           oneway_ |= t.value() == "roundabout"sv;
@@ -86,6 +87,8 @@ struct tags {
           motor_vehicle_ = t.value();
           is_destination_ |= motor_vehicle_ == "destination"sv;
           break;
+        case cista::hash("hgv:forward"): hgv_forward_ = t.value(); break;
+        case cista::hash("hgv:backward"): hgv_backward_ = t.value(); break;
         case cista::hash("hgv"): hgv_ = t.value(); break;
         case cista::hash("hgv:trailer"): hgv_trailer_ = t.value(); break;
         case cista::hash("hazmat"): hazmat_ = t.value(); break;
@@ -242,6 +245,8 @@ struct tags {
     }
   }
 
+  bool is_detour_route() const { return is_route_ && route_type_ == "detour"; }
+
   // https://wiki.openstreetmap.org/wiki/Relation:route
   bool is_route_{false};
 
@@ -254,6 +259,9 @@ struct tags {
   // https://wiki.openstreetmap.org/wiki/Key:oneway
   // https://wiki.openstreetmap.org/wiki/Tag:junction=roundabout
   bool oneway_{false};
+
+  // https://wiki.openstreetmap.org/wiki/Key:oneway
+  bool oneway_reverse_{false};
 
   // https://wiki.openstreetmap.org/wiki/Key:oneway:bicycle
   bool not_oneway_bike_{false};
@@ -272,6 +280,12 @@ struct tags {
 
   // https://wiki.openstreetmap.org/wiki/Key:hgv
   std::string_view hgv_;
+
+  // https://wiki.openstreetmap.org/wiki/Key:hgv
+  std::string_view hgv_forward_;
+
+  // https://wiki.openstreetmap.org/wiki/Key:hgv
+  std::string_view hgv_backward_;
 
   // https://wiki.openstreetmap.org/wiki/Key:hgv:trailer
   std::string_view hgv_trailer_;

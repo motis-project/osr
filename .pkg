@@ -5,7 +5,7 @@
 [osmium]
   url=git@github.com:motis-project/libosmium.git
   branch=master
-  commit=6e6d6b3081cc8bdf25dda89730e25c36eb995516
+  commit=aec81a466451d5c6913df503e543806129df02d1
 [conf]
   url=git@github.com:motis-project/conf.git
   branch=master
@@ -17,7 +17,7 @@
 [cista]
   url=git@github.com:felixguendling/cista.git
   branch=master
-  commit=02fc087619fc913aca2c3fd3e07ec12279b8d6c6
+  commit=10abc43279bd99586d3433ea3b419727f46b8dd9
 [googletest]
   url=git@github.com:motis-project/googletest.git
   branch=master
@@ -50,6 +50,10 @@
   url=git@github.com:triptix-tech/rtree.c.git
   branch=master
   commit=855982edf7efbba1798bacfea12997bf541f5661
+[tg]
+  url=git@github.com:triptix-tech/tg.git
+  branch=main
+  commit=20c0f298b8ce58de29a790290f44dca7c4ecc364
 [fmt]
   url=git@github.com:motis-project/fmt.git
   branch=master
@@ -66,7 +70,3 @@
   url=git@github.com:motis-project/net.git
   branch=master
   commit=c2599102dcffa4babfdcf5320a6bd6f5c6e9b731
-[tzbounds]
-  url=git@github.com:motis-project/tzbounds.git
-  branch=master
-  commit=7d843f62791098b2aac49e5d04a5a180f8da7b13

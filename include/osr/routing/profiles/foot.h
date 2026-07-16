@@ -187,6 +187,7 @@ struct foot {
   template <direction SearchDir, bool WithBlocked, typename Fn>
   static void adjacent(parameters const& params,
                        ways::routing const& w,
+                       timezone_cache_t const& timezones,
                        node const n,
                        duration_t const current_duration,
                        std::optional<routing_time_t> const start_time,
@@ -212,8 +213,8 @@ struct foot {
         }
 
         auto const target_way_prop = w.way_properties_[way];
-        if (way_cost(params, w, way, target_way_prop, way_dir, 0U, start_time,
-                     current_duration, SearchDir)
+        if (way_cost(params, w, timezones, way, target_way_prop, way_dir, 0U,
+                     start_time, current_duration, SearchDir)
                 .cost_ == kInfeasible) {
           return;
         }
@@ -223,10 +224,11 @@ struct foot {
               w, target_node, [&](level_t const target_lvl) {
                 auto const dist =
                     w.get_way_node_distance(way, std::min(from, to));
-                auto const step = clamp_add(
-                    way_cost(params, w, way, target_way_prop, way_dir, dist,
-                             start_time, current_duration, SearchDir),
-                    node_cost(params, target_node_prop));
+                auto const step =
+                    clamp_add(way_cost(params, w, timezones, way,
+                                       target_way_prop, way_dir, dist,
+                                       start_time, current_duration, SearchDir),
+                              node_cost(params, target_node_prop));
                 fn(node{target_node, target_lvl}, step.cost_, step.duration_,
                    dist, way, from, to, elevation_storage::elevation{}, false);
               });
@@ -237,10 +239,10 @@ struct foot {
           }
 
           auto const dist = w.get_way_node_distance(way, std::min(from, to));
-          auto const step =
-              clamp_add(way_cost(params, w, way, target_way_prop, way_dir, dist,
-                                 start_time, current_duration, SearchDir),
-                        node_cost(params, target_node_prop));
+          auto const step = clamp_add(
+              way_cost(params, w, timezones, way, target_way_prop, way_dir,
+                       dist, start_time, current_duration, SearchDir),
+              node_cost(params, target_node_prop));
           fn(node{target_node, *target_lvl}, step.cost_, step.duration_, dist,
              way, from, to, elevation_storage::elevation{}, false);
         }
@@ -257,6 +259,7 @@ struct foot {
 
   static bool is_dest_reachable(parameters const& params,
                                 ways::routing const& w,
+                                timezone_cache_t const& timezones,
                                 node const n,
                                 way_idx_t const way,
                                 direction const way_dir,
@@ -264,8 +267,8 @@ struct foot {
                                 std::optional<routing_time_t> const start_time,
                                 duration_t const current_duration) {
     auto const target_way_prop = w.way_properties_[way];
-    if (way_cost(params, w, way, target_way_prop, way_dir, 0U, start_time,
-                 current_duration, search_dir)
+    if (way_cost(params, w, timezones, way, target_way_prop, way_dir, 0U,
+                 start_time, current_duration, search_dir)
             .cost_ == kInfeasible) {
       return false;
     }
@@ -369,6 +372,7 @@ struct foot {
   static constexpr cost_and_duration way_cost(
       parameters const& params,
       ways::routing const&,
+      timezone_cache_t const&,
       way_idx_t const,
       way_properties const e,
       direction,

@@ -22,7 +22,8 @@ osr::conditional_wall_time wall_time(int const year,
       std::chrono::sys_days{std::chrono::year{year} /
                             std::chrono::month{month} / std::chrono::day{day}} +
       std::chrono::hours{hour} + std::chrono::minutes{minute});
-  return *osr::to_conditional_wall_time(tp);
+  return *osr::to_conditional_wall_time(
+      tp, osr::conditional_timezone_idx_t::invalid(), {});
 }
 
 osr::routing_time_t utc_time(int const year,
@@ -41,6 +42,11 @@ struct match_fixture {
 
   bool parse(std::string_view const key, std::string_view const value) {
     return osr::parse_conditional_restriction_tag(key, value, builder_);
+  }
+
+  void add_timezone(std::string_view const timezone) {
+    routing_.timezones_.emplace_back(timezone);
+    timezones_.push_back(date::locate_zone(timezone));
   }
 
   std::optional<osr::conditional_condition_set_idx_t> parse_condition_set(
@@ -96,11 +102,12 @@ struct match_fixture {
       osr::hgv::parameters const& params,
       osr::conditional_condition_set_idx_t const condition_set,
       osr::routing_time_t const t) const {
-    return osr::hgv::matches_profile_condition_set_utc(params, routing_,
-                                                       condition_set, t);
+    return osr::hgv::matches_profile_condition_set_utc(
+        params, routing_, timezones_, condition_set, t);
   }
 
   osr::ways::routing routing_{};
+  osr::timezone_cache_t timezones_{};
   osr::conditional_storage_builder builder_;
 };
 
@@ -139,7 +146,7 @@ TEST(conditional_match, wall_date_uses_iso_week_number) {
 
 TEST(conditional_match, timezone_converts_utc_to_local_wall_time) {
   auto f = match_fixture{};
-  f.routing_.timezones_.emplace_back("Europe/Berlin"sv);
+  f.add_timezone("Europe/Berlin"sv);
   f.builder_.timezone_ = osr::conditional_timezone_idx_t{0U};
   ASSERT_TRUE(f.parse("hgv:conditional"sv, "no @ (08:00-09:00)"sv));
 
@@ -153,7 +160,7 @@ TEST(conditional_match, timezone_converts_utc_to_local_wall_time) {
 
 TEST(conditional_match, timezone_handles_dst_spring_forward) {
   auto f = match_fixture{};
-  f.routing_.timezones_.emplace_back("Europe/Berlin"sv);
+  f.add_timezone("Europe/Berlin"sv);
   f.builder_.timezone_ = osr::conditional_timezone_idx_t{0U};
   ASSERT_TRUE(f.parse("hgv:conditional"sv, "no @ (Su 02:00-03:30)"sv));
 
@@ -170,7 +177,7 @@ TEST(conditional_match, timezone_handles_dst_spring_forward) {
 
 TEST(conditional_match, timezone_handles_dst_fall_back) {
   auto f = match_fixture{};
-  f.routing_.timezones_.emplace_back("Europe/Berlin"sv);
+  f.add_timezone("Europe/Berlin"sv);
   f.builder_.timezone_ = osr::conditional_timezone_idx_t{0U};
   ASSERT_TRUE(f.parse("hgv:conditional"sv, "no @ (Su 02:00-03:00)"sv));
 
@@ -188,7 +195,7 @@ TEST(conditional_match, timezone_handles_dst_fall_back) {
 TEST(conditional_match,
      timezone_handles_dst_spring_forward_in_overnight_range) {
   auto f = match_fixture{};
-  f.routing_.timezones_.emplace_back("Europe/Berlin"sv);
+  f.add_timezone("Europe/Berlin"sv);
   f.builder_.timezone_ = osr::conditional_timezone_idx_t{0U};
   ASSERT_TRUE(f.parse("hgv:conditional"sv, "no @ (Sa 22:00-03:30)"sv));
 
@@ -204,7 +211,7 @@ TEST(conditional_match,
 
 TEST(conditional_match, timezone_handles_dst_fall_back_in_overnight_range) {
   auto f = match_fixture{};
-  f.routing_.timezones_.emplace_back("Europe/Berlin"sv);
+  f.add_timezone("Europe/Berlin"sv);
   f.builder_.timezone_ = osr::conditional_timezone_idx_t{0U};
   ASSERT_TRUE(f.parse("hgv:conditional"sv, "no @ (Sa 22:00-03:00)"sv));
 

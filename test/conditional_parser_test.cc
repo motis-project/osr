@@ -74,6 +74,24 @@ TEST(conditional_parser, parses_hgv_access_with_weekday_time_range) {
   EXPECT_EQ(10U * 60U, f.routing_.opening_hours_time_spans_[0].to_minutes_);
 }
 
+TEST(conditional_parser, parses_oneway_conditional_values) {
+  auto f = parser_fixture{};
+
+  ASSERT_TRUE(f.parse("oneway:conditional"sv,
+                      "yes @ (Mo-Fr 07:00-16:00); no @ (delivery); "
+                      "-1 @ (2026 May 26-2026 Dec 31)"sv));
+
+  ASSERT_EQ(3U, f.routing_.conditional_oneway_.size());
+  EXPECT_EQ(osr::conditional_oneway_value::kForward,
+            f.routing_.conditional_oneway_[0].value_);
+  EXPECT_EQ(osr::conditional_oneway_value::kNo,
+            f.routing_.conditional_oneway_[1].value_);
+  EXPECT_EQ(osr::conditional_oneway_value::kBackward,
+            f.routing_.conditional_oneway_[2].value_);
+  EXPECT_EQ(osr::conditional_restriction_field::kOneway,
+            f.routing_.conditional_oneway_[2].field_);
+}
+
 TEST(conditional_parser, semicolons_in_opening_hours) {
   auto f = parser_fixture{};
 
@@ -673,8 +691,7 @@ TEST(conditional_parser, ignores_unsupported_clauses) {
 
 TEST(conditional_parser, rejects_unsupported_conditional_keys) {
   for (std::string_view const key :
-       {"oneway:conditional"sv, "vehicle:conditional"sv,
-        "maxstay:conditional"sv, "fee:conditional"sv,
+       {"vehicle:conditional"sv, "maxstay:conditional"sv, "fee:conditional"sv,
         "opening_hours:conditional"sv}) {
     auto f = parser_fixture{};
     EXPECT_FALSE(f.parse(key, "no @ (Mo-Fr 06:00-10:00)"sv));

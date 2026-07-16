@@ -218,6 +218,7 @@ struct generic_car {
   template <direction SearchDir, bool WithBlocked, typename Fn>
   static void adjacent(parameters const& params,
                        ways::routing const& w,
+                       timezone_cache_t const& timezones,
                        node const n,
                        duration_t const current_duration,
                        std::optional<routing_time_t> const start_time,
@@ -227,7 +228,8 @@ struct generic_car {
                        Fn&& fn) {
     if (additional != nullptr) {
       for_each_additional_edge<generic_car>(
-          params, w, n, additional, start_time, current_duration, SearchDir,
+          params, w, timezones, n, additional, start_time, current_duration,
+          SearchDir,
           [&](additional_edge const& ae, cost_and_duration const edge_cost,
               direction const edge_dir) {
             if (!additional->is_additional_node(n.n_)) {
@@ -255,12 +257,13 @@ struct generic_car {
     }
 
     for_each_adjacent_node<generic_car, SearchDir, WithBlocked, true, IsBus>(
-        params, w, n, blocked, params.uturn_penalty_, start_time,
+        params, w, timezones, n, blocked, params.uturn_penalty_, start_time,
         current_duration, SearchDir, fn);
   }
 
   static bool is_dest_reachable(parameters const& params,
                                 ways::routing const& w,
+                                timezone_cache_t const& timezones,
                                 node const n,
                                 way_idx_t const way,
                                 direction const way_dir,
@@ -268,8 +271,8 @@ struct generic_car {
                                 std::optional<routing_time_t> const start_time,
                                 duration_t const current_duration) {
     auto const target_way_prop = w.way_properties_[way];
-    if (way_cost(params, w, way, target_way_prop, way_dir, 0U, start_time,
-                 current_duration, search_dir)
+    if (way_cost(params, w, timezones, way, target_way_prop, way_dir, 0U,
+                 start_time, current_duration, search_dir)
             .cost_ == kInfeasible) {
       return false;
     }
@@ -285,6 +288,7 @@ struct generic_car {
   static constexpr cost_and_duration way_cost(
       parameters const&,
       ways::routing const&,
+      timezone_cache_t const&,
       way_idx_t const,
       way_properties const& e,
       direction const dir,
@@ -296,7 +300,7 @@ struct generic_car {
       auto const accessible = e.is_bus_accessible();
       auto const accessible_with_penalty = e.is_bus_accessible_with_penalty();
       if ((accessible || accessible_with_penalty) &&
-          (dir == direction::kForward || !e.is_oneway_bus_psv())) {
+          e.is_bus_psv_direction_allowed(dir)) {
         auto const in_route = e.in_route();
         auto const bus_only = !e.is_car_accessible();
         auto sl = static_cast<speed_limit>(e.speed_limit_);
@@ -320,8 +324,7 @@ struct generic_car {
         return infeasible_cost_and_duration();
       }
     } else {
-      if (e.is_car_accessible() &&
-          (dir == direction::kForward || !e.is_oneway_car())) {
+      if (e.is_car_accessible() && e.is_car_direction_allowed(dir)) {
         auto const base_cost = static_cast<cost_t>(
             std::rint(static_cast<float>(dist) * e.max_speed_s_per_m()));
         return {.cost_ = clamp_cost(static_cast<std::uint64_t>(base_cost) *

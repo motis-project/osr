@@ -304,7 +304,7 @@ struct lookup {
       std::optional<routing_time_t> const start_time = std::nullopt) const {
     auto const way_prop = ways_.r_->way_properties_[wc.way_];
     auto const edge_dir = reverse ? opposite(dir) : dir;
-    if (P::way_cost(params, *ways_.r_, wc.way_, way_prop,
+    if (P::way_cost(params, *ways_.r_, ways_.timezones_, wc.way_, way_prop,
                     flip(search_dir, edge_dir), 0U, start_time, duration_t{0},
                     search_dir)
             .cost_ == kInfeasible) {
@@ -335,11 +335,12 @@ struct lookup {
                                         search_dir) &&
                 (blocked == nullptr || !blocked->test(*way_node))) {
               c.node_ = *way_node;
-              c.cost_ = P::way_cost(params, *ways_.r_, wc.way_, way_prop,
-                                    flip(search_dir, edge_dir),
-                                    static_cast<distance_t>(c.dist_to_node_),
-                                    start_time, duration_t{0}, search_dir)
-                            .cost_;
+              c.cost_ =
+                  P::way_cost(params, *ways_.r_, ways_.timezones_, wc.way_,
+                              way_prop, flip(search_dir, edge_dir),
+                              static_cast<distance_t>(c.dist_to_node_),
+                              start_time, duration_t{0}, search_dir)
+                      .cost_;
             }
             return utl::cflow::kBreak;
           }
@@ -384,8 +385,8 @@ private:
     auto const way_prop = ways_.r_->way_properties_[wc.way_];
 
     auto const edge_dir = reverse ? opposite(nc.way_dir_) : nc.way_dir_;
-    auto const cost = P::way_cost(params, *ways_.r_, wc.way_, way_prop,
-                                  flip(search_dir, edge_dir),
+    auto const cost = P::way_cost(params, *ways_.r_, ways_.timezones_, wc.way_,
+                                  way_prop, flip(search_dir, edge_dir),
                                   static_cast<distance_t>(nc.dist_to_node_),
                                   start_time, duration_t{0}, search_dir);
 

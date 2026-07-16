@@ -129,8 +129,8 @@ struct dijkstra {
       auto const curr = l.get_node();
       auto const curr_duration = cost_.at(curr.get_key()).duration(curr);
       P::template adjacent<SearchDir, WithBlocked>(
-          params, r, curr, curr_duration, start_time, blocked, sharing,
-          elevations,
+          params, r, w.timezones_, curr, curr_duration, start_time, blocked,
+          sharing, elevations,
           [&](node const neighbor, std::uint32_t const cost,
               duration_t const duration, distance_t, way_idx_t const way,
               std::uint16_t, std::uint16_t, elevation_storage::elevation,

@@ -5,12 +5,16 @@
 #endif
 
 #include <cstdint>
+
 #include <algorithm>
+#include <array>
 #include <iostream>
 #include <limits>
 #include <memory>
+#include <mutex>
 #include <optional>
 #include <string>
+#include <vector>
 #include "osr/extract/extract.h"
 
 #include "boost/thread/tss.hpp"
@@ -28,7 +32,6 @@
 #include "osmium/io/xml_input.hpp"
 
 #include "utl/enumerate.h"
-#include "utl/get_or_create.h"
 #include "utl/helpers/algorithm.h"
 #include "utl/parser/arg_parser.h"
 #include "utl/progress_tracker.h"
@@ -36,12 +39,11 @@
 #include "tiles/osm/hybrid_node_idx.h"
 #include "tiles/osm/tmp_file.h"
 
-#include "tzbounds/timezones.h"
-
 #include "geo/box.h"
 
 #include "osr/elevation_storage.h"
 #include "osr/extract/conditional_parser.h"
+#include "osr/extract/osm_areas.h"
 #include "osr/extract/tag_parser.h"
 #include "osr/extract/tags.h"
 #include "osr/lookup.h"
@@ -52,6 +54,7 @@
 namespace osm = osmium;
 namespace osm_io = osmium::io;
 namespace osm_eb = osmium::osm_entity_bits;
+namespace osm_area = osmium::area;
 namespace osm_mem = osmium::memory;
 namespace fs = std::filesystem;
 using namespace std::string_view_literals;
@@ -138,9 +141,23 @@ std::optional<access_value> get_access_value(std::string_view value) {
 std::optional<hgv_way_info> get_hgv_way_info(tags const& t) {
   auto info = hgv_way_info{};
 
-  if (auto const access = get_access_value(t.hgv_); access.has_value()) {
-    info.fields_ |= to_mask(hgv_info_field::kAccess);
-    info.hgv_access_ = static_cast<std::uint8_t>(*access);
+  auto const hgv_access = get_access_value(t.hgv_);
+  auto const hgv_fwd = get_access_value(t.hgv_forward_);
+  auto const hgv_bwd = get_access_value(t.hgv_backward_);
+
+  if (hgv_access.has_value()) {
+    info.fields_ |= to_mask(hgv_info_field::kAccessFwd);
+    info.hgv_access_fwd_ = static_cast<std::uint8_t>(*hgv_access);
+    info.fields_ |= to_mask(hgv_info_field::kAccessBwd);
+    info.hgv_access_bwd_ = static_cast<std::uint8_t>(*hgv_access);
+  }
+  if (hgv_fwd.has_value()) {
+    info.fields_ |= to_mask(hgv_info_field::kAccessFwd);
+    info.hgv_access_fwd_ = static_cast<std::uint8_t>(*hgv_fwd);
+  }
+  if (hgv_bwd.has_value()) {
+    info.fields_ |= to_mask(hgv_info_field::kAccessBwd);
+    info.hgv_access_bwd_ = static_cast<std::uint8_t>(*hgv_bwd);
   }
 
   set_hgv_info_value(
@@ -273,6 +290,7 @@ way_properties get_way_properties(
   p.is_oneway_car_ = t.oneway_;
   p.is_oneway_bike_ = t.oneway_ && !t.not_oneway_bike_;
   p.is_oneway_bus_psv_ = t.oneway_ && !t.not_oneway_bus_psv_;
+  p.is_oneway_reverse_ = t.oneway_reverse_;
   p.is_elevator_ = t.is_elevator_;
   p.is_steps_ = (t.highway_ == "steps"sv);
   p.is_parking_ = t.is_parking_;
@@ -293,6 +311,7 @@ way_properties get_way_properties(
   p.is_ferry_accessible_ = is_accessible<ferry_profile>(t, obj_type);
   p.is_railway_accessible_with_penalty_ =
       is_accessible_with_penalty<railway_profile>(t, obj_type);
+  p.is_detour_ = t.is_detour_route();
   return p;
 }
 
@@ -349,16 +368,22 @@ struct way_handler : public osm::handler::Handler {
   way_handler(ways& w,
               platforms* platforms,
               rel_ways_t const& rel_ways,
+              osm_areas const& areas,
               hash_map<osm_node_idx_t, level_bits_t>& elevator_nodes)
       : w_{w},
         platforms_{platforms},
         rel_ways_{rel_ways},
+        areas_{areas},
         elevator_nodes_{elevator_nodes} {
     strings_set_.hash_function().strings_ = &w_.strings_;
     strings_set_.key_eq().strings_ = &w_.strings_;
   }
 
   void way(osm::Way const& w) {
+    if (w.nodes().size() < 2U) {
+      return;
+    }
+
     auto const osm_way_idx = to_osm_way_idx(w.id());
     auto const it = rel_ways_.find(osm_way_idx);
     auto t = tags{w};
@@ -399,6 +424,9 @@ struct way_handler : public osm::handler::Handler {
     if (in_route) {
       p.in_route_ = true;
     }
+    if (it != end(rel_ways_) && it->second.p_.is_detour_) {
+      p.is_detour_ = true;
+    }
 
     auto const get_point = [](osmium::NodeRef const& n) {
       return point::from_location(n.location());
@@ -423,29 +451,15 @@ struct way_handler : public osm::handler::Handler {
       return str_idx;
     };
 
-    auto const register_timezone = [&](std::string_view s) {
-      return utl::get_or_create(timezone_idx_by_name_, s, [&]() {
-        auto const idx = conditional_timezone_idx_t{
-            static_cast<std::uint16_t>(w_.r_->timezones_.size())};
-        w_.r_->timezones_.emplace_back(s);
-        return idx;
-      });
-    };
-
     auto const get_timezone = [&]() {
       if (t.conditional_tags_.empty()) {
         return conditional_timezone_idx_t::invalid();
-      }
-      if (timezone_lookup_ == nullptr) {
-        timezone_lookup_ = std::make_unique<tzbounds::timezone_lookup>();
       }
       auto b = geo::box{};
       for (auto const& n : w.nodes()) {
         b.extend(point::from_location(n.location()).as_latlng());
       }
-      auto const tz = timezone_lookup_->lookup(b.centroid());
-      return tz.has_value() ? register_timezone(*tz)
-                            : conditional_timezone_idx_t::invalid();
+      return areas_.get_timezone(b.centroid());
     };
 
     auto l = std::scoped_lock{mutex_};
@@ -472,6 +486,10 @@ struct way_handler : public osm::handler::Handler {
 
     if (it != end(rel_ways_) && it->second.pl_ != platform_idx_t::invalid()) {
       platforms_->platform_ref_[it->second.pl_].push_back(to_value(way_idx));
+    }
+
+    if (areas_.is_in_low_emission_zone(w)) {
+      p.is_in_low_emission_zone_ = true;
     }
 
     w_.way_osm_idx_.push_back(to_osm_way_idx(w.id()));
@@ -510,8 +528,7 @@ struct way_handler : public osm::handler::Handler {
   ways& w_;
   platforms* platforms_;
   rel_ways_t const& rel_ways_;
-  std::unique_ptr<tzbounds::timezone_lookup> timezone_lookup_;
-  hash_map<std::string, conditional_timezone_idx_t> timezone_idx_by_name_;
+  osm_areas const& areas_;
 
   std::mutex elevator_nodes_mutex_;
   hash_map<osm_node_idx_t, level_bits_t>& elevator_nodes_;
@@ -762,7 +779,7 @@ struct rel_ways_handler : public osm::handler::Handler {
 
   void relation(osm::Relation const& r) {
     auto const p = get_way_properties(tags{r}, osm_obj_type::kRelation);
-    if (!p.is_accessible() && !p.in_route()) {
+    if (!p.is_accessible() && !p.in_route() && !p.is_detour()) {
       return;
     }
 
@@ -776,6 +793,7 @@ struct rel_ways_handler : public osm::handler::Handler {
             rel_ways_.emplace(to_osm_way_idx(m.ref()), rel_way{p, platform});
         if (!rw.second) {
           rw.first->second.p_.in_route_ |= p.in_route_;
+          rw.first->second.p_.is_detour_ |= p.is_detour_;
         }
       }
     }
@@ -821,6 +839,12 @@ void extract(bool const with_platforms,
   if (with_platforms) {
     pl = std::make_unique<platforms>(out, cista::mmap::protection::WRITE);
   }
+  auto area_filter = osm::TagsFilter{};
+  area_filter.add_rule(true, "boundary", "low_emission_zone");
+  area_filter.add_rule(true, "timezone");
+  auto area_manager = osm_area::MultipolygonManager<osm_area::Assembler>{
+      osm_area::Assembler::config_type{}, area_filter};
+  auto areas = osm_areas{w};
 
   w.node_way_counter_.reserve(14'000'000'000);
   {  // Collect node coordinates.
@@ -834,17 +858,56 @@ void extract(bool const with_platforms,
                                  osmium::io::read_meta::no};
     while (auto buffer = reader.read()) {
       pt->update(reader.offset());
-      osm::apply(buffer, node_idx_builder, inaccessible_handler, rel_ways_h);
+      osm::apply(buffer, node_idx_builder, inaccessible_handler, rel_ways_h,
+                 area_manager);
     }
     reader.close();
+    area_manager.prepare_for_lookup();
     node_idx_builder.finish();
+  }
+
+  {  // Extract timezone and low emission zone polygons.
+    pt->status("Load OSM / Areas").in_high(file_size).out_bounds(15, 20);
+
+    auto reader =
+        osm_io::Reader{input_file, osm_eb::way, osmium::io::read_meta::no};
+    auto h = osm_area_handler{areas};
+
+    oneapi::tbb::parallel_pipeline(
+        std::thread::hardware_concurrency() * 4U,
+        oneapi::tbb::make_filter<void, osm_mem::Buffer>(
+            oneapi::tbb::filter_mode::serial_in_order,
+            [&](oneapi::tbb::flow_control& fc) {
+              auto buf = reader.read();
+              pt->update(reader.offset());
+              if (!buf) {
+                fc.stop();
+              }
+              return buf;
+            }) &
+            oneapi::tbb::make_filter<osm_mem::Buffer, osm_mem::Buffer>(
+                oneapi::tbb::filter_mode::parallel,
+                [&](osm_mem::Buffer&& buf) {
+                  update_locations(node_idx, buf);
+                  return std::move(buf);
+                }) &
+            oneapi::tbb::make_filter<osm_mem::Buffer, void>(
+                oneapi::tbb::filter_mode::serial_in_order,
+                [&](osm_mem::Buffer&& buf) {
+                  osm::apply(buf, area_manager.handler([&](auto&& area_buf) {
+                    osm::apply(area_buf, h);
+                  }));
+                }));
+
+    pt->update(pt->in_high_);
+    reader.close();
   }
 
   auto elevator_nodes = hash_map<osm_node_idx_t, level_bits_t>{};
   {  // Extract streets, places, and areas.
-    pt->status("Load OSM / Ways").in_high(file_size).out_bounds(15, 40);
+    pt->status("Load OSM / Ways").in_high(file_size).out_bounds(20, 40);
 
-    auto h = way_handler{w, pl.get(), rel_ways, elevator_nodes};
+    auto h = way_handler{w, pl.get(), rel_ways, areas, elevator_nodes};
     auto reader =
         osm_io::Reader{input_file, osm_eb::way, osmium::io::read_meta::no};
 

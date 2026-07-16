@@ -8,11 +8,16 @@
 #include "osr/routing/profiles/foot.h"
 #include "osr/routing/profiles/hgv.h"
 
+osr::timezone_cache_t const& timezone_cache() {
+  static auto const timezones = osr::timezone_cache_t{};
+  return timezones;
+}
+
 osr::cost_t cost(const osr::way_properties p) {
   return osr::foot<false>::way_cost(
-             {}, osr::ways::routing{}, osr::way_idx_t::invalid(), p,
-             osr::direction::kForward, 1, std::nullopt, osr::duration_t{0},
-             osr::direction::kForward)
+             {}, osr::ways::routing{}, timezone_cache(),
+             osr::way_idx_t::invalid(), p, osr::direction::kForward, 1,
+             std::nullopt, osr::duration_t{0}, osr::direction::kForward)
       .cost_;
 }
 
@@ -21,8 +26,28 @@ osr::way_properties hgv_way_properties() {
 }
 
 osr::hgv_way_info hgv_info(osr::access_value const value) {
-  return {.fields_ = osr::to_mask(osr::hgv_info_field::kAccess),
-          .hgv_access_ = static_cast<std::uint8_t>(value)};
+  return {.fields_ = osr::to_mask(osr::hgv_info_field::kAccessFwd) |
+                     osr::to_mask(osr::hgv_info_field::kAccessBwd),
+          .hgv_access_fwd_ = static_cast<std::uint8_t>(value),
+          .hgv_access_bwd_ = static_cast<std::uint8_t>(value)};
+}
+
+osr::hgv_way_info hgv_info_fwd(osr::access_value const value) {
+  return {.fields_ = osr::to_mask(osr::hgv_info_field::kAccessFwd),
+          .hgv_access_fwd_ = static_cast<std::uint8_t>(value)};
+}
+
+osr::hgv_way_info hgv_info_bwd(osr::access_value const value) {
+  return {.fields_ = osr::to_mask(osr::hgv_info_field::kAccessBwd),
+          .hgv_access_bwd_ = static_cast<std::uint8_t>(value)};
+}
+
+osr::hgv_way_info hgv_info(osr::access_value const fwd,
+                           osr::access_value const bwd) {
+  return {.fields_ = osr::to_mask(osr::hgv_info_field::kAccessFwd) |
+                     osr::to_mask(osr::hgv_info_field::kAccessBwd),
+          .hgv_access_fwd_ = static_cast<std::uint8_t>(fwd),
+          .hgv_access_bwd_ = static_cast<std::uint8_t>(bwd)};
 }
 
 osr::hgv_way_info hgv_info(osr::hgv_info_field const field,
@@ -61,8 +86,21 @@ osr::cost_t static_hgv_cost(osr::hgv_way_info const& info,
   routing.way_hgv_info_.emplace_back(way, info);
 
   auto const result = osr::hgv::way_cost(
-      params, routing, way, props, osr::direction::kForward, 1000U,
-      std::nullopt, osr::duration_t{0U}, osr::direction::kForward);
+      params, routing, timezone_cache(), way, props, osr::direction::kForward,
+      1000U, std::nullopt, osr::duration_t{0U}, osr::direction::kForward);
+  return result.cost_;
+}
+
+osr::cost_t low_emission_zone_hgv_cost(osr::hgv::parameters const& params) {
+  auto routing = osr::ways::routing{};
+  auto const way = osr::way_idx_t{0U};
+  auto props = hgv_way_properties();
+  props.is_in_low_emission_zone_ = true;
+  routing.way_properties_.push_back(props);
+
+  auto const result = osr::hgv::way_cost(
+      params, routing, timezone_cache(), way, props, osr::direction::kForward,
+      1000U, std::nullopt, osr::duration_t{0U}, osr::direction::kForward);
   return result.cost_;
 }
 
@@ -80,9 +118,10 @@ osr::cost_t conditional_hgv_cost(std::string_view const key,
   routing.way_properties_.push_back(props);
   routing.way_conditionals_.emplace_back(way, builder.way_);
 
-  auto const result = osr::hgv::way_cost(
-      params, routing, way, props, osr::direction::kForward, 1000U,
-      osr::routing_time_t{}, osr::duration_t{0U}, osr::direction::kForward);
+  auto const result =
+      osr::hgv::way_cost(params, routing, timezone_cache(), way, props,
+                         osr::direction::kForward, 1000U, osr::routing_time_t{},
+                         osr::duration_t{0U}, osr::direction::kForward);
   return result.cost_;
 }
 
@@ -149,6 +188,12 @@ TEST(way_cost_hgv, conditional_hgv_access_values_change_cost) {
   EXPECT_EQ(36U, conditional_hgv_cost("hgv:conditional", "designated"));
   EXPECT_EQ(345U, conditional_hgv_cost("hgv:conditional", "delivery"));
   EXPECT_EQ(345U, conditional_hgv_cost("hgv:conditional", "destination"));
+}
+
+TEST(way_cost_hgv, low_emission_zone_access_blocks_hgv) {
+  EXPECT_NE(osr::kInfeasible, low_emission_zone_hgv_cost({}));
+  EXPECT_EQ(osr::kInfeasible,
+            low_emission_zone_hgv_cost({.low_emission_zone_access_ = false}));
 }
 
 TEST(way_cost_hgv, designated_hazmat_trailer_values_change_cost) {

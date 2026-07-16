@@ -332,15 +332,15 @@ best_candidate(typename P::parameters const& params,
 
       auto const target_duration =
           search.cost_.at(node.get_key()).duration(node);
-      if (!P::is_dest_reachable(params, *w.r_, node, dest.way_,
+      if (!P::is_dest_reachable(params, *w.r_, w.timezones_, node, dest.way_,
                                 flip(opposite(dir), x->way_dir_), dir,
                                 start_time, target_duration)) {
         return;
       }
 
       auto const dest_way_cost = P::way_cost(
-          params, *w.r_, dest.way_, w.r_->way_properties_[dest.way_],
-          flip(opposite(dir), x->way_dir_),
+          params, *w.r_, w.timezones_, dest.way_,
+          w.r_->way_properties_[dest.way_], flip(opposite(dir), x->way_dir_),
           static_cast<distance_t>(x->dist_to_node_), start_time,
           target_duration, dir);
       if (dest_way_cost.cost_ == kInfeasible) {
@@ -455,9 +455,9 @@ std::optional<path> route_bidirectional(typename P::parameters const& params,
     for (auto const* nc : {&start.left_, &start.right_}) {
       if (nc->valid() && nc->cost_ < max) {
         auto const start_cost = P::way_cost(
-            params, *w.r_, start.way_, w.r_->way_properties_[start.way_],
-            flip(dir, nc->way_dir_), static_cast<distance_t>(nc->dist_to_node_),
-            {}, duration_t{0}, dir);
+            params, *w.r_, w.timezones_, start.way_,
+            w.r_->way_properties_[start.way_], flip(dir, nc->way_dir_),
+            static_cast<distance_t>(nc->dist_to_node_), {}, duration_t{0}, dir);
         if (start_cost.cost_ == kInfeasible || start_cost.cost_ >= max) {
           continue;
         }
@@ -561,9 +561,10 @@ std::optional<path> route_dijkstra(
     for (auto const* nc : {&start.left_, &start.right_}) {
       if (nc->valid() && nc->cost_ < max) {
         auto const start_cost = P::way_cost(
-            params, *w.r_, start.way_, w.r_->way_properties_[start.way_],
-            flip(dir, nc->way_dir_), static_cast<distance_t>(nc->dist_to_node_),
-            start_time, duration_t{0}, dir);
+            params, *w.r_, w.timezones_, start.way_,
+            w.r_->way_properties_[start.way_], flip(dir, nc->way_dir_),
+            static_cast<distance_t>(nc->dist_to_node_), start_time,
+            duration_t{0}, dir);
         if (start_cost.cost_ == kInfeasible || start_cost.cost_ >= max) {
           continue;
         }
@@ -648,7 +649,8 @@ std::optional<path> route_astar(typename P::parameters const& params,
       for (auto const* nc : {&end.left_, &end.right_}) {
         if (nc->valid() && nc->cost_ < max) {
           P::resolve_all(*w.r_, nc->node_, to.lvl_, [&](auto const node) {
-            if (!P::is_dest_reachable(params, *w.r_, node, end.way_,
+            if (!P::is_dest_reachable(params, *w.r_, w.timezones_, node,
+                                      end.way_,
                                       flip(opposite(dir), nc->way_dir_), dir,
                                       start_time, duration_t{0})) {
               return;
@@ -666,9 +668,10 @@ std::optional<path> route_astar(typename P::parameters const& params,
     for (auto const* nc : {&start.left_, &start.right_}) {
       if (nc->valid() && nc->cost_ < max) {
         auto const start_cost = P::way_cost(
-            params, *w.r_, start.way_, w.r_->way_properties_[start.way_],
-            flip(dir, nc->way_dir_), static_cast<distance_t>(nc->dist_to_node_),
-            start_time, duration_t{0}, dir);
+            params, *w.r_, w.timezones_, start.way_,
+            w.r_->way_properties_[start.way_], flip(dir, nc->way_dir_),
+            static_cast<distance_t>(nc->dist_to_node_), start_time,
+            duration_t{0}, dir);
         if (start_cost.cost_ == kInfeasible || start_cost.cost_ >= max) {
           continue;
         }
@@ -739,9 +742,10 @@ std::vector<std::optional<path>> route(
     for (auto const* nc : {&start.left_, &start.right_}) {
       if (nc->valid() && nc->cost_ < max) {
         auto const start_cost = P::way_cost(
-            params, *w.r_, start.way_, w.r_->way_properties_[start.way_],
-            flip(dir, nc->way_dir_), static_cast<distance_t>(nc->dist_to_node_),
-            start_time, duration_t{0}, dir);
+            params, *w.r_, w.timezones_, start.way_,
+            w.r_->way_properties_[start.way_], flip(dir, nc->way_dir_),
+            static_cast<distance_t>(nc->dist_to_node_), start_time,
+            duration_t{0}, dir);
         if (start_cost.cost_ == kInfeasible || start_cost.cost_ >= max) {
           continue;
         }

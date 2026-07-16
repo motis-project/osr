@@ -15,6 +15,7 @@ struct sharing_data;
 template <Profile P, typename Fn>
 void for_each_additional_edge(typename P::parameters const&,
                               ways::routing const&,
+                              timezone_cache_t const&,
                               typename P::node,
                               sharing_data const*,
                               std::optional<routing_time_t>,
@@ -30,6 +31,7 @@ template <WayAwareProfile P,
           typename Fn>
 void for_each_adjacent_node(typename P::parameters const&,
                             ways::routing const&,
+                            timezone_cache_t const&,
                             typename P::node,
                             bitvec<node_idx_t> const*,
                             cost_t,
@@ -74,6 +76,7 @@ constexpr cost_t get_profile_additional_turn_cost(
 template <WayAwareProfile P, direction SearchDir, bool IsBus>
 bool is_profile_turn_restricted(typename P::parameters const& params,
                                 ways::routing const& w,
+                                timezone_cache_t const& timezones,
                                 node_idx_t const n,
                                 std::uint8_t const from,
                                 std::uint8_t const to,
@@ -82,11 +85,12 @@ bool is_profile_turn_restricted(typename P::parameters const& params,
                                 direction const search_dir) {
   if constexpr (requires {
                   P::template is_restricted<SearchDir>(
-                      params, w, n, from, to, start_time, current_duration,
-                      search_dir);
+                      params, w, timezones, n, from, to, start_time,
+                      current_duration, search_dir);
                 }) {
-    return P::template is_restricted<SearchDir>(
-        params, w, n, from, to, start_time, current_duration, search_dir);
+    return P::template is_restricted<SearchDir>(params, w, timezones, n, from,
+                                                to, start_time,
+                                                current_duration, search_dir);
   } else {
     return w.template is_restricted<SearchDir, IsBus>(n, from, to);
   }
@@ -95,10 +99,11 @@ bool is_profile_turn_restricted(typename P::parameters const& params,
 template <Profile P, typename Fn>
 void for_each_additional_edge(typename P::parameters const& params,
                               ways::routing const& w,
+                              timezone_cache_t const& timezones,
                               typename P::node const n,
                               sharing_data const* additional,
                               Fn&& fn) {
-  for_each_additional_edge<P>(params, w, n, additional, std::nullopt,
+  for_each_additional_edge<P>(params, w, timezones, n, additional, std::nullopt,
                               duration_t{0}, direction::kForward,
                               std::forward<Fn>(fn));
 }
@@ -106,6 +111,7 @@ void for_each_additional_edge(typename P::parameters const& params,
 template <Profile P, typename Fn>
 void for_each_additional_edge(typename P::parameters const& params,
                               ways::routing const& w,
+                              timezone_cache_t const& timezones,
                               typename P::node const n,
                               sharing_data const* additional,
                               std::optional<routing_time_t> const start_time,
@@ -121,9 +127,9 @@ void for_each_additional_edge(typename P::parameters const& params,
       assert(ae.underlying_way_ != way_idx_t::invalid());
       auto const way_props = w.way_properties_[ae.underlying_way_];
 
-      auto const edge_cost =
-          P::way_cost(params, w, ae.underlying_way_, way_props, edge_dir,
-                      ae.distance_, start_time, current_duration, search_dir);
+      auto const edge_cost = P::way_cost(
+          params, w, timezones, ae.underlying_way_, way_props, edge_dir,
+          ae.distance_, start_time, current_duration, search_dir);
       if (edge_cost.cost_ == kInfeasible) {
         continue;
       }
@@ -182,13 +188,14 @@ template <WayAwareProfile P,
           typename Fn>
 void for_each_adjacent_node(typename P::parameters const& params,
                             ways::routing const& w,
+                            timezone_cache_t const& timezones,
                             typename P::node const n,
                             bitvec<node_idx_t> const* blocked,
                             cost_t const uturn_penalty,
                             Fn&& fn) {
   for_each_adjacent_node<P, SearchDir, WithBlocked, WithRestrictions, IsBus>(
-      params, w, n, blocked, uturn_penalty, std::nullopt, duration_t{0},
-      SearchDir, std::forward<Fn>(fn));
+      params, w, timezones, n, blocked, uturn_penalty, std::nullopt,
+      duration_t{0}, SearchDir, std::forward<Fn>(fn));
 }
 
 template <WayAwareProfile P,
@@ -199,6 +206,7 @@ template <WayAwareProfile P,
           typename Fn>
 void for_each_adjacent_node(typename P::parameters const& params,
                             ways::routing const& w,
+                            timezone_cache_t const& timezones,
                             typename P::node const n,
                             bitvec<node_idx_t> const* blocked,
                             cost_t const uturn_penalty,
@@ -226,16 +234,16 @@ void for_each_adjacent_node(typename P::parameters const& params,
       }
 
       auto const target_way_prop = w.way_properties_[way];
-      if (P::way_cost(params, w, way, target_way_prop, way_dir, 0U, start_time,
-                      current_duration, search_dir)
+      if (P::way_cost(params, w, timezones, way, target_way_prop, way_dir, 0U,
+                      start_time, current_duration, search_dir)
               .cost_ == kInfeasible) {
         return;
       }
 
       if constexpr (WithRestrictions) {
         if (is_profile_turn_restricted<P, SearchDir, IsBus>(
-                params, w, n.n_, n.way_, way_pos, start_time, current_duration,
-                search_dir)) {
+                params, w, timezones, n.n_, n.way_, way_pos, start_time,
+                current_duration, search_dir)) {
           return;
         }
       }
@@ -251,7 +259,7 @@ void for_each_adjacent_node(typename P::parameters const& params,
       auto const target = typename P::node{
           target_node, w.get_way_pos(target_node, way, to), way_dir};
       auto const wc =
-          P::way_cost(params, w, way, target_way_prop, way_dir, dist,
+          P::way_cost(params, w, timezones, way, target_way_prop, way_dir, dist,
                       start_time, current_duration, search_dir);
       if (wc.cost_ == kInfeasible) {
         return;
