@@ -12,6 +12,8 @@
 #include "fmt/format.h"
 
 #include "osr/extract/extract.h"
+
+#include "xml_to_pbf.h"
 #include "osr/lookup.h"
 #include "osr/routing/path.h"
 #include "osr/routing/profiles/car.h"
@@ -117,16 +119,12 @@ class extracted_graph {
 public:
   extracted_graph(std::string_view const name, std::string_view const osm) {
     auto const temp = fs::temp_directory_path();
-    auto const osm_path = temp / fmt::format("{}.osm", name);
+    auto const osm_path = osr::test::write_osm_pbf(name, osm);
     dir_ = temp / fmt::format("{}_dir", name);
 
     auto ec = std::error_code{};
     fs::remove_all(dir_, ec);
     fs::create_directories(dir_, ec);
-
-    auto out = std::ofstream{osm_path};
-    out << osm;
-    out.close();
 
     osr::extract(false, osm_path.generic_string(), dir_, {});
     ways_ = std::make_unique<osr::ways>(dir_, cista::mmap::protection::READ);

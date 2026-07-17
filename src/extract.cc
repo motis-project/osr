@@ -17,26 +17,32 @@
 #include <vector>
 #include "osr/extract/extract.h"
 
+#ifndef _WIN32
+#include <sys/mman.h>
+#endif
+
 #include "boost/thread/tss.hpp"
 
 #include "fmt/core.h"
 #include "fmt/std.h"
 
-#include "oneapi/tbb/parallel_pipeline.h"
-
-#include "osmium/area/assembler.hpp"
-#include "osmium/area/multipolygon_manager.hpp"
-#include "osmium/handler/node_locations_for_ways.hpp"
-#include "osmium/index/map/flex_mem.hpp"
-#include "osmium/io/pbf_input.hpp"
-#include "osmium/io/xml_input.hpp"
+#include "osmium/memory/buffer.hpp"
+#include "osmium/visitor.hpp"
 
 #include "utl/enumerate.h"
 #include "utl/helpers/algorithm.h"
+#include "utl/parallel_for.h"
 #include "utl/parser/arg_parser.h"
 #include "utl/progress_tracker.h"
+#include "utl/verify.h"
 
-#include "tiles/osm/hybrid_node_idx.h"
+#include "osm/decoder.h"
+#include "osm/hnidx/hybrid_node_index.h"
+#include "osm/inflate.h"
+#include "osm/mp_manager.h"
+#include "osm/osmium_builder.h"
+#include "osm/raw_reader.h"
+#include "osm/types.h"
 
 #include "geo/box.h"
 
@@ -50,11 +56,6 @@
 #include "osr/preprocessing/elevation/provider.h"
 #include "osr/ways.h"
 
-namespace osm = osmium;
-namespace osm_io = osmium::io;
-namespace osm_eb = osmium::osm_entity_bits;
-namespace osm_area = osmium::area;
-namespace osm_mem = osmium::memory;
 namespace fs = std::filesystem;
 using namespace std::string_view_literals;
 
@@ -333,7 +334,7 @@ std::pair<node_properties, level_bits_t> get_node_properties(tags const& t) {
   return {p, t.level_bits_};
 }
 
-struct way_handler : public osm::handler::Handler {
+struct way_handler : public osmium::handler::Handler {
   using is_transparent = void;
 
   struct strings_hash {
@@ -376,7 +377,7 @@ struct way_handler : public osm::handler::Handler {
     strings_set_.key_eq().strings_ = &w_.strings_;
   }
 
-  void way(osm::Way const& w) {
+  void way(osmium::Way const& w) {
     if (w.nodes().size() < 2U) {
       return;
     }
@@ -516,7 +517,7 @@ struct way_handler : public osm::handler::Handler {
   hash_map<osm_node_idx_t, level_bits_t>& elevator_nodes_;
 };
 
-struct node_handler : public osm::handler::Handler {
+struct node_handler : public osmium::handler::Handler {
   struct cache {
     void clear() {
       from_.clear();
@@ -534,7 +535,7 @@ struct node_handler : public osm::handler::Handler {
     w_.r_->node_positions_.resize(w_.n_nodes());
   }
 
-  void node(osm::Node const& n) {
+  void node(osmium::Node const& n) {
     auto const osm_node_idx = to_osm_node_idx(n.id());
     if (auto const node_idx = w_.find_node_idx(osm_node_idx);
         node_idx.has_value()) {
@@ -567,7 +568,7 @@ struct node_handler : public osm::handler::Handler {
     }
   }
 
-  void relation(osm::Relation const& r) {
+  void relation(osmium::Relation const& r) {
     static auto c = boost::thread_specific_ptr<cache>{};
     if (c.get() == nullptr) {
       c.reset(new cache{});
@@ -731,35 +732,11 @@ struct node_handler : public osm::handler::Handler {
   hash_map<osm_node_idx_t, level_bits_t> const& elevator_nodes_;
 };
 
-struct mark_inaccessible_handler : public osm::handler::Handler {
-  explicit mark_inaccessible_handler(bool track_platforms, ways& w)
-      : track_platforms_{track_platforms}, w_{w} {}
-
-  void node(osm::Node const& n) {
-    auto const t = tags{n};
-    auto const accessible =
-        is_accessible<car_profile>(t, osm_obj_type::kNode) &&
-        is_accessible<bike_profile>(t, osm_obj_type::kNode) &&
-        is_accessible<foot_profile>(t, osm_obj_type::kNode);
-    if (!accessible || t.is_elevator_ || t.is_platform()) {
-      w_.node_way_counter_.increment(to_idx(to_osm_node_idx(n.id())));
-    }
-
-    if (track_platforms_ && t.is_platform()) {
-      // Ensure nodes are created even if they are not part of a routable way.
-      w_.node_way_counter_.increment(to_idx(to_osm_node_idx(n.id())));
-    }
-  }
-
-  bool track_platforms_;
-  ways& w_;
-};
-
-struct rel_ways_handler : public osm::handler::Handler {
+struct rel_ways_handler : public osmium::handler::Handler {
   explicit rel_ways_handler(platforms* pl, rel_ways_t& rel_ways)
       : pl_{pl}, rel_ways_{rel_ways} {}
 
-  void relation(osm::Relation const& r) {
+  void relation(osmium::Relation const& r) {
     auto const p = get_way_properties(tags{r}, osm_obj_type::kRelation);
     if (!p.is_accessible() && !p.in_route() && !p.is_detour()) {
       return;
@@ -770,7 +747,7 @@ struct rel_ways_handler : public osm::handler::Handler {
                               : platform_idx_t::invalid();
 
     for (auto const& m : r.members()) {
-      if (m.type() == osm::item_type::way) {
+      if (m.type() == osmium::item_type::way) {
         auto rw =
             rel_ways_.emplace(to_osm_way_idx(m.ref()), rel_way{p, platform});
         if (!rw.second) {
@@ -795,24 +772,31 @@ void extract(bool const with_platforms,
     fs::create_directories(out);
   }
 
-  auto input_file = osm_io::File{};
-  auto file_size = std::size_t{0U};
-  try {
-    input_file = osm_io::File{in.generic_string()};
-    file_size =
-        osm_io::Reader{input_file, osmium::io::read_meta::no}.file_size();
-  } catch (...) {
-    fmt::println("load_osm failed [file={}]", in);
-    throw;
+  utl::verify(fs::exists(in), "load_osm failed [file={}]", in);
+  auto reader = osm::raw_reader{
+      .file_ = cista::mmap{in.generic_string().c_str(),
+                           cista::mmap::protection::READ}};
+
+  // All passes read the PBF strictly forward: hint the kernel to ramp up
+  // readahead and evict pages behind the cursor.
+#ifdef MADV_SEQUENTIAL
+  ::madvise(const_cast<std::uint8_t*>(reader.file_.data()),
+            reader.file_.size(), MADV_SEQUENTIAL);
+#endif
+
+  auto blocks = std::vector<osm::buf>{};
+  while (auto const b = reader.read()) {
+    blocks.emplace_back(*b);
   }
 
   auto pt = utl::get_active_progress_tracker_or_activate("osr");
 
-  auto node_idx =
-      tiles::hybrid_node_idx{cista::mmap{out.generic_string().c_str(),
-                                         cista::mmap::protection::TMPFILE},
-                             cista::mmap{out.generic_string().c_str(),
-                                         cista::mmap::protection::TMPFILE}};
+  auto node_idx = osm::hybrid_node_idx{
+      cista::mmap{out.generic_string().c_str(),
+                  cista::mmap::protection::TMPFILE},
+      cista::mmap{out.generic_string().c_str(),
+                  cista::mmap::protection::TMPFILE}};
+  auto node_idx_merger = osm::hybrid_block_merger{node_idx};
 
   auto rel_ways = rel_ways_t{};
   auto w = ways{out, cista::mmap::protection::WRITE};
@@ -820,76 +804,222 @@ void extract(bool const with_platforms,
   if (with_platforms) {
     pl = std::make_unique<platforms>(out, cista::mmap::protection::WRITE);
   }
-  auto area_filter = osm::TagsFilter{};
-  area_filter.add_rule(true, "boundary", "low_emission_zone");
-  area_filter.add_rule(true, "timezone");
-  auto area_manager = osm_area::MultipolygonManager<osm_area::Assembler>{
-      osm_area::Assembler::config_type{}, area_filter};
+  auto mp = osm::polygon_manager{/*assemble_way_polygons=*/false};
   auto areas = osm_areas{w};
 
-  w.node_way_counter_.reserve(14'000'000'000);
-  {  // Collect node coordinates.
-    pt->status("Load OSM / Coordinates").in_high(file_size).out_bounds(0, 15);
+  // Timezone / low emission zone relations, stored (owned) in pass 1 for
+  // assembly after the ways pass collected the member way geometries.
+  struct area_relation {
+    std::int64_t id_;
+    std::vector<std::tuple<std::int64_t, std::string, osm::member_type>>
+        members_;
+    std::vector<std::pair<std::string, std::string>> tags_;
+  };
+  auto area_relations = std::vector<area_relation>{};
 
-    auto node_idx_builder = tiles::hybrid_node_idx_builder{node_idx};
+  auto const is_area_relation = [](osmium::TagList const& tags) {
+    auto const* boundary = tags["boundary"];
+    return tags.has_key("timezone") ||
+           (boundary != nullptr &&
+            std::string_view{boundary} == "low_emission_zone"sv);
+  };
 
-    auto inaccessible_handler = mark_inaccessible_handler{pl != nullptr, w};
-    auto rel_ways_h = rel_ways_handler{pl.get(), rel_ways};
-    auto reader = osm_io::Reader{input_file, osm_eb::node | osm_eb::relation,
-                                 osmium::io::read_meta::no};
-    while (auto buffer = reader.read()) {
-      pt->update(reader.offset());
-      osm::apply(buffer, node_idx_builder, inaccessible_handler, rel_ways_h,
-                 area_manager);
+  auto const to_member_type = [](osmium::item_type const t) {
+    switch (t) {
+      case osmium::item_type::node: return osm::member_type::kNode;
+      case osmium::item_type::way: return osm::member_type::kWay;
+      default: return osm::member_type::kRelation;
     }
-    reader.close();
-    area_manager.prepare_for_lookup();
-    node_idx_builder.finish();
+  };
+
+  struct block_local {
+    osm::inflate decompressor_;
+    std::string decompressed_;
+    std::vector<std::string_view> strings_;
+    osmium::memory::Buffer scratch_{1U << 12U,
+                                    osmium::memory::Buffer::auto_grow::yes};
+  };
+
+  auto const decompress = [&blocks](block_local& local, std::size_t const i) {
+    local.decompressed_.resize(blocks[i].raw_size_);
+    local.decompressor_.decompress(blocks[i].compressed_,
+                                   local.decompressed_);
+  };
+
+  w.node_way_counter_.reserve(14'000'000'000);
+  {  // Pass 1: node index, blocking nodes, relations.
+    pt->status("Load OSM / Pass 1").in_high(blocks.size()).out_bounds(0, 15);
+
+    auto rel_ways_h = rel_ways_handler{pl.get(), rel_ways};
+
+    struct pass1_result {
+      osm::hybrid_block nodes_;
+      std::vector<std::uint64_t> blocking_nodes_;
+      osmium::memory::Buffer rels_{1U << 12U,
+                                   osmium::memory::Buffer::auto_grow::yes};
+    };
+
+    utl::parallel_ordered_collect_threadlocal<block_local>(
+        blocks.size(),
+        [&](block_local& local, std::size_t const i) {
+          auto res = pass1_result{};
+          auto enc = osm::hybrid_block_encoder{};
+          decompress(local, i);
+          osm::decode_primitive(
+              local.decompressed_, local.strings_,
+              /*read_nodes=*/true, /*read_ways=*/false,
+              /*read_relations=*/true,
+              [&](std::int64_t const id, geo::latlng const& pos,
+                  auto&& tag_range) {
+                enc.node(osm::node{id, geo::fixed_latlng::from_latlng(pos)});
+                if (std::ranges::begin(tag_range) !=
+                    std::ranges::end(tag_range)) {
+                  auto const& n =
+                      osm::build_node(local.scratch_, id, pos, tag_range);
+                  auto const t = tags{n};
+                  auto const accessible =
+                      is_accessible<car_profile>(t, osm_obj_type::kNode) &&
+                      is_accessible<bike_profile>(t, osm_obj_type::kNode) &&
+                      is_accessible<foot_profile>(t, osm_obj_type::kNode);
+                  if (!accessible || t.is_elevator_ || t.is_platform()) {
+                    res.blocking_nodes_.push_back(
+                        to_idx(to_osm_node_idx(id)));
+                  }
+                  if (pl != nullptr && t.is_platform()) {
+                    // Ensure nodes are created even if they are not part of
+                    // a routable way.
+                    res.blocking_nodes_.push_back(
+                        to_idx(to_osm_node_idx(id)));
+                  }
+                }
+              },
+              [](auto&&...) {},
+              [&](std::int64_t const id, auto&& members, auto&& tag_range) {
+                auto const& rel = osm::build_relation(local.scratch_, id,
+                                                      members, tag_range);
+                auto const p =
+                    get_way_properties(tags{rel}, osm_obj_type::kRelation);
+                if (p.is_accessible() || p.in_route() || p.is_detour() ||
+                    is_area_relation(rel.tags())) {
+                  res.rels_.add_item(rel);
+                  res.rels_.commit();
+                }
+              });
+          res.nodes_ = std::move(enc).finish();
+          return res;
+        },
+        [&](std::size_t, pass1_result&& res) {
+          node_idx_merger.merge(std::move(res.nodes_));
+          for (auto const id : res.blocking_nodes_) {
+            w.node_way_counter_.increment(id);
+          }
+          osmium::apply(res.rels_, rel_ways_h);
+          for (auto const& rel : res.rels_.select<osmium::Relation>()) {
+            if (!is_area_relation(rel.tags())) {
+              continue;
+            }
+            auto ar = area_relation{.id_ = rel.id(), .members_ = {}, .tags_ = {}};
+            for (auto const& m : rel.members()) {
+              ar.members_.emplace_back(m.ref(), std::string{m.role()},
+                                       to_member_type(m.type()));
+            }
+            for (auto const& t : rel.tags()) {
+              ar.tags_.emplace_back(t.key(), t.value());
+            }
+            mp.save_ways_of_relation(ar.id_, ar.members_, ar.tags_);
+            area_relations.push_back(std::move(ar));
+          }
+        },
+        [&](std::size_t const i) { pt->update_monotonic(i); });
+
+    node_idx_merger.finish();
+    mp.index_relation_members();
   }
 
   auto elevator_nodes = hash_map<osm_node_idx_t, level_bits_t>{};
-  {  // Extract streets, places; assemble timezone + low emission zone areas.
-    pt->status("Load OSM / Ways").in_high(file_size).out_bounds(15, 38);
+  {  // Pass 2: extract streets, collect area member way geometries.
+    pt->status("Load OSM / Ways").in_high(blocks.size()).out_bounds(15, 38);
 
-    auto area_h = osm_area_handler{areas};
     auto h = way_handler{w, pl.get(), rel_ways, elevator_nodes};
-    auto reader =
-        osm_io::Reader{input_file, osm_eb::way, osmium::io::read_meta::no};
 
-    oneapi::tbb::parallel_pipeline(
-        std::thread::hardware_concurrency() * 4U,
-        oneapi::tbb::make_filter<void, osm_mem::Buffer>(
-            oneapi::tbb::filter_mode::serial_in_order,
-            [&](oneapi::tbb::flow_control& fc) {
-              auto buf = reader.read();
-              pt->update(reader.offset());
-              if (!buf) {
-                fc.stop();
-              }
-              return buf;
-            }) &
-            oneapi::tbb::make_filter<osm_mem::Buffer, osm_mem::Buffer>(
-                oneapi::tbb::filter_mode::parallel,
-                [&](osm_mem::Buffer&& buf) {
-                  update_locations(node_idx, buf);
-                  return std::move(buf);
-                }) &
-            oneapi::tbb::make_filter<osm_mem::Buffer, void>(
-                oneapi::tbb::filter_mode::serial_in_order,
-                [&](osm_mem::Buffer&& buf) {
-                  osm::apply(buf,
-                             area_manager.handler([&](auto&& area_buf) {
-                               osm::apply(area_buf, area_h);
-                             }),
-                             h);
-                }));
+    struct pass2_local : public block_local {
+      std::vector<osm::way> ways_;
+      std::vector<std::vector<std::pair<std::string_view, std::string_view>>>
+          tags_;
+    };
 
-    pt->update(pt->in_high_);
-    reader.close();
+    struct pass2_result {
+      osmium::memory::Buffer ways_{1U << 16U,
+                                   osmium::memory::Buffer::auto_grow::yes};
+      std::vector<osm::way> member_ways_;
+    };
+
+    utl::parallel_ordered_collect_threadlocal<pass2_local>(
+        blocks.size(),
+        [&](pass2_local& local, std::size_t const i) {
+          auto res = pass2_result{};
+          decompress(local, i);
+          local.ways_.clear();
+          local.tags_.clear();
+          osm::decode_primitive(
+              local.decompressed_, local.strings_,
+              /*read_nodes=*/false, /*read_ways=*/true,
+              /*read_relations=*/false, [](auto&&...) {},
+              [&](std::int64_t const id, auto&& refs, auto&& tag_range) {
+                auto& ow = local.ways_.emplace_back();
+                ow.id = id;
+                for (auto const ref : refs) {
+                  ow.node_refs.emplace_back(osm::node_ref{ref, {}});
+                }
+                auto& t = local.tags_.emplace_back();
+                for (auto const& [k, v] : tag_range) {
+                  t.emplace_back(k, v);
+                }
+              },
+              [](auto&&...) {});
+
+          osm::update_locations(node_idx, local.ways_);
+
+          for (auto const [ow, t] : utl::zip(local.ways_, local.tags_)) {
+            res.ways_.add_item(osm::build_way(local.scratch_, ow, t));
+            res.ways_.commit();
+            if (mp.is_relation_member(ow.id)) {
+              res.member_ways_.push_back(std::move(ow));
+            }
+          }
+          return res;
+        },
+        [&](std::size_t, pass2_result&& res) {
+          osmium::apply(res.ways_, h);
+          static auto const kNoTags =
+              std::vector<std::pair<std::string_view, std::string_view>>{};
+          for (auto& mw : res.member_ways_) {
+            mp.save_ways(std::move(mw), kNoTags);
+          }
+        },
+        [&](std::size_t const i) { pt->update_monotonic(i); });
+  }
+
+  {  // Assemble timezone and low emission zone polygons.
+    pt->status("Load OSM / Areas")
+        .in_high(std::max(std::size_t{1U}, area_relations.size()))
+        .out_bounds(38, 39);
+    auto scratch = osmium::memory::Buffer{
+        1U << 12U, osmium::memory::Buffer::auto_grow::yes};
+    for (auto const& ar : area_relations) {
+      auto const pa = mp.assemble_area(ar.id_, ar.members_, ar.tags_);
+      if (pa.valid) {
+        areas.add_area(osm::build_area(scratch, pa, ar.tags_));
+      } else {
+        std::clog << "osr: area assembly failed for relation " << ar.id_
+                  << " (" << ar.members_.size() << " members)\n";
+      }
+      pt->increment();
+    }
   }
 
   {  // Set way properties that depend on the assembled areas.
-    pt->status("Annotate Areas").in_high(1).out_bounds(38, 40);
+    pt->status("Annotate Areas").in_high(1).out_bounds(39, 40);
     areas.annotate_ways();
     pt->update(pt->in_high_);
   }
@@ -901,20 +1031,55 @@ void extract(bool const with_platforms,
   w.build_components();
 
   auto r = std::vector<resolved_restriction>{};
-  {
+  {  // Pass 3: node properties + turn restrictions.
     pt->status("Load OSM / Node Properties")
-        .in_high(file_size)
+        .in_high(blocks.size())
         .out_bounds(90, 95);
-    auto reader = osm_io::Reader{input_file, osm_eb::node | osm_eb::relation,
-                                 osmium::io::read_meta::no};
-    auto h = node_handler{w, pl.get(), r, elevator_nodes};
-    while (auto b = reader.read()) {
-      pt->update(reader.offset());
-      osm::apply(b, h);
-    }
 
-    reader.close();
-    pt->update(pt->in_high_);
+    auto h = node_handler{w, pl.get(), r, elevator_nodes};
+
+    struct pass3_result {
+      osmium::memory::Buffer objs_{1U << 14U,
+                                   osmium::memory::Buffer::auto_grow::yes};
+    };
+
+    utl::parallel_ordered_collect_threadlocal<block_local>(
+        blocks.size(),
+        [&](block_local& local, std::size_t const i) {
+          auto res = pass3_result{};
+          decompress(local, i);
+          osm::decode_primitive(
+              local.decompressed_, local.strings_,
+              /*read_nodes=*/true, /*read_ways=*/false,
+              /*read_relations=*/true,
+              [&](std::int64_t const id, geo::latlng const& pos,
+                  auto&& tag_range) {
+                if (w.find_node_idx(to_osm_node_idx(id)).has_value()) {
+                  res.objs_.add_item(
+                      osm::build_node(local.scratch_, id, pos, tag_range));
+                  res.objs_.commit();
+                }
+              },
+              [](auto&&...) {},
+              [&](std::int64_t const id, auto&& members, auto&& tag_range) {
+                auto is_restriction = false;
+                for (auto const& [k, v] : tag_range) {
+                  if (std::string_view{k} == "type"sv &&
+                      std::string_view{v} == "restriction"sv) {
+                    is_restriction = true;
+                    break;
+                  }
+                }
+                if (is_restriction) {
+                  res.objs_.add_item(osm::build_relation(local.scratch_, id,
+                                                         members, tag_range));
+                  res.objs_.commit();
+                }
+              });
+          return res;
+        },
+        [&](std::size_t, pass3_result&& res) { osmium::apply(res.objs_, h); },
+        [&](std::size_t const i) { pt->update_monotonic(i); });
   }
 
   w.add_restriction(r);

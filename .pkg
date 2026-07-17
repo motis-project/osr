@@ -2,10 +2,6 @@
   url=git@github.com:motis-project/boost.git
   branch=boost-1.89.0
   commit=77467bf580d98ea06716e2931cbe3b1f28e0cd37
-[osmium]
-  url=git@github.com:motis-project/libosmium.git
-  branch=master
-  commit=aec81a466451d5c6913df503e543806129df02d1
 [conf]
   url=git@github.com:motis-project/conf.git
   branch=master
@@ -34,10 +30,6 @@
   url=git@github.com:motis-project/zlib-ng.git
   branch=develop
   commit=d68e1d908e789c31c1f2fafe4bd8e09cb91e21c5
-[tiles]
-  url=git@github.com:motis-project/tiles.git
-  branch=master
-  commit=52ca3f64549af2207a8741a4a2ef48d0f72a2853
 [mimalloc]
   url=git@github.com:motis-project/mimalloc.git
   branch=master
@@ -70,7 +62,7 @@
   url=git@github.com:motis-project/net.git
   branch=master
   commit=c2599102dcffa4babfdcf5320a6bd6f5c6e9b731
-[oneTBB]
-  url=git@github.com:motis-project/oneTBB.git
-  branch=master
-  commit=cda5d37ce8303c58ac506259387e75de4ffcf26b
+[osm]
+  url=git@github.com:motis-project/osm.git
+  branch=dev
+  commit=ca1da6a727307503865eec00925e09caf291a4c4

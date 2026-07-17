@@ -8,6 +8,8 @@
 #include "cista/mmap.h"
 
 #include "osr/extract/extract.h"
+
+#include "xml_to_pbf.h"
 #include "osr/lookup.h"
 #include "osr/types.h"
 #include "osr/ways.h"
@@ -107,15 +109,6 @@ constexpr auto const kLowEmissionZoneOsm =
   </relation>
 </osm>)osm";
 
-fs::path write_osm(std::string_view const name,
-                   std::string_view const content) {
-  auto const path = fs::temp_directory_path() / name;
-  auto out = std::ofstream{path};
-  out << content;
-  out.close();
-  return path;
-}
-
 }  // namespace
 
 TEST(extract, string_cache) {
@@ -124,7 +117,7 @@ TEST(extract, string_cache) {
   fs::remove_all(p, ec);
   fs::create_directories(p, ec);
 
-  extract(false, "test/map.osm", p, {});
+  extract(false, "test/map.osm.pbf", p, {});
 
   auto w = ways{p, cista::mmap::protection::READ};
   // 140186757 and 519430215 have the same name=Pankratiusstraße
@@ -161,7 +154,7 @@ TEST(extract, standalone_ramp) {
   fs::remove_all(p, ec);
   fs::create_directories(p, ec);
 
-  extract(false, "test/standalone-ramp.osm", p, {});
+  extract(false, "test/standalone-ramp.osm.pbf", p, {});
 
   auto w = ways{p, cista::mmap::protection::READ};
   auto const ramp = w.find_way(osm_way_idx_t{1});
@@ -177,7 +170,7 @@ TEST(extract, standalone_ramp) {
 }
 
 TEST(extract, supports_negative_custom_ids) {
-  auto const osm_path = write_osm("osr_negative_ids.osm", kNegativeIdsOsm);
+  auto const osm_path = osr::test::write_osm_pbf("osr_negative_ids", kNegativeIdsOsm);
   auto const dir = fs::temp_directory_path() / "osr_negative_ids_dir";
   auto ec = std::error_code{};
   fs::remove_all(dir, ec);
@@ -206,7 +199,7 @@ TEST(extract, supports_negative_custom_ids) {
 
 TEST(extract, supports_huge_positive_custom_ids) {
   auto const osm_path =
-      write_osm("osr_huge_positive_ids.osm", kHugePositiveIdsOsm);
+      osr::test::write_osm_pbf("osr_huge_positive_ids", kHugePositiveIdsOsm);
   auto const dir = fs::temp_directory_path() / "osr_huge_positive_ids_dir";
   auto ec = std::error_code{};
   fs::remove_all(dir, ec);
@@ -227,7 +220,7 @@ TEST(extract, supports_huge_positive_custom_ids) {
 
 TEST(extract, marks_low_emission_zone_ways) {
   auto const osm_path =
-      write_osm("osr_low_emission_zone.osm", kLowEmissionZoneOsm);
+      osr::test::write_osm_pbf("osr_low_emission_zone", kLowEmissionZoneOsm);
   auto const dir = fs::temp_directory_path() / "osr_low_emission_zone_dir";
   auto ec = std::error_code{};
   fs::remove_all(dir, ec);
