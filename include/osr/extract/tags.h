@@ -28,16 +28,12 @@ struct tags {
           }));
   }
 
-  // Build directly from a decoded [key, value] range (as produced by
-  // osm::decode_primitive), skipping the osmium object round-trip. `type`
-  // supplies what osmium::OSMObject::type() would have.
   template <typename TagRange>
   tags(osm_obj_type const type, TagRange&& tag_range) {
     parse(type == osm_obj_type::kRelation, std::forward<TagRange>(tag_range));
   }
 
 private:
-  // `tag_range` is any range of [key, value] string_view pairs.
   template <typename TagRange>
   void parse(bool const is_relation, TagRange&& tag_range) {
     auto const add_levels = [](std::string_view const value,

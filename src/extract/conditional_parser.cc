@@ -635,9 +635,7 @@ bool parse_opening_hours_rule(std::string_view text,
   }
 
   auto rule = opening_hours_rule{};
-  // Zero the padding too (all members default to 0 / kOpen == 0) so the
-  // serialized output is byte-reproducible.
-  std::memset(&rule, 0, sizeof(rule));
+  std::memset(&rule, 0, sizeof(rule));  // makes output byte-reproducible
   auto parsed_any = false;
   auto tokens = split_ws(text);
   if (tokens.size() == 1U && tokens.front() == "24/7"sv) {
