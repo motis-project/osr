@@ -9,10 +9,10 @@
 
 #include "osr/extract/extract.h"
 
-#include "xml_to_pbf.h"
 #include "osr/lookup.h"
 #include "osr/types.h"
 #include "osr/ways.h"
+#include "xml_to_pbf.h"
 
 namespace fs = std::filesystem;
 using namespace osr;
@@ -170,7 +170,8 @@ TEST(extract, standalone_ramp) {
 }
 
 TEST(extract, supports_negative_custom_ids) {
-  auto const osm_path = osr::test::write_osm_pbf("osr_negative_ids", kNegativeIdsOsm);
+  auto const osm_path =
+      osr::test::write_osm_pbf("osr_negative_ids", kNegativeIdsOsm);
   auto const dir = fs::temp_directory_path() / "osr_negative_ids_dir";
   auto ec = std::error_code{};
   fs::remove_all(dir, ec);

@@ -28,7 +28,8 @@ TEST(extract, wa) {
   fs::remove_all(p, ec);
   fs::create_directories(p, ec);
 
-  osr::extract(false, "test/map.osm.pbf", p, "test/restriction_test_elevation/");
+  osr::extract(false, "test/map.osm.pbf", p,
+               "test/restriction_test_elevation/");
 
   auto w = osr::ways{p, cista::mmap::protection::READ};
   auto l = osr::lookup{w, p, cista::mmap::protection::READ};

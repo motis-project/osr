@@ -170,13 +170,12 @@ private:
           break;
         case cista::hash("psv"):
           if (bus_ == override::kNone) {
-            bus_ = value == "no"sv ? override::kBlacklist
-                                       : override::kWhitelist;
+            bus_ =
+                value == "no"sv ? override::kBlacklist : override::kWhitelist;
           }
           break;
         case cista::hash("bus"):  // more specific than psv
-          bus_ =
-              value == "no"sv ? override::kBlacklist : override::kWhitelist;
+          bus_ = value == "no"sv ? override::kBlacklist : override::kWhitelist;
           break;
         case cista::hash("access"):
           switch (cista::hash(std::string_view{value})) {
@@ -217,9 +216,7 @@ private:
         case cista::hash("maxspeed:hgv"): max_speed_hgv_ = value; break;
         case cista::hash("maxlength"): max_length_ = value; break;
         case cista::hash("maxlength:hgv"): max_length_hgv_ = value; break;
-        case cista::hash("maxweightrating"):
-          max_weightrating_ = value;
-          break;
+        case cista::hash("maxweightrating"): max_weightrating_ = value; break;
         case cista::hash("maxweightrating:hgv"):
           max_weightrating_hgv_ = value;
           break;

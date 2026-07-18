@@ -13,13 +13,13 @@
 
 #include "osr/extract/extract.h"
 
-#include "xml_to_pbf.h"
 #include "osr/lookup.h"
 #include "osr/routing/path.h"
 #include "osr/routing/profiles/car.h"
 #include "osr/routing/profiles/hgv.h"
 #include "osr/routing/route.h"
 #include "osr/ways.h"
+#include "xml_to_pbf.h"
 
 namespace fs = std::filesystem;
 
