@@ -78,6 +78,9 @@ jobs:
           restore-keys: deps-
 
       - uses: ilammy/msvc-dev-cmd@v1
+        with:
+          # Pin the VC++ toolset: the runner's newer 14.51 (cl 19.51) hangs
+          toolset: 14.44
 
       - name: Build
         run: |
