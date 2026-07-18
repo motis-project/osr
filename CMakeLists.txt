@@ -104,7 +104,8 @@ else ()
             -Wall
             -Wextra
             -Wno-changes-meaning
-            -Wno-maybe-uninitialized)
+            -Wno-maybe-uninitialized
+            -Wno-class-memaccess)
 endif ()
 
 # --- LIB ---
@@ -138,7 +139,7 @@ add_executable(osr-extract exe/extract.cc)
 target_link_libraries(osr-extract osr conf ${osr-resource-libs})
 
 add_executable(osr-benchmark exe/benchmark.cc)
-target_link_libraries(osr-benchmark osr ${osr-resource-libs})
+target_link_libraries(osr-benchmark osr conf ${osr-resource-libs})
 
 file(GLOB_RECURSE osr-backend-src exe/backend/*.cc)
 add_executable(osr-backend ${osr-backend-src})
