@@ -7,8 +7,10 @@
 #include "gtest/gtest.h"
 
 #include "osr/extract/extract.h"
+
 #include "osr/geojson.h"
 #include "osr/ways.h"
+#include "xml_to_pbf.h"
 
 namespace fs = std::filesystem;
 
@@ -96,15 +98,6 @@ constexpr auto const kHgvAccessOsm = R"osm(<osm version="0.6" generator="test">
   </way>
 </osm>)osm";
 
-fs::path write_osm(std::string_view const name,
-                   std::string_view const content) {
-  auto const path = fs::temp_directory_path() / name;
-  auto out = std::ofstream{path};
-  out << content;
-  out.close();
-  return path;
-}
-
 fs::path prepare_extract_dir(std::string_view const name) {
   auto const dir = fs::temp_directory_path() / name;
   auto ec = std::error_code{};
@@ -117,7 +110,7 @@ fs::path prepare_extract_dir(std::string_view const name) {
 
 TEST(conditional_extract, stores_parseable_conditional_restrictions) {
   auto const osm_path =
-      write_osm("osr_conditionals.osm", kConditionalRestrictionsOsm);
+      osr::test::write_osm_pbf("osr_conditionals", kConditionalRestrictionsOsm);
   auto const dir = prepare_extract_dir("osr_conditionals_dir");
 
   osr::extract(false, osm_path.generic_string(), dir, {});
@@ -158,8 +151,8 @@ TEST(conditional_extract, stores_parseable_conditional_restrictions) {
 }
 
 TEST(conditional_extract, writes_conditionals_to_geojson_debug_output) {
-  auto const osm_path =
-      write_osm("osr_conditionals_geojson.osm", kConditionalRestrictionsOsm);
+  auto const osm_path = osr::test::write_osm_pbf("osr_conditionals_geojson",
+                                                 kConditionalRestrictionsOsm);
   auto const dir = prepare_extract_dir("osr_conditionals_geojson_dir");
 
   osr::extract(false, osm_path.generic_string(), dir, {});
@@ -186,8 +179,8 @@ TEST(conditional_extract, writes_conditionals_to_geojson_debug_output) {
 }
 
 TEST(conditional_extract, ignores_unsupported_conditionals) {
-  auto const osm_path = write_osm("osr_conditionals_unsupported.osm",
-                                  kConditionalRestrictionsOsm);
+  auto const osm_path = osr::test::write_osm_pbf("osr_conditionals_unsupported",
+                                                 kConditionalRestrictionsOsm);
   auto const dir = prepare_extract_dir("osr_conditionals_unsupported_dir");
 
   osr::extract(false, osm_path.generic_string(), dir, {});
@@ -201,7 +194,8 @@ TEST(conditional_extract, ignores_unsupported_conditionals) {
 }
 
 TEST(conditional_extract, stores_hgv_access_values_separately) {
-  auto const osm_path = write_osm("osr_hgv_access.osm", kHgvAccessOsm);
+  auto const osm_path =
+      osr::test::write_osm_pbf("osr_hgv_access", kHgvAccessOsm);
   auto const dir = prepare_extract_dir("osr_hgv_access_dir");
 
   osr::extract(false, osm_path.generic_string(), dir, {});

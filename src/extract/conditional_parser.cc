@@ -2,6 +2,7 @@
 
 #include <cctype>
 #include <cstdint>
+#include <cstring>
 
 #include <charconv>
 #include <algorithm>
@@ -634,6 +635,7 @@ bool parse_opening_hours_rule(std::string_view text,
   }
 
   auto rule = opening_hours_rule{};
+  std::memset(&rule, 0, sizeof(rule));  // makes output byte-reproducible
   auto parsed_any = false;
   auto tokens = split_ws(text);
   if (tokens.size() == 1U && tokens.front() == "24/7"sv) {
