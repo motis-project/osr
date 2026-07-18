@@ -117,7 +117,7 @@ TEST(extract, string_cache) {
   fs::remove_all(p, ec);
   fs::create_directories(p, ec);
 
-  extract(false, "test/map.osm.pbf", p, {});
+  extract(false, osr::test::osm_to_pbf("test/map.osm").generic_string(), p, {});
 
   auto w = ways{p, cista::mmap::protection::READ};
   // 140186757 and 519430215 have the same name=Pankratiusstraße
@@ -154,7 +154,9 @@ TEST(extract, standalone_ramp) {
   fs::remove_all(p, ec);
   fs::create_directories(p, ec);
 
-  extract(false, "test/standalone-ramp.osm.pbf", p, {});
+  extract(false,
+          osr::test::osm_to_pbf("test/standalone-ramp.osm").generic_string(), p,
+          {});
 
   auto w = ways{p, cista::mmap::protection::READ};
   auto const ramp = w.find_way(osm_way_idx_t{1});

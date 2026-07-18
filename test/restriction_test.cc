@@ -19,6 +19,8 @@
 #include "osr/types.h"
 #include "osr/ways.h"
 
+#include "xml_to_pbf.h"
+
 namespace fs = std::filesystem;
 using namespace osr;
 
@@ -28,7 +30,7 @@ TEST(extract, wa) {
   fs::remove_all(p, ec);
   fs::create_directories(p, ec);
 
-  osr::extract(false, "test/map.osm.pbf", p,
+  osr::extract(false, osr::test::osm_to_pbf("test/map.osm").generic_string(), p,
                "test/restriction_test_elevation/");
 
   auto w = osr::ways{p, cista::mmap::protection::READ};
