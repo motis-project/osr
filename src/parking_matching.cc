@@ -3,12 +3,8 @@
 #include <functional>
 #include <optional>
 
-#include "utl/get_or_create.h"
-
 #include "osr/location.h"
-#include "osr/lookup.h"
 #include "osr/routing/profile.h"
-#include "osr/types.h"
 
 namespace osr {
 

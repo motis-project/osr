@@ -8,6 +8,7 @@
 #include "utl/helpers/algorithm.h"
 
 #include "osr/elevation_storage.h"
+#include "osr/routing/for_each_parking_edge.h"
 #include "osr/routing/mode.h"
 #include "osr/routing/path.h"
 #include "osr/routing/profiles/car.h"
@@ -307,6 +308,68 @@ struct car_parking {
                cost + (n.is_car_node() ? 0 : kSwitchPenalty), dist, way, from,
                to, elevation, false);
           });
+    }
+
+    if constexpr (UseParking) {
+      if (kFwd && n.is_car_node()) {
+			fmt::println("Starting test: {}", n.n_);
+        if (w.has_parking_edges_.test(n.n_)) {
+          fmt::println("Candidate: {} (at: {})", n.n_, w.node_positions_[n.n_]);
+          for_each_parking_edge(
+              w, n.n_, [&](parking_edge_idx_t const parking_edge_idx) {
+                auto const& parking_edge = w.parking_edges_[parking_edge_idx];
+                if (parking_edge.car_left_ != n.n_ &&
+                    parking_edge.car_right_ != n.n_) {
+                  return;
+                }
+                for (auto const foot_node :
+                     {parking_edge.foot_left_, parking_edge.foot_right_}) {
+                  if (foot_node == node_idx_t::invalid()) {
+                    continue;
+                  }
+                  fmt::println("Adding edge {} -> {}", n.n_, foot_node);
+                  auto const way = w.node_ways_[n.n_][0];  // TODO Use way_idx of
+                                                          // parking area ?
+                  fn(node{foot_node, node_type::kFoot,
+                          w.node_properties_[foot_node].from_level(),
+                          direction::kForward, 0},
+                     kSwitchPenalty, 0, way, 0, 0,
+                     elevation_storage::elevation{}, false);
+                }
+              });
+        }
+      }
+      if (kBwd && n.is_foot_node()) {
+			fmt::println("Starting backward test: {}", n.n_);
+        if (w.has_parking_edges_.test(n.n_)) {
+          fmt::println("Candidate foot->car: {} (at: {})", n.n_, w.node_positions_[n.n_]);
+          for_each_parking_edge(
+              w, n.n_, [&](parking_edge_idx_t const parking_edge_idx) {
+                auto const& parking_edge = w.parking_edges_[parking_edge_idx];
+                if (parking_edge.foot_left_ != n.n_ &&
+                    parking_edge.foot_right_ != n.n_) {
+                  return;
+                }
+                for (auto const car_node :
+                     {parking_edge.car_left_, parking_edge.car_right_}) {
+                  if (car_node == node_idx_t::invalid()) {
+                    continue;
+                  }
+                  fmt::println("Adding foot->car edge {} -> {}", n.n_, car_node);
+                  auto const way = w.node_ways_[n.n_][0];  // TODO Use way_idx of
+                                                          // parking area ?
+                  fn(node{car_node, node_type::kCar,
+                          level_t{0.0F},
+                          direction::kBackward, 0},
+                     kSwitchPenalty, 0, way, 0, 0,
+                     elevation_storage::elevation{}, false);
+                }
+              });
+        }
+      }
+      // TODO
+      // If forward && is_extra_node && extra_node.car_* == n
+      // => Add edge n -> extra -> foot_* (<= 2 paths)
     }
   }
 

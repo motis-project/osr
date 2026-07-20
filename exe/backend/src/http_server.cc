@@ -1,6 +1,5 @@
 #include "osr/backend/http_server.h"
 
-#include <algorithm>
 #include <utility>
 
 #include "boost/algorithm/string.hpp"
@@ -22,6 +21,7 @@
 #include "osr/geojson.h"
 #include "osr/lookup.h"
 #include "osr/routing/algorithms.h"
+#include "osr/routing/for_each_parking_edge.h"
 #include "osr/routing/parameters.h"
 #include "osr/routing/profiles/bike.h"
 #include "osr/routing/profiles/bike_sharing.h"
@@ -204,19 +204,10 @@ struct http_server::impl {
         bitvec<parking_edge_idx_t>(w_.r_->parking_edges_.size());
     auto const mark_parking_edges = [&](way_idx_t const w) {
       for (auto const node_idx : w_.r_->way_nodes_[w]) {
-        if (w_.r_->has_parking_edges_.test(node_idx)) {
-          auto it = std::lower_bound(
-              begin(w_.r_->node_parking_edges_),
-              end(w_.r_->node_parking_edges_), node_idx,
-              [&](pair<node_idx_t, parking_edge_idx_t> const& p,
-                  node_idx_t const n) { return p.first < n; });
-          for (; it != end(w_.r_->node_parking_edges_) && it->first == node_idx;
-               ++it) {
-            // fmt::println("Found for way {}:  {} ({}) -> {}", w, node_idx,
-            //              w_.r_->node_positions_[node_idx], it->second);
-            parking_edges.set(it->second);
-          }
-        }
+        for_each_parking_edge(*w_.r_, node_idx,
+                              [&](parking_edge_idx_t const parking_edge_idx) {
+                                parking_edges.set(parking_edge_idx);
+                              });
       }
     };
 
