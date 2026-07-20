@@ -312,9 +312,7 @@ struct car_parking {
 
     if constexpr (UseParking) {
       if (kFwd && n.is_car_node()) {
-			fmt::println("Starting test: {}", n.n_);
         if (w.has_parking_edges_.test(n.n_)) {
-          fmt::println("Candidate: {} (at: {})", n.n_, w.node_positions_[n.n_]);
           for_each_parking_edge(
               w, n.n_, [&](parking_edge_idx_t const parking_edge_idx) {
                 auto const& parking_edge = w.parking_edges_[parking_edge_idx];
@@ -327,9 +325,8 @@ struct car_parking {
                   if (foot_node == node_idx_t::invalid()) {
                     continue;
                   }
-                  fmt::println("Adding edge {} -> {}", n.n_, foot_node);
-                  auto const way = w.node_ways_[n.n_][0];  // TODO Use way_idx of
-                                                          // parking area ?
+                  auto const way = w.node_ways_[n.n_][0];  // TODO Use way_idx
+                                                           // of parking area ?
                   fn(node{foot_node, node_type::kFoot,
                           w.node_properties_[foot_node].from_level(),
                           direction::kForward, 0},
@@ -340,9 +337,7 @@ struct car_parking {
         }
       }
       if (kBwd && n.is_foot_node()) {
-			fmt::println("Starting backward test: {}", n.n_);
         if (w.has_parking_edges_.test(n.n_)) {
-          fmt::println("Candidate foot->car: {} (at: {})", n.n_, w.node_positions_[n.n_]);
           for_each_parking_edge(
               w, n.n_, [&](parking_edge_idx_t const parking_edge_idx) {
                 auto const& parking_edge = w.parking_edges_[parking_edge_idx];
@@ -355,11 +350,9 @@ struct car_parking {
                   if (car_node == node_idx_t::invalid()) {
                     continue;
                   }
-                  fmt::println("Adding foot->car edge {} -> {}", n.n_, car_node);
-                  auto const way = w.node_ways_[n.n_][0];  // TODO Use way_idx of
-                                                          // parking area ?
-                  fn(node{car_node, node_type::kCar,
-                          level_t{0.0F},
+                  auto const way = w.node_ways_[n.n_][0];  // TODO Use way_idx
+                                                           // of parking area ?
+                  fn(node{car_node, node_type::kCar, level_t{0.0F},
                           direction::kBackward, 0},
                      kSwitchPenalty, 0, way, 0, 0,
                      elevation_storage::elevation{}, false);

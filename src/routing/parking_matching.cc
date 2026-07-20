@@ -28,9 +28,6 @@ struct fit {
     if (best_ == std::nullopt) {
       return true;
     }
-    fmt::println("Testing scores: {} < {}    dists: {} - {}",
-                 score(*best_, is_preferred_), score(c, is_designated),
-                 best_->dist_to_way_, c.dist_to_way_);
     return score(*best_, is_preferred_) < score(c, is_designated);
   }
 
@@ -88,13 +85,6 @@ std::optional<way_candidate> find_closest(
   l.find(bbox, [&](way_idx_t const way_idx) {
     auto const component = w.r_->way_component_[way_idx];
     if (component_sizes[component] < best_fit.component_size_) {
-      // fmt::println(
-      //     "DEBUG: Not matched. Target component too small: {} (osm: {})   "
-      //     "Sizes: {} < {}    from: {} (osm: {}  component: {})",
-      //     way_idx, w.way_osm_idx_[way_idx], component_sizes[component],
-      //     best_fit.component_size_, component_ways[0],
-      //     w.way_osm_idx_[component_ways[0]],
-      //     w.r_->way_component_[component_ways[0]]);
       return;
     }
     auto const [is_usable, is_preferred] = p(way_extra[way_idx]);
@@ -196,10 +186,6 @@ void connect_parking_ways(
       // TODO: Check only first occurrence is handled - e.g. 812579362 +
       // 812579361 (??)
       auto const parking_component = component_ways(w, way_idx);
-      if (component_sizes[component] > 1) {
-        fmt::println("Component ways ({}): {}", component_sizes[component],
-                     parking_component);
-      }
       auto const osm_way = w.way_osm_idx_[way_idx];
       utl::verify(w.way_osm_nodes_[way_idx].size() > 0, "Empty way");
       auto const& osm_node = w.way_osm_nodes_[way_idx][0U];
