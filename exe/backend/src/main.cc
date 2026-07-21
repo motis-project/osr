@@ -92,7 +92,8 @@ int main(int argc, char const* argv[]) {
   }
   auto const elevations = elevation_storage::try_open(opt.data_dir_);
 
-  auto const l = lookup{w, opt.data_dir_, cista::mmap::protection::READ};
+  auto l = lookup{w};
+  l.build_rtree();
 
   auto ioc = boost::asio::io_context{};
   auto pool = boost::asio::io_context{};

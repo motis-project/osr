@@ -1,10 +1,8 @@
 #pragma once
 
 #include <optional>
-#include <ostream>
 
-#include "cista/containers/rtree.h"
-#include "cista/reflection/printable.h"
+#include "rtree.h"
 
 #include "geo/box.h"
 #include "geo/latlng.h"
@@ -89,13 +87,15 @@ using match_t = std::vector<way_candidate>;
 using match_view_t = std::span<way_candidate const>;
 
 struct lookup {
-  lookup(ways const&, std::filesystem::path, cista::mmap::protection);
+  lookup(ways const&);
+
+  ~lookup() {
+    if (rtree_ != nullptr) {
+      rtree_free(rtree_);
+    }
+  }
 
   void build_rtree();
-
-  cista::mmap mm(char const* file) {
-    return cista::mmap{(p_ / file).generic_string().c_str(), mode_};
-  }
 
   std::vector<raw_way_candidate> get_raw_match(location const&,
                                                double max_match_distance) const;
@@ -216,12 +216,20 @@ struct lookup {
 
   template <typename Fn>
   void find(geo::box const& b, Fn&& fn) const {
-    auto const min = b.min_.lnglat_float();
-    auto const max = b.max_.lnglat_float();
-    rtree_.search(min, max, [&](auto, auto, way_idx_t const w) {
-      fn(w);
-      return true;
-    });
+    utl::verify(rtree_ != nullptr, "osr rtree not built");
+
+    auto const min_corner = std::array{b.min_.lng(), b.min_.lat()};
+    auto const max_corner = std::array{b.max_.lng(), b.max_.lat()};
+
+    rtree_search(
+        rtree_, min_corner.data(), max_corner.data(),
+        [](double const* /* min */, double const* /* max */, void const* item,
+           void* udata) {
+          (*reinterpret_cast<Fn*>(udata))(
+              way_idx_t{reinterpret_cast<std::size_t>(item)});
+          return true;
+        },
+        &fn);
   }
 
   hash_set<node_idx_t> find_elevators(geo::box const& b) const;
@@ -398,9 +406,7 @@ private:
     }
   }
 
-  std::filesystem::path p_;
-  cista::mmap::protection mode_;
-  cista::mm_rtree<way_idx_t> rtree_;
+  rtree* rtree_{nullptr};
   ways const& ways_;
 };
 

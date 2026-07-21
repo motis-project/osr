@@ -877,10 +877,9 @@ void extract(bool const with_platforms,
             oneapi::tbb::make_filter<osm_mem::Buffer, void>(
                 oneapi::tbb::filter_mode::serial_in_order,
                 [&](osm_mem::Buffer&& buf) {
-                  osm::apply(buf,
-                             area_manager.handler([&](auto&& area_buf) {
-                               osm::apply(area_buf, area_h);
-                             }),
+                  osm::apply(buf, area_manager.handler([&](auto&& area_buf) {
+                    osm::apply(area_buf, area_h);
+                  }),
                              h);
                 }));
 
@@ -938,9 +937,6 @@ void extract(bool const with_platforms,
   pt->status("Big Street Neighbors").in_high(w.n_ways()).out_bounds(95, 99);
   w.compute_big_street_neighbors();
   w.r_->write(out);
-
-  pt->status("Build R-Tree").in_high(1).out_bounds(99, 100);
-  lookup{w, out, cista::mmap::protection::WRITE}.build_rtree();
 }
 
 }  // namespace osr

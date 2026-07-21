@@ -11,27 +11,24 @@
 
 namespace osr {
 
-lookup::lookup(ways const& ways,
-               std::filesystem::path p,
-               cista::mmap::protection mode)
-    : p_{std::move(p)},
-      mode_{mode},
-      rtree_{mode == cista::mmap::protection::READ
-                 ? *cista::read<cista::mm_rtree<way_idx_t>::meta>(
-                       p_ / "rtree_meta.bin")
-                 : cista::mm_rtree<way_idx_t>::meta{},
-             cista::mm_rtree<way_idx_t>::vector_t{mm("rtree_data.bin")}},
-      ways_{ways} {}
+lookup::lookup(ways const& ways) : rtree_{}, ways_{ways} {}
 
 void lookup::build_rtree() {
+  assert(rtree_ == nullptr);
+
+  rtree_ = rtree_new();
+
   for (auto way = way_idx_t{0U}; way != ways_.n_ways(); ++way) {
     auto b = geo::box{};
     for (auto const& c : ways_.way_polylines_[way]) {
       b.extend(c);
     }
-    rtree_.insert(b.min_.lnglat_float(), b.max_.lnglat_float(), way);
+    auto const min_corner = std::array{b.min_.lng(), b.min_.lat()};
+    auto const max_corner = std::array{b.max_.lng(), b.max_.lat()};
+
+    rtree_insert(rtree_, min_corner.data(), max_corner.data(),
+                 reinterpret_cast<void*>(static_cast<std::size_t>(way.v_)));
   }
-  rtree_.write_meta(p_ / "rtree_meta.bin");
 }
 
 std::vector<raw_way_candidate> lookup::get_raw_way_candidates(
