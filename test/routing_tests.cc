@@ -6,8 +6,10 @@
 
 #include "osr/extract/extract.h"
 #include "osr/lookup.h"
+#include "osr/routing/parameters.h"
 #include "osr/routing/profiles/foot.h"
 #include "osr/routing/route.h"
+#include "osr/routing/sharing_data.h"
 #include "osr/ways.h"
 
 namespace fs = std::filesystem;
@@ -43,6 +45,44 @@ TEST(routing, foot_island) {
   EXPECT_EQ(
       R"({"type":"FeatureCollection","metadata":{},"features":[{"type":"Feature","properties":{"level":0E0,"osm_way_id":0,"cost":3,"distance":3},"geometry":{"type":"LineString","coordinates":[[8.651514431787469E0,4.987274386418564E1],[8.6515174E0,4.98727447E1]]}},{"type":"Feature","properties":{"level":0E0,"osm_way_id":1201551426,"cost":3,"distance":3},"geometry":{"type":"LineString","coordinates":[[8.6515174E0,4.98727447E1],[8.6515563E0,4.98727556E1]]}},{"type":"Feature","properties":{"level":0E0,"osm_way_id":22937760,"cost":2,"distance":2},"geometry":{"type":"LineString","coordinates":[[8.6515563E0,4.98727556E1],[8.6515406E0,4.98727706E1]]}},{"type":"Feature","properties":{"level":0E0,"osm_way_id":22937760,"cost":10,"distance":10},"geometry":{"type":"LineString","coordinates":[[8.6515406E0,4.98727706E1],[8.6514528E0,4.98728367E1]]}},{"type":"Feature","properties":{"level":0E0,"osm_way_id":847710844,"cost":6,"distance":7},"geometry":{"type":"LineString","coordinates":[[8.6514528E0,4.98728367E1],[8.6514754E0,4.98728959E1]]}},{"type":"Feature","properties":{"level":0E0,"osm_way_id":23511479,"cost":8,"distance":8},"geometry":{"type":"LineString","coordinates":[[8.6514754E0,4.98728959E1],[8.651539E0,4.98729497E1]]}},{"type":"Feature","properties":{"level":0E0,"osm_way_id":23511479,"cost":2,"distance":2},"geometry":{"type":"LineString","coordinates":[[8.651539E0,4.98729497E1],[8.6515596E0,4.98729618E1]]}},{"type":"Feature","properties":{"level":0E0,"osm_way_id":0,"cost":8,"distance":9},"geometry":{"type":"LineString","coordinates":[[8.6515596E0,4.98729618E1],[8.651493334251755E0,4.987300334757231E1]]}}]})",
       extract_and_route("test/luisenplatz-darmstadt.osm.pbf", from, to));
+}
+
+TEST(routing, sharing_geofencing_does_not_restrict_walking) {
+  auto const path = "test/luisenplatz-darmstadt.osm.pbf";
+  auto const dir = fs::temp_directory_path() / path;
+  auto ec = std::error_code{};
+  fs::remove_all(dir, ec);
+  fs::create_directories(dir, ec);
+
+  osr::extract(false, path, dir, {});
+
+  auto w = osr::ways{dir, cista::mmap::protection::READ};
+  auto l = osr::lookup{w, dir, cista::mmap::protection::READ};
+  auto through_allowed = osr::bitvec<osr::node_idx_t>{};
+  through_allowed.resize(
+      static_cast<osr::bitvec<osr::node_idx_t>::size_type>(w.n_nodes()));
+  auto const additional_node_coordinates = std::vector<geo::latlng>{};
+  auto const additional_edges =
+      osr::hash_map<osr::node_idx_t, std::vector<osr::additional_edge>>{};
+  auto const sharing = osr::sharing_data{
+      .through_allowed_ = &through_allowed,
+      .additional_node_offset_ = w.n_nodes(),
+      .additional_node_coordinates_ = additional_node_coordinates,
+      .additional_edges_ = additional_edges};
+  auto const from = osr::location{49.872715, 8.651534, osr::level_t{0.F}};
+  auto const to = osr::location{49.873023, 8.651523, osr::level_t{0.F}};
+
+  for (auto const profile :
+       {osr::search_profile::kBikeSharing, osr::search_profile::kCarSharing}) {
+    for (auto const direction :
+         {osr::direction::kForward, osr::direction::kBackward}) {
+      auto const route = osr::route(
+          osr::get_parameters(profile), w, l, profile, from, to, 900, direction,
+          250.0, nullptr, &sharing, nullptr, osr::routing_algorithm::kDijkstra);
+      EXPECT_TRUE(route.has_value())
+          << osr::to_str(profile) << " " << osr::to_str(direction);
+    }
+  }
 }
 
 TEST(routing, foot_ferry) {

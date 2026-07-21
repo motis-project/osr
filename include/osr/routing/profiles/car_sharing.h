@@ -402,12 +402,9 @@ struct car_sharing {
               way_idx_t const way, std::uint16_t const from,
               std::uint16_t const to,
               elevation_storage::elevation const elevation, bool) {
-            if (is_allowed(sharing->through_allowed_, neighbor.n_)) {
-              fn(to_node(neighbor, nt), cost + switch_penalty,
-                 clamp_add_duration(duration,
-                                    duration_from_cost(switch_penalty)),
-                 dist, way, from, to, elevation, switch_penalty != 0);
-            }
+            fn(to_node(neighbor, nt), cost + switch_penalty,
+               clamp_add_duration(duration, duration_from_cost(switch_penalty)),
+               dist, way, from, to, elevation, switch_penalty != 0);
           });
       if (include_additional_edges) {
         // walk to station or free-floating vehicle
