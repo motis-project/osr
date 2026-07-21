@@ -229,63 +229,78 @@ void ways::connect_ways() {
       std::vector<std::uint16_t> dists_;
       std::vector<routing::long_distance> long_dists_;
     };
+
+    constexpr auto kConnectChunkSize = std::size_t{1024U};
+    auto const n_chunks = (n_ways + kConnectChunkSize - 1U) / kConnectChunkSize;
     utl::parallel_ordered_collect_threadlocal<char>(
-        n_ways,
-        [&](char&, std::size_t const way) {
-          auto const way_idx = way_idx_t{way};
-          auto c = way_edges{};
-          auto pred_pos = std::make_optional<point>();
-          auto from = node_idx_t::invalid();
-          auto distance = 0.0;
-          auto i = std::uint16_t{0U};
-          for (auto const [osm_node_idx, pos] :
-               utl::zip(way_osm_nodes_[way_idx], way_polylines_[way_idx])) {
-            if (pred_pos.has_value()) {
-              distance += geo::distance(pos, *pred_pos);
-            }
+        n_chunks,
+        [&](char&, std::size_t const chunk) {
+          auto const chunk_begin = chunk * kConnectChunkSize;
+          auto const chunk_end =
+              std::min(chunk_begin + kConnectChunkSize, n_ways);
+          auto out = std::vector<way_edges>{};
+          out.reserve(chunk_end - chunk_begin);
+          for (auto way = chunk_begin; way != chunk_end; ++way) {
+            auto const way_idx = way_idx_t{way};
+            auto c = way_edges{};
+            auto pred_pos = std::make_optional<point>();
+            auto from = node_idx_t::invalid();
+            auto distance = 0.0;
+            auto i = std::uint16_t{0U};
+            for (auto const [osm_node_idx, pos] :
+                 utl::zip(way_osm_nodes_[way_idx], way_polylines_[way_idx])) {
+              if (pred_pos.has_value()) {
+                distance += geo::distance(pos, *pred_pos);
+              }
 
-            if (node_way_counter_.is_multi(to_idx(osm_node_idx))) {
-              auto const to = get_node_idx(osm_node_idx);
-              count[to_idx(to)].fetch_add(1U, std::memory_order_relaxed);
-              c.nodes_.push_back(to);
+              if (node_way_counter_.is_multi(to_idx(osm_node_idx))) {
+                auto const to = get_node_idx(osm_node_idx);
+                count[to_idx(to)].fetch_add(1U, std::memory_order_relaxed);
+                c.nodes_.push_back(to);
 
-              if (from != node_idx_t::invalid()) {
-                auto const dist = static_cast<distance_t>(std::round(distance));
-                if (dist < std::numeric_limits<std::uint16_t>::max()) {
-                  c.dists_.push_back(static_cast<std::uint16_t>(dist));
-                } else {
-                  c.long_dists_.push_back(routing::long_distance{
-                      .way_ = way_idx,
-                      .node_ = static_cast<std::uint16_t>(i - 1U),
-                      .distance_ = dist});
-                  c.dists_.push_back(std::numeric_limits<std::uint16_t>::max());
+                if (from != node_idx_t::invalid()) {
+                  auto const dist =
+                      static_cast<distance_t>(std::round(distance));
+                  if (dist < std::numeric_limits<std::uint16_t>::max()) {
+                    c.dists_.push_back(static_cast<std::uint16_t>(dist));
+                  } else {
+                    c.long_dists_.push_back(routing::long_distance{
+                        .way_ = way_idx,
+                        .node_ = static_cast<std::uint16_t>(i - 1U),
+                        .distance_ = dist});
+                    c.dists_.push_back(
+                        std::numeric_limits<std::uint16_t>::max());
+                  }
                 }
+
+                distance = 0.0;
+                from = to;
+
+                if (i == std::numeric_limits<std::uint16_t>::max()) {
+                  fmt::println("error: way {} has too many nodes, truncating",
+                               way_osm_idx_[way_idx]);
+                  break;
+                }
+
+                ++i;
               }
 
-              distance = 0.0;
-              from = to;
-
-              if (i == std::numeric_limits<std::uint16_t>::max()) {
-                fmt::println("error: way {} has too many nodes, truncating",
-                             way_osm_idx_[way_idx]);
-                break;
-              }
-
-              ++i;
+              pred_pos = pos;
             }
-
-            pred_pos = pos;
+            out.push_back(std::move(c));
           }
-          return c;
+          return out;
         },
-        [&](std::size_t, way_edges const& c) {
-          r_->way_nodes_.emplace_back(c.nodes_);
-          r_->way_node_dist_.emplace_back(c.dists_);
-          for (auto const& x : c.long_dists_) {
-            r_->long_way_node_dist_.push_back(x);
+        [&](std::size_t, std::vector<way_edges> const& chunk_out) {
+          for (auto const& c : chunk_out) {
+            r_->way_nodes_.emplace_back(c.nodes_);
+            r_->way_node_dist_.emplace_back(c.dists_);
+            for (auto const& x : c.long_dists_) {
+              r_->long_way_node_dist_.push_back(x);
+            }
           }
         },
-        [&](std::size_t) { pt->increment(); });
+        [&](std::size_t) { pt->increment(kConnectChunkSize); });
 
     utl::sort(r_->long_way_node_dist_);
 
