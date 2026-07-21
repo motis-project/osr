@@ -24,7 +24,21 @@ lookup::lookup(ways const& ways,
       ways_{ways} {}
 
 void lookup::build_rtree() {
-  for (auto way = way_idx_t{0U}; way != ways_.n_ways(); ++way) {
+  auto sorted_ways = std::vector<way_idx_t>();
+  sorted_ways.resize(ways_.n_ways());
+  std::iota(sorted_ways.begin(), sorted_ways.end(), way_idx_t{0});
+
+  std::stable_sort(
+      sorted_ways.begin(), sorted_ways.end(),
+      [&](way_idx_t const a, way_idx_t const b) {
+        return geo::morton_encode(
+                   ways_
+                       .way_polylines_[a][ways_.way_polylines_[a].size() / 2]) <
+               geo::morton_encode(
+                   ways_.way_polylines_[b][ways_.way_polylines_[b].size() / 2]);
+      });
+
+  for (auto way : sorted_ways) {
     auto b = geo::box{};
     for (auto const& c : ways_.way_polylines_[way]) {
       b.extend(c);
