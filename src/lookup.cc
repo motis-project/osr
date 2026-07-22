@@ -1,5 +1,7 @@
 #include "osr/lookup.h"
 
+#include "utl/parallel_for.h"
+
 #include "osr/routing/parameters.h"
 #include "osr/routing/profiles/bike.h"
 #include "osr/routing/profiles/bike_sharing.h"
@@ -30,10 +32,10 @@ void lookup::build_rtree() {
   auto curve = vec_map<way_idx_t, std::uint64_t>{};
   curve.resize(ways_.n_ways());
 
-  for (auto const way : sorted_ways) {
+  utl::parallel_for(sorted_ways, [&](way_idx_t const way) {
     curve[way] = geo::morton_encode(
         ways_.way_polylines_[way][ways_.way_polylines_[way].size() / 2]);
-  }
+  });
 
   std::stable_sort(sorted_ways.begin(), sorted_ways.end(),
                    [&](way_idx_t const a, way_idx_t const b) {
