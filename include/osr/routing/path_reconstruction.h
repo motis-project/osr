@@ -12,6 +12,7 @@
 #include "geo/latlng.h"
 
 #include "osr/elevation_storage.h"
+#include "osr/routing/parking_matching.h"
 #include "osr/routing/path.h"
 #include "osr/routing/profile.h"
 #include "osr/routing/sharing_data.h"
@@ -175,8 +176,15 @@ inline double add_path(typename P::parameters const& params,
     segment.from_ =
         dir == direction::kBackward ? to.get_node() : from.get_node();
     segment.to_ = dir == direction::kBackward ? from.get_node() : to.get_node();
-    segment.polyline_ = {get_node_pos(segment.from_),
-                         get_node_pos(segment.to_)};
+    if constexpr (is_parking<P>()) {
+      segment.mode_ = mode::kParking;
+      // TODO Create polyline
+      segment.polyline_ = {get_node_pos(segment.from_),
+                           get_node_pos(segment.to_)};
+    } else {
+      segment.polyline_ = {get_node_pos(segment.from_),
+                           get_node_pos(segment.to_)};
+    }
   }
 
   return distance;

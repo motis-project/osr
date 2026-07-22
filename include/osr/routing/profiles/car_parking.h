@@ -325,8 +325,8 @@ struct car_parking {
                   if (foot_node == node_idx_t::invalid()) {
                     continue;
                   }
-                  auto const way = w.node_ways_[n.n_][0];  // TODO Use way_idx
-                                                           // of parking area ?
+                  auto const way = way_idx_t::invalid();  // TODO Use way_idx
+                                                          // of parking area ?
                   fn(node{foot_node, node_type::kFoot,
                           w.node_properties_[foot_node].from_level(),
                           direction::kForward, 0},
@@ -350,8 +350,8 @@ struct car_parking {
                   if (car_node == node_idx_t::invalid()) {
                     continue;
                   }
-                  auto const way = w.node_ways_[n.n_][0];  // TODO Use way_idx
-                                                           // of parking area ?
+                  auto const way = way_idx_t::invalid();  // TODO Use way_idx
+                                                          // of parking area ?
                   fn(node{car_node, node_type::kCar, level_t{0.0F},
                           direction::kBackward, 0},
                      kSwitchPenalty, 0, way, 0, 0,
