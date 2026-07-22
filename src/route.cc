@@ -316,7 +316,7 @@ best_candidate(typename P::parameters const& params,
                cost_t const max,
                direction const dir,
                std::optional<routing_time_t> const start_time,
-               bool,
+               bool should_continue,
                way_candidate const& start,
                double const limit_squared_max_matching_distance) {
   auto best_cost = path{.cost_ = std::numeric_limits<cost_t>::max(),
@@ -369,7 +369,7 @@ best_candidate(typename P::parameters const& params,
     if (start_component != w.r_->way_component_[dest.way_]) {
       continue;
     }
-    if (++component_seen_ctr > 10) {
+    if (should_continue && ++component_seen_ctr > 10) {
       break;
     }
     if (std::pow(dest.dist_to_way_, 2) > limit_squared_max_matching_distance &&
