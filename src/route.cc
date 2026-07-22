@@ -316,17 +316,19 @@ best_candidate(typename P::parameters const& params,
                cost_t const max,
                direction const dir,
                std::optional<routing_time_t> const start_time,
-               bool should_continue,
+               bool,
                way_candidate const& start,
                double const limit_squared_max_matching_distance) {
+  auto best_cost = path{.cost_ = std::numeric_limits<cost_t>::max(),
+                        .duration_ = kMaxDuration};
+  auto best_node = P::node::invalid();
+  auto best = static_cast<node_candidate const*>(nullptr);
+
   auto const get_best = [&](way_candidate const& dest,
                             node_candidate const* x) {
-    auto best_node = P::node::invalid();
-    auto best_cost = path{.cost_ = std::numeric_limits<cost_t>::max(),
-                          .duration_ = kMaxDuration};
     P::resolve_all(*w.r_, x->node_, lvl, [&](auto&& node) {
       auto const target_cost = search.get_cost(node);
-      if (target_cost == kInfeasible) {
+      if (target_cost == kInfeasible || target_cost > best_cost.cost_) {
         return;
       }
 
@@ -354,36 +356,30 @@ best_candidate(typename P::parameters const& params,
           (total_cost == best_cost.cost_ &&
            total_duration < best_cost.duration_)) {
         best_node = node;
+        best = x;
         best_cost.cost_ = static_cast<cost_t>(total_cost);
         best_cost.duration_ = total_duration;
       }
     });
-    return std::pair{best_node, best_cost};
   };
 
+  auto const start_component = w.r_->way_component_[start.way_];
+  auto component_seen_ctr = 0;
   for (auto const [j, dest] : utl::enumerate(m)) {
-    if (w.r_->way_component_[start.way_] != w.r_->way_component_[dest.way_]) {
+    if (start_component != w.r_->way_component_[dest.way_]) {
       continue;
     }
-    if (!should_continue && component_seen(w, m, j, 10)) {
-      continue;
+    if (++component_seen_ctr > 10) {
+      break;
     }
     if (std::pow(dest.dist_to_way_, 2) > limit_squared_max_matching_distance &&
         j > kBottomKDefinitelyConsidered) {
       break;
     }
-    auto best_node = P::node::invalid();
-    auto best_cost = path{.cost_ = std::numeric_limits<cost_t>::max()};
-    auto best = static_cast<node_candidate const*>(nullptr);
 
     for (auto const x : {&dest.left_, &dest.right_}) {
       if (x->valid()) {
-        auto const [x_node, x_cost] = get_best(dest, x);
-        if (x_cost.cost_ < best_cost.cost_) {
-          best = x;
-          best_node = x_node;
-          best_cost = x_cost;
-        }
+        get_best(dest, x);
       }
     }
 
