@@ -1,5 +1,7 @@
 #include "osr/lookup.h"
 
+#include "utl/parallel_for.h"
+
 #include "osr/routing/parameters.h"
 #include "osr/routing/profiles/bike.h"
 #include "osr/routing/profiles/bike_sharing.h"
@@ -27,16 +29,18 @@ void lookup::build_rtree() {
   auto sorted_ways = std::vector<way_idx_t>();
   sorted_ways.resize(ways_.n_ways());
   std::iota(sorted_ways.begin(), sorted_ways.end(), way_idx_t{0});
+  auto curve = vec_map<way_idx_t, std::uint64_t>{};
+  curve.resize(ways_.n_ways());
 
-  std::stable_sort(
-      sorted_ways.begin(), sorted_ways.end(),
-      [&](way_idx_t const a, way_idx_t const b) {
-        return geo::morton_encode(
-                   ways_
-                       .way_polylines_[a][ways_.way_polylines_[a].size() / 2]) <
-               geo::morton_encode(
-                   ways_.way_polylines_[b][ways_.way_polylines_[b].size() / 2]);
-      });
+  utl::parallel_for(sorted_ways, [&](way_idx_t const way) {
+    curve[way] = geo::morton_encode(
+        ways_.way_polylines_[way][ways_.way_polylines_[way].size() / 2]);
+  });
+
+  std::stable_sort(sorted_ways.begin(), sorted_ways.end(),
+                   [&](way_idx_t const a, way_idx_t const b) {
+                     return curve[a] < curve[b];
+                   });
 
   for (auto way : sorted_ways) {
     auto b = geo::box{};
