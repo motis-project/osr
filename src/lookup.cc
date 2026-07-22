@@ -27,16 +27,18 @@ void lookup::build_rtree() {
   auto sorted_ways = std::vector<way_idx_t>();
   sorted_ways.resize(ways_.n_ways());
   std::iota(sorted_ways.begin(), sorted_ways.end(), way_idx_t{0});
+  auto curve = std::vector<std::uint32_t>();
+  curve.resize(ways_.n_ways());
 
-  std::stable_sort(
-      sorted_ways.begin(), sorted_ways.end(),
-      [&](way_idx_t const a, way_idx_t const b) {
-        return geo::morton_encode(
-                   ways_
-                       .way_polylines_[a][ways_.way_polylines_[a].size() / 2]) <
-               geo::morton_encode(
-                   ways_.way_polylines_[b][ways_.way_polylines_[b].size() / 2]);
-      });
+  for (auto const way : sorted_ways) {
+    curve[way.v_] = geo::morton_encode(
+        ways_.way_polylines_[way][ways_.way_polylines_[way].size() / 2]);
+  }
+
+  std::stable_sort(sorted_ways.begin(), sorted_ways.end(),
+                   [&](way_idx_t const a, way_idx_t const b) {
+                     return curve[a.v_] < curve[b.v_];
+                   });
 
   for (auto way : sorted_ways) {
     auto b = geo::box{};
