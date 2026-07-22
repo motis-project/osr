@@ -23,101 +23,20 @@ lookup::lookup(ways const& ways,
              cista::mm_rtree<way_idx_t>::vector_t{mm("rtree_data.bin")}},
       ways_{ways} {}
 
-uint32_t interleave(uint32_t x) {
-  x = (x | (x << 8)) & 0x00FF00FF;
-  x = (x | (x << 4)) & 0x0F0F0F0F;
-  x = (x | (x << 2)) & 0x33333333;
-  x = (x | (x << 1)) & 0x55555555;
-  return x;
-}
-
-uint32_t hilbertXYToIndex_logarithmic(uint32_t x, uint32_t y) {
-  uint32_t A, B, C, D;
-
-  // Initial prefix scan round, prime with x and y
-  {
-    uint32_t a = x ^ y;
-    uint32_t b = 0xFFFF ^ a;
-    uint32_t c = 0xFFFF ^ (x | y);
-    uint32_t d = x & (y ^ 0xFFFF);
-
-    A = a | (b >> 1);
-    B = (a >> 1) ^ a;
-
-    C = ((c >> 1) ^ (b & (d >> 1))) ^ c;
-    D = ((a & (c >> 1)) ^ (d >> 1)) ^ d;
-  }
-
-  {
-    uint32_t a = A;
-    uint32_t b = B;
-    uint32_t c = C;
-    uint32_t d = D;
-
-    A = ((a & (a >> 2)) ^ (b & (b >> 2)));
-    B = ((a & (b >> 2)) ^ (b & ((a ^ b) >> 2)));
-
-    C ^= ((a & (c >> 2)) ^ (b & (d >> 2)));
-    D ^= ((b & (c >> 2)) ^ ((a ^ b) & (d >> 2)));
-  }
-
-  {
-    uint32_t a = A;
-    uint32_t b = B;
-    uint32_t c = C;
-    uint32_t d = D;
-
-    A = ((a & (a >> 4)) ^ (b & (b >> 4)));
-    B = ((a & (b >> 4)) ^ (b & ((a ^ b) >> 4)));
-
-    C ^= ((a & (c >> 4)) ^ (b & (d >> 4)));
-    D ^= ((b & (c >> 4)) ^ ((a ^ b) & (d >> 4)));
-  }
-
-  // Final round and projection
-  {
-    uint32_t a = A;
-    uint32_t b = B;
-    uint32_t c = C;
-    uint32_t d = D;
-
-    C ^= ((a & (c >> 8)) ^ (b & (d >> 8)));
-    D ^= ((b & (c >> 8)) ^ ((a ^ b) & (d >> 8)));
-  }
-
-  // Undo transformation prefix scan
-  uint32_t a = C ^ (C >> 1);
-  uint32_t b = D ^ (D >> 1);
-
-  // Recover index bits
-  uint32_t i0 = x ^ y;
-  uint32_t i1 = b | (0xFFFF ^ (i0 | a));
-
-  return (interleave(i1) << 1) | interleave(i0);
-}
-
-uint32_t hilbert(point const& p) {
-  uint32_t x = ((p.lng_ + 180.0) / 360.0) * 0xFFFF;
-  uint32_t y = ((p.lat_ + 90.0) / 180.0) * 0xFFFF;
-  return hilbertXYToIndex_logarithmic(x, y);
-}
-
 void lookup::build_rtree() {
   auto sorted_ways = std::vector<way_idx_t>();
   sorted_ways.resize(ways_.n_ways());
-  auto curve = std::vector<std::uint32_t>();
-  curve.resize(ways_.n_ways());
   std::iota(sorted_ways.begin(), sorted_ways.end(), way_idx_t{0});
 
-  for (auto way : sorted_ways) {
-    curve[way.v_] = hilbert(
-        ways_.way_polylines_[way][ways_.way_polylines_[way].size() / 2]);
-  }
-
-  std::stable_sort(sorted_ways.begin(), sorted_ways.end(),
-                   [&](way_idx_t const a, way_idx_t const b) {
-                     return curve[a.v_] < curve[b.v_];
-                   });
+  std::stable_sort(
+      sorted_ways.begin(), sorted_ways.end(),
+      [&](way_idx_t const a, way_idx_t const b) {
+        return geo::morton_encode(
+                   ways_
+                       .way_polylines_[a][ways_.way_polylines_[a].size() / 2]) <
+               geo::morton_encode(
+                   ways_.way_polylines_[b][ways_.way_polylines_[b].size() / 2]);
+      });
 
   for (auto way : sorted_ways) {
     auto b = geo::box{};
