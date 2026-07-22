@@ -41,6 +41,8 @@ static void load(std::string_view raw_data, std::string_view data_dir) {
 TEST(simple_dijkstra, monaco) {
   auto const raw_data = "test/monaco.osm.pbf";
   auto const data_dir = "test/monaco";
+  // auto const raw_data = "test/darmstadt-bismarckstr.osm.pbf";
+  // auto const data_dir = "test/darmstadt-bismarckstr";
   auto constexpr dir = direction::kForward;
   auto constexpr max_cost = 2 * 3600U;
 

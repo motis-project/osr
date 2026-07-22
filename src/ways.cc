@@ -224,6 +224,40 @@ void ways::compute_big_street_neighbors() {
       });
 }
 
+void ways::add_shortcuts() {
+  // get max importance
+  uint32_t max_importance = 0;
+  uint32_t dummy = 0;
+  for (auto const importance : r_->node_importance_) {
+    if (importance > max_importance) {
+      max_importance = importance;
+    }
+  }
+
+  // Iterate over each importance level, from lowest to highest, creating
+  for (uint32_t c = 0; c <= max_importance; c++) {
+    for (auto i = node_idx_t{0U}; i != n_nodes(); ++i) {
+      if (r_->node_importance_[i] != c) {
+        continue;
+      }
+      // Iterate over every way to that node
+      auto const ways = r_->node_ways_[i];
+      for (auto wi = way_pos_t{0U}; wi != ways.size(); ++wi) {
+        auto const nodes_in_way = r_->way_nodes_[ways[wi]];
+        for (auto no : nodes_in_way) {
+          dummy = r_->node_importance_[no];
+          if (no != i && r_->node_importance_[no] > c) {
+            // CREATE SHORTCUT IF NOT EXISTS
+            dummy = r_->node_importance_[no];
+          }
+        }
+      }
+    }
+  }
+  std::cout << dummy;
+  // shortcuts
+}
+
 void ways::connect_ways() {
   auto pt = utl::get_active_progress_tracker_or_activate("osr");
 

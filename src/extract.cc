@@ -672,6 +672,7 @@ void extract(bool const with_platforms,
 
   w.build_components_and_importance();
   w.add_restriction(r);
+  w.add_shortcuts();
 
   utl::sort(w.r_->multi_level_elevators_);
 
