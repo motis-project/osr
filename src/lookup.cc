@@ -27,11 +27,11 @@ void lookup::build_rtree() {
   auto sorted_ways = std::vector<way_idx_t>();
   sorted_ways.resize(ways_.n_ways());
   std::iota(sorted_ways.begin(), sorted_ways.end(), way_idx_t{0});
-  auto curve = std::vector<std::uint32_t>();
+  auto curve = vec_map<way_idx_t, std::uint64_t>{};
   curve.resize(ways_.n_ways());
 
   for (auto const way : sorted_ways) {
-    curve[way.v_] = geo::morton_encode(
+    curve[way] = geo::morton_encode(
         ways_.way_polylines_[way][ways_.way_polylines_[way].size() / 2]);
   }
 
