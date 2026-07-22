@@ -369,7 +369,7 @@ best_candidate(typename P::parameters const& params,
     if (start_component != w.r_->way_component_[dest.way_]) {
       continue;
     }
-    if (should_continue && ++component_seen_ctr > 10) {
+    if (!should_continue && ++component_seen_ctr > 10) {
       break;
     }
     if (std::pow(dest.dist_to_way_, 2) > limit_squared_max_matching_distance &&
