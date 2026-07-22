@@ -200,6 +200,7 @@ struct ways {
   void add_restriction(std::vector<resolved_restriction>&);
   void compute_big_street_neighbors();
   void connect_ways();
+  void add_shortcuts();
   void compute_turn_bearings();
   void build_components_and_importance();
 
