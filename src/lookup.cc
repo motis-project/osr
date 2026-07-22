@@ -37,7 +37,7 @@ void lookup::build_rtree() {
 
   std::stable_sort(sorted_ways.begin(), sorted_ways.end(),
                    [&](way_idx_t const a, way_idx_t const b) {
-                     return curve[a.v_] < curve[b.v_];
+                     return curve[a] < curve[b];
                    });
 
   for (auto way : sorted_ways) {
