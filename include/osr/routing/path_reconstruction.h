@@ -15,6 +15,7 @@
 #include "osr/routing/parking_matching.h"
 #include "osr/routing/path.h"
 #include "osr/routing/profile.h"
+#include "osr/routing/profiles/car_parking.h"  // TODO Debug only
 #include "osr/routing/sharing_data.h"
 #include "osr/types.h"
 #include "osr/util/infinite.h"
@@ -58,6 +59,13 @@ inline connecting_way find_connecting_way(typename P::parameters const& params,
           conn = {way, a_idx, b_idx, is_loop, dist, elevation};
         }
       });
+  if constexpr (is_parking<P>()) {
+    if (!conn.has_value()) {
+      fmt::println("ERROR: {} ({}) -> {} ({})", from.get_node(),
+                   P::node_type_to_str(from.type_), to.get_node(),
+                   P::node_type_to_str(to.type_));
+    }
+  }
   utl::verify(
       conn.has_value(), "no connecting way node/{} -> node/{} found {} {}",
       (sharing == nullptr || from.get_node() < sharing->additional_node_offset_)
@@ -179,8 +187,14 @@ inline double add_path(typename P::parameters const& params,
     if constexpr (is_parking<P>()) {
       segment.mode_ = mode::kParking;
       // TODO Create polyline
-      segment.polyline_ = {get_node_pos(segment.from_),
-                           get_node_pos(segment.to_)};
+      auto const& parking_to = dir == direction::kBackward ? from : to;
+      auto const parking_edge =
+          w.r_->parking_edges_[parking_edge_idx_t{cista::to_idx(parking_to.n_)}];
+      auto const correct_to = P::decode_parking_node(*w.r_, parking_to);
+			segment.to_ = correct_to.get_node();
+      segment.polyline_ = {
+          get_node_pos(segment.from_), parking_edge.car_extra_point_,
+          parking_edge.foot_extra_point_, get_node_pos(segment.to_)};
     } else {
       segment.polyline_ = {get_node_pos(segment.from_),
                            get_node_pos(segment.to_)};

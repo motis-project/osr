@@ -19,6 +19,14 @@ namespace osr {
 
 struct sharing_data;
 
+// inline node_idx_t to_node_idx(parking_edge_idx_t const parking_edge_idx) {
+//   return node_idx_t{to_idx(parking_edge_idx)};
+// }
+//
+// inline parking_edge_idx_t to_parking_edge_idx(node_idx_t const node_idx) {
+//   return parking_edge_idx_t{to_idx(node_idx)};
+// }
+
 template <bool IsWheelchair, bool UseParking = true>
 struct car_parking {
   using footp = foot<IsWheelchair>;
@@ -28,12 +36,13 @@ struct car_parking {
 
   using key = node_idx_t;
 
-  enum class node_type : std::uint8_t { kCar, kFoot, kInvalid };
+  enum class node_type : std::uint8_t { kCar, kFoot, kParking, kInvalid };
 
   static constexpr std::string_view node_type_to_str(node_type const type) {
     switch (type) {
       case node_type::kCar: return "car";
       case node_type::kFoot: return "foot";
+      case node_type::kParking: return "parking";
       case node_type::kInvalid: return "invalid";
     }
     std::unreachable();
@@ -98,6 +107,10 @@ struct car_parking {
       return type_ == node_type::kFoot;
     }
 
+    constexpr bool is_parking_node() const noexcept {
+      return type_ == node_type::kParking;
+    }
+
     constexpr bool is_invalid_node() const noexcept {
       return type_ == node_type::kInvalid;
     }
@@ -108,6 +121,7 @@ struct car_parking {
     direction dir_;
     way_pos_t way_;
   };
+  static_assert(sizeof(std::declval<node>()) == 8);
 
   struct label {
     label(node const n, cost_t const c)
@@ -151,11 +165,14 @@ struct car_parking {
       auto const idx = get_index(n);
       return pred_[idx] == node_idx_t::invalid()
                  ? std::nullopt
-                 : std::optional{node{.n_ = pred_[idx],
-                                      .type_ = to_node_type(pred_type_[idx]),
-                                      .lvl_ = pred_lvl_[idx],
-                                      .dir_ = to_dir(pred_dir_[idx]),
-                                      .way_ = pred_way_[idx]}};
+                 : std::optional{
+                       node{.n_ = pred_[idx],
+                            .type_ = pred_parking_[idx]
+                                         ? node_type::kParking
+                                         : to_node_type(pred_type_[idx]),
+                            .lvl_ = pred_lvl_[idx],
+                            .dir_ = to_dir(pred_dir_[idx]),
+                            .way_ = pred_way_[idx]}};
     }
 
     constexpr cost_t cost(node const n) const noexcept {
@@ -174,6 +191,7 @@ struct car_parking {
         pred_type_[idx] = to_bool(pred.type_);
         pred_way_[idx] = pred.way_;
         pred_dir_[idx] = to_bool(pred.dir_);
+        pred_parking_[idx] = pred.type_ == node_type::kParking;
         return true;
       }
       return false;
@@ -252,6 +270,38 @@ struct car_parking {
     return node{n, node_type::kInvalid, lvl, dir, way};
   }
 
+  static node encode_parking_node(parking_edge_idx_t const parking_edge_idx,
+                                  level_t const lvl,
+                                  direction const dir,
+                                  unsigned const car_offset,
+                                  unsigned const foot_offset) {
+    utl::verify(car_offset < 2, "Invalid car offset {}", car_offset);
+    utl::verify(foot_offset < 2, "Invalid foot offset {}", foot_offset);
+    return {node_idx_t{to_idx(parking_edge_idx)}, node_type::kParking, lvl, dir,
+            static_cast<way_pos_t>((2 * car_offset) + foot_offset)};
+  }
+  static node decode_parking_node(ways::routing const& w, node const& n) {
+    auto const parking_edge =
+        w.parking_edges_[parking_edge_idx_t{to_idx(n.n_)}];
+    if (n.dir_ == direction::kForward) {
+      auto const foot_offset = n.way_ & 0x01;
+      auto const node_idx =
+          foot_offset == 0 ? parking_edge.foot_left_ : parking_edge.foot_right_;
+      fmt::println(
+          "Decode Forward: parking_edge: {}, foot_offset: {}, node: {}", n.n_,
+          foot_offset, node_idx);
+      return {node_idx, node_type::kFoot, n.lvl_, n.dir_, 0U};
+    } else {
+      auto const car_offset = (n.way_ >> 1) & 0x01;
+      auto const node_idx =
+          car_offset == 0 ? parking_edge.car_left_ : parking_edge.car_right_;
+      fmt::println(
+          "Decode Backwards: parking_edge: {}, car_offset: {}, node: {}", n.n_,
+          car_offset, node_idx);
+      return {node_idx, node_type::kCar, n.lvl_, n.dir_, 0U};
+    }
+  }
+
   template <typename Fn>
   static void resolve_all(ways::routing const& w,
                           node_idx_t const n,
@@ -276,6 +326,36 @@ struct car_parking {
                        Fn&& fn) {
     static constexpr auto const kFwd = SearchDir == direction::kForward;
     static constexpr auto const kBwd = SearchDir == direction::kBackward;
+
+    if (n.is_parking_node()) {
+      auto const n2 = decode_parking_node(w, n);
+      fmt::println("DECODED: (n: {} way: {})  ->  (n: {})", n.n_, n.way_,
+                   n2.n_);
+      adjacent<SearchDir, WithBlocked>(params, w, n2, blocked, nullptr,
+                                       elevations, fn);
+      return;
+      // auto const& parking_edge = w.parking_edges_[to_parking_edge_idx(n.n_)];
+      // if (kFwd) {
+      //   adjacent<SearchDir, WithBlocked>(params, w, n.from_parking_edge(),
+      //                                    blocked, nullptr, elevations, fn);
+      //   // // TODO: costs - Add offset costs
+      //   // for (auto const foot_node :
+      //   //      {parking_edge.foot_left_, parking_edge.foot_right_}) {
+      //   //   if (foot_node == node_idx_t::invalid()) {
+      //   //     continue;
+      //   //   }
+      //   //   fn(node{foot_node, node_type::kFoot,
+      //   //           w.node_properties_[foot_node].from_level(),
+      //   //           direction::kForward, 0},
+      //   //      kSwitchPenalty, 0, way_idx_t::invalid(), 0, 0,
+      //   //      elevation_storage::elevation{}, false);
+      //   // }
+      // } else if (kBwd) {
+      //   adjacent<SearchDir, WithBlocked>(params, w, n.from_parking_edge(),
+      //                                    blocked, nullptr, elevations, fn);
+      // }
+      // return;
+    }
 
     auto const is_parking =
         !UseParking || w.node_properties_[n.n_].is_parking() ||
@@ -316,27 +396,62 @@ struct car_parking {
           for_each_parking_edge(
               w, n.n_, [&](parking_edge_idx_t const parking_edge_idx) {
                 auto const& parking_edge = w.parking_edges_[parking_edge_idx];
-                if (parking_edge.car_left_ != n.n_ &&
-                    parking_edge.car_right_ != n.n_) {
-                  return;
-                }
-                for (auto const foot_node :
-                     {parking_edge.foot_left_, parking_edge.foot_right_}) {
-                  if (foot_node == node_idx_t::invalid()) {
+                for (auto car_offset = 0U; car_offset < 2U; ++car_offset) {
+                  auto const car_node = car_offset == 0
+                                            ? parking_edge.car_left_
+                                            : parking_edge.car_right_;
+                  if (car_node != n.n_) {
                     continue;
                   }
-                  auto const way = way_idx_t::invalid();  // TODO Use way_idx
-                                                          // of parking area ?
-                  fn(node{foot_node, node_type::kFoot,
-                          w.node_properties_[foot_node].from_level(),
-                          direction::kForward, 0},
-                     kSwitchPenalty, 0, way, 0, 0,
-                     elevation_storage::elevation{}, false);
+                  for (auto foot_offset = 0U; foot_offset < 2U; ++foot_offset) {
+                    auto const foot_node = foot_offset == 0
+                                               ? parking_edge.foot_left_
+                                               : parking_edge.foot_right_;
+                    if (foot_node == node_idx_t::invalid()) {
+                      continue;
+                    }
+                    auto const encoded = encode_parking_node(
+                        parking_edge_idx,
+                        w.node_properties_[foot_node].from_level(), SearchDir,
+                        car_offset, foot_offset);
+                    fmt::println(
+                        "ENCODED: (n: {} car: {} / {}, foot: {} / {})  ->  (n: "
+                        "{} way: {})",
+                        n.n_, car_node, car_offset, foot_node, foot_offset,
+                        encoded.n_, encoded.way_);
+                    auto const cost = kSwitchPenalty;  // TODO:offset- Add costs
+                    fn(std::move(encoded), cost, 0, way_idx_t::invalid(), 0, 0,
+                       elevation_storage::elevation{}, false);
+                  }
                 }
+                // // for (auto const [car_offset, car_node] :
+                // //      {{0, parking_edge.car_left_},
+                // //       {1, parking_edge.car_right_}}) {
+                // // }
+                // // TODO Keep start check here
+                // if (parking_edge.car_left_ != n.n_ &&
+                //     parking_edge.car_right_ != n.n_) {
+                //   return;
+                // }
+                // for (auto const foot_node :
+                //      {parking_edge.foot_left_, parking_edge.foot_right_}) {
+                //   if (foot_node == node_idx_t::invalid()) {
+                //     continue;
+                //   }
+                //   auto const way = way_idx_t::invalid();  // TODO Use way_idx
+                //                                           // of parking area
+                //                                           ?
+                //   fn(node{foot_node, node_type::kFoot,
+                //           w.node_properties_[foot_node].from_level(),
+                //           direction::kForward, 0},
+                //      kSwitchPenalty, 0, way, 0, 0,
+                //      elevation_storage::elevation{}, false);
+                // }
               });
         }
       }
       if (kBwd && n.is_foot_node()) {
+        fmt::println("DEBUG DEBUG -- BACKWARDS");
         if (w.has_parking_edges_.test(n.n_)) {
           for_each_parking_edge(
               w, n.n_, [&](parking_edge_idx_t const parking_edge_idx) {
