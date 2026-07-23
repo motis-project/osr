@@ -61,6 +61,16 @@ struct restriction {
   way_pos_t applies_to_bus_ : 1;
 };
 
+struct shortcut {
+  friend bool operator==(shortcut, shortcut) = default;
+
+  // Persisted shortcut edge from the owning shortcuts_ bucket to to_, created
+  // by contracting via_.
+  node_idx_t to_{};
+  node_idx_t via_{};
+  distance_t distance_{};
+};
+
 struct way_properties {
   constexpr bool is_accessible() const {
     return is_car_accessible() || is_bike_accessible() ||
@@ -366,6 +376,8 @@ struct ways {
     vecvec<node_idx_t, way_idx_t> node_ways_;
     vecvec<node_idx_t, std::uint16_t> node_in_way_idx_;
     vecvec<node_idx_t, turn_bearing> node_turn_bearings_;
+    // Shortcut adjacency, bucketed by source node.
+    vecvec<node_idx_t, shortcut> shortcuts_;
 
     bitvec<node_idx_t> node_is_restricted_;
     vecvec<node_idx_t, restriction> node_restrictions_;
