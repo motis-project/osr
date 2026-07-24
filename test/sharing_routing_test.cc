@@ -325,6 +325,33 @@ void verify_source_match_fallback(search_profile const profile) {
   ASSERT_FALSE(result->segments_.empty());
 }
 
+template <typename Profile>
+void verify_cached_endpoint_matching() {
+  auto const& l = *sharing_routing_test::lookup_;
+  auto const endpoint = location{{49.000045, 8.002800}, kNoLevel};
+  auto const params = typename Profile::parameters{};
+  auto const raw = l.get_raw_match(endpoint, 50.0);
+  auto const uncached = l.match_endpoint<Profile>(
+      params, endpoint, true, direction::kForward, 50.0, nullptr, false);
+  auto const cached =
+      l.match_endpoint<Profile>(params, endpoint, true, direction::kForward,
+                                50.0, nullptr, false, std::nullopt, raw);
+
+  ASSERT_EQ(uncached.size(), cached.size());
+  for (auto const& candidate : cached) {
+    auto const expected =
+        utl::find_if(uncached, [&](way_candidate const& other) {
+          return candidate.way_ == other.way_ &&
+                 candidate.vehicle_match_ == other.vehicle_match_;
+        });
+    ASSERT_NE(end(uncached), expected);
+    EXPECT_EQ(candidate.left_.node_, expected->left_.node_);
+    EXPECT_EQ(candidate.left_.cost_, expected->left_.cost_);
+    EXPECT_EQ(candidate.right_.node_, expected->right_.node_);
+    EXPECT_EQ(candidate.right_.cost_, expected->right_.cost_);
+  }
+}
+
 TEST_F(sharing_routing_test, bike_returns_at_destination_road_node) {
   verify_sharing_route<bike_sharing>(search_profile::kBikeSharing, mode::kBike);
 }
@@ -352,6 +379,14 @@ TEST_F(sharing_routing_test, bike_can_return_at_exact_coordinate) {
 TEST_F(sharing_routing_test, car_can_return_at_exact_coordinate) {
   verify_exact_coordinate_return<car_sharing<track_node_tracking>>(
       search_profile::kCarSharing, mode::kCar);
+}
+
+TEST_F(sharing_routing_test, cached_bike_endpoint_matches_uncached) {
+  verify_cached_endpoint_matching<bike_sharing>();
+}
+
+TEST_F(sharing_routing_test, cached_car_endpoint_matches_uncached) {
+  verify_cached_endpoint_matching<car_sharing<track_node_tracking>>();
 }
 
 TEST_F(sharing_routing_test, bike_falls_back_to_second_destination_match) {

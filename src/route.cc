@@ -387,7 +387,27 @@ struct ranked_match_cursor {
     return {next(foot_idx_, false), next(vehicle_idx_, true)};
   }
 
+  template <typename Fn>
+  bool for_each_in_stage(unsigned const stage, Fn&& fn) {
+    do {
+      auto const [foot, vehicle] = next();
+      if (foot == nullptr && vehicle == nullptr) {
+        return true;
+      }
+      for (auto const* match : {foot, vehicle}) {
+        if (match != nullptr) {
+          fn(*match);
+        }
+      }
+    } while (stage == kAllRemainingStage);
+    return false;
+  }
+
+  static constexpr auto kStageCount = 3U;
+
 private:
+  static constexpr auto kAllRemainingStage = kStageCount - 1U;
+
   way_candidate const* next(std::size_t& idx, bool const vehicle) {
     while (idx != matches_.size() && matches_[idx].vehicle_match_ != vehicle) {
       ++idx;
@@ -792,23 +812,23 @@ std::optional<path> route_dijkstra(
     auto seeds = std::vector<source_seed<P>>{};
     auto source_matches = ranked_match_cursor{from_match};
     auto should_continue = true;
-    while (true) {
-      auto const [foot, vehicle] = source_matches.next();
-      if (foot == nullptr && vehicle == nullptr) {
-        break;
-      }
-      for (auto const* start : {foot, vehicle}) {
-        if (start == nullptr ||
-            utl::none_of(to_match, [&](way_candidate const& end) {
-              return w.r_->way_component_[start->way_] ==
-                     w.r_->way_component_[end.way_];
-            })) {
-          continue;
-        }
-        add_source_match<P>(params, w, from.lvl_, *start, max, dir, start_time,
-                            seeds, d);
-      }
+    for (auto stage = 0U; stage != ranked_match_cursor::kStageCount; ++stage) {
+      auto const exhausted = source_matches.for_each_in_stage(
+          stage, [&](way_candidate const& start) {
+            if (utl::none_of(to_match, [&](way_candidate const& end) {
+                  return w.r_->way_component_[start.way_] ==
+                         w.r_->way_component_[end.way_];
+                })) {
+              return;
+            }
+            add_source_match<P>(params, w, from.lvl_, start, max, dir,
+                                start_time, seeds, d);
+          });
+
       if (d.pq_.empty()) {
+        if (exhausted) {
+          break;
+        }
         continue;
       }
       should_continue = d.run(params, w, *w.r_, max, start_time, blocked,
@@ -1021,29 +1041,28 @@ std::vector<std::optional<path>> route(
     auto seeds = std::vector<source_seed<P>>{};
     auto source_matches = ranked_match_cursor{from_match};
     auto should_continue = true;
-    while (true) {
-      auto const [foot, vehicle] = source_matches.next();
-      if (foot == nullptr && vehicle == nullptr) {
-        break;
-      }
-      for (auto const* start : {foot, vehicle}) {
-        if (start == nullptr) {
-          continue;
-        }
-        auto relevant = false;
-        for (auto j = 0U; j != to_match.size() && !relevant; ++j) {
-          relevant = !result[j].has_value() &&
-                     utl::any_of(to_match[j], [&](way_candidate const& end) {
-                       return w.r_->way_component_[start->way_] ==
-                              w.r_->way_component_[end.way_];
-                     });
-        }
-        if (relevant) {
-          add_source_match<P>(params, w, from.lvl_, *start, max, dir,
-                              start_time, seeds, d);
-        }
-      }
+    for (auto stage = 0U; stage != ranked_match_cursor::kStageCount; ++stage) {
+      auto const exhausted = source_matches.for_each_in_stage(
+          stage, [&](way_candidate const& start) {
+            auto relevant = false;
+            for (auto j = 0U; j != to_match.size() && !relevant; ++j) {
+              relevant =
+                  !result[j].has_value() &&
+                  utl::any_of(to_match[j], [&](way_candidate const& end) {
+                    return w.r_->way_component_[start.way_] ==
+                           w.r_->way_component_[end.way_];
+                  });
+            }
+            if (relevant) {
+              add_source_match<P>(params, w, from.lvl_, start, max, dir,
+                                  start_time, seeds, d);
+            }
+          });
+
       if (d.pq_.empty()) {
+        if (exhausted) {
+          break;
+        }
         continue;
       }
       should_continue = d.run(params, w, *w.r_, max, start_time, blocked,

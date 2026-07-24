@@ -243,16 +243,44 @@ struct lookup {
         match<P>(params, query, reverse, search_dir, max_match_distance,
                  blocked, start_time, raw_way_candidates);
     if constexpr (SharingProfile<P>) {
-      auto vehicle = match<typename P::vehiclep>(
-          P::vehicle_parameters(params), query, reverse, search_dir,
-          max_match_distance, blocked, start_time, raw_way_candidates);
-      if (!exact_return_allowed) {
+      auto vehicle = match_t{};
+      if (exact_return_allowed) {
+        vehicle = match<typename P::vehiclep>(
+            P::vehicle_parameters(params), query, reverse, search_dir,
+            max_match_distance, blocked, start_time, raw_way_candidates);
+      } else if (raw_way_candidates.has_value()) {
+        vehicle = complete_match<typename P::vehiclep>(
+            P::vehicle_parameters(params), query, reverse, search_dir,
+            max_match_distance, blocked, start_time, *raw_way_candidates);
         std::erase_if(vehicle, [&](way_candidate const& candidate) {
           return utl::none_of(matches, [&](way_candidate const& regular) {
-            return regular.way_ == candidate.way_ &&
-                   regular.segment_idx_ == candidate.segment_idx_;
+            return regular.way_ == candidate.way_;
           });
         });
+      } else {
+        vehicle.reserve(matches.size());
+        auto const approx_distance_lng_degrees =
+            geo::approx_distance_lng_degrees(query.pos_);
+        for (auto const& regular : matches) {
+          auto candidate = way_candidate{
+              .dist_to_way_ = regular.dist_to_way_,
+              .way_ = regular.way_,
+              .closest_point_on_way_ = regular.closest_point_on_way_,
+              .segment_idx_ = regular.segment_idx_};
+          candidate.left_ = find_next_node<typename P::vehiclep>(
+              P::vehicle_parameters(params), candidate, query,
+              direction::kBackward, query.lvl_, reverse, search_dir, blocked,
+              approx_distance_lng_degrees, candidate.closest_point_on_way_,
+              candidate.segment_idx_, start_time);
+          candidate.right_ = find_next_node<typename P::vehiclep>(
+              P::vehicle_parameters(params), candidate, query,
+              direction::kForward, query.lvl_, reverse, search_dir, blocked,
+              approx_distance_lng_degrees, candidate.closest_point_on_way_,
+              candidate.segment_idx_, start_time);
+          if (candidate.left_.valid() || candidate.right_.valid()) {
+            vehicle.emplace_back(std::move(candidate));
+          }
+        }
       }
       for (auto& candidate : vehicle) {
         candidate.vehicle_match_ = true;
