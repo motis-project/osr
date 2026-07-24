@@ -379,6 +379,27 @@ bool component_seen(ways const& w,
   return false;
 }
 
+struct ranked_match_cursor {
+  explicit ranked_match_cursor(match_view_t const matches)
+      : matches_{matches} {}
+
+  std::pair<way_candidate const*, way_candidate const*> next() {
+    return {next(foot_idx_, false), next(vehicle_idx_, true)};
+  }
+
+private:
+  way_candidate const* next(std::size_t& idx, bool const vehicle) {
+    while (idx != matches_.size() && matches_[idx].vehicle_match_ != vehicle) {
+      ++idx;
+    }
+    return idx != matches_.size() ? &matches_[idx++] : nullptr;
+  }
+
+  match_view_t matches_;
+  std::size_t foot_idx_{};
+  std::size_t vehicle_idx_{};
+};
+
 template <SharingProfile P>
 struct source_seed {
   typename P::node node_;
@@ -387,73 +408,45 @@ struct source_seed {
   duration_t duration_;
 };
 
-template <SharingProfile P, typename IsRelevant>
-std::vector<source_seed<P>> get_source_seeds(
-    typename P::parameters const& params,
-    ways const& w,
-    level_t const lvl,
-    match_view_t const matches,
-    cost_t const max,
-    direction const dir,
-    std::optional<routing_time_t> const start_time,
-    IsRelevant&& is_relevant) {
-  auto seeds = std::vector<source_seed<P>>{};
-  for (auto const& match : matches) {
-    if (!is_relevant(match)) {
-      continue;
-    }
-    auto const component = w.r_->way_component_[match.way_];
-    auto closest_in_component = std::numeric_limits<double>::max();
-    for (auto const& candidate : matches) {
-      if (is_relevant(candidate) &&
-          w.r_->way_component_[candidate.way_] == component) {
-        closest_in_component =
-            std::min(closest_in_component, candidate.dist_to_way_);
-      }
-    }
-    if (match.dist_to_way_ > closest_in_component + P::kMatchTolerance) {
-      continue;
-    }
-
-    for (auto const* nc : {&match.left_, &match.right_}) {
-      if (!nc->valid() || nc->cost_ >= max) {
-        continue;
-      }
-      auto const start_cost =
-          get_endpoint_cost<P>(params, w, match, *nc, flip(dir, nc->way_dir_),
-                               start_time, duration_t{0}, dir);
-      if (start_cost.cost_ == kInfeasible || start_cost.cost_ >= max) {
-        continue;
-      }
-      resolve_endpoint_node<P>(
-          *w.r_, match, nc->node_, lvl, dir, [&](auto const node) {
-            auto const existing = utl::find_if(
-                seeds,
-                [&](source_seed<P> const& seed) { return seed.node_ == node; });
-            auto const candidate = source_seed<P>{
-                node, &match, start_cost.cost_, start_cost.duration_};
-            if (existing == end(seeds)) {
-              seeds.emplace_back(candidate);
-            } else if (candidate.cost_ < existing->cost_ ||
-                       (candidate.cost_ == existing->cost_ &&
-                        candidate.match_->dist_to_way_ <
-                            existing->match_->dist_to_way_)) {
-              *existing = candidate;
-            }
-          });
-    }
-  }
-  return seeds;
-}
-
 template <SharingProfile P>
-void add_source_seeds(ways const& w,
-                      dijkstra<P>& d,
-                      std::span<source_seed<P> const> const seeds) {
-  for (auto const& seed : seeds) {
-    auto label = typename P::label{seed.node_, seed.cost_};
-    label.track(label, *w.r_, seed.match_->way_, seed.node_.get_node(), false);
-    d.add_start(w, label, seed.duration_);
+void add_source_match(typename P::parameters const& params,
+                      ways const& w,
+                      level_t const lvl,
+                      way_candidate const& match,
+                      cost_t const max,
+                      direction const dir,
+                      std::optional<routing_time_t> const start_time,
+                      std::vector<source_seed<P>>& seeds,
+                      dijkstra<P>& d) {
+  for (auto const* nc : {&match.left_, &match.right_}) {
+    if (!nc->valid() || nc->cost_ >= max) {
+      continue;
+    }
+    auto const start_cost =
+        get_endpoint_cost<P>(params, w, match, *nc, flip(dir, nc->way_dir_),
+                             start_time, duration_t{0}, dir);
+    if (start_cost.cost_ == kInfeasible || start_cost.cost_ >= max) {
+      continue;
+    }
+    resolve_endpoint_node<P>(
+        *w.r_, match, nc->node_, lvl, dir, [&](auto const node) {
+          auto const existing = utl::find_if(
+              seeds,
+              [&](source_seed<P> const& seed) { return seed.node_ == node; });
+          auto const candidate = source_seed<P>{node, &match, start_cost.cost_,
+                                                start_cost.duration_};
+          if (existing != end(seeds) && existing->cost_ <= candidate.cost_) {
+            return;
+          }
+          if (existing == end(seeds)) {
+            seeds.emplace_back(candidate);
+          } else {
+            *existing = candidate;
+          }
+          auto label = typename P::label{node, candidate.cost_};
+          label.track(label, *w.r_, match.way_, node.get_node(), false);
+          d.add_start(w, label, candidate.duration_);
+        });
   }
 }
 
@@ -559,31 +552,8 @@ best_candidate(typename P::parameters const& params,
     }
   };
 
-  auto selected = std::optional<result_t>{};
-  auto closest_reachable_match = std::optional<double>{};
-  auto const start_component =
-      start != nullptr
-          ? std::make_optional(w.r_->way_component_[start->way_])
-          : std::nullopt;
-  auto component_seen_ctr = 0;
-  for (auto const [j, dest] : utl::enumerate(m)) {
-    if constexpr (SharingProfile<P>) {
-      if (closest_reachable_match.has_value() &&
-          dest.dist_to_way_ > *closest_reachable_match + P::kMatchTolerance) {
-        break;
-      }
-    }
-    if (start_component.has_value() &&
-        *start_component != w.r_->way_component_[dest.way_]) {
-      continue;
-    }
-    if (!should_continue && ++component_seen_ctr > 10) {
-      break;
-    }
-    if (std::pow(dest.dist_to_way_, 2) > limit_squared_max_matching_distance &&
-        j > kBottomKDefinitelyConsidered) {
-      break;
-    }
+  auto const evaluate =
+      [&](way_candidate const& dest) -> std::optional<result_t> {
     best_node = P::node::invalid();
     best_cost = path{.cost_ = std::numeric_limits<cost_t>::max(),
                      .duration_ = kMaxDuration};
@@ -594,32 +564,76 @@ best_candidate(typename P::parameters const& params,
         get_best(dest, x);
       }
     }
+    return best != nullptr && best_cost.cost_ < max
+               ? std::optional{result_t{best, &dest, best_node, best_cost}}
+               : std::nullopt;
+  };
 
-    if (best != nullptr) {
-      if constexpr (SharingProfile<P>) {
-        if (!closest_reachable_match.has_value()) {
-          closest_reachable_match = dest.dist_to_way_;
+  if constexpr (SharingProfile<P>) {
+    auto matches = ranked_match_cursor{m};
+    auto component_seen_ctr = 0U;
+    for (auto rank = 0U;; ++rank) {
+      auto selected = std::optional<result_t>{};
+      auto stop = false;
+      auto const [foot, vehicle] = matches.next();
+      if (foot == nullptr && vehicle == nullptr) {
+        break;
+      }
+      for (auto const* dest : {foot, vehicle}) {
+        if (dest == nullptr) {
+          continue;
         }
-        auto const is_better =
-            !selected.has_value() ||
-            best_cost.cost_ < std::get<3>(*selected).cost_ ||
-            (best_cost.cost_ == std::get<3>(*selected).cost_ &&
-             (best_cost.duration_ < std::get<3>(*selected).duration_ ||
-              (best_cost.duration_ == std::get<3>(*selected).duration_ &&
-               dest.dist_to_way_ < std::get<1>(*selected)->dist_to_way_)));
-        if (is_better) {
-          selected = result_t{best, &dest, best_node, best_cost};
+        if (!should_continue && ++component_seen_ctr > 10U) {
+          stop = true;
+          break;
         }
-      } else {
-        return best_cost.cost_ < max
-                   ? std::optional{result_t{best, &dest, best_node, best_cost}}
-                   : std::nullopt;
+        if (std::pow(dest->dist_to_way_, 2) >
+                limit_squared_max_matching_distance &&
+            rank > kBottomKDefinitelyConsidered) {
+          continue;
+        }
+        auto candidate = evaluate(*dest);
+        if (!candidate.has_value()) {
+          continue;
+        }
+        auto const& candidate_path = std::get<3>(*candidate);
+        if (!selected.has_value() ||
+            candidate_path.cost_ < std::get<3>(*selected).cost_ ||
+            (candidate_path.cost_ == std::get<3>(*selected).cost_ &&
+             (candidate_path.duration_ < std::get<3>(*selected).duration_ ||
+              (candidate_path.duration_ == std::get<3>(*selected).duration_ &&
+               dest->dist_to_way_ < std::get<1>(*selected)->dist_to_way_)))) {
+          selected = std::move(candidate);
+        }
+      }
+      if (selected.has_value()) {
+        return selected;
+      }
+      if (stop) {
+        return std::nullopt;
+      }
+    }
+  } else {
+    auto const start_component = w.r_->way_component_[start->way_];
+    auto component_seen_ctr = 0U;
+    for (auto const [j, dest] : utl::enumerate(m)) {
+      if (start_component != w.r_->way_component_[dest.way_]) {
+        continue;
+      }
+      if (!should_continue && ++component_seen_ctr > 10U) {
+        break;
+      }
+      if (std::pow(dest.dist_to_way_, 2) >
+              limit_squared_max_matching_distance &&
+          j > kBottomKDefinitelyConsidered) {
+        break;
+      }
+      if (auto const candidate = evaluate(dest); candidate.has_value()) {
+        return candidate;
       }
     }
   }
-  return selected.has_value() && std::get<3>(*selected).cost_ < max
-             ? selected
-             : std::nullopt;
+  return std::nullopt;
 }
 
 std::optional<path> try_direct(osr::location const& from,
@@ -774,32 +788,44 @@ std::optional<path> route_dijkstra(
       kMaxMatchingDistanceSquaredRatio;
 
   if constexpr (SharingProfile<P>) {
-    auto const is_relevant = [&](way_candidate const& start) {
-      return utl::any_of(to_match, [&](way_candidate const& end) {
-        return w.r_->way_component_[start.way_] ==
-               w.r_->way_component_[end.way_];
-      });
-    };
-    auto const seeds = get_source_seeds<P>(params, w, from.lvl_, from_match,
-                                           max, dir, start_time, is_relevant);
-    if (seeds.empty()) {
-      return std::nullopt;
-    }
     d.reset(max);
-    add_source_seeds<P>(w, d, seeds);
-    auto const search_complete = d.run(params, w, *w.r_, max, start_time,
-                                       blocked, sharing, elevations, dir);
-    auto const c = best_candidate<P>(params, w, d, to.lvl_, to_match, max, dir,
-                                     start_time, search_complete, nullptr,
-                                     limit_squared_max_matching_distance);
-    if (!c.has_value()) {
-      return std::nullopt;
+    auto seeds = std::vector<source_seed<P>>{};
+    auto source_matches = ranked_match_cursor{from_match};
+    auto should_continue = true;
+    while (true) {
+      auto const [foot, vehicle] = source_matches.next();
+      if (foot == nullptr && vehicle == nullptr) {
+        break;
+      }
+      for (auto const* start : {foot, vehicle}) {
+        if (start == nullptr ||
+            utl::none_of(to_match, [&](way_candidate const& end) {
+              return w.r_->way_component_[start->way_] ==
+                     w.r_->way_component_[end.way_];
+            })) {
+          continue;
+        }
+        add_source_match<P>(params, w, from.lvl_, *start, max, dir, start_time,
+                            seeds, d);
+      }
+      if (d.pq_.empty()) {
+        continue;
+      }
+      should_continue = d.run(params, w, *w.r_, max, start_time, blocked,
+                              sharing, elevations, dir) &&
+                        should_continue;
+      auto const c = best_candidate<P>(
+          params, w, d, to.lvl_, to_match, max, dir, start_time,
+          should_continue, nullptr, limit_squared_max_matching_distance);
+      if (c.has_value()) {
+        auto const [nc, wc, node, p] = *c;
+        auto const& seed = get_source_seed<P>(d, seeds, node);
+        return reconstruct<P>(params, w, l, blocked, sharing, elevations, d,
+                              from, to, *seed.match_, *wc, *nc, node, p.cost_,
+                              dir, start_time);
+      }
     }
-    auto const [nc, wc, node, p] = *c;
-    auto const& seed = get_source_seed<P>(d, seeds, node);
-    return reconstruct<P>(params, w, l, blocked, sharing, elevations, d, from,
-                          to, *seed.match_, *wc, *nc, node, p.cost_, dir,
-                          start_time);
+    return std::nullopt;
   } else {
     d.reset(max);
     auto should_continue = true;
@@ -986,59 +1012,75 @@ std::vector<std::optional<path>> route(
   auto const distance_lng_degrees = geo::approx_distance_lng_degrees(from.pos_);
 
   if constexpr (SharingProfile<P>) {
-    auto direct = std::vector<bool>(to_match.size(), false);
     for (auto i = 0U; i != to.size(); ++i) {
       if (auto const p = try_direct(from, to[i]); p.has_value()) {
         result[i] = p;
-        direct[i] = true;
       }
-    }
-    auto const is_relevant = [&](way_candidate const& start) {
-      for (auto j = 0U; j != to_match.size(); ++j) {
-        if (!direct[j] &&
-            utl::any_of(to_match[j], [&](way_candidate const& end) {
-              return w.r_->way_component_[start.way_] ==
-                     w.r_->way_component_[end.way_];
-            })) {
-          return true;
-        }
-      }
-      return false;
-    };
-    auto const seeds = get_source_seeds<P>(params, w, from.lvl_, from_match,
-                                           max, dir, start_time, is_relevant);
-    if (seeds.empty()) {
-      return result;
     }
     d.reset(max);
-    add_source_seeds<P>(w, d, seeds);
-    auto const search_complete = d.run(params, w, *w.r_, max, start_time,
-                                       blocked, sharing, elevations, dir);
+    auto seeds = std::vector<source_seed<P>>{};
+    auto source_matches = ranked_match_cursor{from_match};
+    auto should_continue = true;
+    while (true) {
+      auto const [foot, vehicle] = source_matches.next();
+      if (foot == nullptr && vehicle == nullptr) {
+        break;
+      }
+      for (auto const* start : {foot, vehicle}) {
+        if (start == nullptr) {
+          continue;
+        }
+        auto relevant = false;
+        for (auto j = 0U; j != to_match.size() && !relevant; ++j) {
+          relevant = !result[j].has_value() &&
+                     utl::any_of(to_match[j], [&](way_candidate const& end) {
+                       return w.r_->way_component_[start->way_] ==
+                              w.r_->way_component_[end.way_];
+                     });
+        }
+        if (relevant) {
+          add_source_match<P>(params, w, from.lvl_, *start, max, dir,
+                              start_time, seeds, d);
+        }
+      }
+      if (d.pq_.empty()) {
+        continue;
+      }
+      should_continue = d.run(params, w, *w.r_, max, start_time, blocked,
+                              sharing, elevations, dir) &&
+                        should_continue;
 
-    for (auto j = 0U; j != result.size(); ++j) {
-      if (direct[j]) {
-        continue;
+      auto found = 0U;
+      for (auto j = 0U; j != result.size(); ++j) {
+        if (result[j].has_value()) {
+          ++found;
+          continue;
+        }
+        auto const limit_squared_max_matching_distance =
+            geo::approx_squared_distance(from.pos_, to[j].pos_,
+                                         distance_lng_degrees) /
+            kMaxMatchingDistanceSquaredRatio;
+        auto const c = best_candidate<P>(
+            params, w, d, to[j].lvl_, to_match[j], max, dir, start_time,
+            should_continue, nullptr, limit_squared_max_matching_distance);
+        if (!c.has_value()) {
+          continue;
+        }
+        auto [nc, wc, n, p] = *c;
+        d.cost_.at(n.get_key()).write(n, p);
+        if (do_reconstruct(p)) {
+          auto const& seed = get_source_seed<P>(d, seeds, n);
+          p = reconstruct<P>(params, w, l, blocked, sharing, elevations, d,
+                             from, to[j], *seed.match_, *wc, *nc, n, p.cost_,
+                             dir, start_time);
+          p.uses_elevator_ = true;
+        }
+        result[j] = std::move(p);
+        ++found;
       }
-      auto const limit_squared_max_matching_distance =
-          geo::approx_squared_distance(from.pos_, to[j].pos_,
-                                       distance_lng_degrees) /
-          kMaxMatchingDistanceSquaredRatio;
-      auto const c = best_candidate<P>(
-          params, w, d, to[j].lvl_, to_match[j], max, dir, start_time,
-          search_complete, nullptr, limit_squared_max_matching_distance);
-      if (!c.has_value()) {
-        continue;
+      if (found == result.size()) {
+        return result;
       }
-      auto [nc, wc, n, p] = *c;
-      d.cost_.at(n.get_key()).write(n, p);
-      if (do_reconstruct(p)) {
-        auto const& seed = get_source_seed<P>(d, seeds, n);
-        p = reconstruct<P>(params, w, l, blocked, sharing, elevations, d, from,
-                           to[j], *seed.match_, *wc, *nc, n, p.cost_, dir,
-                           start_time);
-        p.uses_elevator_ = true;
-      }
-      result[j] = std::move(p);
     }
     return result;
   } else {
@@ -1084,9 +1126,9 @@ std::vector<std::optional<path>> route(
                                            distance_lng_degrees) /
               kMaxMatchingDistanceSquaredRatio;
 
-          auto const c = best_candidate<P>(
-              params, w, d, t.lvl_, m, max, dir, start_time, should_continue,
-              &start, limit_squared_max_matching_distance);
+          auto const c = best_candidate<P>(params, w, d, t.lvl_, m, max, dir,
+                                           start_time, should_continue, &start,
+                                           limit_squared_max_matching_distance);
           if (c.has_value()) {
             auto [nc, wc, n, p] = *c;
             d.cost_.at(n.get_key()).write(n, p);
@@ -1193,10 +1235,18 @@ std::optional<path> route_dijkstra(
     std::optional<routing_time_t> const start_time) {
   return with_profile(profile, [&]<Profile P>(P&&) -> std::optional<path> {
     auto const& pp = std::get<typename P::parameters>(params);
-    auto const from_match = l.match<P>(pp, from, false, dir, max_match_distance,
-                                       blocked, start_time);
-    auto const to_match =
-        l.match<P>(pp, to, true, dir, max_match_distance, blocked, start_time);
+    auto const match = [&](location const& endpoint, bool const reverse) {
+      if constexpr (SharingProfile<P>) {
+        return l.match_endpoint<P>(pp, endpoint, reverse, dir,
+                                   max_match_distance, blocked, false,
+                                   start_time);
+      } else {
+        return l.match<P>(pp, endpoint, reverse, dir, max_match_distance,
+                          blocked, start_time);
+      }
+    };
+    auto const from_match = match(from, false);
+    auto const to_match = match(to, true);
 
     if (from_match.empty() || to_match.empty()) {
       return std::nullopt;
@@ -1340,10 +1390,8 @@ std::optional<path> route(profile_parameters const& params,
                           routing_algorithm algo,
                           std::optional<routing_time_t> const start_time,
                           route_endpoint_options const& endpoint_options) {
-  if ((endpoint_options.exact_return_at_from_ ||
-       endpoint_options.exact_return_at_to(0U)) &&
-      (profile == search_profile::kBikeSharing ||
-       profile == search_profile::kCarSharing)) {
+  if (profile == search_profile::kBikeSharing ||
+      profile == search_profile::kCarSharing) {
     return with_profile(profile, [&]<Profile P>(P&&) -> std::optional<path> {
       auto const& pp = std::get<typename P::parameters>(params);
       auto const from_match = l.match_endpoint<P>(
@@ -1360,9 +1408,7 @@ std::optional<path> route(profile_parameters const& params,
                             elevations);
     });
   }
-  if (profile == search_profile::kBikeSharing ||
-      profile == search_profile::kCarSharing ||
-      profile == search_profile::kCarParkingWheelchair ||
+  if (profile == search_profile::kCarParkingWheelchair ||
       profile == search_profile::kCarParking ||
       profile == search_profile::kHgv) {
     algo = routing_algorithm::kDijkstra;  // TODO

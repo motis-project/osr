@@ -30,7 +30,6 @@ struct bike_sharing {
   static constexpr auto const kStartSwitchPenalty = cost_t{30U};
   // bike -> trailing foot
   static constexpr auto const kEndSwitchPenalty = cost_t{30U};
-  static constexpr auto const kMatchTolerance = 50.0;
 
   static constexpr auto const kAdditionalWayProperties =
       way_properties{.is_foot_accessible_ = true,

@@ -72,6 +72,7 @@ struct way_candidate {
   node_candidate left_{}, right_{};
   geo::latlng closest_point_on_way_{};
   unsigned segment_idx_{};
+  bool vehicle_match_{};
   bool exact_return_{};
 };
 
@@ -242,21 +243,24 @@ struct lookup {
         match<P>(params, query, reverse, search_dir, max_match_distance,
                  blocked, start_time, raw_way_candidates);
     if constexpr (SharingProfile<P>) {
-      if (exact_return_allowed) {
-        auto exact = match<typename P::vehiclep>(
-            P::vehicle_parameters(params), query, reverse, search_dir,
-            max_match_distance, blocked, start_time, raw_way_candidates);
-        for (auto& candidate : exact) {
-          candidate.exact_return_ = true;
-          std::erase_if(matches, [&](way_candidate const& regular) {
+      auto vehicle = match<typename P::vehiclep>(
+          P::vehicle_parameters(params), query, reverse, search_dir,
+          max_match_distance, blocked, start_time, raw_way_candidates);
+      if (!exact_return_allowed) {
+        std::erase_if(vehicle, [&](way_candidate const& candidate) {
+          return utl::none_of(matches, [&](way_candidate const& regular) {
             return regular.way_ == candidate.way_ &&
                    regular.segment_idx_ == candidate.segment_idx_;
           });
-        }
-        matches.insert(end(matches), std::make_move_iterator(begin(exact)),
-                       std::make_move_iterator(end(exact)));
-        utl::sort(matches);
+        });
       }
+      for (auto& candidate : vehicle) {
+        candidate.vehicle_match_ = true;
+        candidate.exact_return_ = exact_return_allowed;
+      }
+      matches.insert(end(matches), std::make_move_iterator(begin(vehicle)),
+                     std::make_move_iterator(end(vehicle)));
+      utl::sort(matches);
     }
     return matches;
   }

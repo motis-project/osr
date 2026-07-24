@@ -47,8 +47,9 @@ struct sharing_routing_test : public ::testing::Test {
 };
 
 struct test_sharing_data {
-  explicit test_sharing_data(ways const& w) {
-    auto const start_node = w.find_node_idx(osm_node_idx_t{1U}).value();
+  explicit test_sharing_data(
+      ways const& w, osm_node_idx_t const start_osm_node = osm_node_idx_t{1U}) {
+    auto const start_node = w.find_node_idx(start_osm_node).value();
     auto const additional_node = node_idx_t{w.n_nodes()};
     auto const size =
         static_cast<bitvec<node_idx_t>::size_type>(w.n_nodes() + 1U);
@@ -98,17 +99,19 @@ void verify_sharing_route(search_profile const profile,
             nullptr, &sharing, nullptr, routing_algorithm::kDijkstra);
   ASSERT_TRUE(forward.has_value());
 
-  auto const backward_source_matches =
-      l.match<Profile>(params, to, false, direction::kBackward, 50.0, nullptr);
+  auto const backward_source_matches = l.match_endpoint<Profile>(
+      params, to, false, direction::kBackward, 50.0, nullptr, false);
   ASSERT_GE(backward_source_matches.size(), 2U);
-  EXPECT_EQ(osm_way_idx_t{200U},
-            w.way_osm_idx_[backward_source_matches.front().way_]);
-  EXPECT_TRUE(
-      utl::any_of(backward_source_matches, [&](way_candidate const& wc) {
-        return w.way_osm_idx_[wc.way_] == osm_way_idx_t{100U} &&
-               wc.dist_to_way_ <= backward_source_matches.front().dist_to_way_ +
-                                      Profile::kMatchTolerance;
-      }));
+  auto const closest_foot =
+      utl::find_if(backward_source_matches,
+                   [](way_candidate const& wc) { return !wc.vehicle_match_; });
+  auto const closest_vehicle =
+      utl::find_if(backward_source_matches,
+                   [](way_candidate const& wc) { return wc.vehicle_match_; });
+  ASSERT_NE(end(backward_source_matches), closest_foot);
+  ASSERT_NE(end(backward_source_matches), closest_vehicle);
+  EXPECT_EQ(osm_way_idx_t{200U}, w.way_osm_idx_[closest_foot->way_]);
+  EXPECT_EQ(osm_way_idx_t{100U}, w.way_osm_idx_[closest_vehicle->way_]);
 
   auto const backward =
       route(params, w, l, profile, to, from, 3600U, direction::kBackward, 50.0,
@@ -188,13 +191,20 @@ void verify_exact_coordinate_return(search_profile const profile,
 
   auto const endpoint_matches = l.match_endpoint<Profile>(
       params, to, true, direction::kForward, 50.0, nullptr, true);
-  auto const road_matches = utl::count_if(endpoint_matches, [&](auto const& m) {
-    return w.way_osm_idx_[m.way_] == osm_way_idx_t{100U};
-  });
-  ASSERT_EQ(1U, road_matches);
-  EXPECT_TRUE(utl::find_if(endpoint_matches, [&](auto const& m) {
-                return w.way_osm_idx_[m.way_] == osm_way_idx_t{100U};
-              })->exact_return_);
+  auto const regular_road =
+      utl::find_if(endpoint_matches, [&](way_candidate const& m) {
+        return w.way_osm_idx_[m.way_] == osm_way_idx_t{100U} &&
+               !m.vehicle_match_;
+      });
+  auto const exact_road =
+      utl::find_if(endpoint_matches, [&](way_candidate const& m) {
+        return w.way_osm_idx_[m.way_] == osm_way_idx_t{100U} &&
+               m.vehicle_match_;
+      });
+  ASSERT_NE(end(endpoint_matches), regular_road);
+  ASSERT_NE(end(endpoint_matches), exact_road);
+  EXPECT_FALSE(regular_road->exact_return_);
+  EXPECT_TRUE(exact_road->exact_return_);
 
   auto const regular =
       route(params, w, l, profile, from, to, 3600U, direction::kForward, 50.0,
@@ -241,6 +251,80 @@ void verify_exact_coordinate_return(search_profile const profile,
   }
 }
 
+template <typename Profile>
+void verify_destination_match_fallback(search_profile const profile) {
+  auto const& w = *sharing_routing_test::ways_;
+  auto const& l = *sharing_routing_test::lookup_;
+  auto const data = test_sharing_data{w, osm_node_idx_t{31U}};
+  auto const sharing = data.view(w);
+  auto const from = location{{49.010000, 8.000000}, kNoLevel};
+  auto const to = location{{49.010045, 8.002800}, kNoLevel};
+  auto const params = typename Profile::parameters{};
+
+  auto const matches = l.match_endpoint<Profile>(
+      params, to, true, direction::kForward, 50.0, nullptr, false);
+  auto const closest_foot = utl::find_if(
+      matches,
+      [](way_candidate const& match) { return !match.vehicle_match_; });
+  auto const closest_vehicle = utl::find_if(
+      matches, [](way_candidate const& match) { return match.vehicle_match_; });
+  auto const fallback_foot =
+      utl::find_if(matches, [&](way_candidate const& match) {
+        return !match.vehicle_match_ &&
+               w.way_osm_idx_[match.way_] == osm_way_idx_t{300U};
+      });
+  ASSERT_NE(end(matches), closest_foot);
+  ASSERT_NE(end(matches), closest_vehicle);
+  ASSERT_NE(end(matches), fallback_foot);
+  EXPECT_EQ(osm_way_idx_t{400U}, w.way_osm_idx_[closest_foot->way_]);
+  EXPECT_EQ(osm_way_idx_t{400U}, w.way_osm_idx_[closest_vehicle->way_]);
+  EXPECT_EQ(w.r_->way_component_[closest_foot->way_],
+            w.r_->way_component_[fallback_foot->way_]);
+
+  auto const result =
+      route(params, w, l, profile, from, to, 3600U, direction::kForward, 50.0,
+            nullptr, &sharing, nullptr, routing_algorithm::kDijkstra);
+  ASSERT_TRUE(result.has_value());
+  ASSERT_FALSE(result->segments_.empty());
+}
+
+template <typename Profile>
+void verify_source_match_fallback(search_profile const profile) {
+  auto const& w = *sharing_routing_test::ways_;
+  auto const& l = *sharing_routing_test::lookup_;
+  auto const data = test_sharing_data{w, osm_node_idx_t{61U}};
+  auto const sharing = data.view(w);
+  auto const from = location{{49.020045, 8.000200}, kNoLevel};
+  auto const to = location{{49.020000, 8.002800}, kNoLevel};
+  auto const params = typename Profile::parameters{};
+
+  auto const matches = l.match_endpoint<Profile>(
+      params, from, false, direction::kForward, 50.0, nullptr, false);
+  auto const closest_foot = utl::find_if(
+      matches,
+      [](way_candidate const& match) { return !match.vehicle_match_; });
+  auto const closest_vehicle = utl::find_if(
+      matches, [](way_candidate const& match) { return match.vehicle_match_; });
+  auto const fallback_foot =
+      utl::find_if(matches, [&](way_candidate const& match) {
+        return !match.vehicle_match_ &&
+               w.way_osm_idx_[match.way_] == osm_way_idx_t{500U};
+      });
+  ASSERT_NE(end(matches), closest_foot);
+  ASSERT_NE(end(matches), closest_vehicle);
+  ASSERT_NE(end(matches), fallback_foot);
+  EXPECT_EQ(osm_way_idx_t{600U}, w.way_osm_idx_[closest_foot->way_]);
+  EXPECT_EQ(osm_way_idx_t{600U}, w.way_osm_idx_[closest_vehicle->way_]);
+  EXPECT_EQ(w.r_->way_component_[closest_foot->way_],
+            w.r_->way_component_[fallback_foot->way_]);
+
+  auto const result =
+      route(params, w, l, profile, from, to, 3600U, direction::kForward, 50.0,
+            nullptr, &sharing, nullptr, routing_algorithm::kDijkstra);
+  ASSERT_TRUE(result.has_value());
+  ASSERT_FALSE(result->segments_.empty());
+}
+
 TEST_F(sharing_routing_test, bike_returns_at_destination_road_node) {
   verify_sharing_route<bike_sharing>(search_profile::kBikeSharing, mode::kBike);
 }
@@ -268,6 +352,24 @@ TEST_F(sharing_routing_test, bike_can_return_at_exact_coordinate) {
 TEST_F(sharing_routing_test, car_can_return_at_exact_coordinate) {
   verify_exact_coordinate_return<car_sharing<track_node_tracking>>(
       search_profile::kCarSharing, mode::kCar);
+}
+
+TEST_F(sharing_routing_test, bike_falls_back_to_second_destination_match) {
+  verify_destination_match_fallback<bike_sharing>(search_profile::kBikeSharing);
+}
+
+TEST_F(sharing_routing_test, car_falls_back_to_second_destination_match) {
+  verify_destination_match_fallback<car_sharing<track_node_tracking>>(
+      search_profile::kCarSharing);
+}
+
+TEST_F(sharing_routing_test, bike_falls_back_to_second_source_match) {
+  verify_source_match_fallback<bike_sharing>(search_profile::kBikeSharing);
+}
+
+TEST_F(sharing_routing_test, car_falls_back_to_second_source_match) {
+  verify_source_match_fallback<car_sharing<track_node_tracking>>(
+      search_profile::kCarSharing);
 }
 
 }  // namespace

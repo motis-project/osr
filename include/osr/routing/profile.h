@@ -190,7 +190,6 @@ concept SharingProfile =
       {
         P::vehicle_parameters(params)
       } -> std::same_as<typename P::vehiclep::parameters const&>;
-      { P::kMatchTolerance } -> std::convertible_to<double>;
       {
         P::resolve_exact_return_node(routing, way, node, level, search_dir, fn)
       } -> std::same_as<void>;
