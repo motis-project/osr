@@ -315,6 +315,8 @@ struct ways {
     }
 
     bool is_loop(way_idx_t const w) const {
+      utl::verify(w < way_nodes_.size(), "invalid way_idx: {} > {}", w,
+                  way_nodes_.size());
       return way_nodes_[w].back() == way_nodes_[w].front();
     }
 
@@ -358,6 +360,16 @@ struct ways {
 
     struct parking_edge {
       CISTA_COMPARABLE()
+
+      static way_idx_t encode_parking_edge(
+          ways::routing const& r, parking_edge_idx_t const parking_edge_idx) {
+        return way_idx_t{r.way_component_.size() + to_idx(parking_edge_idx)};
+      }
+
+      static parking_edge_idx_t decode_parking_edge(ways::routing const& r,
+                                                    way_idx_t const way_idx) {
+        return parking_edge_idx_t{to_idx(way_idx) - r.way_component_.size()};
+      }
 
       node_idx_t car_left_;
       node_idx_t car_right_;

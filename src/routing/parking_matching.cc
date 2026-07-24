@@ -251,4 +251,22 @@ void connect_parking_ways(
   utl::sort(w.r_->node_parking_edges_);
 }
 
+bool is_parking_way(ways::routing const& r, way_idx_t const way_idx) {
+  return way_idx >= r.way_component_.size() &&
+         way_idx < r.way_component_.size() + r.parking_edges_.size();
+}
+
+geo::polyline parking_way_polyline(ways::routing const& r,
+                                   way_idx_t const way_idx,
+                                   node_idx_t const from,
+                                   node_idx_t const to) {
+  utl::verify(is_parking_way(r, way_idx), "way {} is not a valid parking edge",
+              way_idx);
+  auto const& parking_edge =
+      r.parking_edges_[ways::routing::parking_edge::decode_parking_edge(
+          r, way_idx)];
+  return {r.node_positions_[from], parking_edge.car_extra_point_,
+          parking_edge.foot_extra_point_, r.node_positions_[to]};
+}
+
 }  // namespace osr

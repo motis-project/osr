@@ -35,6 +35,17 @@ struct connecting_way {
   elevation_storage::elevation elevation_{};
 };
 
+template <Profile P>
+bool is_regular_way(ways::routing const&, way_idx_t const way) {
+  return way != way_idx_t::invalid();
+}
+
+template <Profile P>
+  requires(is_parking<P>() == true)
+bool is_regular_way(ways::routing const& r, way_idx_t const way) {
+  return way != way_idx_t::invalid() && !is_parking_way(r, way);
+}
+
 template <direction SearchDir, bool WithBlocked, Profile P>
 inline connecting_way find_connecting_way(typename P::parameters const& params,
                                           ways const& w,
@@ -53,19 +64,13 @@ inline connecting_way find_connecting_way(typename P::parameters const& params,
           std::uint16_t const b_idx,
           elevation_storage::elevation const elevation, bool) {
         if (target == to && cost == expected_cost) {
-          auto const is_loop = way != way_idx_t::invalid() && r.is_loop(way) &&
+          auto const is_loop = is_regular_way<P>(*w.r_, way) &&
+                               r.is_loop(way) &&
                                static_cast<unsigned>(std::abs(a_idx - b_idx)) ==
                                    r.way_nodes_[way].size() - 2U;
           conn = {way, a_idx, b_idx, is_loop, dist, elevation};
         }
       });
-  if constexpr (is_parking<P>()) {
-    if (!conn.has_value()) {
-      fmt::println("ERROR: {} ({}) -> {} ({})", from.get_node(),
-                   P::node_type_to_str(from.type_), to.get_node(),
-                   P::node_type_to_str(to.type_));
-    }
-  }
   utl::verify(
       conn.has_value(), "no connecting way node/{} -> node/{} found {} {}",
       (sharing == nullptr || from.get_node() < sharing->additional_node_offset_)
@@ -132,7 +137,7 @@ inline double add_path(typename P::parameters const& params,
   segment.elevation_ = elevation;
   segment.mode_ = to.get_mode();
 
-  if (way != way_idx_t::invalid()) {
+  if (is_regular_way<P>(*w.r_, way)) {
     auto const start_idx = dir == direction::kBackward ? to_idx : from_idx;
     auto const end_idx = dir == direction::kBackward ? from_idx : to_idx;
     auto const is_reverse = (start_idx > end_idx) ^ is_loop;
@@ -186,15 +191,8 @@ inline double add_path(typename P::parameters const& params,
     segment.to_ = dir == direction::kBackward ? from.get_node() : to.get_node();
     if constexpr (is_parking<P>()) {
       segment.mode_ = mode::kParking;
-      // TODO Create polyline
-      auto const& parking_to = dir == direction::kBackward ? from : to;
-      auto const parking_edge =
-          w.r_->parking_edges_[parking_edge_idx_t{cista::to_idx(parking_to.n_)}];
-      auto const correct_to = P::decode_parking_node(*w.r_, parking_to);
-			segment.to_ = correct_to.get_node();
-      segment.polyline_ = {
-          get_node_pos(segment.from_), parking_edge.car_extra_point_,
-          parking_edge.foot_extra_point_, get_node_pos(segment.to_)};
+      segment.polyline_ =
+          parking_way_polyline(*w.r_, way, segment.from_, segment.to_);
     } else {
       segment.polyline_ = {get_node_pos(segment.from_),
                            get_node_pos(segment.to_)};
