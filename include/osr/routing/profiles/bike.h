@@ -33,7 +33,7 @@ template <bike_costing Costing,
           unsigned int ElevationUpCost,
           unsigned int ElevationExponentThousandth = 2100U>
 struct bike {
-  static constexpr auto const kMaxMatchDistance = 100U;
+  static constexpr auto const kMaxMatchDistance = 30U;
 
   struct parameters {
     using profile_t =
