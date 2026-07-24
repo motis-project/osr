@@ -24,7 +24,7 @@ struct bike_parking {
   using footp = foot<false>;
   using bikep = bike<bike_costing::kSafe, kElevationNoCost>;
 
-  static constexpr auto const kSwitchPenalty = cost_t{200U};
+  static constexpr auto const kSwitchPenalty = cost_t{20U};
   static constexpr auto const kMaxMatchDistance = bikep::kMaxMatchDistance;
 
   static constexpr auto const kAdditionalWayProperties =
