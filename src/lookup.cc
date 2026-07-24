@@ -139,21 +139,22 @@ match_t lookup::match(profile_parameters const& params,
   });
 }
 
-match_t lookup::match_endpoint(profile_parameters const& params,
-                               location const& query,
-                               bool const reverse,
-                               direction const search_dir,
-                               double const max_match_distance,
-                               bitvec<node_idx_t> const* blocked,
-                               search_profile const p,
-                               bool const exact_return_allowed,
-                               std::optional<std::span<raw_way_candidate const>>
-                                   raw_way_candidates) const {
+match_t lookup::match_endpoint(
+    profile_parameters const& params,
+    location const& query,
+    bool const reverse,
+    direction const search_dir,
+    double const max_match_distance,
+    bitvec<node_idx_t> const* blocked,
+    search_profile const p,
+    bool const exact_return_allowed,
+    std::optional<std::span<raw_way_candidate const>> raw_way_candidates,
+    bool const include_non_exact_vehicle_matches) const {
   return with_profile(p, [&]<Profile P>(P&&) {
-    return match_endpoint<P>(std::get<typename P::parameters>(params), query,
-                             reverse, search_dir, max_match_distance, blocked,
-                             exact_return_allowed, std::nullopt,
-                             raw_way_candidates);
+    return match_endpoint<P>(
+        std::get<typename P::parameters>(params), query, reverse, search_dir,
+        max_match_distance, blocked, exact_return_allowed, std::nullopt,
+        raw_way_candidates, include_non_exact_vehicle_matches);
   });
 }
 
