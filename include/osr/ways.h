@@ -374,6 +374,8 @@ struct ways {
       node_idx_t car_left_;
       node_idx_t car_right_;
       point car_extra_point_;
+      point car_entrance_point_;
+      point foot_entrance_point_;
       point foot_extra_point_;
       node_idx_t foot_left_;
       node_idx_t foot_right_;

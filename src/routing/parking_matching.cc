@@ -43,6 +43,13 @@ struct fit {
   // double min_dist_{std::numeric_limits<double>::infinity()};
 };
 
+std::tuple<geo::latlng, double> get_center(
+    ways const& w, vec<way_idx_t> const& component_ways) {
+  auto const bbox = get_bounding_box(w, component_ways);
+  auto const center = bbox.centroid();
+  return {center, geo::approx_distance_lng_degrees(center)};
+}
+
 template <Profile P>
 std::optional<way_candidate> find_closest(
     ways const& w,
@@ -203,6 +210,9 @@ void connect_parking_ways(
       fmt::println("Connecting {} (osm: {}) ({}, {}) ...", way_idx, osm_way,
                    pos.lat(), pos.lng());
 
+      auto const [center, approx_distance_lng_degrees] =
+          get_center(w, parking_component);
+      // TODO Use center + approx_distance_lng_degrees
       auto closest_car = find_closest<car>(
           w, l, way_extra, parking_component, component_sizes,
           [&](way_extra_properties const& props) -> std::tuple<bool, bool> {
@@ -219,11 +229,21 @@ void connect_parking_ways(
                        closest_car->way_, w.way_osm_idx_[closest_car->way_],
                        closest_foot->way_, w.way_osm_idx_[closest_foot->way_]);
 
+          auto const car_entrance = geo::approx_squared_distance_to_polyline(
+              closest_car->closest_point_on_way_,
+              w.way_polylines_[parking_component[0]],
+              approx_distance_lng_degrees);
+          auto const foot_entrance = geo::approx_squared_distance_to_polyline(
+              closest_foot->closest_point_on_way_,
+              w.way_polylines_[parking_component[0]],
+              approx_distance_lng_degrees);
           auto const parking_edge_idx =
               parking_edge_idx_t{w.r_->parking_edges_.size()};
           w.r_->parking_edges_.emplace_back(
               closest_car->left_.node_, closest_car->right_.node_,
               point::from_latlng(closest_car->closest_point_on_way_),
+              point::from_latlng(car_entrance.best_),
+              point::from_latlng(foot_entrance.best_),
               point::from_latlng(closest_foot->closest_point_on_way_),
               closest_foot->left_.node_, closest_foot->right_.node_);
           if (closest_car->left_.valid()) {
@@ -265,8 +285,9 @@ geo::polyline parking_way_polyline(ways::routing const& r,
   auto const& parking_edge =
       r.parking_edges_[ways::routing::parking_edge::decode_parking_edge(
           r, way_idx)];
-  return {r.node_positions_[from], parking_edge.car_extra_point_,
-          parking_edge.foot_extra_point_, r.node_positions_[to]};
+  return {r.node_positions_[from],          parking_edge.car_extra_point_,
+          parking_edge.car_entrance_point_, parking_edge.foot_entrance_point_,
+          parking_edge.foot_extra_point_,   r.node_positions_[to]};
 }
 
 }  // namespace osr
