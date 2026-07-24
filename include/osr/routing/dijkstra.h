@@ -91,7 +91,7 @@ struct dijkstra {
            bitvec<node_idx_t> const* blocked,
            sharing_data const* sharing,
            elevation_storage const* elevations,
-           geo::box* bbox) {
+           geo::box* bbox = nullptr) {
     while (!pq_.empty()) {
       auto l = pq_.pop();
 
