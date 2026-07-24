@@ -153,16 +153,7 @@ struct bidirectional {
                    node_idx_t idx,
                    direction const dir,
                    sharing_data const* sharing) const {
-    auto const get_node_pos = [&](node_idx_t const n) -> geo::latlng {
-      if (n == node_idx_t::invalid()) {
-        return {};
-      } else if (w.is_additional_node(n)) {
-        return sharing->get_additional_node_coordinates(n);
-      } else {
-        return w.get_node_pos(n).as_latlng();
-      }
-    };
-    auto const p = get_node_pos(idx);
+    auto const p = get_node_pos(w, sharing, idx);
     auto const dist = distapprox(p, end_loc_.pos_);
     auto const other_dist = distapprox(p, start_loc_.pos_);
     return 0.5 *

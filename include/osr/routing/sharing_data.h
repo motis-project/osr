@@ -50,4 +50,17 @@ inline bool is_allowed(bitvec<node_idx_t> const* b, node_idx_t const n) {
   return b == nullptr || b->test(n);
 }
 
+inline geo::latlng get_node_pos(ways const& w,
+                                sharing_data const* sharing,
+                                node_idx_t const n) {
+  if (n == node_idx_t::invalid()) {
+    return {};
+  } else if (w.is_additional_node(n)) {
+    assert(sharing != nullptr);
+    return sharing->get_additional_node_coordinates(n);
+  } else {
+    return w.get_node_pos(n).as_latlng();
+  }
+}
+
 }  // namespace osr

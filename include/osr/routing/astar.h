@@ -260,19 +260,6 @@ struct astar {
                dir);
   }
 
-  static geo::latlng get_node_pos(ways const& w,
-                                  sharing_data const* sharing,
-                                  node_idx_t const n) {
-    if (n == node_idx_t::invalid()) {
-      return {};
-    } else if (w.is_additional_node(n)) {
-      assert(sharing != nullptr);
-      return sharing->get_additional_node_coordinates(n);
-    } else {
-      return w.get_node_pos(n).as_latlng();
-    }
-  }
-
   double distapprox(geo::latlng const& p1, geo::latlng const& p2) const {
     auto const y = std::abs(p1.lat() - p2.lat()) * kDistanceLatDegrees;
     auto const xdiff = std::abs(p1.lng() - p2.lng());

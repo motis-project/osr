@@ -758,37 +758,45 @@ std::vector<std::optional<path>> route(
       }
     }
 
+    auto bbox = geo::box{};
+
     should_continue = d.run(params, w, *w.r_, max, start_time, blocked, sharing,
-                            elevations, dir) &&
+                            elevations, dir, &bbox) &&
                       should_continue;
 
     auto found = 0U;
     for (auto const [m, t, r] : utl::zip(to_match, to, result)) {
       if (r.has_value()) {
         ++found;
-      } else if (auto const direct = try_direct(from, t); direct.has_value()) {
+        continue;
+      }
+      if (!bbox.contains(t.pos_)) {
+        continue;
+      }
+      if (auto const direct = try_direct(from, t); direct.has_value()) {
         r = direct;
-      } else {
-        auto const limit_squared_max_matching_distance =
-            geo::approx_squared_distance(from.pos_, t.pos_,
-                                         distance_lng_degrees) /
-            kMaxMatchingDistanceSquaredRatio;
+        ++found;
+        continue;
+      }
+      auto const limit_squared_max_matching_distance =
+          geo::approx_squared_distance(from.pos_, t.pos_,
+                                       distance_lng_degrees) /
+          kMaxMatchingDistanceSquaredRatio;
 
-        auto const c = best_candidate<P>(params, w, d, t.lvl_, m, max, dir,
-                                         start_time, should_continue, start,
-                                         limit_squared_max_matching_distance);
-        if (c.has_value()) {
-          auto [nc, wc, n, p] = *c;
-          d.cost_.at(n.get_key()).write(n, p);
-          if (do_reconstruct(p)) {
-            p = reconstruct<P>(params, w, l, blocked, sharing, elevations, d,
-                               from, t, start, *wc, *nc, n, p.cost_, dir,
-                               start_time);
-            p.uses_elevator_ = true;
-          }
-          r = std::make_optional(p);
-          ++found;
+      auto const c = best_candidate<P>(params, w, d, t.lvl_, m, max, dir,
+                                       start_time, should_continue, start,
+                                       limit_squared_max_matching_distance);
+      if (c.has_value()) {
+        auto [nc, wc, n, p] = *c;
+        d.cost_.at(n.get_key()).write(n, p);
+        if (do_reconstruct(p)) {
+          p = reconstruct<P>(params, w, l, blocked, sharing, elevations, d,
+                             from, t, start, *wc, *nc, n, p.cost_, dir,
+                             start_time);
+          p.uses_elevator_ = true;
         }
+        r = std::make_optional(p);
+        ++found;
       }
     }
 

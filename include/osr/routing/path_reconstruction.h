@@ -171,23 +171,13 @@ inline double add_path(typename P::parameters const& params,
       }
     }
   } else {
-    auto const get_node_pos = [&](node_idx_t const n) -> geo::latlng {
-      if (n == node_idx_t::invalid()) {
-        return {};
-      } else if (w.is_additional_node(n)) {
-        return sharing->get_additional_node_coordinates(n);
-      } else {
-        return w.get_node_pos(n).as_latlng();
-      }
-    };
-
     segment.from_level_ = level_t{0.0F};
     segment.to_level_ = level_t{0.0F};
     segment.from_ =
         dir == direction::kBackward ? to.get_node() : from.get_node();
     segment.to_ = dir == direction::kBackward ? from.get_node() : to.get_node();
-    segment.polyline_ = {get_node_pos(segment.from_),
-                         get_node_pos(segment.to_)};
+    segment.polyline_ = {get_node_pos(w, sharing, segment.from_),
+                         get_node_pos(w, sharing, segment.to_)};
   }
 
   return distance;

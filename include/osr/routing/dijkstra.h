@@ -7,6 +7,8 @@
 
 #include "utl/verify.h"
 
+#include "geo/box.h"
+
 #include "osr/elevation_storage.h"
 #include "osr/routing/additional_edge.h"
 #include "osr/routing/dial.h"
@@ -88,7 +90,8 @@ struct dijkstra {
            std::optional<routing_time_t> const start_time,
            bitvec<node_idx_t> const* blocked,
            sharing_data const* sharing,
-           elevation_storage const* elevations) {
+           elevation_storage const* elevations,
+           geo::box* bbox) {
     while (!pq_.empty()) {
       auto l = pq_.pop();
 
@@ -127,6 +130,9 @@ struct dijkstra {
       }
 
       auto const curr = l.get_node();
+      if (bbox) {
+        bbox->extend(get_node_pos(w, sharing, l.n_));
+      }
       auto const curr_duration = cost_.at(curr.get_key()).duration(curr);
       P::template adjacent<SearchDir, WithBlocked>(
           params, r, w.timezones_, curr, curr_duration, start_time, blocked,
@@ -175,22 +181,24 @@ struct dijkstra {
            bitvec<node_idx_t> const* blocked,
            sharing_data const* sharing,
            elevation_storage const* elevations,
-           direction const dir) {
+           direction const dir,
+           geo::box* bbox = nullptr) {
     if (blocked == nullptr) {
       return dir == direction::kForward
                  ? run<direction::kForward, false>(params, w, r, max,
                                                    start_time, blocked, sharing,
-                                                   elevations)
+                                                   elevations, bbox)
                  : run<direction::kBackward, false>(params, w, r, max,
                                                     start_time, blocked,
-                                                    sharing, elevations);
+                                                    sharing, elevations, bbox);
     } else {
       return dir == direction::kForward
                  ? run<direction::kForward, true>(params, w, r, max, start_time,
-                                                  blocked, sharing, elevations)
+                                                  blocked, sharing, elevations,
+                                                  bbox)
                  : run<direction::kBackward, true>(params, w, r, max,
                                                    start_time, blocked, sharing,
-                                                   elevations);
+                                                   elevations, bbox);
     }
   }
 
