@@ -18,6 +18,7 @@
 #include "osr/routing/dijkstra.h"
 #include "osr/routing/path_reconstruction.h"
 #include "osr/routing/profiles/bike.h"
+#include "osr/routing/profiles/bike_parking.h"
 #include "osr/routing/profiles/bike_sharing.h"
 #include "osr/routing/profiles/car.h"
 #include "osr/routing/profiles/car_parking.h"
@@ -735,7 +736,8 @@ std::optional<path> route(profile_parameters const& params,
   }
 
   if (profile == search_profile::kBikeSharing ||
-      profile == search_profile::kCarSharing) {
+      profile == search_profile::kCarSharing ||
+      profile == search_profile::kBikeParking) {
     algo = routing_algorithm::kDijkstra;  // TODO
   }
 
@@ -772,6 +774,7 @@ std::optional<path> route(profile_parameters const& params,
                           routing_algorithm algo) {
   if (profile == search_profile::kBikeSharing ||
       profile == search_profile::kCarSharing ||
+      profile == search_profile::kBikeParking ||
       profile == search_profile::kCarParkingWheelchair ||
       profile == search_profile::kCarParking) {
     algo = routing_algorithm::kDijkstra;  // TODO

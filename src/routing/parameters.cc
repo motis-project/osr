@@ -28,6 +28,7 @@ profile_parameters get_parameters(search_profile const p) {
     case search_profile::kBikeSharing: return bike_sharing::parameters{};
     case search_profile::kCarSharing:
       return car_sharing<track_node_tracking>::parameters{};
+    case search_profile::kBikeParking: return bike_parking::parameters{};
     case search_profile::kBus: return bus::parameters{};
     case search_profile::kRailway: return railway::parameters{};
     case search_profile::kFerry: return ferry::parameters{};

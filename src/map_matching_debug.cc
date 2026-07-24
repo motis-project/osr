@@ -14,6 +14,7 @@
 
 #include "osr/lookup.h"
 #include "osr/routing/profiles/bike.h"
+// #include "osr/routing/profiles/bike_parking.h"
 #include "osr/routing/profiles/bike_sharing.h"
 #include "osr/routing/profiles/car.h"
 #include "osr/routing/profiles/car_parking.h"
@@ -1104,6 +1105,16 @@ template boost::json::object build_map_match_debug_json<bike_sharing>(
     std::vector<segment_data<bike_sharing>> const&,
     matched_route const&,
     std::function<geo::latlng(node_idx_t)> const&);
+
+// template boost::json::object build_map_match_debug_json<bike_parking>(
+//     ways const&,
+//     lookup const&,
+//     bike_parking::parameters const&,
+//     std::vector<location> const&,
+//     std::vector<point_data<bike_parking>> const&,
+//     std::vector<segment_data<bike_parking>> const&,
+//     matched_route const&,
+//     std::function<geo::latlng(node_idx_t)> const&);
 
 template boost::json::object
 build_map_match_debug_json<car_sharing<track_node_tracking>>(

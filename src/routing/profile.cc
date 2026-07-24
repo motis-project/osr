@@ -25,6 +25,7 @@ search_profile to_profile(std::string_view s) {
       return search_profile::kCarDropOffWheelchair;
     case cista::hash("bike_sharing"): return search_profile::kBikeSharing;
     case cista::hash("car_sharing"): return search_profile::kCarSharing;
+    case cista::hash("bike_parking"): return search_profile::kBikeParking;
     case cista::hash("bus"): return search_profile::kBus;
     case cista::hash("railway"): return search_profile::kRailway;
     case cista::hash("ferry"): return search_profile::kFerry;
@@ -47,6 +48,7 @@ std::string_view to_str(search_profile const p) {
     case search_profile::kCarDropOffWheelchair: return "car_dropoff_wheelchair";
     case search_profile::kBikeSharing: return "bike_sharing";
     case search_profile::kCarSharing: return "car_sharing";
+    case search_profile::kBikeParking: return "bike_parking";
     case search_profile::kBus: return "bus";
     case search_profile::kRailway: return "railway";
     case search_profile::kFerry: return "ferry";
