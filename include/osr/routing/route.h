@@ -132,6 +132,24 @@ std::vector<std::optional<path>> route(
         [](path const&) { return false; },
     std::optional<routing_time_t> = std::nullopt);
 
+std::vector<std::optional<path>> route(
+    profile_parameters const&,
+    ways const&,
+    lookup const&,
+    search_profile const,
+    location const& from,
+    std::vector<location> const& to,
+    match_view_t from_match,
+    match_result const& to_match,
+    cost_t const max,
+    direction const,
+    bitvec<node_idx_t> const* blocked = nullptr,
+    sharing_data const* sharing = nullptr,
+    elevation_storage const* = nullptr,
+    std::function<bool(path const&)> const& do_reconstruct =
+        [](path const&) { return false; },
+    std::optional<routing_time_t> = std::nullopt);
+
 std::optional<path> route(profile_parameters const&,
                           ways const& w,
                           lookup const& l,

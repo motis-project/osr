@@ -139,6 +139,22 @@ match_t lookup::match(profile_parameters const& params,
   });
 }
 
+void lookup::match(profile_parameters const& params,
+                   location const& query,
+                   bool const reverse,
+                   direction const search_dir,
+                   double const max_match_distance,
+                   bitvec<node_idx_t> const* blocked,
+                   search_profile const p,
+                   std::span<raw_way_candidate const> const raw_way_candidates,
+                   match_result& out) const {
+  with_profile(p, [&]<Profile P>(P&&) {
+    complete_match<P>(std::get<typename P::parameters>(params), query, reverse,
+                      search_dir, max_match_distance, blocked, std::nullopt,
+                      raw_way_candidates, out);
+  });
+}
+
 hash_set<node_idx_t> lookup::find_elevators(geo::box const& b) const {
   auto elevators = hash_set<node_idx_t>{};
   find(b, [&](way_idx_t const way) {
@@ -151,4 +167,17 @@ hash_set<node_idx_t> lookup::find_elevators(geo::box const& b) const {
   return elevators;
 }
 
+}  // namespace osr
+
+namespace osr {
+// TEMPORARY: force instantiation of the SoA match path for type checking.
+template void lookup::complete_match<car>(car::parameters const&,
+                                          location const&,
+                                          bool,
+                                          direction,
+                                          double,
+                                          bitvec<node_idx_t> const*,
+                                          std::optional<routing_time_t>,
+                                          std::span<raw_way_candidate const>,
+                                          match_result&) const;
 }  // namespace osr
