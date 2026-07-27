@@ -132,6 +132,10 @@ private:
         case cista::hash("ref"): ref_ = value; break;
         case cista::hash("entrance"): is_entrance_ = true; break;
         case cista::hash("sidewalk"):
+          if (value == "left"sv || value == "right"sv || value == "both"sv) {
+            sidewalk_ = true;
+          }
+          [[fallthrough]];
         case cista::hash("sidewalk:both"):
         case cista::hash("sidewalk:left"): [[fallthrough]];
         case cista::hash("sidewalk:right"):
@@ -324,6 +328,7 @@ public:
   std::string_view railway_;
 
   // https://wiki.openstreetmap.org/wiki/Key:sidewalk
+  bool sidewalk_{false};
   bool sidewalk_separate_{false};
 
   // https://wiki.openstreetmap.org/wiki/Key:cycleway
