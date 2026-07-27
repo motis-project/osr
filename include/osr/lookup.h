@@ -62,13 +62,9 @@ struct raw_way_candidate {
   raw_node_candidate left_{}, right_{};
 };
 
-using way_candidate_idx_t =
-    cista::strong<std::uint32_t, struct way_candidate_idx_>;
 using match_idx_t = cista::strong<std::uint32_t, struct match_idx_>;
 
-// One matched way node, expanded from its stored form: `way_dir_` follows from
-// whether it is the left or the right node of the way, `lvl_` from the match it
-// belongs to, so neither is stored per node.
+// One matched way node, expanded from its stored form.
 struct candidate_node {
   bool valid() const { return node_ != node_idx_t::invalid(); }
 
@@ -79,8 +75,15 @@ struct candidate_node {
   level_t lvl_{kNoLevel};
 };
 
-// All matches of one request.
+// All matches of one request, in flat trivially copyable arrays bucketed per
+// match. Geometry is deliberately absent - only path reconstruction needs it,
+// and it recomputes it via `lookup::get_node_candidate_path()`.
 struct match_result {
+  // Index into the flat candidate arrays. Internal: callers address whole
+  // matches via `match_idx_t`, never individual candidates.
+  using way_candidate_idx_t =
+      cista::strong<std::uint32_t, struct way_candidate_idx_>;
+
   struct node {
     bool valid() const { return node_ != node_idx_t::invalid(); }
 
@@ -201,37 +204,38 @@ struct lookup {
         append_raw<P>(params, query, reverse, search_dir, max_match_distance,
                       blocked, start_time, raw_way_candidates, doublings, out);
     // Cold path: no precomputed candidate was usable, so run the full match.
-    if (added == 0U && doublings < 4U) {
+    if (!added && doublings < 4U) {
       auto dist = max_match_distance;
-      auto n = get_way_candidates<P>(params, query, reverse, search_dir, dist,
-                                     blocked, out, start_time);
+      auto found = get_way_candidates<P>(params, query, reverse, search_dir,
+                                         dist, blocked, out, start_time);
       auto i = 0U;
-      while (n == 0U && i++ < 4U) {
+      while (!found && i++ < 4U) {
         dist *= 2U;
-        n = get_way_candidates<P>(params, query, reverse, search_dir, dist,
-                                  blocked, out, start_time);
+        found = get_way_candidates<P>(params, query, reverse, search_dir, dist,
+                                      blocked, out, start_time);
       }
     }
     out.finish();
   }
 
   // Converts raw (geometric, profile independent) candidates into profile
-  // aware ones, appending them to the match currently being built.
+  // aware ones, appending them to the match currently being built. Returns
+  // whether any candidate was usable.
   template <Profile P>
-  unsigned append_raw(P::parameters const& params,
-                      location const& query,
-                      bool const reverse,
-                      direction const search_dir,
-                      double const max_match_distance,
-                      bitvec<node_idx_t> const* blocked,
-                      std::optional<routing_time_t> const start_time,
-                      std::span<raw_way_candidate const> raw_way_candidates,
-                      unsigned& doublings,
-                      match_result& out) const {
+  bool append_raw(P::parameters const& params,
+                  location const& query,
+                  bool const reverse,
+                  direction const search_dir,
+                  double const max_match_distance,
+                  bitvec<node_idx_t> const* blocked,
+                  std::optional<routing_time_t> const start_time,
+                  std::span<raw_way_candidate const> raw_way_candidates,
+                  unsigned& doublings,
+                  match_result& out) const {
     auto dist = max_match_distance;
-    auto added = 0U;
+    auto added = false;
     for (auto const& raw_wc : raw_way_candidates) {
-      while (raw_wc.dist_to_way_ >= dist && added == 0U && doublings++ < 4U) {
+      while (raw_wc.dist_to_way_ >= dist && !added && doublings++ < 4U) {
         dist *= 2U;
       }
       if (raw_wc.dist_to_way_ >= dist) {
@@ -248,7 +252,7 @@ struct lookup {
                          query, reverse, search_dir, blocked, start_time);
       if (n.left_.valid() || n.right_.valid()) {
         out.add(raw_wc.dist_to_way_, raw_wc.way_, n);
-        ++added;
+        added = true;
       }
     }
     return added;
@@ -345,13 +349,14 @@ struct lookup {
       match_result& out,
       std::optional<routing_time_t> const start_time = std::nullopt) const {
     out.start(query.lvl_);
-    auto n =
+    auto found =
         get_way_candidates<P>(params, query, reverse, search_dir,
                               max_match_distance, blocked, out, start_time);
     auto i = 0U;
-    while (n == 0U && i++ < 4U) {
+    while (!found && i++ < 4U) {
       max_match_distance *= 2U;
-      n = get_way_candidates<P>(params, query, reverse, search_dir,
+      found =
+          get_way_candidates<P>(params, query, reverse, search_dir,
                                 max_match_distance, blocked, out, start_time);
     }
     out.finish();
@@ -372,11 +377,11 @@ struct lookup {
   void insert(way_idx_t);
 
   // Appends the geometric+profile matches for `query` to `out` (which must be
-  // mid-bucket, i.e. between start() and finish()) and returns how many were
-  // added. Candidates are ordered by their `double` distance before the
-  // narrowing to float, so ties order by full precision.
+  // mid-bucket, i.e. between start() and finish()) and
+  // returns whether any was found. Candidates are ordered by their `double`
+  // distance before the narrowing to float, so ties order by full precision.
   template <Profile P>
-  unsigned get_way_candidates(
+  bool get_way_candidates(
       P::parameters const& params,
       location const& query,
       bool const reverse,
@@ -432,7 +437,7 @@ struct lookup {
                                  static_cast<float>(wc.right_.dist_to_node_),
                              .cost_ = wc.right_.cost_}});
     }
-    return static_cast<unsigned>(way_candidates.size());
+    return !way_candidates.empty();
   }
 
   template <Profile P>
@@ -468,9 +473,6 @@ struct lookup {
       geo::latlng const best,
       size_t segment_idx,
       std::optional<routing_time_t> const start_time = std::nullopt,
-      // Only map matching needs the geometry, and it caches it itself.
-      // Routing recomputes it for the one candidate it actually uses via
-      // `get_node_candidate_path()`, so building it here would be waste.
       std::vector<geo::latlng>* path = nullptr) const {
     auto const way_prop = ways_.r_->way_properties_[way];
     auto const edge_dir = reverse ? opposite(dir) : dir;
