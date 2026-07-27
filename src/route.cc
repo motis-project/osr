@@ -16,6 +16,7 @@
 #include "osr/lookup.h"
 #include "osr/routing/bidirectional.h"
 #include "osr/routing/dijkstra.h"
+#include "osr/routing/dijkstra_bidir.h"
 #include "osr/routing/path_reconstruction.h"
 #include "osr/routing/profiles/bike.h"
 #include "osr/routing/profiles/bike_sharing.h"
@@ -47,6 +48,15 @@ dijkstra<P>& get_dijkstra() {
   static auto s = boost::thread_specific_ptr<dijkstra<P>>{};
   if (s.get() == nullptr) {
     s.reset(new dijkstra<P>{});
+  }
+  return *s.get();
+}
+
+template <Profile P>
+dijkstra_bidir<P>& get_dijkstra_bidir() {
+  static auto s = boost::thread_specific_ptr<dijkstra_bidir<P>>{};
+  if (s.get() == nullptr) {
+    s.reset(new dijkstra_bidir<P>{});
   }
   return *s.get();
 }
@@ -250,6 +260,81 @@ path reconstruct(typename P::parameters const& params,
   return p;
 }
 
+template <Profile P>
+path reconstruct_bidir(typename P::parameters const& params,
+                       ways const& w,
+                       lookup const& l,
+                       bitvec<node_idx_t> const* blocked,
+                       sharing_data const* sharing,
+                       elevation_storage const* elevations,
+                       dijkstra_bidir<P> const& d,
+                       location const& from,
+                       location const& to,
+                       way_candidate const& start,
+                       way_candidate const& dest,
+                       node_candidate const& dest_nc,
+                       typename P::node const dest_node,
+                       cost_t const cost,
+                       direction const dir) {
+
+  auto n = dest_node;
+  auto segments = std::vector<path::segment>{
+      {.polyline_ = l.get_node_candidate_path(dest, dest_nc,
+                                              dir == direction::kForward, to),
+       .from_level_ = dest_nc.lvl_,
+       .to_level_ = dest_nc.lvl_,
+       .from_ =
+           dir == direction::kForward ? n.get_node() : node_idx_t::invalid(),
+       .to_ =
+           dir == direction::kBackward ? n.get_node() : node_idx_t::invalid(),
+       .way_ = way_idx_t::invalid(),
+       .cost_ = dest_nc.cost_,
+       .dist_ = static_cast<distance_t>(dest_nc.dist_to_node_),
+       .mode_ = dest_node.get_mode()}};
+  auto dist = 0.0;
+  while (true) {
+    auto const& e = d.cost_.at(n.get_key());
+    auto const pred = e.pred(n);
+    if (pred.has_value()) {
+      auto const expected_cost =
+          static_cast<cost_t>(e.cost(n) - d.get_cost(*pred));
+      dist += add_path<P>(params, w, *w.r_, blocked, sharing, elevations, *pred,
+                          n, expected_cost, segments, dir);
+    } else {
+      break;
+    }
+    n = *pred;
+  }
+
+  auto const& start_nc =
+      n.get_node() == start.left_.node_ ? start.left_ : start.right_;
+  segments.push_back(
+      {.polyline_ = l.get_node_candidate_path(
+           start, start_nc, dir == direction::kBackward, from),
+       .from_level_ = start_nc.lvl_,
+       .to_level_ = start_nc.lvl_,
+       .from_ =
+           dir == direction::kBackward ? n.get_node() : node_idx_t::invalid(),
+       .to_ = dir == direction::kForward ? n.get_node() : node_idx_t::invalid(),
+       .way_ = way_idx_t::invalid(),
+       .cost_ = start_nc.cost_,
+       .dist_ = static_cast<distance_t>(start_nc.dist_to_node_),
+       .mode_ = n.get_mode()});
+  if (dir == direction::kForward) {
+    std::reverse(begin(segments), end(segments));
+  }
+  auto path_elevation = elevation_storage::elevation{};
+  for (auto const& segment : segments) {
+    path_elevation += segment.elevation_;
+  }
+  auto p = path{.cost_ = cost,
+                .dist_ = start_nc.dist_to_node_ + dist + dest_nc.dist_to_node_,
+                .elevation_ = path_elevation,
+                .segments_ = segments};
+  d.cost_.at(dest_node.get_key()).write(dest_node, p);
+  return p;
+}
+
 bool component_seen(ways const& w,
                     match_view_t matches,
                     size_t match_idx,
@@ -280,6 +365,80 @@ best_candidate(typename P::parameters const& params,
                bool should_continue,
                way_candidate const& start,
                double const limit_squared_max_matching_distance) {
+  auto const get_best = [&](way_candidate const& dest,
+                            node_candidate const* x) {
+    auto best_node = P::node::invalid();
+    auto best_cost = path{.cost_ = std::numeric_limits<cost_t>::max()};
+    P::resolve_all(*w.r_, x->node_, lvl, [&](auto&& node) {
+      if (!P::is_dest_reachable(params, *w.r_, node, dest.way_,
+                                flip(opposite(dir), x->way_dir_), dir)) {
+        return;
+      }
+
+      auto const target_cost = d.get_cost(node);
+      if (target_cost == kInfeasible) {
+        return;
+      }
+
+      auto const total_cost = target_cost + x->cost_;
+      if (total_cost < best_cost.cost_) {
+        best_node = node;
+        best_cost.cost_ = static_cast<cost_t>(total_cost);
+      }
+    });
+    return std::pair{best_node, best_cost};
+  };
+
+  for (auto const [j, dest] : utl::enumerate(m)) {
+    if (w.r_->way_component_[start.way_] != w.r_->way_component_[dest.way_]) {
+      continue;
+    }
+    if (!should_continue && component_seen(w, m, j, 10)) {
+      continue;
+    }
+    if (std::pow(dest.dist_to_way_, 2) > limit_squared_max_matching_distance &&
+        j > kBottomKDefinitelyConsidered) {
+      break;
+    }
+    auto best_node = P::node::invalid();
+    auto best_cost = path{.cost_ = std::numeric_limits<cost_t>::max()};
+    auto best = static_cast<node_candidate const*>(nullptr);
+
+    for (auto const x : {&dest.left_, &dest.right_}) {
+      if (x->valid()) {
+        auto const [x_node, x_cost] = get_best(dest, x);
+        if (x_cost.cost_ < best_cost.cost_) {
+          best = x;
+          best_node = x_node;
+          best_cost = x_cost;
+        }
+      }
+    }
+
+    if (best != nullptr) {
+      return best_cost.cost_ < max
+                 ? std::optional{std::tuple{best, &dest, best_node, best_cost}}
+                 : std::nullopt;
+    }
+  }
+  return std::nullopt;
+}
+
+template <Profile P>
+std::optional<std::tuple<node_candidate const*,
+                         way_candidate const*,
+                         typename P::node,
+                         path>>
+best_candidate_bidir(typename P::parameters const& params,
+                     ways const& w,
+                     dijkstra_bidir<P>& d,
+                     level_t const lvl,
+                     match_view_t m,
+                     cost_t const max,
+                     direction const dir,
+                     bool should_continue,
+                     way_candidate const& start,
+                     double const limit_squared_max_matching_distance) {
   auto const get_best = [&](way_candidate const& dest,
                             node_candidate const* x) {
     auto best_node = P::node::invalid();
@@ -520,6 +679,71 @@ std::optional<path> route_dijkstra(typename P::parameters const& params,
 }
 
 template <Profile P>
+std::optional<path> route_dijkstra_bidir(typename P::parameters const& params,
+                                         ways const& w,
+                                         lookup const& l,
+                                         dijkstra_bidir<P>& d,
+                                         location const& from,
+                                         location const& to,
+                                         match_view_t from_match,
+                                         match_view_t to_match,
+                                         cost_t const max,
+                                         direction const dir,
+                                         bitvec<node_idx_t> const* blocked,
+                                         sharing_data const* sharing,
+                                         elevation_storage const* elevations) {
+  if (auto const direct = try_direct(from, to); direct.has_value()) {
+    return *direct;
+  }
+
+  auto const limit_squared_max_matching_distance =
+      std::pow(geo::distance(from.pos_, to.pos_), 2) /
+      kMaxMatchingDistanceSquaredRatio;
+
+  d.reset(max);
+  auto should_continue = true;
+  for (auto const [i, start] : utl::enumerate(from_match)) {
+    if (!should_continue && component_seen(w, from_match, i)) {
+      continue;
+    }
+    if (utl::none_of(to_match, [&](way_candidate const& end) {
+          return w.r_->way_component_[start.way_] ==
+                 w.r_->way_component_[end.way_];
+        })) {
+      continue;
+    }
+
+    for (auto const* nc : {&start.left_, &start.right_}) {
+      if (nc->valid() && nc->cost_ < max) {
+        P::resolve_start_node(
+            *w.r_, start.way_, nc->node_, from.lvl_, dir,
+            [&](auto const node) { d.add_start(w, {node, nc->cost_}); });
+      }
+    }
+
+    if (d.pq_.empty()) {
+      continue;
+    }
+
+    should_continue =
+        d.run(params, w, *w.r_, max, blocked, sharing, elevations, dir) &&
+        should_continue;
+
+    auto const c = best_candidate_bidir(params, w, d, to.lvl_, to_match, max,
+                                        dir, should_continue, start,
+                                        limit_squared_max_matching_distance);
+    if (c.has_value()) {
+      auto const [nc, wc, node, p] = *c;
+      return reconstruct_bidir<P>(params, w, l, blocked, sharing, elevations, d,
+                                  from, to, start, *wc, *nc, node, p.cost_,
+                                  dir);
+    }
+  }
+
+  return std::nullopt;
+}
+
+template <Profile P>
 std::vector<std::optional<path>> route(
     typename P::parameters const& params,
     ways const& w,
@@ -691,6 +915,35 @@ std::optional<path> route_dijkstra(profile_parameters const& params,
   });
 }
 
+std::optional<path> route_dijkstra_bidir(profile_parameters const& params,
+                                         ways const& w,
+                                         lookup const& l,
+                                         search_profile const profile,
+                                         location const& from,
+                                         location const& to,
+                                         cost_t const max,
+                                         direction const dir,
+                                         double const max_match_distance,
+                                         bitvec<node_idx_t> const* blocked,
+                                         sharing_data const* sharing,
+                                         elevation_storage const* elevations) {
+  return with_profile(profile, [&]<Profile P>(P&&) -> std::optional<path> {
+    auto const& pp = std::get<typename P::parameters>(params);
+    auto const from_match =
+        l.match<P>(pp, from, false, dir, max_match_distance, blocked);
+    auto const to_match =
+        l.match<P>(pp, to, true, dir, max_match_distance, blocked);
+
+    if (from_match.empty() || to_match.empty()) {
+      return std::nullopt;
+    }
+
+    return route_dijkstra_bidir(pp, w, l, get_dijkstra_bidir<P>(), from, to,
+                                from_match, to_match, max, dir, blocked,
+                                sharing, elevations);
+  });
+}
+
 std::vector<std::optional<path>> route(
     profile_parameters const& params,
     ways const& w,
@@ -753,6 +1006,13 @@ std::optional<path> route(profile_parameters const& params,
                                    from_match, to_match, max, dir, blocked,
                                    sharing, elevations);
       });
+    case routing_algorithm::kDijkstraBi:
+      return with_profile(profile, [&]<Profile P>(P&&) {
+        return route_dijkstra_bidir(std::get<typename P::parameters>(params), w,
+                                    l, get_dijkstra_bidir<P>(), from, to,
+                                    from_match, to_match, max, dir, blocked,
+                                    sharing, elevations);
+      });
   }
   throw utl::fail("not implemented");
 }
@@ -784,6 +1044,10 @@ std::optional<path> route(profile_parameters const& params,
       return route_bidirectional(params, w, l, profile, from, to, max, dir,
                                  max_match_distance, blocked, sharing,
                                  elevations);
+    case routing_algorithm::kDijkstraBi:
+      return route_dijkstra_bidir(params, w, l, profile, from, to, max, dir,
+                                  max_match_distance, blocked, sharing,
+                                  elevations);
   }
   throw utl::fail("not implemented");
 }

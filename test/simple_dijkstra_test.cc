@@ -79,7 +79,7 @@ TEST(simple_dijkstra, monaco) {
   auto const result =
       route(car::parameters{}, w, l, search_profile::kCar, from, to,
             from_matches_span, to_matches_span, max_cost, dir, nullptr, nullptr,
-            nullptr, routing_algorithm::kDijkstra);
+            nullptr, routing_algorithm::kDijkstraBi);
 
   if (result.has_value()) {
     fmt::println("found path | cost: {} | dist: {:.2f}", result->cost_,
