@@ -167,6 +167,9 @@ struct match_result {
   vec_map<way_candidate_idx_t, nodes> nodes_{};
 };
 
+// One match, borrowed from the `match_result` that owns it.
+using match_view_t = match_result::view;
+
 struct lookup {
   lookup(ways const&, std::filesystem::path, cista::mmap::protection);
 
