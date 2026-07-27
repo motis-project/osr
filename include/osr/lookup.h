@@ -44,34 +44,11 @@ void till_the_end(T const& start,
   }
 }
 
-struct node_candidate {
-  bool valid() const { return node_ != node_idx_t::invalid(); }
-
-  level_t lvl_{kNoLevel};
-  direction way_dir_{direction::kForward};
-  node_idx_t node_{node_idx_t::invalid()};
-  double dist_to_node_{0.0};
-  cost_t cost_{0U};
-  std::vector<geo::latlng> path_{};
-};
-
 struct raw_node_candidate {
   bool valid() const { return node_ != node_idx_t::invalid(); }
 
   node_idx_t node_{node_idx_t::invalid()};
   float dist_to_node_{0.0};
-};
-
-struct way_candidate {
-  friend bool operator<(way_candidate const& a, way_candidate const& b) {
-    return a.dist_to_way_ < b.dist_to_way_;
-  }
-
-  double dist_to_way_;
-  way_idx_t way_{way_idx_t::invalid()};
-  node_candidate left_{}, right_{};
-  geo::latlng closest_point_on_way_{};
-  unsigned segment_idx_{};
 };
 
 struct raw_way_candidate {
@@ -85,13 +62,24 @@ struct raw_way_candidate {
   raw_node_candidate left_{}, right_{};
 };
 
-using match_t = std::vector<way_candidate>;
-using match_view_t = std::span<way_candidate const>;
-
 using way_candidate_idx_t =
     cista::strong<std::uint32_t, struct way_candidate_idx_>;
 using match_idx_t = cista::strong<std::uint32_t, struct match_idx_>;
 
+// One matched way node, expanded from its stored form: `way_dir_` follows from
+// whether it is the left or the right node of the way, `lvl_` from the match it
+// belongs to, so neither is stored per node.
+struct candidate_node {
+  bool valid() const { return node_ != node_idx_t::invalid(); }
+
+  node_idx_t node_{node_idx_t::invalid()};
+  double dist_to_node_{0.0};
+  cost_t cost_{0U};
+  direction way_dir_{direction::kForward};
+  level_t lvl_{kNoLevel};
+};
+
+// All matches of one request.
 struct match_result {
   struct node {
     bool valid() const { return node_ != node_idx_t::invalid(); }
@@ -109,6 +97,15 @@ struct match_result {
   struct view {
     bool empty() const { return way_.empty(); }
     std::size_t size() const { return way_.size(); }
+
+    candidate_node left(std::size_t const j) const {
+      auto const& n = nodes_[j].left_;
+      return {n.node_, n.dist_to_node_, n.cost_, direction::kBackward, lvl_};
+    }
+    candidate_node right(std::size_t const j) const {
+      auto const& n = nodes_[j].right_;
+      return {n.node_, n.dist_to_node_, n.cost_, direction::kForward, lvl_};
+    }
 
     std::span<float const> dist_to_way_{};
     std::span<way_idx_t const> way_{};
@@ -141,24 +138,6 @@ struct match_result {
 
   void finish() { begin_.emplace_back(way_candidate_idx_t{(way_.size())}); }
 
-  // Appends an AoS match as a new bucket (conversion at the one place that
-  // still builds `match_t`).
-  void add_match(match_view_t const m, level_t const lvl) {
-    start(lvl);
-    for (auto const& wc : m) {
-      add(static_cast<float>(wc.dist_to_way_), wc.way_,
-          nodes{.left_ = {.node_ = wc.left_.node_,
-                          .dist_to_node_ =
-                              static_cast<float>(wc.left_.dist_to_node_),
-                          .cost_ = wc.left_.cost_},
-                .right_ = {.node_ = wc.right_.node_,
-                           .dist_to_node_ =
-                               static_cast<float>(wc.right_.dist_to_node_),
-                           .cost_ = wc.right_.cost_}});
-    }
-    finish();
-  }
-
   // Appends a copy of one bucket of `src`. Used to gather a scattered subset
   // of precomputed matches into the contiguous form `route()` consumes.
   void append(match_result const& src, match_idx_t const i) {
@@ -188,72 +167,6 @@ struct match_result {
   vec_map<way_candidate_idx_t, nodes> nodes_{};
 };
 
-// Uniform view of one matched way node, independent of AoS/SoA storage.
-struct candidate_node {
-  bool valid() const { return node_ != node_idx_t::invalid(); }
-
-  node_idx_t node_{node_idx_t::invalid()};
-  double dist_to_node_{0.0};
-  cost_t cost_{0U};
-  direction way_dir_{direction::kForward};
-  level_t lvl_{kNoLevel};
-};
-
-// Accessors letting routing code iterate AoS (`match_t`) and SoA
-// (`match_result`) matches with the same syntax. `left_` is always the
-// backward node, `right_` the forward one, so the SoA form derives the
-// direction from the position instead of storing it.
-inline std::size_t n_candidates(match_view_t const m) { return m.size(); }
-inline way_idx_t candidate_way(match_view_t const m, std::size_t const j) {
-  return m[j].way_;
-}
-inline double candidate_dist_to_way(match_view_t const m, std::size_t const j) {
-  return m[j].dist_to_way_;
-}
-inline candidate_node candidate_left(match_view_t const m,
-                                     std::size_t const j) {
-  auto const& n = m[j].left_;
-  return {n.node_, n.dist_to_node_, n.cost_, n.way_dir_, n.lvl_};
-}
-inline candidate_node candidate_right(match_view_t const m,
-                                      std::size_t const j) {
-  auto const& n = m[j].right_;
-  return {n.node_, n.dist_to_node_, n.cost_, n.way_dir_, n.lvl_};
-}
-
-inline std::size_t n_candidates(match_result::view const& m) {
-  return m.size();
-}
-inline way_idx_t candidate_way(match_result::view const& m,
-                               std::size_t const j) {
-  return m.way_[j];
-}
-inline double candidate_dist_to_way(match_result::view const& m,
-                                    std::size_t const j) {
-  return m.dist_to_way_[j];
-}
-inline candidate_node candidate_left(match_result::view const& m,
-                                     std::size_t const j) {
-  auto const& n = m.nodes_[j].left_;
-  return {n.node_, n.dist_to_node_, n.cost_, direction::kBackward, m.lvl_};
-}
-inline candidate_node candidate_right(match_result::view const& m,
-                                      std::size_t const j) {
-  auto const& n = m.nodes_[j].right_;
-  return {n.node_, n.dist_to_node_, n.cost_, direction::kForward, m.lvl_};
-}
-
-// Same for the container of matches passed to the one-to-many `route()`.
-inline std::size_t n_matches(std::vector<match_t> const& m) { return m.size(); }
-inline match_view_t match_at(std::vector<match_t> const& m,
-                             std::size_t const i) {
-  return m[i];
-}
-inline std::size_t n_matches(match_result const& m) { return m.size(); }
-inline match_result::view match_at(match_result const& m, std::size_t const i) {
-  return m[match_idx_t{static_cast<match_idx_t::value_t>(i)}];
-}
-
 struct lookup {
   lookup(ways const&, std::filesystem::path, cista::mmap::protection);
 
@@ -266,50 +179,9 @@ struct lookup {
   std::vector<raw_way_candidate> get_raw_match(location const&,
                                                double max_match_distance) const;
 
-  template <Profile P>
-  match_t complete_match(
-      P::parameters const& params,
-      location const& query,
-      bool const reverse,
-      direction const search_dir,
-      double max_match_distance,
-      bitvec<node_idx_t> const* blocked,
-      std::optional<routing_time_t> const start_time,
-      std::span<raw_way_candidate const> raw_way_candidates) const {
-    auto matches = std::vector<way_candidate>{};
-    auto i = 0U;
-    auto dist = max_match_distance;
-    for (auto const& raw_wc : raw_way_candidates) {
-      while (raw_wc.dist_to_way_ >= dist && matches.empty() && i++ < 4U) {
-        dist *= 2U;
-      }
-      if (raw_wc.dist_to_way_ >= dist) {
-        break;
-      }
-      auto wc =
-          way_candidate{raw_wc.dist_to_way_,
-                        raw_wc.way_,
-                        {query.lvl_, direction::kBackward, raw_wc.left_.node_,
-                         raw_wc.left_.dist_to_node_},
-                        {query.lvl_, direction::kForward, raw_wc.right_.node_,
-                         raw_wc.right_.dist_to_node_}};
-      apply_next_node_cost<P>(params, wc, wc.left_, query, reverse, search_dir,
-                              blocked, start_time);
-      apply_next_node_cost<P>(params, wc, wc.right_, query, reverse, search_dir,
-                              blocked, start_time);
-      if (wc.left_.valid() || wc.right_.valid()) {
-        matches.emplace_back(std::move(wc));
-      }
-    }
-    if (i < 4 && matches.empty()) {
-      return match<P>(params, query, reverse, search_dir, max_match_distance,
-                      blocked, start_time);
-    }
-    return matches;
-  }
-
-  // SoA variant of `complete_match()`: appends one match to `out`. Falls back
-  // to a fresh geometric match if the precomputed candidates yield nothing.
+  // Turns precomputed (geometric) candidates into profile aware ones and
+  // appends them to `out` as one match. Falls back to a fresh geometric match
+  // if none of the precomputed candidates is usable.
   template <Profile P>
   void complete_match(P::parameters const& params,
                       location const& query,
@@ -325,22 +197,16 @@ struct lookup {
     auto const added =
         append_raw<P>(params, query, reverse, search_dir, max_match_distance,
                       blocked, start_time, raw_way_candidates, doublings, out);
-    // Cold path: no precomputed candidate was usable. Reuse the AoS matcher
-    // verbatim so the (subtle) widening semantics stay identical, and convert
-    // its result. Rare enough that the temporary AoS vector does not matter.
+    // Cold path: no precomputed candidate was usable, so run the full match.
     if (added == 0U && doublings < 4U) {
-      for (auto const& wc : match<P>(params, query, reverse, search_dir,
-                                     max_match_distance, blocked, start_time)) {
-        out.add(static_cast<float>(wc.dist_to_way_), wc.way_,
-                match_result::nodes{
-                    .left_ = {.node_ = wc.left_.node_,
-                              .dist_to_node_ =
-                                  static_cast<float>(wc.left_.dist_to_node_),
-                              .cost_ = wc.left_.cost_},
-                    .right_ = {.node_ = wc.right_.node_,
-                               .dist_to_node_ =
-                                   static_cast<float>(wc.right_.dist_to_node_),
-                               .cost_ = wc.right_.cost_}});
+      auto dist = max_match_distance;
+      auto n = get_way_candidates<P>(params, query, reverse, search_dir, dist,
+                                     blocked, out, start_time);
+      auto i = 0U;
+      while (n == 0U && i++ < 4U) {
+        dist *= 2U;
+        n = get_way_candidates<P>(params, query, reverse, search_dir, dist,
+                                  blocked, out, start_time);
       }
     }
     out.finish();
@@ -385,8 +251,7 @@ struct lookup {
     return added;
   }
 
-  // `apply_next_node_cost()` keyed on the way index instead of a
-  // `way_candidate`, so it works on the SoA representation.
+  // Applies profile feasibility and cost to a matched way node.
   template <Profile P>
   void apply_node_cost(P::parameters const& params,
                        way_idx_t const way,
@@ -420,8 +285,8 @@ struct lookup {
   }
 
   // Recomputes the geometry between the query position and the candidate
-  // node. Used by path reconstruction; the SoA match representation never
-  // caches it.
+  // node. Matches do not cache it: only path reconstruction needs it, and only
+  // for the one candidate it actually uses.
   std::vector<geo::latlng> get_node_candidate_path(
       way_idx_t const way,
       node_idx_t const node,
@@ -453,28 +318,6 @@ struct lookup {
     return path;
   }
 
-  std::vector<geo::latlng> get_node_candidate_path(
-      way_candidate const& wc,
-      node_candidate const& nc,
-      bool const reverse,
-      location const& query) const {
-    if (!nc.path_.empty() || !nc.valid()) {
-      return nc.path_;
-    }
-    return get_node_candidate_path(wc.way_, nc.node_, nc.way_dir_, reverse,
-                                   query);
-  }
-
-  match_t match(profile_parameters const& params,
-                location const& query,
-                bool const reverse,
-                direction const search_dir,
-                double const max_match_distance,
-                bitvec<node_idx_t> const* blocked,
-                search_profile,
-                std::optional<std::span<raw_way_candidate const>>
-                    raw_way_candidates = std::nullopt) const;
-
   void match(profile_parameters const& params,
              location const& query,
              bool reverse,
@@ -485,32 +328,30 @@ struct lookup {
              std::span<raw_way_candidate const> raw_way_candidates,
              match_result& out) const;
 
+  // Matches `query` against the street network and appends the result to
+  // `out` as one match. If nothing is found, the search is retried at twice
+  // the distance, up to four times.
   template <Profile P>
-  match_t match(P::parameters const& params,
-                location const& query,
-                bool const reverse,
-                direction const search_dir,
-                double max_match_distance,
-                bitvec<node_idx_t> const* blocked,
-                std::optional<routing_time_t> const start_time = std::nullopt,
-                std::optional<std::span<raw_way_candidate const>>
-                    raw_way_candidates = std::nullopt) const {
-    if (raw_way_candidates.has_value()) {
-      return complete_match<P>(params, query, reverse, search_dir,
-                               max_match_distance, blocked, start_time,
-                               *raw_way_candidates);
-    }
-    auto way_candidates =
+  void match(
+      P::parameters const& params,
+      location const& query,
+      bool const reverse,
+      direction const search_dir,
+      double max_match_distance,
+      bitvec<node_idx_t> const* blocked,
+      match_result& out,
+      std::optional<routing_time_t> const start_time = std::nullopt) const {
+    out.start(query.lvl_);
+    auto n =
         get_way_candidates<P>(params, query, reverse, search_dir,
-                              max_match_distance, blocked, start_time);
+                              max_match_distance, blocked, out, start_time);
     auto i = 0U;
-    while (way_candidates.empty() && i++ < 4U) {
+    while (n == 0U && i++ < 4U) {
       max_match_distance *= 2U;
-      way_candidates =
-          get_way_candidates<P>(params, query, reverse, search_dir,
-                                max_match_distance, blocked, start_time);
+      n = get_way_candidates<P>(params, query, reverse, search_dir,
+                                max_match_distance, blocked, out, start_time);
     }
-    return way_candidates;
+    out.finish();
   }
 
   template <typename Fn>
@@ -527,16 +368,26 @@ struct lookup {
 
   void insert(way_idx_t);
 
+  // Appends the geometric+profile matches for `query` to `out` (which must be
+  // mid-bucket, i.e. between start() and finish()) and returns how many were
+  // added. Candidates are ordered by their `double` distance before the
+  // narrowing to float, so ties order by full precision.
   template <Profile P>
-  match_t get_way_candidates(
+  unsigned get_way_candidates(
       P::parameters const& params,
       location const& query,
       bool const reverse,
       direction const search_dir,
       double const max_match_distance,
       bitvec<node_idx_t> const* blocked,
+      match_result& out,
       std::optional<routing_time_t> const start_time = std::nullopt) const {
-    auto way_candidates = std::vector<way_candidate>{};
+    struct tmp_candidate {
+      double dist_to_way_;
+      way_idx_t way_;
+      candidate_node left_, right_;
+    };
+    auto way_candidates = std::vector<tmp_candidate>{};
     auto const approx_distance_lng_degrees =
         geo::approx_distance_lng_degrees(query.pos_);
     auto const squared_max_dist = std::pow(max_match_distance, 2);
@@ -547,26 +398,38 @@ struct lookup {
               query.pos_, ways_.way_polylines_[way],
               approx_distance_lng_degrees);
       if (squared_dist < squared_max_dist) {
-        auto wc =
-            way_candidate{.dist_to_way_ = std::sqrt(squared_dist),
-                          .way_ = way,
-                          .closest_point_on_way_ = best,
-                          .segment_idx_ = static_cast<unsigned>(segment_idx)};
-        wc.left_ = find_next_node<P>(params, wc, query, direction::kBackward,
-                                     query.lvl_, reverse, search_dir, blocked,
-                                     approx_distance_lng_degrees, best,
-                                     segment_idx, start_time);
-        wc.right_ = find_next_node<P>(params, wc, query, direction::kForward,
-                                      query.lvl_, reverse, search_dir, blocked,
-                                      approx_distance_lng_degrees, best,
-                                      segment_idx, start_time);
-        if (wc.left_.valid() || wc.right_.valid()) {
-          way_candidates.emplace_back(std::move(wc));
+        auto const dist_to_way = std::sqrt(squared_dist);
+        auto const left = find_next_node<P>(
+            params, way, dist_to_way, query, direction::kBackward, query.lvl_,
+            reverse, search_dir, blocked, approx_distance_lng_degrees, best,
+            segment_idx, start_time);
+        auto const right = find_next_node<P>(
+            params, way, dist_to_way, query, direction::kForward, query.lvl_,
+            reverse, search_dir, blocked, approx_distance_lng_degrees, best,
+            segment_idx, start_time);
+        if (left.valid() || right.valid()) {
+          way_candidates.emplace_back(
+              tmp_candidate{dist_to_way, way, left, right});
         }
       }
     });
-    utl::sort(way_candidates);
-    return way_candidates;
+    utl::sort(way_candidates,
+              [](tmp_candidate const& a, tmp_candidate const& b) {
+                return a.dist_to_way_ < b.dist_to_way_;
+              });
+    for (auto const& wc : way_candidates) {
+      out.add(static_cast<float>(wc.dist_to_way_), wc.way_,
+              match_result::nodes{
+                  .left_ = {.node_ = wc.left_.node_,
+                            .dist_to_node_ =
+                                static_cast<float>(wc.left_.dist_to_node_),
+                            .cost_ = wc.left_.cost_},
+                  .right_ = {.node_ = wc.right_.node_,
+                             .dist_to_node_ =
+                                 static_cast<float>(wc.right_.dist_to_node_),
+                             .cost_ = wc.right_.cost_}});
+    }
+    return static_cast<unsigned>(way_candidates.size());
   }
 
   template <Profile P>
@@ -588,20 +451,10 @@ struct lookup {
   }
 
   template <Profile P>
-  bool is_way_node_feasible(P::parameters const& params,
-                            way_candidate const& wc,
-                            node_idx_t const node_idx,
-                            location const& query,
-                            bool const reverse,
-                            direction const search_dir) const {
-    return is_way_node_feasible<P>(params, wc.way_, node_idx, query, reverse,
-                                   search_dir);
-  }
-
-  template <Profile P>
-  node_candidate find_next_node(
+  candidate_node find_next_node(
       P::parameters const& params,
-      way_candidate const& wc,
+      way_idx_t const way,
+      double const dist_to_way,
       location const& query,
       direction const dir,
       level_t const lvl,
@@ -612,30 +465,27 @@ struct lookup {
       geo::latlng const best,
       size_t segment_idx,
       std::optional<routing_time_t> const start_time = std::nullopt,
-      // Only map matching consumes `node_candidate::path_` directly. Routing
-      // recomputes the geometry for the one candidate it actually uses via
-      // `get_node_candidate_path()`, so filling it for every candidate here is
-      // wasted work.
-      bool const with_path = false) const {
-    auto const way_prop = ways_.r_->way_properties_[wc.way_];
+      // Only map matching needs the geometry, and it caches it itself.
+      // Routing recomputes it for the one candidate it actually uses via
+      // `get_node_candidate_path()`, so building it here would be waste.
+      std::vector<geo::latlng>* path = nullptr) const {
+    auto const way_prop = ways_.r_->way_properties_[way];
     auto const edge_dir = reverse ? opposite(dir) : dir;
-    if (P::way_cost(params, *ways_.r_, ways_.timezones_, wc.way_, way_prop,
+    if (P::way_cost(params, *ways_.r_, ways_.timezones_, way, way_prop,
                     flip(search_dir, edge_dir), 0U, start_time, duration_t{0},
                     search_dir)
             .cost_ == kInfeasible) {
-      return node_candidate{};
+      return candidate_node{};
     }
 
-    auto c = node_candidate{.lvl_ = lvl,
-                            .way_dir_ = dir,
-                            .dist_to_node_ = wc.dist_to_way_,
-                            .cost_ = 0};
-    if (with_path) {
-      c.path_ = {best};
+    auto c = candidate_node{
+        .dist_to_node_ = dist_to_way, .cost_ = 0, .way_dir_ = dir, .lvl_ = lvl};
+    if (path != nullptr) {
+      *path = {best};
     }
     auto last_path_pos = best;
-    auto const polyline = ways_.way_polylines_[wc.way_];
-    auto const osm_nodes = ways_.way_osm_nodes_[wc.way_];
+    auto const polyline = ways_.way_polylines_[way];
+    auto const osm_nodes = ways_.way_osm_nodes_[way];
 
     till_the_end(
         segment_idx + (dir == direction::kForward ? 1U : 0U),
@@ -646,22 +496,21 @@ struct lookup {
               last_path_pos, pos, approx_distance_lng_degrees));
           c.dist_to_node_ += segment_dist;
           last_path_pos = pos;
-          if (with_path) {
-            c.path_.push_back(pos);
+          if (path != nullptr) {
+            path->push_back(pos);
           }
 
           auto const way_node = ways_.find_node_idx(osm_node_idx);
           if (way_node.has_value()) {
-            if (is_way_node_feasible<P>(params, wc, *way_node, query, reverse,
+            if (is_way_node_feasible<P>(params, way, *way_node, query, reverse,
                                         search_dir) &&
                 (blocked == nullptr || !blocked->test(*way_node))) {
               c.node_ = *way_node;
-              c.cost_ =
-                  P::way_cost(params, *ways_.r_, ways_.timezones_, wc.way_,
-                              way_prop, flip(search_dir, edge_dir),
-                              static_cast<distance_t>(c.dist_to_node_),
-                              start_time, duration_t{0}, search_dir)
-                      .cost_;
+              c.cost_ = P::way_cost(params, *ways_.r_, ways_.timezones_, way,
+                                    way_prop, flip(search_dir, edge_dir),
+                                    static_cast<distance_t>(c.dist_to_node_),
+                                    start_time, duration_t{0}, search_dir)
+                            .cost_;
             }
             return utl::cflow::kBreak;
           }
@@ -669,8 +518,8 @@ struct lookup {
           return utl::cflow::kContinue;
         });
 
-    if (with_path && (reverse ^ (search_dir == direction::kBackward))) {
-      std::reverse(begin(c.path_), end(c.path_));
+    if (path != nullptr && (reverse ^ (search_dir == direction::kBackward))) {
+      std::reverse(begin(*path), end(*path));
     }
     return c;
   }
@@ -684,40 +533,6 @@ private:
                                         double,
                                         geo::latlng const,
                                         size_t) const;
-
-  template <Profile P>
-  void apply_next_node_cost(
-      P::parameters const& params,
-      way_candidate const& wc,
-      node_candidate& nc,
-      location const& query,
-      bool const reverse,
-      direction const search_dir,
-      bitvec<node_idx_t> const* blocked,
-      std::optional<routing_time_t> const start_time) const {
-    if (!nc.valid()) {
-      return;
-    }
-    if (!is_way_node_feasible<P>(params, wc, nc.node_, query, reverse,
-                                 search_dir)) {
-      nc.node_ = node_idx_t::invalid();
-      return;
-    }
-    auto const way_prop = ways_.r_->way_properties_[wc.way_];
-
-    auto const edge_dir = reverse ? opposite(nc.way_dir_) : nc.way_dir_;
-    auto const cost = P::way_cost(params, *ways_.r_, ways_.timezones_, wc.way_,
-                                  way_prop, flip(search_dir, edge_dir),
-                                  static_cast<distance_t>(nc.dist_to_node_),
-                                  start_time, duration_t{0}, search_dir);
-
-    if (cost.cost_ != kInfeasible &&
-        (blocked == nullptr || !blocked->test(nc.node_))) {
-      nc.cost_ = cost.cost_;
-    } else {
-      nc.node_ = node_idx_t::invalid();
-    }
-  }
 
   std::filesystem::path p_;
   cista::mmap::protection mode_;

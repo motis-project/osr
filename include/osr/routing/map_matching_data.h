@@ -36,10 +36,15 @@ struct matched_way {
   node_idx_t additional_node_idx_{node_idx_t::invalid()};
   typename P::node fwd_node_{P::node::invalid()};
   typename P::node bwd_node_{P::node::invalid()};
-  node_candidate fwd_out_{};  // outgoing from point, way dir = fwd
-  node_candidate fwd_in_{};  // incoming to point, way dir = fwd
-  node_candidate bwd_out_{};  // outgoing from point, way dir = bwd
-  node_candidate bwd_in_{};  // incoming to point, way dir = bwd
+  candidate_node fwd_out_{};  // outgoing from point, way dir = fwd
+  candidate_node fwd_in_{};  // incoming to point, way dir = fwd
+  candidate_node bwd_out_{};  // outgoing from point, way dir = bwd
+  candidate_node bwd_in_{};  // incoming to point, way dir = bwd
+  // Geometry for the four candidates above. Cached here (rather than in the
+  // shared candidate type) because map matching consumes it for every edge,
+  // while routing recomputes it only for the candidate it actually uses.
+  std::vector<geo::latlng> fwd_out_path_{}, fwd_in_path_{}, bwd_out_path_{},
+      bwd_in_path_{};
   cost_t fwd_cost_{kInfeasible};
   cost_t bwd_cost_{kInfeasible};
   std::size_t beeline_from_{0U};

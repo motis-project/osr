@@ -45,11 +45,8 @@ struct dial {
   void clear() {
     current_bucket_ = 0U;
     size_ = 0U;
-    // Only buckets up to the highest one ever pushed can hold anything.
-    // Clearing all of them dominates short searches, which is what the
-    // one-to-many offset queries do (one search per rental provider).
-    auto const end = std::min(static_cast<std::size_t>(max_bucket_) + 1U,
-                              buckets_.size());
+    auto const end =
+        std::min(static_cast<std::size_t>(max_bucket_) + 1U, buckets_.size());
     for (auto i = std::size_t{0U}; i != end; ++i) {
       buckets_[i].clear();
     }
