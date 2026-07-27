@@ -13,6 +13,7 @@
 #include "utl/cflow.h"
 #include "utl/helpers/algorithm.h"
 #include "utl/pairwise.h"
+#include "utl/verify.h"
 
 #include "osr/location.h"
 #include "osr/routing/parameters.h"
@@ -153,14 +154,22 @@ struct match_result {
   }
 
   view operator[](match_idx_t const i) const {
+    utl::verify(to_idx(i) + 1U < begin_.size(),
+                "match_result: match {} out of range (size={})", to_idx(i),
+                size());
+
     auto const from = to_idx(begin_[i]);
     auto const to = to_idx(begin_[match_idx_t{to_idx(i) + 1U}]);
     auto const n = static_cast<std::size_t>(to - from);
-    return view{
-        .dist_to_way_ = std::span{&dist_to_way_[way_candidate_idx_t{from}], n},
-        .way_ = std::span{&way_[way_candidate_idx_t{from}], n},
-        .nodes_ = std::span{&nodes_[way_candidate_idx_t{from}], n},
-        .lvl_ = lvl_[i]};
+    auto const at = [&](auto const& v) {
+      using value_t = std::decay_t<decltype(v[way_candidate_idx_t{0U}])>;
+      return n == 0U ? std::span<value_t const>{}
+                     : std::span{&v[way_candidate_idx_t{from}], n};
+    };
+    return view{.dist_to_way_ = at(dist_to_way_),
+                .way_ = at(way_),
+                .nodes_ = at(nodes_),
+                .lvl_ = lvl_[i]};
   }
 
   vec_map<match_idx_t, way_candidate_idx_t> begin_{};  // size() + 1 entries
