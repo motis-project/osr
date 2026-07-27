@@ -37,12 +37,6 @@ struct dijkstra_bidir {
     pq_.n_buckets(max + 1U);
     cost_.clear();
     max_reached_ = false;
-    if constexpr (EarlyTermination) {
-      destinations_.clear();
-      remaining_destinations_ = 0U;
-      early_termination_max_cost_ = kInfeasible;
-      terminated_early_max_cost_ = false;
-    }
   }
 
   void add_start(ways const& w, label const l) {
@@ -60,14 +54,10 @@ struct dijkstra_bidir {
     }
   }
 
-  void add_destination(node const n) {
-    if constexpr (EarlyTermination) {
-      auto it = std::lower_bound(begin(destinations_), end(destinations_), n);
-      if (it == end(destinations_) || *it != n) {
-        destinations_.insert(it, n);
-        ++remaining_destinations_;
-      }
-    }
+  void add_destination(ways const& w, node const n) {
+    std::cout << "DEST ";
+    n.get_node().print(std::cout, w);
+    std::cout << "\n";
   }
 
   cost_t get_cost(node const n) const {
@@ -88,30 +78,6 @@ struct dijkstra_bidir {
 
       if (get_cost(l.get_node()) < l.cost()) {
         continue;
-      }
-
-      if constexpr (EarlyTermination) {
-        if (std::find(begin(destinations_), end(destinations_), l.get_node()) !=
-            end(destinations_)) {
-          --remaining_destinations_;
-          auto const curr_cost = get_cost(l.get_node());
-          early_termination_max_cost_ = std::min(
-              early_termination_max_cost_,
-              static_cast<cost_t>(std::min(
-                  {static_cast<std::uint64_t>(curr_cost) * 2 +
-                       static_cast<std::uint64_t>(
-                           P::upper_bound_heuristic(params, 1500U)),
-                   static_cast<std::uint64_t>(
-                       curr_cost + P::upper_bound_heuristic(params, 10000U)),
-                   static_cast<std::uint64_t>(kInfeasible - 1U)})));
-          if (remaining_destinations_ == 0U) {
-            break;
-          }
-        }
-        if (l.cost() > early_termination_max_cost_) {
-          terminated_early_max_cost_ = true;
-          break;
-        }
       }
 
       if constexpr (kDebug) {
@@ -179,8 +145,10 @@ struct dijkstra_bidir {
   }
 
   dial<label, get_bucket> pq_{get_bucket{}};
+  // dial<label, get_bucket> pqBack_{get_bucket{}};
 
   ankerl::unordered_dense::map<key, entry, hash> cost_;
+  // ankerl::unordered_dense::map<key, entry, hash> costBackward_;
   bool max_reached_{};
 
   // for early termination
