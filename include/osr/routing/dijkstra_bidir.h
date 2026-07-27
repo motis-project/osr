@@ -33,36 +33,63 @@ struct dijkstra_bidir {
   };
 
   void reset(cost_t const max) {
-    pq_.clear();
-    pq_.n_buckets(max + 1U);
-    cost_.clear();
+    pqForward_.clear();
+    pqForward_.n_buckets(max + 1U);
+    pqBackward_.clear();
+    pqBackward_.n_buckets(max + 1U);
+    costForward_.clear();
+    costBackward_.clear();
     max_reached_ = false;
   }
 
   void add_start(ways const& w, label const l) {
-    if (cost_[l.get_node().get_key()].update(l, l.get_node(), l.cost(),
-                                             node::invalid())) {
+    if (costForward_[l.get_node().get_key()].update(l, l.get_node(), l.cost(),
+                                                    node::invalid())) {
       if constexpr (kDebug) {
         std::cout << "START ";
         l.get_node().print(std::cout, w);
         std::cout << "\n";
       }
-      utl::verify(l.cost() < pq_.n_buckets(),
+      utl::verify(l.cost() < pqForward_.n_buckets(),
                   "dijkstra_bidir::add_start: label cost exceeds max: {} >= {}",
-                  l.cost(), pq_.n_buckets());
-      pq_.push(l);
+                  l.cost(), pqForward_.n_buckets());
+      pqForward_.push(l);
     }
   }
 
-  void add_destination(ways const& w, node const n) {
-    std::cout << "DEST ";
-    n.get_node().print(std::cout, w);
-    std::cout << "\n";
+  void add_destination(ways const& w, label const l) {
+    // std::cout << "DEST ";
+    // n.get_node().print(std::cout, w);
+    // std::cout << "\n";
+    if (costBackward_[l.get_node().get_key()].update(l, l.get_node(), l.cost(),
+                                                     node::invalid())) {
+      if constexpr (kDebug) {
+        std::cout << "DESTINATION ";
+        l.get_node().print(std::cout, w);
+        std::cout << "\n";
+      }
+      utl::verify(
+          l.cost() < pqBackward_.n_buckets(),
+          "dijkstra_bidir::add_destination: label cost exceeds max: {} >= {}",
+          l.cost(), pqBackward_.n_buckets());
+      pqBackward_.push(l);
+    }
   }
 
+  // cost_t get_cost(node const n) const {
+  //   auto const it = cost_.find(n.get_key());
+  //   return it != end(cost_) ? it->second.cost(n) : kInfeasible;
+  // }
+
+  template <direction Dir>
   cost_t get_cost(node const n) const {
-    auto const it = cost_.find(n.get_key());
-    return it != end(cost_) ? it->second.cost(n) : kInfeasible;
+    if constexpr (Dir == direction::kForward) {
+      auto const it = costForward_.find(n.get_key());
+      return it != end(costForward_) ? it->second.cost(n) : kInfeasible;
+    } else {
+      auto const it = costBackward_.find(n.get_key());
+      return it != end(costBackward_) ? it->second.cost(n) : kInfeasible;
+    }
   }
 
   template <direction SearchDir, bool WithBlocked>
@@ -73,50 +100,88 @@ struct dijkstra_bidir {
            bitvec<node_idx_t> const* blocked,
            sharing_data const* sharing,
            elevation_storage const* elevations) {
-    while (!pq_.empty()) {
-      auto l = pq_.pop();
+    while (!pqForward_.empty() || !pqBackward_.empty()) {
+      auto const forward =
+          pqBackward_.empty() ||
+          (!pqForward_.empty() &&
+           pqForward_.get_next_bucket() <= pqBackward_.get_next_bucket());
 
-      if (get_cost(l.get_node()) < l.cost()) {
-        continue;
+      auto l = forward ? pqForward_.pop() : pqBackward_.pop();
+
+      // if (get_cost(l.get_node()) < l.cost()) { //?????
+      //   continue;
+      // }
+      if (forward) {
+        if (get_cost<direction::kForward>(l.get_node()) < l.cost()) {
+          continue;
+        }
+      } else {
+        if (get_cost<direction::kBackward>(l.get_node()) < l.cost()) {
+          continue;
+        }
       }
 
+      auto const curr = l.get_node();
       if constexpr (kDebug) {
         std::cout << "EXTRACT ";
         l.get_node().print(std::cout, w);
         std::cout << "\n";
       }
 
-      auto const curr = l.get_node();
-      P::template adjacent<SearchDir, WithBlocked>(
-          params, r, curr, blocked, sharing, elevations,
-          [&](node const neighbor, std::uint32_t const cost, distance_t,
-              way_idx_t const way, std::uint16_t, std::uint16_t,
-              elevation_storage::elevation, bool const track) {
+      auto relax_neighbor = [&](node const neighbor, std::uint32_t const cost,
+                                distance_t, way_idx_t const way, std::uint16_t,
+                                std::uint16_t, elevation_storage::elevation,
+                                bool const track) {
+        if constexpr (kDebug) {
+          std::cout << "  NEIGHBOR ";
+          neighbor.print(std::cout, w);
+        }
+
+        auto const total = static_cast<std::uint64_t>(l.cost()) + cost;
+        if (total >= max) {
+          max_reached_ = true;
+          return;
+        }
+        if (forward) {
+          if (costForward_[neighbor.get_key()].update(
+                  l, neighbor, static_cast<cost_t>(total), curr)) {
+            auto next = label{neighbor, static_cast<cost_t>(total)};
+            next.track(l, r, way, neighbor.get_node(), track);
+            pqForward_.push(std::move(next));
+
             if constexpr (kDebug) {
-              std::cout << "  NEIGHBOR ";
-              neighbor.print(std::cout, w);
+              std::cout << " -> PUSH\n";
             }
+          } else {
+            if constexpr (kDebug) {
+              std::cout << " -> DOMINATED\n";
+            }
+          }
+        } else {
+          if (costBackward_[neighbor.get_key()].update(
+                  l, neighbor, static_cast<cost_t>(total), curr)) {
+            auto next = label{neighbor, static_cast<cost_t>(total)};
+            next.track(l, r, way, neighbor.get_node(), track);
+            pqBackward_.push(std::move(next));
 
-            auto const total = static_cast<std::uint64_t>(l.cost()) + cost;
-            if (total >= max) {
-              max_reached_ = true;
-              return;
+            if constexpr (kDebug) {
+              std::cout << " -> PUSH\n";
             }
-            if (cost_[neighbor.get_key()].update(
-                    l, neighbor, static_cast<cost_t>(total), curr)) {
-              auto next = label{neighbor, static_cast<cost_t>(total)};
-              next.track(l, r, way, neighbor.get_node(), track);
-              pq_.push(std::move(next));
+          } else {
+            if constexpr (kDebug) {
+              std::cout << " -> DOMINATED\n";
+            }
+          }
+        }
+      };
 
-              if constexpr (kDebug) {
-                std::cout << " -> PUSH\n";
-              }
-            } else {
-              if constexpr (kDebug) {
-                std::cout << " -> DOMINATED\n";
-              }
-            }
-          });
+      if (forward) {
+        P::template adjacent<SearchDir, WithBlocked>(
+            params, r, curr, blocked, sharing, elevations, relax_neighbor);
+      } else {
+        P::template adjacent<opposite(SearchDir), WithBlocked>(
+            params, r, curr, blocked, sharing, elevations, relax_neighbor);
+      }
     }
     return !max_reached_;
   }
@@ -144,11 +209,11 @@ struct dijkstra_bidir {
     }
   }
 
-  dial<label, get_bucket> pq_{get_bucket{}};
-  // dial<label, get_bucket> pqBack_{get_bucket{}};
+  dial<label, get_bucket> pqForward_{get_bucket{}};
+  dial<label, get_bucket> pqBackward_{get_bucket{}};
 
-  ankerl::unordered_dense::map<key, entry, hash> cost_;
-  // ankerl::unordered_dense::map<key, entry, hash> costBackward_;
+  ankerl::unordered_dense::map<key, entry, hash> costForward_;
+  ankerl::unordered_dense::map<key, entry, hash> costBackward_;
   bool max_reached_{};
 
   // for early termination
