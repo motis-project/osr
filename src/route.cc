@@ -985,7 +985,7 @@ std::vector<std::optional<path>> route(
     search_profile const profile,
     location const& from,
     std::vector<location> const& to,
-    match_result::view const from_match,
+    match_view_t const& from_match,
     match_result const& to_match,
     cost_t const max,
     direction const dir,
