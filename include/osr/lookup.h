@@ -376,10 +376,8 @@ struct lookup {
 
   void insert(way_idx_t);
 
-  // Appends the geometric+profile matches for `query` to `out` (which must be
-  // mid-bucket, i.e. between start() and finish()) and
-  // returns whether any was found. Candidates are ordered by their `double`
-  // distance before the narrowing to float, so ties order by full precision.
+  // Appends the geometric+profile matches for `query` to `out` (between start()
+  // and finish()) and returns whether any was found.
   template <Profile P>
   bool get_way_candidates(
       P::parameters const& params,
