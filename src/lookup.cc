@@ -168,16 +168,3 @@ hash_set<node_idx_t> lookup::find_elevators(geo::box const& b) const {
 }
 
 }  // namespace osr
-
-namespace osr {
-// TEMPORARY: force instantiation of the SoA match path for type checking.
-template void lookup::complete_match<car>(car::parameters const&,
-                                          location const&,
-                                          bool,
-                                          direction,
-                                          double,
-                                          bitvec<node_idx_t> const*,
-                                          std::optional<routing_time_t>,
-                                          std::span<raw_way_candidate const>,
-                                          match_result&) const;
-}  // namespace osr

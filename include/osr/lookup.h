@@ -88,13 +88,10 @@ struct raw_way_candidate {
 using match_t = std::vector<way_candidate>;
 using match_view_t = std::span<way_candidate const>;
 
-using way_candidate_idx_t = cista::strong<std::uint32_t, struct way_candidate_idx_>;
+using way_candidate_idx_t =
+    cista::strong<std::uint32_t, struct way_candidate_idx_>;
 using match_idx_t = cista::strong<std::uint32_t, struct match_idx_>;
 
-// Structure of arrays replacement for `std::vector<match_t>`: all matches of
-// one request live in flat, trivially copyable arrays, bucketed per match.
-// `node_candidate::path_` is intentionally absent - it is only needed for path
-// reconstruction, which recomputes it via `get_node_candidate_path()`.
 struct match_result {
   struct node {
     bool valid() const { return node_ != node_idx_t::invalid(); }
@@ -142,10 +139,35 @@ struct match_result {
     nodes_.emplace_back(n);
   }
 
-  void finish() {
-    begin_.emplace_back(
-        way_candidate_idx_t{static_cast<way_candidate_idx_t::value_t>(
-            way_.size())});
+  void finish() { begin_.emplace_back(way_candidate_idx_t{(way_.size())}); }
+
+  // Appends an AoS match as a new bucket (conversion at the one place that
+  // still builds `match_t`).
+  void add_match(match_view_t const m, level_t const lvl) {
+    start(lvl);
+    for (auto const& wc : m) {
+      add(static_cast<float>(wc.dist_to_way_), wc.way_,
+          nodes{.left_ = {.node_ = wc.left_.node_,
+                          .dist_to_node_ =
+                              static_cast<float>(wc.left_.dist_to_node_),
+                          .cost_ = wc.left_.cost_},
+                .right_ = {.node_ = wc.right_.node_,
+                           .dist_to_node_ =
+                               static_cast<float>(wc.right_.dist_to_node_),
+                           .cost_ = wc.right_.cost_}});
+    }
+    finish();
+  }
+
+  // Appends a copy of one bucket of `src`. Used to gather a scattered subset
+  // of precomputed matches into the contiguous form `route()` consumes.
+  void append(match_result const& src, match_idx_t const i) {
+    auto const v = src[i];
+    start(v.lvl_);
+    for (auto j = std::size_t{0U}; j != v.size(); ++j) {
+      add(v.dist_to_way_[j], v.way_[j], v.nodes_[j]);
+    }
+    finish();
   }
 
   view operator[](match_idx_t const i) const {
@@ -188,7 +210,8 @@ inline way_idx_t candidate_way(match_view_t const m, std::size_t const j) {
 inline double candidate_dist_to_way(match_view_t const m, std::size_t const j) {
   return m[j].dist_to_way_;
 }
-inline candidate_node candidate_left(match_view_t const m, std::size_t const j) {
+inline candidate_node candidate_left(match_view_t const m,
+                                     std::size_t const j) {
   auto const& n = m[j].left_;
   return {n.node_, n.dist_to_node_, n.cost_, n.way_dir_, n.lvl_};
 }
@@ -306,9 +329,8 @@ struct lookup {
     // verbatim so the (subtle) widening semantics stay identical, and convert
     // its result. Rare enough that the temporary AoS vector does not matter.
     if (added == 0U && doublings < 4U) {
-      for (auto const& wc :
-           match<P>(params, query, reverse, search_dir, max_match_distance,
-                    blocked, start_time)) {
+      for (auto const& wc : match<P>(params, query, reverse, search_dir,
+                                     max_match_distance, blocked, start_time)) {
         out.add(static_cast<float>(wc.dist_to_way_), wc.way_,
                 match_result::nodes{
                     .left_ = {.node_ = wc.left_.node_,
@@ -411,8 +433,7 @@ struct lookup {
     auto const [squared_dist, best, segment_idx] =
         geo::approx_squared_distance_to_polyline<
             std::tuple<double, geo::latlng, size_t>>(
-            query.pos_, ways_.way_polylines_[way],
-            approx_distance_lng_degrees);
+            query.pos_, ways_.way_polylines_[way], approx_distance_lng_degrees);
     auto const polyline = ways_.way_polylines_[way];
     auto const osm_nodes = ways_.way_osm_nodes_[way];
     auto path = std::vector<geo::latlng>{best};
