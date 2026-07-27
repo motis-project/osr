@@ -8,6 +8,7 @@
 #include "osr/routing/profiles/car_sharing.h"
 #include "osr/routing/profiles/ferry.h"
 #include "osr/routing/profiles/foot.h"
+#include "osr/routing/profiles/hgv.h"
 #include "osr/routing/profiles/railway.h"
 
 namespace osr {
@@ -27,6 +28,7 @@ auto with_profile(search_profile const p, Fn&& fn) {
     case search_profile::kBikeElevationHigh:
       return fn(bike<bike_costing::kSafe, kElevationHighCost>{});
     case search_profile::kCar: return fn(car{});
+    case search_profile::kHgv: return fn(hgv{});
     case search_profile::kCarDropOff: return fn(car_parking<false, false>{});
     case search_profile::kCarDropOffWheelchair:
       return fn(car_parking<true, false>{});

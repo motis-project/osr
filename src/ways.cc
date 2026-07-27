@@ -2,7 +2,10 @@
 
 #include <algorithm>
 
+#include "date/tz.h"
+
 #include "utl/parallel_for.h"
+#include "utl/to_vec.h"
 
 #include "cista/io.h"
 
@@ -56,6 +59,9 @@ ways::ways(std::filesystem::path p, cista::mmap::protection const mode)
       r_{mode == cista::mmap::protection::READ
              ? routing::read(p_)
              : cista::wrapped<routing>{cista::raw::make_unique<routing>()}},
+      timezones_{utl::to_vec(
+          r_->timezones_,
+          [](auto const& tz) { return date::locate_zone(tz.view()); })},
       node_to_osm_{mm("node_to_osm.bin")},
       way_osm_idx_{mm("way_osm_idx.bin")},
       way_polylines_{mm_vec<point>{mm("way_polylines_data.bin")},
@@ -119,9 +125,10 @@ void ways::add_restriction(std::vector<resolved_restriction>& rs) {
 
         for (auto const& x : range) {
           if (x.type_ == resolved_restriction::type::kNo) {
-            r_->node_restrictions_[x.via_].push_back(
-                restriction{r_->get_way_pos(x.via_, x.from_),
-                            r_->get_way_pos(x.via_, x.to_), x.applies_to_bus_});
+            r_->node_restrictions_[x.via_].push_back(restriction{
+                r_->get_way_pos(x.via_, x.from_),
+                r_->get_way_pos(x.via_, x.to_), x.applies_to_default_,
+                x.applies_to_bus_, x.applies_to_hgv_, x.condition_set_});
           } else /* kOnly */ {
             for (auto const [i, from] :
                  utl::enumerate(r_->node_ways_[x.via_])) {
@@ -130,7 +137,8 @@ void ways::add_restriction(std::vector<resolved_restriction>& rs) {
                 if (x.from_ == from && x.to_ != to) {
                   r_->node_restrictions_[x.via_].push_back(restriction{
                       static_cast<way_pos_t>(i), static_cast<way_pos_t>(j),
-                      x.applies_to_bus_});
+                      x.applies_to_default_, x.applies_to_bus_,
+                      x.applies_to_hgv_, x.condition_set_});
                 }
               }
             }
@@ -197,7 +205,7 @@ void ways::connect_ways() {
         .out_bounds(40, 50);
 
     auto node_idx = node_idx_t{0U};
-    node_way_counter_.multi_.for_each_set_bit([&](std::uint64_t const b_idx) {
+    node_way_counter_.for_each_multi([&](std::uint64_t const b_idx) {
       auto const i = osm_node_idx_t{b_idx};
       node_to_osm_.push_back(i);
       ++node_idx;
@@ -208,86 +216,148 @@ void ways::connect_ways() {
 
   // Build edges.
   {
-    pt->status("Connect ways")
-        .in_high(way_osm_nodes_.size())
-        .out_bounds(50, 75);
-    auto node_ways = mm_paged_vecvec<node_idx_t, way_idx_t>{
-        cista::paged<mm_vec32<way_idx_t>>{
-            mm_vec32<way_idx_t>{mm("tmp_node_ways_data.bin")}},
-        mm_vec<cista::page<std::uint32_t, std::uint16_t>>{
-            mm("tmp_node_ways_index.bin")}};
-    auto node_in_way_idx = mm_paged_vecvec<node_idx_t, std::uint16_t>{
-        cista::paged<mm_vec32<std::uint16_t>>{
-            mm_vec32<std::uint16_t>{mm("tmp_node_in_way_idx_data.bin")}},
-        mm_vec<cista::page<std::uint32_t, std::uint16_t>>{
-            mm("tmp_node_in_way_idx_index.bin")}};
-    node_ways.resize(node_to_osm_.size());
-    node_in_way_idx.resize(node_to_osm_.size());
-    for (auto const [osm_way_idx, osm_nodes, polyline] :
-         utl::zip(way_osm_idx_, way_osm_nodes_, way_polylines_)) {
-      auto pred_pos = std::make_optional<point>();
-      auto from = node_idx_t::invalid();
-      auto distance = 0.0;
-      auto i = std::uint16_t{0U};
-      auto way_idx = way_idx_t{r_->way_nodes_.size()};
-      auto dists = r_->way_node_dist_.add_back_sized(0U);
-      auto nodes = r_->way_nodes_.add_back_sized(0U);
-      for (auto const [osm_node_idx, pos] : utl::zip(osm_nodes, polyline)) {
-        if (pred_pos.has_value()) {
-          distance += geo::distance(pos, *pred_pos);
-        }
+    auto const n_nodes = static_cast<std::size_t>(node_to_osm_.size());
+    auto const n_ways = static_cast<std::size_t>(way_osm_nodes_.size());
 
-        if (node_way_counter_.is_multi(to_idx(osm_node_idx))) {
-          auto const to = get_node_idx(osm_node_idx);
-          node_ways[to].push_back(way_idx);
-          node_in_way_idx[to].push_back(i);
-          nodes.push_back(to);
+    pt->status("Connect ways").in_high(n_ways).out_bounds(50, 71);
 
-          if (from != node_idx_t::invalid()) {
-            auto const dist = static_cast<distance_t>(std::round(distance));
-            if (dist < std::numeric_limits<std::uint16_t>::max()) {
-              dists.push_back(static_cast<std::uint16_t>(dist));
-            } else {
-              r_->long_way_node_dist_.push_back(routing::long_distance{
-                  .way_ = way_idx,
-                  .node_ = static_cast<std::uint16_t>(i - 1U),
-                  .distance_ = dist});
-              dists.push_back(std::numeric_limits<std::uint16_t>::max());
+    // Phase 1: Count number of ways per node (if way visits *N -> counted *N).
+    // Phase 2: Reserve node_ways_ / node_in_way_idx_ and reset counts to 0.
+    // Phase 3: Fill node_ways_ / node_in_way_idx_ = transpose of way_nodes_.
+    //          -> count becomes a fill cursor per node
+    auto count = std::vector<std::atomic<std::uint32_t>>(n_nodes);
+
+    struct way_edges {
+      std::vector<node_idx_t> nodes_;
+      std::vector<std::uint16_t> dists_;
+      std::vector<routing::long_distance> long_dists_;
+    };
+
+    constexpr auto kConnectChunkSize = std::size_t{1024U};
+    auto const n_chunks = (n_ways + kConnectChunkSize - 1U) / kConnectChunkSize;
+    utl::parallel_ordered_collect_threadlocal<char>(
+        n_chunks,
+        [&](char&, std::size_t const chunk) {
+          auto const chunk_begin = chunk * kConnectChunkSize;
+          auto const chunk_end =
+              std::min(chunk_begin + kConnectChunkSize, n_ways);
+          auto out = std::vector<way_edges>{};
+          out.reserve(chunk_end - chunk_begin);
+          for (auto way = chunk_begin; way != chunk_end; ++way) {
+            auto const way_idx = way_idx_t{way};
+            auto c = way_edges{};
+            auto pred_pos = std::make_optional<point>();
+            auto from = node_idx_t::invalid();
+            auto distance = 0.0;
+            auto i = std::uint16_t{0U};
+            for (auto const [osm_node_idx, pos] :
+                 utl::zip(way_osm_nodes_[way_idx], way_polylines_[way_idx])) {
+              if (pred_pos.has_value()) {
+                distance += geo::distance(pos, *pred_pos);
+              }
+
+              if (node_way_counter_.is_multi(to_idx(osm_node_idx))) {
+                auto const to = get_node_idx(osm_node_idx);
+                count[to_idx(to)].fetch_add(1U, std::memory_order_relaxed);
+                c.nodes_.push_back(to);
+
+                if (from != node_idx_t::invalid()) {
+                  auto const dist =
+                      static_cast<distance_t>(std::round(distance));
+                  if (dist < std::numeric_limits<std::uint16_t>::max()) {
+                    c.dists_.push_back(static_cast<std::uint16_t>(dist));
+                  } else {
+                    c.long_dists_.push_back(routing::long_distance{
+                        .way_ = way_idx,
+                        .node_ = static_cast<std::uint16_t>(i - 1U),
+                        .distance_ = dist});
+                    c.dists_.push_back(
+                        std::numeric_limits<std::uint16_t>::max());
+                  }
+                }
+
+                distance = 0.0;
+                from = to;
+
+                if (i == std::numeric_limits<std::uint16_t>::max()) {
+                  fmt::println("error: way {} has too many nodes, truncating",
+                               way_osm_idx_[way_idx]);
+                  break;
+                }
+
+                ++i;
+              }
+
+              pred_pos = pos;
+            }
+            out.push_back(std::move(c));
+          }
+          return out;
+        },
+        [&](std::size_t, std::vector<way_edges> const& chunk_out) {
+          for (auto const& c : chunk_out) {
+            r_->way_nodes_.emplace_back(c.nodes_);
+            r_->way_node_dist_.emplace_back(c.dists_);
+            for (auto const& x : c.long_dists_) {
+              r_->long_way_node_dist_.push_back(x);
             }
           }
+        },
+        [&](std::size_t) { pt->increment(kConnectChunkSize); });
 
-          distance = 0.0;
-          from = to;
+    utl::sort(r_->long_way_node_dist_);
 
-          if (i == std::numeric_limits<std::uint16_t>::max()) {
-            fmt::println("error: way with {} nodes", osm_way_idx);
+    pt->status("Connect ways / transpose").in_high(n_ways).out_bounds(71, 74);
+
+    // Reserve node_ways_ / node_in_way_idx_ for each node.
+    for (auto n = std::size_t{0U}; n != n_nodes; ++n) {
+      auto const size = count[n].exchange(0U, std::memory_order_relaxed);
+      r_->node_ways_.add_back_sized(size);
+      r_->node_in_way_idx_.add_back_sized(size);
+    }
+
+    // Fill node_ways_ / node_in_way_idx_ = transpose of way_nodes_.
+    // Threads claims their write slot via the atomic per-node cursor.
+    utl::parallel_for_run(
+        n_ways,
+        [&](std::size_t const way) {
+          auto i = std::uint16_t{0U};
+          for (auto const n : r_->way_nodes_[way_idx_t{way}]) {
+            auto const pos =
+                count[to_idx(n)].fetch_add(1U, std::memory_order_relaxed);
+            r_->node_ways_[n][pos] = way_idx_t{way};
+            r_->node_in_way_idx_[n][pos] = i++;
           }
+        },
+        pt->update_fn());
 
-          ++i;
-        }
+    // Sort node_ways_ / node_in_way_idx_ by way_idx for deterministic ordering.
+    pt->status("Connect ways / sort").in_high(n_nodes).out_bounds(74, 75);
+    utl::parallel_for_run_threadlocal<
+        std::vector<std::pair<way_idx_t, std::uint16_t>>>(
+        n_nodes,
+        [&](std::vector<std::pair<way_idx_t, std::uint16_t>>& scratch,
+            std::size_t const n) {
+          auto ways = r_->node_ways_[node_idx_t{n}];
+          auto positions = r_->node_in_way_idx_[node_idx_t{n}];
 
-        pred_pos = pos;
-      }
-      pt->increment();
-    }
+          // Copy to scratch + sort.
+          scratch.clear();
+          for (auto const [w, p] : utl::zip(ways, positions)) {
+            scratch.emplace_back(w, p);
+          }
+          utl::sort(scratch);
 
-    std::sort(begin(r_->long_way_node_dist_), end(r_->long_way_node_dist_));
-
-    for (auto const x : node_ways) {
-      r_->node_ways_.emplace_back(x);
-    }
-    for (auto const x : node_in_way_idx) {
-      r_->node_in_way_idx_.emplace_back(x);
-    }
+          // Copy back from scratch.
+          for (auto const [i, x] : utl::enumerate(scratch)) {
+            ways[i] = x.first;
+            positions[i] = x.second;
+          }
+        },
+        pt->update_fn());
   }
 
   compute_turn_bearings();
-
-  auto e = std::error_code{};
-  std::filesystem::remove(p_ / "tmp_node_ways_data.bin", e);
-  std::filesystem::remove(p_ / "tmp_node_ways_index.bin", e);
-  std::filesystem::remove(p_ / "tmp_node_in_way_idx_data.bin", e);
-  std::filesystem::remove(p_ / "tmp_node_in_way_idx_index.bin", e);
 }
 
 std::size_t ways::get_polyline_node_idx(

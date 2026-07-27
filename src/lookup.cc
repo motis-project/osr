@@ -1,5 +1,7 @@
 #include "osr/lookup.h"
 
+#include "utl/parallel_for.h"
+
 #include "osr/routing/parameters.h"
 #include "osr/routing/profiles/bike.h"
 #include "osr/routing/profiles/bike_sharing.h"
@@ -24,7 +26,23 @@ lookup::lookup(ways const& ways,
       ways_{ways} {}
 
 void lookup::build_rtree() {
-  for (auto way = way_idx_t{0U}; way != ways_.n_ways(); ++way) {
+  auto sorted_ways = std::vector<way_idx_t>();
+  sorted_ways.resize(ways_.n_ways());
+  std::iota(sorted_ways.begin(), sorted_ways.end(), way_idx_t{0});
+  auto curve = vec_map<way_idx_t, std::uint64_t>{};
+  curve.resize(ways_.n_ways());
+
+  utl::parallel_for(sorted_ways, [&](way_idx_t const way) {
+    curve[way] = geo::morton_encode(
+        ways_.way_polylines_[way][ways_.way_polylines_[way].size() / 2]);
+  });
+
+  std::stable_sort(sorted_ways.begin(), sorted_ways.end(),
+                   [&](way_idx_t const a, way_idx_t const b) {
+                     return curve[a] < curve[b];
+                   });
+
+  for (auto way : sorted_ways) {
     auto b = geo::box{};
     for (auto const& c : ways_.way_polylines_[way]) {
       b.extend(c);
@@ -116,7 +134,7 @@ match_t lookup::match(profile_parameters const& params,
                           raw_way_candidates) const {
   return with_profile(p, [&]<Profile P>(P&&) {
     return match<P>(std::get<typename P::parameters>(params), query, reverse,
-                    search_dir, max_match_distance, blocked,
+                    search_dir, max_match_distance, blocked, std::nullopt,
                     raw_way_candidates);
   });
 }

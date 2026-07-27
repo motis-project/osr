@@ -78,6 +78,7 @@
       "cacheVariables": {
         "CMAKE_EXE_LINKER_FLAGS": "-B/opt/mold",
         "CMAKE_BUILD_TYPE": "Release",
+        "BUILD_SHARED_LIBS": "OFF",
         "OSR_MIMALLOC": "ON"
       },
       "environment": {
@@ -94,6 +95,7 @@
         "CMAKE_CROSSCOMPILING_EMULATOR": "qemu-aarch64-static",
         "CMAKE_EXE_LINKER_FLAGS": "-B/opt/mold",
         "CMAKE_BUILD_TYPE": "Release",
+        "BUILD_SHARED_LIBS": "OFF",
         "OSR_MIMALLOC": "ON"
       },
       "environment": {

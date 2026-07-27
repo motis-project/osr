@@ -11,6 +11,7 @@ std::string_view to_str(mode const m) {
     case mode::kFoot: return "foot";
     case mode::kWheelchair: return "wheelchair";
     case mode::kCar: return "car";
+    case mode::kHgv: return "hgv";
     case mode::kBike: return "bike";
     case mode::kRailway: return "railway";
     case mode::kFerry: return "ferry";

@@ -10,6 +10,7 @@
 #endif
 #include <filesystem>
 #include <ranges>
+#include <vector>
 
 #include "fmt/ranges.h"
 #include "fmt/std.h"
@@ -27,19 +28,30 @@
 #include "utl/verify.h"
 #include "utl/zip.h"
 
+#include "osr/conditional.h"
 #include "osr/extract/tags.h"
 #include "osr/point.h"
 #include "osr/routing/turns.h"
 #include "osr/types.h"
 #include "osr/util/multi_counter.h"
 
+namespace date {
+class time_zone;
+}
+
 namespace osr {
+
+using timezone_cache_t = std::vector<date::time_zone const*>;
 
 struct resolved_restriction {
   enum class type { kNo, kOnly } type_;
   way_idx_t from_, to_;
   node_idx_t via_;
+  bool applies_to_default_{true};
   bool applies_to_bus_{true};
+  bool applies_to_hgv_{true};
+  conditional_condition_set_idx_t condition_set_{
+      conditional_condition_set_idx_t::invalid()};
 };
 
 struct restriction {
@@ -59,7 +71,91 @@ struct restriction {
 
   way_pos_t from_ : 4;
   way_pos_t to_ : 4;
+  way_pos_t applies_to_default_ : 1;
   way_pos_t applies_to_bus_ : 1;
+  way_pos_t applies_to_hgv_ : 1;
+  conditional_condition_set_idx_t condition_set_{
+      conditional_condition_set_idx_t::invalid()};
+};
+
+enum class hgv_info_field : std::uint16_t {
+  kAccessFwd = 1U << 0U,
+  kAccessBwd = 1U << 1U,
+  kMaxSpeed = 1U << 2U,
+  kMaxLength = 1U << 3U,
+  kMaxWeightRating = 1U << 4U,
+  kMaxHeight = 1U << 5U,
+  kMaxWidth = 1U << 6U,
+  kMaxWeight = 1U << 7U,
+  kMaxAxleLoad = 1U << 8U,
+  kMaxAxles = 1U << 9U,
+  kHazmat = 1U << 10U,
+  kHazmatWater = 1U << 11U,
+  kTrailer = 1U << 12U,
+};
+
+constexpr std::uint16_t to_mask(hgv_info_field const field) {
+  return static_cast<std::uint16_t>(field);
+}
+
+struct hgv_way_info {
+  friend bool operator==(hgv_way_info, hgv_way_info) = default;
+
+  template <std::size_t NMaxTypes>
+  friend constexpr auto static_type_hash(
+      hgv_way_info const*, cista::hash_data<NMaxTypes> h) noexcept {
+    return h.combine(cista::hash("hgv_way_info v1"));
+  }
+
+  template <typename Ctx>
+  friend void serialize(Ctx&, hgv_way_info const*, cista::offset_t) {}
+
+  template <typename Ctx>
+  friend void deserialize(Ctx const&, hgv_way_info*) {}
+
+  constexpr bool has(hgv_info_field const field) const {
+    return (fields_ & to_mask(field)) != 0U;
+  }
+
+  constexpr access_value hgv_access_fwd() const {
+    return static_cast<access_value>(hgv_access_fwd_);
+  }
+
+  constexpr access_value hgv_access_bwd() const {
+    return static_cast<access_value>(hgv_access_bwd_);
+  }
+
+  constexpr access_value hazmat_access() const {
+    return static_cast<access_value>(hazmat_access_);
+  }
+
+  constexpr access_value hazmat_water_access() const {
+    return static_cast<access_value>(hazmat_water_access_);
+  }
+
+  constexpr access_value trailer_access() const {
+    return static_cast<access_value>(trailer_access_);
+  }
+
+  std::uint16_t fields_{0U};
+  std::uint8_t hgv_access_fwd_{
+      static_cast<std::uint8_t>(access_value::kUnknown)};
+  std::uint8_t hgv_access_bwd_{
+      static_cast<std::uint8_t>(access_value::kUnknown)};
+  std::uint8_t hazmat_access_{
+      static_cast<std::uint8_t>(access_value::kUnknown)};
+  std::uint8_t hazmat_water_access_{
+      static_cast<std::uint8_t>(access_value::kUnknown)};
+  std::uint8_t trailer_access_{
+      static_cast<std::uint8_t>(access_value::kUnknown)};
+  std::uint8_t maxspeed_km_h_{0U};
+  std::uint8_t maxaxles_{0U};
+  std::uint16_t maxlength_cm_{0U};
+  std::uint16_t maxweightrating_100kg_{0U};
+  std::uint16_t maxheight_cm_{0U};
+  std::uint16_t maxwidth_cm_{0U};
+  std::uint16_t maxweight_100kg_{0U};
+  std::uint16_t maxaxleload_100kg_{0U};
 };
 
 struct way_properties {
@@ -67,7 +163,8 @@ struct way_properties {
     return is_car_accessible() || is_bike_accessible() ||
            is_foot_accessible() || is_bus_accessible() ||
            is_bus_accessible_with_penalty() || is_railway_accessible() ||
-           is_railway_accessible_with_penalty() || is_ferry_accessible();
+           is_railway_accessible_with_penalty() || is_ferry_accessible() ||
+           has_hgv_info() || has_conditionals();
   }
   constexpr bool is_car_accessible() const { return is_car_accessible_; }
   constexpr bool is_bike_accessible() const { return is_bike_accessible_; }
@@ -88,6 +185,21 @@ struct way_properties {
   constexpr bool is_oneway_car() const { return is_oneway_car_; }
   constexpr bool is_oneway_bike() const { return is_oneway_bike_; }
   constexpr bool is_oneway_bus_psv() const { return is_oneway_bus_psv_; }
+  constexpr bool is_oneway_reverse() const { return is_oneway_reverse_; }
+  constexpr bool is_oneway_direction_allowed(bool const is_oneway,
+                                             direction const dir) const {
+    return !is_oneway || dir == (is_oneway_reverse_ ? direction::kBackward
+                                                    : direction::kForward);
+  }
+  constexpr bool is_car_direction_allowed(direction const dir) const {
+    return is_oneway_direction_allowed(is_oneway_car(), dir);
+  }
+  constexpr bool is_bike_direction_allowed(direction const dir) const {
+    return is_oneway_direction_allowed(is_oneway_bike(), dir);
+  }
+  constexpr bool is_bus_psv_direction_allowed(direction const dir) const {
+    return is_oneway_direction_allowed(is_oneway_bus_psv(), dir);
+  }
   constexpr bool is_elevator() const { return is_elevator_; }
   constexpr bool is_steps() const { return is_steps_; }
   constexpr bool is_ramp() const { return is_ramp_; }
@@ -95,6 +207,12 @@ struct way_properties {
   constexpr bool has_toll() const { return has_toll_; }
   constexpr bool is_sidewalk_separate() const { return is_sidewalk_separate_; }
   constexpr bool in_route() const { return in_route_; }
+  constexpr bool has_hgv_info() const { return has_hgv_info_; }
+  constexpr bool has_conditionals() const { return has_conditionals_; }
+  constexpr bool is_in_low_emission_zone() const {
+    return is_in_low_emission_zone_;
+  }
+  constexpr bool is_detour() const { return is_detour_; }
   constexpr std::uint16_t max_speed_km_per_h() const {
     return to_kmh(static_cast<speed_limit>(speed_limit_));
   }
@@ -107,7 +225,7 @@ struct way_properties {
   template <std::size_t NMaxTypes>
   friend constexpr auto static_type_hash(
       way_properties const*, cista::hash_data<NMaxTypes> h) noexcept {
-    return h.combine(cista::hash("way_properties v1.1"));
+    return h.combine(cista::hash("way_properties v1.2"));
   }
 
   template <typename Ctx>
@@ -146,9 +264,14 @@ struct way_properties {
   std::uint8_t is_bus_accessible_with_penalty_ : 1;
   std::uint8_t is_ferry_accessible_ : 1;
   std::uint8_t is_railway_accessible_with_penalty_ : 1;
+  std::uint8_t has_hgv_info_ : 1;
+  std::uint8_t has_conditionals_ : 1;
+  std::uint8_t is_in_low_emission_zone_ : 1;
+  std::uint8_t is_detour_ : 1;
+  std::uint8_t is_oneway_reverse_ : 1;
 };
 
-static_assert(sizeof(way_properties) == 5);
+static_assert(sizeof(way_properties) == 6);
 
 struct node_properties {
   constexpr bool is_car_accessible() const { return is_car_accessible_; }
@@ -205,7 +328,9 @@ struct ways {
   unsigned build_components();
 
   std::optional<way_idx_t> find_way(osm_way_idx_t const i) {
-    auto const it = std::lower_bound(begin(way_osm_idx_), end(way_osm_idx_), i);
+    auto const it = std::lower_bound(
+        begin(way_osm_idx_), end(way_osm_idx_), i,
+        [](auto const a, auto const b) { return osm_id_less(a, b); });
     return it != end(way_osm_idx_) && *it == i
                ? std::optional{way_idx_t{
                      std::distance(begin(way_osm_idx_), it)}}
@@ -238,6 +363,18 @@ struct ways {
 
   std::size_t get_polyline_node_idx(
       way_idx_t const way, std::uint16_t const target_routing_idx) const;
+
+  std::optional<std::int64_t> get_osm_node(node_idx_t const n) const {
+    return n != node_idx_t::invalid() && n < n_nodes()
+               ? std::optional{decode_osm_id(node_to_osm_[n])}
+               : std::nullopt;
+  }
+
+  std::optional<std::int64_t> get_osm_way(way_idx_t const way) const {
+    return way != way_idx_t::invalid()
+               ? std::optional{decode_osm_id(way_osm_idx_[way])}
+               : std::nullopt;
+  }
 
   cista::mmap mm(char const* file) {
     return cista::mmap{(p_ / file).generic_string().c_str(), mode_};
@@ -281,7 +418,7 @@ struct ways {
       return 0U;
     }
 
-    template <direction SearchDir, bool IsBus = false>
+    template <direction SearchDir, bool IsBus = false, bool IsHgv = false>
     bool is_restricted(node_idx_t const n,
                        std::uint8_t const from,
                        std::uint8_t const to) const {
@@ -297,21 +434,28 @@ struct ways {
 
       return utl::any_of(r, [&](restriction const& x) {
         if constexpr (IsBus) {
-          return x.from_ == from_way && x.to_ == to_way && x.applies_to_bus_;
+          return x.from_ == from_way && x.to_ == to_way && x.applies_to_bus_ &&
+                 x.condition_set_ == conditional_condition_set_idx_t::invalid();
+        } else if constexpr (IsHgv) {
+          return x.from_ == from_way && x.to_ == to_way && x.applies_to_hgv_ &&
+                 x.condition_set_ == conditional_condition_set_idx_t::invalid();
         } else {
-          return x.from_ == from_way && x.to_ == to_way;
+          return x.from_ == from_way && x.to_ == to_way &&
+                 x.applies_to_default_ &&
+                 x.condition_set_ == conditional_condition_set_idx_t::invalid();
         }
       });
     }
 
-    template <bool IsBus = false>
+    template <bool IsBus = false, bool IsHgv = false>
     bool is_restricted(node_idx_t const n,
                        std::uint8_t const from,
                        std::uint8_t const to,
                        direction const search_dir) const {
       return search_dir == direction::kForward
-                 ? is_restricted<direction::kForward, IsBus>(n, from, to)
-                 : is_restricted<direction::kBackward, IsBus>(n, from, to);
+                 ? is_restricted<direction::kForward, IsBus, IsHgv>(n, from, to)
+                 : is_restricted<direction::kBackward, IsBus, IsHgv>(n, from,
+                                                                     to);
     }
 
     bool is_loop(way_idx_t const w) const {
@@ -350,6 +494,31 @@ struct ways {
     static cista::wrapped<routing> read(std::filesystem::path const&);
     void write(std::filesystem::path const&) const;
 
+    hgv_way_info const* get_hgv_info(way_idx_t const way) const {
+      if (!way_properties_[way].has_hgv_info()) {
+        return nullptr;
+      }
+      auto const it = std::lower_bound(
+          begin(way_hgv_info_), end(way_hgv_info_), way,
+          [](auto const& entry, auto const& key) { return entry.first < key; });
+      utl::verify(it != end(way_hgv_info_) && it->first == way,
+                  "missing HGV info for way {}", way);
+      return &it->second;
+    }
+
+    way_conditional_restrictions const* get_conditional_restrictions(
+        way_idx_t const way) const {
+      if (!way_properties_[way].has_conditionals()) {
+        return nullptr;
+      }
+      auto const it = std::lower_bound(
+          begin(way_conditionals_), end(way_conditionals_), way,
+          [](auto const& entry, auto const& key) { return entry.first < key; });
+      utl::verify(it != end(way_conditionals_) && it->first == way,
+                  "missing conditional restrictions for way {}", way);
+      return &it->second;
+    }
+
     struct long_distance {
       CISTA_COMPARABLE()
 
@@ -383,6 +552,23 @@ struct ways {
 
     vec_map<node_idx_t, node_properties> node_properties_;
     vec_map<way_idx_t, way_properties> way_properties_;
+    vec<pair<way_idx_t, hgv_way_info>> way_hgv_info_;
+
+    vec<pair<way_idx_t, way_conditional_restrictions>> way_conditionals_;
+    vec<conditional_access_restriction> conditional_access_;
+    vec<conditional_oneway_restriction> conditional_oneway_;
+    vec<conditional_numeric_restriction> conditional_numeric_;
+
+    vec<conditional_condition_set> conditional_condition_sets_;
+    vec<conditional_condition> conditional_conditions_;
+    vec<opening_hours> opening_hours_;
+    vec<opening_hours_rule> opening_hours_rules_;
+    vec<opening_hours_year_range> opening_hours_year_ranges_;
+    vec<opening_hours_week_range> opening_hours_week_ranges_;
+    vec<opening_hours_monthday_range> opening_hours_monthday_ranges_;
+    vec<opening_hours_weekday_range> opening_hours_weekday_ranges_;
+    vec<opening_hours_time_span> opening_hours_time_spans_;
+    vecvec<conditional_timezone_idx_t, char> timezones_;
 
     vecvec<way_idx_t, node_idx_t> way_nodes_;
     vecvec<way_idx_t, std::uint16_t> way_node_dist_;
@@ -407,6 +593,7 @@ struct ways {
   };
 
   cista::wrapped<routing> r_;
+  timezone_cache_t timezones_;
 
   mm_vec_map<node_idx_t, osm_node_idx_t> node_to_osm_;
   mm_vec_map<way_idx_t, osm_way_idx_t> way_osm_idx_;
@@ -418,7 +605,7 @@ struct ways {
   mm_bitvec<way_idx_t> way_has_conditional_access_no_;
   mm_vec<pair<way_idx_t, string_idx_t>> way_conditional_access_no_;
 
-  multi_counter node_way_counter_;
+  multi_counter<> node_way_counter_;
 };
 
 struct way_extra_properties {
