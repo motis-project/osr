@@ -293,11 +293,12 @@ path reconstruct_bidir(typename P::parameters const& params,
        .mode_ = dest_node.get_mode()}};
   auto dist = 0.0;
   while (true) {
-    auto const& e = d.cost_.at(n.get_key());
+    auto const& e = d.costForward_.at(n.get_key());
     auto const pred = e.pred(n);
     if (pred.has_value()) {
       auto const expected_cost =
-          static_cast<cost_t>(e.cost(n) - d.get_cost(*pred));
+          static_cast<cost_t>(e.cost(n) -
+                              d.template get_cost<direction::kForward>(*pred));
       dist += add_path<P>(params, w, *w.r_, blocked, sharing, elevations, *pred,
                           n, expected_cost, segments, dir);
     } else {
@@ -331,7 +332,7 @@ path reconstruct_bidir(typename P::parameters const& params,
                 .dist_ = start_nc.dist_to_node_ + dist + dest_nc.dist_to_node_,
                 .elevation_ = path_elevation,
                 .segments_ = segments};
-  d.cost_.at(dest_node.get_key()).write(dest_node, p);
+  d.costForward_.at(dest_node.get_key()).write(dest_node, p);
   return p;
 }
 
@@ -449,7 +450,7 @@ best_candidate_bidir(typename P::parameters const& params,
         return;
       }
 
-      auto const target_cost = d.get_cost(node);
+      auto const target_cost = d.template get_cost<direction::kForward>(node);
       if (target_cost == kInfeasible) {
         return;
       }
@@ -721,7 +722,21 @@ std::optional<path> route_dijkstra_bidir(typename P::parameters const& params,
       }
     }
 
-    if (d.pq_.empty()) {
+    for (auto const& end : to_match) {
+      if (w.r_->way_component_[start.way_] != w.r_->way_component_[end.way_]) {
+        continue;
+      }
+      auto const end_way = end.way_;
+      for (auto const* nc : {&end.left_, &end.right_}) {
+        if (nc->valid() && nc->cost_ < max) {
+          P::resolve_start_node(
+              *w.r_, end_way, nc->node_, to.lvl_, opposite(dir),
+              [&](auto const node) { d.add_destination(w, {node, nc->cost_}); });
+        }
+      }
+    }
+
+    if (d.pqForward_.empty() || d.pqBackward_.empty()) {
       continue;
     }
 

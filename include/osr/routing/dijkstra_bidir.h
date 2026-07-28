@@ -4,6 +4,8 @@
 #include <algorithm>
 #include <vector>
 
+#include "fmt/core.h"
+
 #include "utl/verify.h"
 
 #include "osr/elevation_storage.h"
@@ -27,7 +29,7 @@ struct dijkstra_bidir {
   using hash = typename P::hash;
   using settled_set = ankerl::unordered_dense::set<key, hash>;
 
-  static constexpr auto const kDebug = true;
+  static constexpr auto const kDebug = false;
 
   struct get_bucket {
     cost_t operator()(label const& l) { return l.cost(); }
@@ -42,6 +44,7 @@ struct dijkstra_bidir {
     costBackward_.clear();
     settledForward_.clear();
     settledBackward_.clear();
+    mu_ = kInfeasible;
     max_reached_ = false;
   }
 
@@ -95,6 +98,66 @@ struct dijkstra_bidir {
     }
   }
 
+  void update_mu(node const n) {
+    auto const f = get_cost<direction::kForward>(n);
+    auto const b = get_cost<direction::kBackward>(n);
+    if (f != kInfeasible && b != kInfeasible) {
+      mu_ = std::min(
+          mu_, clamp_cost(static_cast<std::uint64_t>(f) +
+                          static_cast<std::uint64_t>(b)));
+    }
+  }
+
+  template <direction Dir>
+  bool settle(node const n) {
+    if constexpr (Dir == direction::kForward) {
+      if (!settledForward_.insert(n.get_key()).second) {
+        return false;
+      }
+      if (settledBackward_.contains(n.get_key())) {
+        update_mu(n);
+      }
+    } else {
+      if (!settledBackward_.insert(n.get_key()).second) {
+        return false;
+      }
+      if (settledForward_.contains(n.get_key())) {
+        update_mu(n);
+      }
+    }
+    return true;
+  }
+
+  template <direction Dir>
+  bool is_stale(label const& l) const {
+    return get_cost<Dir>(l.get_node()) < l.cost();
+  }
+
+  template <direction Dir>
+  void discard_stale_top(dial<label, get_bucket>& pq) {
+    while (!pq.empty()) {
+      auto const& candidate = pq.buckets_[pq.get_next_bucket()].back();
+      if (!is_stale<Dir>(candidate)) {
+        return;
+      }
+      pq.pop();
+    }
+  }
+
+  bool done() {
+    if (mu_ == kInfeasible) {
+      return false;
+    }
+
+    if (pqForward_.empty() || pqBackward_.empty()) {
+      return false;
+    }
+
+    return static_cast<std::uint64_t>(pqForward_.get_next_bucket()) +
+               static_cast<std::uint64_t>(pqBackward_.get_next_bucket()) >=
+           static_cast<std::uint64_t>(mu_);
+  }
+
   template <direction SearchDir, bool WithBlocked>
   bool run(P::parameters const& params,
            ways const& w,
@@ -104,33 +167,40 @@ struct dijkstra_bidir {
            sharing_data const* sharing,
            elevation_storage const* elevations) {
     while (!pqForward_.empty() || !pqBackward_.empty()) {
+      discard_stale_top<direction::kForward>(pqForward_);
+      discard_stale_top<direction::kBackward>(pqBackward_);
+      if (done()) {
+        fmt::println("dijkstra_bidir mu: {}", mu_);
+        break;
+      }
+      if (pqForward_.empty() && pqBackward_.empty()) {
+        break;
+      }
+
       auto const forward =
           pqBackward_.empty() ||
           (!pqForward_.empty() &&
            pqForward_.get_next_bucket() <= pqBackward_.get_next_bucket());
 
       auto l = forward ? pqForward_.pop() : pqBackward_.pop();
+      auto const curr = l.get_node();
 
-      // if (get_cost(l.get_node()) < l.cost()) { //?????
-      //   continue;
-      // }
       if (forward) {
-        if (get_cost<direction::kForward>(l.get_node()) < l.cost()) {
+        if (is_stale<direction::kForward>(l)) {
           continue;
         }
-        if (!settledForward_.insert(curr.get_key()).second) {
+        if (!settle<direction::kForward>(curr)) {
           continue;
         }
       } else {
-        if (get_cost<direction::kBackward>(l.get_node()) < l.cost()) {
+        if (is_stale<direction::kBackward>(l)) {
           continue;
         }
-        if (!settledBackward_.insert(curr.get_key()).second) {
+        if (!settle<direction::kBackward>(curr)) {
           continue;
         }
       }
 
-      auto const curr = l.get_node();
       if constexpr (kDebug) {
         std::cout << "EXTRACT ";
         l.get_node().print(std::cout, w);
@@ -192,7 +262,7 @@ struct dijkstra_bidir {
             params, r, curr, blocked, sharing, elevations, relax_neighbor);
       }
     }
-    return !max_reached_;
+    return !max_reached_ && mu_ == kInfeasible;
   }
 
   bool run(P::parameters const& params,
@@ -227,6 +297,7 @@ struct dijkstra_bidir {
 
   settled_set settledForward_;
   settled_set settledBackward_;
+  cost_t mu_{kInfeasible};
 
   // for early termination
   std::vector<node> destinations_;
