@@ -371,7 +371,7 @@ boost::json::object build_map_match_debug_json(
     max_segment_cost = std::max(max_segment_cost, seg.min_cost_);
 
     auto const to_debug_mps =
-        [&](node_candidate const& nc) -> debug_match_point_segment {
+        [&](candidate_node const& nc) -> debug_match_point_segment {
       if (!nc.valid()) {
         return {};
       }

@@ -83,6 +83,16 @@ struct test_sharing_data {
   hash_map<node_idx_t, std::vector<additional_edge>> additional_edges_{};
 };
 
+template <typename Fn>
+std::optional<std::size_t> find_match(match_view_t const& matches, Fn&& fn) {
+  for (auto i = std::size_t{0U}; i != matches.size(); ++i) {
+    if (fn(i)) {
+      return i;
+    }
+  }
+  return std::nullopt;
+}
+
 template <typename Profile>
 void verify_sharing_route(search_profile const profile,
                           mode const rental_mode) {
@@ -99,26 +109,32 @@ void verify_sharing_route(search_profile const profile,
             nullptr, &sharing, nullptr, routing_algorithm::kDijkstra);
   ASSERT_TRUE(forward.has_value());
 
-  auto const backward_source_matches = l.match_endpoint<Profile>(
-      params, to, false, direction::kBackward, 50.0, nullptr, false);
+  auto backward_source_result = match_result{};
+  l.match_endpoint<Profile>(params, to, false, direction::kBackward, 50.0,
+                            nullptr, false, backward_source_result);
+  auto const backward_source_matches = backward_source_result[match_idx_t{0U}];
   ASSERT_GE(backward_source_matches.size(), 2U);
-  auto const closest_foot =
-      utl::find_if(backward_source_matches,
-                   [](way_candidate const& wc) { return !wc.vehicle_match_; });
-  auto const closest_vehicle =
-      utl::find_if(backward_source_matches,
-                   [](way_candidate const& wc) { return wc.vehicle_match_; });
-  ASSERT_NE(end(backward_source_matches), closest_foot);
-  ASSERT_NE(end(backward_source_matches), closest_vehicle);
-  EXPECT_EQ(osm_way_idx_t{200U}, w.way_osm_idx_[closest_foot->way_]);
-  EXPECT_EQ(osm_way_idx_t{100U}, w.way_osm_idx_[closest_vehicle->way_]);
+  auto const closest_foot = find_match(
+      backward_source_matches,
+      [&](auto const i) { return !backward_source_matches.vehicle_match(i); });
+  auto const closest_vehicle = find_match(
+      backward_source_matches,
+      [&](auto const i) { return backward_source_matches.vehicle_match(i); });
+  ASSERT_TRUE(closest_foot.has_value());
+  ASSERT_TRUE(closest_vehicle.has_value());
+  EXPECT_EQ(osm_way_idx_t{200U},
+            w.way_osm_idx_[backward_source_matches.way_[*closest_foot]]);
+  EXPECT_EQ(osm_way_idx_t{100U},
+            w.way_osm_idx_[backward_source_matches.way_[*closest_vehicle]]);
 
-  auto const station_matches = l.match_endpoint<Profile>(
-      params, to, false, direction::kBackward, 50.0, nullptr, false,
-      std::nullopt, std::nullopt, false);
-  EXPECT_TRUE(utl::none_of(station_matches, [](way_candidate const& candidate) {
-    return candidate.vehicle_match_;
-  }));
+  auto station_result = match_result{};
+  l.match_endpoint<Profile>(params, to, false, direction::kBackward, 50.0,
+                            nullptr, false, station_result, std::nullopt,
+                            std::nullopt, false);
+  auto const station_matches = station_result[match_idx_t{0U}];
+  EXPECT_FALSE(find_match(station_matches, [&](auto const i) {
+                 return station_matches.vehicle_match(i);
+               }).has_value());
 
   auto const backward =
       route(params, w, l, profile, to, from, 3600U, direction::kBackward, 50.0,
@@ -196,23 +212,23 @@ void verify_exact_coordinate_return(search_profile const profile,
   auto const to = location{{49.000045, 8.002800}, kNoLevel};
   auto const params = typename Profile::parameters{};
 
-  auto const endpoint_matches = l.match_endpoint<Profile>(
-      params, to, true, direction::kForward, 50.0, nullptr, true, std::nullopt,
-      std::nullopt, false);
-  auto const regular_road =
-      utl::find_if(endpoint_matches, [&](way_candidate const& m) {
-        return w.way_osm_idx_[m.way_] == osm_way_idx_t{100U} &&
-               !m.vehicle_match_;
-      });
-  auto const exact_road =
-      utl::find_if(endpoint_matches, [&](way_candidate const& m) {
-        return w.way_osm_idx_[m.way_] == osm_way_idx_t{100U} &&
-               m.vehicle_match_;
-      });
-  ASSERT_NE(end(endpoint_matches), regular_road);
-  ASSERT_NE(end(endpoint_matches), exact_road);
-  EXPECT_FALSE(regular_road->exact_return_);
-  EXPECT_TRUE(exact_road->exact_return_);
+  auto endpoint_result = match_result{};
+  l.match_endpoint<Profile>(params, to, true, direction::kForward, 50.0,
+                            nullptr, true, endpoint_result, std::nullopt,
+                            std::nullopt, false);
+  auto const endpoint_matches = endpoint_result[match_idx_t{0U}];
+  auto const regular_road = find_match(endpoint_matches, [&](auto const i) {
+    return w.way_osm_idx_[endpoint_matches.way_[i]] == osm_way_idx_t{100U} &&
+           !endpoint_matches.vehicle_match(i);
+  });
+  auto const exact_road = find_match(endpoint_matches, [&](auto const i) {
+    return w.way_osm_idx_[endpoint_matches.way_[i]] == osm_way_idx_t{100U} &&
+           endpoint_matches.vehicle_match(i);
+  });
+  ASSERT_TRUE(regular_road.has_value());
+  ASSERT_TRUE(exact_road.has_value());
+  EXPECT_FALSE(endpoint_matches.exact_return(*regular_road));
+  EXPECT_TRUE(endpoint_matches.exact_return(*exact_road));
 
   auto const regular =
       route(params, w, l, profile, from, to, 3600U, direction::kForward, 50.0,
@@ -269,25 +285,26 @@ void verify_destination_match_fallback(search_profile const profile) {
   auto const to = location{{49.010045, 8.002800}, kNoLevel};
   auto const params = typename Profile::parameters{};
 
-  auto const matches = l.match_endpoint<Profile>(
-      params, to, true, direction::kForward, 50.0, nullptr, false);
-  auto const closest_foot = utl::find_if(
-      matches,
-      [](way_candidate const& match) { return !match.vehicle_match_; });
-  auto const closest_vehicle = utl::find_if(
-      matches, [](way_candidate const& match) { return match.vehicle_match_; });
-  auto const fallback_foot =
-      utl::find_if(matches, [&](way_candidate const& match) {
-        return !match.vehicle_match_ &&
-               w.way_osm_idx_[match.way_] == osm_way_idx_t{300U};
-      });
-  ASSERT_NE(end(matches), closest_foot);
-  ASSERT_NE(end(matches), closest_vehicle);
-  ASSERT_NE(end(matches), fallback_foot);
-  EXPECT_EQ(osm_way_idx_t{400U}, w.way_osm_idx_[closest_foot->way_]);
-  EXPECT_EQ(osm_way_idx_t{400U}, w.way_osm_idx_[closest_vehicle->way_]);
-  EXPECT_EQ(w.r_->way_component_[closest_foot->way_],
-            w.r_->way_component_[fallback_foot->way_]);
+  auto match_result = osr::match_result{};
+  l.match_endpoint<Profile>(params, to, true, direction::kForward, 50.0,
+                            nullptr, false, match_result);
+  auto const matches = match_result[match_idx_t{0U}];
+  auto const closest_foot = find_match(
+      matches, [&](auto const i) { return !matches.vehicle_match(i); });
+  auto const closest_vehicle = find_match(
+      matches, [&](auto const i) { return matches.vehicle_match(i); });
+  auto const fallback_foot = find_match(matches, [&](auto const i) {
+    return !matches.vehicle_match(i) &&
+           w.way_osm_idx_[matches.way_[i]] == osm_way_idx_t{300U};
+  });
+  ASSERT_TRUE(closest_foot.has_value());
+  ASSERT_TRUE(closest_vehicle.has_value());
+  ASSERT_TRUE(fallback_foot.has_value());
+  EXPECT_EQ(osm_way_idx_t{400U}, w.way_osm_idx_[matches.way_[*closest_foot]]);
+  EXPECT_EQ(osm_way_idx_t{400U},
+            w.way_osm_idx_[matches.way_[*closest_vehicle]]);
+  EXPECT_EQ(w.r_->way_component_[matches.way_[*closest_foot]],
+            w.r_->way_component_[matches.way_[*fallback_foot]]);
 
   auto const result =
       route(params, w, l, profile, from, to, 3600U, direction::kForward, 50.0,
@@ -306,25 +323,26 @@ void verify_source_match_fallback(search_profile const profile) {
   auto const to = location{{49.020000, 8.002800}, kNoLevel};
   auto const params = typename Profile::parameters{};
 
-  auto const matches = l.match_endpoint<Profile>(
-      params, from, false, direction::kForward, 50.0, nullptr, false);
-  auto const closest_foot = utl::find_if(
-      matches,
-      [](way_candidate const& match) { return !match.vehicle_match_; });
-  auto const closest_vehicle = utl::find_if(
-      matches, [](way_candidate const& match) { return match.vehicle_match_; });
-  auto const fallback_foot =
-      utl::find_if(matches, [&](way_candidate const& match) {
-        return !match.vehicle_match_ &&
-               w.way_osm_idx_[match.way_] == osm_way_idx_t{500U};
-      });
-  ASSERT_NE(end(matches), closest_foot);
-  ASSERT_NE(end(matches), closest_vehicle);
-  ASSERT_NE(end(matches), fallback_foot);
-  EXPECT_EQ(osm_way_idx_t{600U}, w.way_osm_idx_[closest_foot->way_]);
-  EXPECT_EQ(osm_way_idx_t{600U}, w.way_osm_idx_[closest_vehicle->way_]);
-  EXPECT_EQ(w.r_->way_component_[closest_foot->way_],
-            w.r_->way_component_[fallback_foot->way_]);
+  auto match_result = osr::match_result{};
+  l.match_endpoint<Profile>(params, from, false, direction::kForward, 50.0,
+                            nullptr, false, match_result);
+  auto const matches = match_result[match_idx_t{0U}];
+  auto const closest_foot = find_match(
+      matches, [&](auto const i) { return !matches.vehicle_match(i); });
+  auto const closest_vehicle = find_match(
+      matches, [&](auto const i) { return matches.vehicle_match(i); });
+  auto const fallback_foot = find_match(matches, [&](auto const i) {
+    return !matches.vehicle_match(i) &&
+           w.way_osm_idx_[matches.way_[i]] == osm_way_idx_t{500U};
+  });
+  ASSERT_TRUE(closest_foot.has_value());
+  ASSERT_TRUE(closest_vehicle.has_value());
+  ASSERT_TRUE(fallback_foot.has_value());
+  EXPECT_EQ(osm_way_idx_t{600U}, w.way_osm_idx_[matches.way_[*closest_foot]]);
+  EXPECT_EQ(osm_way_idx_t{600U},
+            w.way_osm_idx_[matches.way_[*closest_vehicle]]);
+  EXPECT_EQ(w.r_->way_component_[matches.way_[*closest_foot]],
+            w.r_->way_component_[matches.way_[*fallback_foot]]);
 
   auto const result =
       route(params, w, l, profile, from, to, 3600U, direction::kForward, 50.0,
