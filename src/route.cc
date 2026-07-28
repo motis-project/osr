@@ -394,8 +394,9 @@ bool component_seen(ways const& w,
 }
 
 struct ranked_match_cursor {
-  explicit ranked_match_cursor(match_view_t const& matches)
-      : matches_{matches} {}
+  explicit ranked_match_cursor(match_view_t const& matches,
+                               bool const single_after_first = false)
+      : matches_{matches}, single_after_first_{single_after_first} {}
 
   std::pair<std::optional<std::size_t>, std::optional<std::size_t>> next() {
     return {next(foot_idx_, false), next(vehicle_idx_, true)};
@@ -403,10 +404,26 @@ struct ranked_match_cursor {
 
   template <typename Fn>
   bool for_each_in_stage(unsigned const stage, Fn&& fn) {
+    if (single_after_first_ && stage != 0U) {
+      while (next_idx_ != matches_.size() &&
+             (next_idx_ == first_foot_ || next_idx_ == first_vehicle_)) {
+        ++next_idx_;
+      }
+      if (next_idx_ == matches_.size()) {
+        return true;
+      }
+      fn(next_idx_++);
+      return next_idx_ == matches_.size();
+    }
+
     do {
       auto const [foot, vehicle] = next();
       if (!foot.has_value() && !vehicle.has_value()) {
         return true;
+      }
+      if (stage == 0U) {
+        first_foot_ = foot;
+        first_vehicle_ = vehicle;
       }
       if (foot.has_value()) {
         fn(*foot);
@@ -416,6 +433,11 @@ struct ranked_match_cursor {
       }
     } while (stage == kAllRemainingStage);
     return false;
+  }
+
+  unsigned stage_count() const {
+    return single_after_first_ ? static_cast<unsigned>(matches_.size() + 1U)
+                               : kStageCount;
   }
 
   static constexpr auto kStageCount = 3U;
@@ -434,8 +456,12 @@ private:
   }
 
   match_view_t matches_;
+  bool single_after_first_{};
   std::size_t foot_idx_{};
   std::size_t vehicle_idx_{};
+  std::size_t next_idx_{};
+  std::optional<std::size_t> first_foot_{};
+  std::optional<std::size_t> first_vehicle_{};
 };
 
 template <SharingProfile P>
@@ -1096,30 +1122,56 @@ std::vector<std::optional<path>> route(
     }
     d.reset(max);
     auto seeds = std::vector<source_seed<P>>{};
+    auto exact_return_backward = dir == direction::kBackward;
+    if (exact_return_backward) {
+      exact_return_backward = false;
+      for (auto i = std::size_t{0U}; i != from_match.size(); ++i) {
+        if (from_match.exact_return(i)) {
+          exact_return_backward = true;
+          break;
+        }
+      }
+    }
+
+    auto source_matches =
+        ranked_match_cursor{from_match, exact_return_backward};
     auto should_continue = true;
-    auto const add_relevant_source = [&](std::size_t const start_idx) {
-      auto const start_way = from_match.way_[start_idx];
-      auto relevant = false;
-      for (auto j = std::size_t{0U}; j != to_match.size() && !relevant; ++j) {
-        if (result[j].has_value()) {
-          continue;
+    for (auto stage = 0U; stage != source_matches.stage_count(); ++stage) {
+      auto const exhausted = source_matches.for_each_in_stage(
+          stage, [&](std::size_t const start_idx) {
+            if (exact_return_backward && stage != 0U && !should_continue &&
+                component_seen(w, from_match, start_idx)) {
+              return;
+            }
+            auto const start_way = from_match.way_[start_idx];
+            auto relevant = false;
+            for (auto j = std::size_t{0U}; j != to_match.size() && !relevant;
+                 ++j) {
+              if (result[j].has_value()) {
+                continue;
+              }
+              auto const destinations =
+                  to_match[match_idx_t{static_cast<match_idx_t::value_t>(j)}];
+              for (auto k = std::size_t{0U}; k != destinations.size(); ++k) {
+                if (w.r_->way_component_[start_way] ==
+                    w.r_->way_component_[destinations.way_[k]]) {
+                  relevant = true;
+                  break;
+                }
+              }
+            }
+            if (relevant) {
+              add_source_match<P>(params, w, from.lvl_, from_match, start_idx,
+                                  max, dir, start_time, seeds, d);
+            }
+          });
+
+      if (d.pq_.empty()) {
+        if (exhausted) {
+          break;
         }
-        auto const destinations =
-            to_match[match_idx_t{static_cast<match_idx_t::value_t>(j)}];
-        for (auto k = std::size_t{0U}; k != destinations.size(); ++k) {
-          if (w.r_->way_component_[start_way] ==
-              w.r_->way_component_[destinations.way_[k]]) {
-            relevant = true;
-            break;
-          }
-        }
+        continue;
       }
-      if (relevant) {
-        add_source_match<P>(params, w, from.lvl_, from_match, start_idx, max,
-                            dir, start_time, seeds, d);
-      }
-    };
-    auto const run_and_collect = [&]() {
       should_continue = d.run(params, w, *w.r_, max, start_time, blocked,
                               sharing, elevations, dir) &&
                         should_continue;
@@ -1155,58 +1207,7 @@ std::vector<std::optional<path>> route(
         result[j] = std::move(p);
         ++found;
       }
-      return found == result.size();
-    };
-
-    auto exact_return_backward = dir == direction::kBackward;
-    if (exact_return_backward) {
-      exact_return_backward = false;
-      for (auto i = std::size_t{0U}; i != from_match.size(); ++i) {
-        if (from_match.exact_return(i)) {
-          exact_return_backward = true;
-          break;
-        }
-      }
-    }
-
-    auto source_matches = ranked_match_cursor{from_match};
-    if (exact_return_backward) {
-      auto const [closest_foot, closest_vehicle] = source_matches.next();
-      if (closest_foot.has_value()) {
-        add_relevant_source(*closest_foot);
-      }
-      if (closest_vehicle.has_value()) {
-        add_relevant_source(*closest_vehicle);
-      }
-      if (!d.pq_.empty() && run_and_collect()) {
-        return result;
-      }
-
-      for (auto i = std::size_t{0U}; i != from_match.size(); ++i) {
-        if (i == closest_foot || i == closest_vehicle ||
-            (!should_continue && component_seen(w, from_match, i))) {
-          continue;
-        }
-        add_relevant_source(i);
-        if (!d.pq_.empty() && run_and_collect()) {
-          return result;
-        }
-      }
-      return result;
-    }
-
-    for (auto stage = 0U; stage != ranked_match_cursor::kStageCount; ++stage) {
-      auto const exhausted = source_matches.for_each_in_stage(
-          stage,
-          [&](std::size_t const start_idx) { add_relevant_source(start_idx); });
-
-      if (d.pq_.empty()) {
-        if (exhausted) {
-          break;
-        }
-        continue;
-      }
-      if (run_and_collect()) {
+      if (found == result.size()) {
         return result;
       }
     }
