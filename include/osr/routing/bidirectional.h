@@ -190,8 +190,6 @@ struct bidirectional {
                   elevation_storage const* elevations,
                   dial<label, get_bucket>& pq,
                   cost_map& costs) {
-    auto const adjusted_max =
-        clamp_cost((static_cast<std::uint64_t>(max) + radius_) / 2U);
     auto const is_fwd = PathDir == direction::kForward;
 
     auto const l = pq.pop();
@@ -229,7 +227,7 @@ struct bidirectional {
               clamp_cost(static_cast<std::int64_t>(total) +
                          static_cast<std::int64_t>(heuristic(
                              params, w, neighbor.n_, PathDir, sharing)));
-          if (total >= adjusted_max) {
+          if (total >= max) {
             if (is_fwd) {
               max_reached_1_ = true;
             } else {
