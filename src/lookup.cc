@@ -1,5 +1,6 @@
 #include "osr/lookup.h"
 
+#include "utl/helpers/algorithm.h"
 #include "utl/parallel_for.h"
 
 #include "osr/routing/parameters.h"
@@ -83,9 +84,25 @@ std::vector<raw_way_candidate> lookup::get_raw_way_candidates(
 
 std::vector<raw_way_candidate> lookup::get_raw_match(
     location const& query, double max_match_distance) const {
+  auto const covers_all_base_profiles =
+      [&](std::vector<raw_way_candidate> const& candidates) {
+        return utl::all_of(
+            std::array{search_profile::kFoot, search_profile::kBike,
+                       search_profile::kCar},
+            [&](search_profile const p) {
+              auto const params = get_parameters(p);
+              return with_profile(p, [&]<Profile P>(P&&) {
+                return utl::any_of(candidates, [&](auto const& wc) {
+                  return is_raw_usable<P>(
+                      std::get<typename P::parameters>(params), wc, query);
+                });
+              });
+            });
+      };
+
   auto way_candidates = get_raw_way_candidates(query, max_match_distance);
   auto i = 0U;
-  while (way_candidates.empty() && i++ < 4U) {
+  while (!covers_all_base_profiles(way_candidates) && i++ < 4U) {
     max_match_distance *= 2U;
     way_candidates = get_raw_way_candidates(query, max_match_distance);
   }
