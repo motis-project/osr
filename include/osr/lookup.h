@@ -422,6 +422,16 @@ struct lookup {
       std::optional<std::span<raw_way_candidate const>> raw_way_candidates =
           std::nullopt,
       bool const include_non_exact_vehicle_matches = true) const {
+    auto raw_way_candidates_storage = std::vector<raw_way_candidate>{};
+    if constexpr (SharingProfile<P>) {
+      if (exact_return_allowed && !raw_way_candidates.has_value()) {
+        // Reuse one geometric/R-tree match for both the regular foot endpoint
+        // and the exact vehicle return endpoint.
+        raw_way_candidates_storage = get_raw_match(query, max_match_distance);
+        raw_way_candidates = raw_way_candidates_storage;
+      }
+    }
+
     auto regular_result = match_result{};
     if (raw_way_candidates.has_value()) {
       complete_match<P>(params, query, reverse, search_dir, max_match_distance,
