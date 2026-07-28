@@ -16,6 +16,7 @@
 #include "osr/routing/dijkstra.h"
 #include "osr/routing/profile.h"
 #include "osr/routing/profiles/car.h"
+#include "osr/routing/profiles/foot.h"
 #include "osr/routing/route.h"
 #include "osr/types.h"
 #include "osr/ways.h"
@@ -61,12 +62,14 @@ TEST(simple_dijkstra, monaco) {
   auto const from =
       location{geo::latlng{43.729952584237395, 7.423440329846727}};
   auto const to = location{geo::latlng{43.73175634804065, 7.4261553024191755}};
+  using profile = foot<false, elevator_tracking>;
+  auto const params = profile::parameters{};
 
   // Snap the locations onto the routing graph.
-  auto const from_matches = l.match<car>(car::parameters{}, from, false, dir,
-                                         kMaxMatchDistance, nullptr);
-  auto const to_matches = l.match<car>(car::parameters{}, to, true, dir,
-                                       kMaxMatchDistance, nullptr);
+  auto const from_matches =
+      l.match<profile>(params, from, false, dir, kMaxMatchDistance, nullptr);
+  auto const to_matches =
+      l.match<profile>(params, to, true, dir, kMaxMatchDistance, nullptr);
 
   ASSERT_FALSE(from_matches.empty()) << "no graph match near 'from'";
   ASSERT_FALSE(to_matches.empty()) << "no graph match near 'to'";
@@ -76,15 +79,34 @@ TEST(simple_dijkstra, monaco) {
   auto const to_matches_span = std::span{begin(to_matches), end(to_matches)};
 
   // Set a breakpoint here (or inside osr::dijkstra) and step into the search.
-  auto const result =
-      route(car::parameters{}, w, l, search_profile::kCar, from, to,
-            from_matches_span, to_matches_span, max_cost, dir, nullptr, nullptr,
-            nullptr, routing_algorithm::kDijkstraBi);
+  auto const dijkstra_result =
+      route(params, w, l, search_profile::kFoot, from, to, from_matches_span,
+            to_matches_span, max_cost, dir, nullptr, nullptr, nullptr,
+            routing_algorithm::kDijkstra);
+  auto const bidir_result =
+      route(params, w, l, search_profile::kFoot, from, to, from_matches_span,
+            to_matches_span, max_cost, dir, nullptr, nullptr, nullptr,
+            routing_algorithm::kDijkstraBi);
 
-  if (result.has_value()) {
-    fmt::println("found path | cost: {} | dist: {:.2f}", result->cost_,
-                 result->dist_);
+  if (dijkstra_result.has_value()) {
+    fmt::println("dijkstra found path | cost: {} | dist: {:.2f}",
+                 dijkstra_result->cost_, dijkstra_result->dist_);
   } else {
-    fmt::println("no path found");
+    fmt::println("dijkstra found no path");
+  }
+  if (bidir_result.has_value()) {
+    fmt::println("bidir found path | cost: {} | dist: {:.2f}",
+                 bidir_result->cost_, bidir_result->dist_);
+  } else {
+    fmt::println("bidir found no path");
+  }
+
+  if (dijkstra_result.has_value() != bidir_result.has_value()) {
+    fmt::println("comparison mismatch | dijkstra_has_path: {} | bidir_has_path: {}",
+                 dijkstra_result.has_value(), bidir_result.has_value());
+  } else if (dijkstra_result.has_value() && bidir_result.has_value()) {
+    fmt::println("comparison | cost equal: {} | dist equal: {}",
+                 dijkstra_result->cost_ == bidir_result->cost_,
+                 dijkstra_result->dist_ == bidir_result->dist_);
   }
 }
