@@ -234,7 +234,7 @@ struct bike_sharing {
       return duration_from_cost(cost(n));
     }
 
-    constexpr bool update(label const,
+    constexpr bool update(label const&,
                           node const n,
                           cost_t const c,
                           node const pred,

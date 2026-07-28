@@ -1558,9 +1558,7 @@ std::optional<path> route(profile_parameters const& params,
                             elevations);
     });
   }
-  if (profile == search_profile::kBikeSharing ||
-      profile == search_profile::kCarSharing ||
-      profile == search_profile::kCarParkingWheelchair ||
+  if (profile == search_profile::kCarParkingWheelchair ||
       profile == search_profile::kCarParking ||
       profile == search_profile::kHgv) {
     algo = routing_algorithm::kDijkstra;  // TODO
