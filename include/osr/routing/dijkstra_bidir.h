@@ -25,6 +25,7 @@ struct dijkstra_bidir {
   using node = typename P::node;
   using entry = typename P::entry;
   using hash = typename P::hash;
+  using settled_set = ankerl::unordered_dense::set<key, hash>;
 
   static constexpr auto const kDebug = true;
 
@@ -39,6 +40,8 @@ struct dijkstra_bidir {
     pqBackward_.n_buckets(max + 1U);
     costForward_.clear();
     costBackward_.clear();
+    settledForward_.clear();
+    settledBackward_.clear();
     max_reached_ = false;
   }
 
@@ -115,8 +118,14 @@ struct dijkstra_bidir {
         if (get_cost<direction::kForward>(l.get_node()) < l.cost()) {
           continue;
         }
+        if (!settledForward_.insert(curr.get_key()).second) {
+          continue;
+        }
       } else {
         if (get_cost<direction::kBackward>(l.get_node()) < l.cost()) {
+          continue;
+        }
+        if (!settledBackward_.insert(curr.get_key()).second) {
           continue;
         }
       }
@@ -215,6 +224,9 @@ struct dijkstra_bidir {
   ankerl::unordered_dense::map<key, entry, hash> costForward_;
   ankerl::unordered_dense::map<key, entry, hash> costBackward_;
   bool max_reached_{};
+
+  settled_set settledForward_;
+  settled_set settledBackward_;
 
   // for early termination
   std::vector<node> destinations_;
