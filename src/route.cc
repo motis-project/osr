@@ -1096,40 +1096,30 @@ std::vector<std::optional<path>> route(
     }
     d.reset(max);
     auto seeds = std::vector<source_seed<P>>{};
-    auto source_matches = ranked_match_cursor{from_match};
     auto should_continue = true;
-    for (auto stage = 0U; stage != ranked_match_cursor::kStageCount; ++stage) {
-      auto const exhausted = source_matches.for_each_in_stage(
-          stage, [&](std::size_t const start_idx) {
-            auto const start_way = from_match.way_[start_idx];
-            auto relevant = false;
-            for (auto j = std::size_t{0U}; j != to_match.size() && !relevant;
-                 ++j) {
-              if (result[j].has_value()) {
-                continue;
-              }
-              auto const destinations =
-                  to_match[match_idx_t{static_cast<match_idx_t::value_t>(j)}];
-              for (auto k = std::size_t{0U}; k != destinations.size(); ++k) {
-                if (w.r_->way_component_[start_way] ==
-                    w.r_->way_component_[destinations.way_[k]]) {
-                  relevant = true;
-                  break;
-                }
-              }
-            }
-            if (relevant) {
-              add_source_match<P>(params, w, from.lvl_, from_match, start_idx,
-                                  max, dir, start_time, seeds, d);
-            }
-          });
-
-      if (d.pq_.empty()) {
-        if (exhausted) {
-          break;
+    auto const add_relevant_source = [&](std::size_t const start_idx) {
+      auto const start_way = from_match.way_[start_idx];
+      auto relevant = false;
+      for (auto j = std::size_t{0U}; j != to_match.size() && !relevant; ++j) {
+        if (result[j].has_value()) {
+          continue;
         }
-        continue;
+        auto const destinations =
+            to_match[match_idx_t{static_cast<match_idx_t::value_t>(j)}];
+        for (auto k = std::size_t{0U}; k != destinations.size(); ++k) {
+          if (w.r_->way_component_[start_way] ==
+              w.r_->way_component_[destinations.way_[k]]) {
+            relevant = true;
+            break;
+          }
+        }
       }
+      if (relevant) {
+        add_source_match<P>(params, w, from.lvl_, from_match, start_idx, max,
+                            dir, start_time, seeds, d);
+      }
+    };
+    auto const run_and_collect = [&]() {
       should_continue = d.run(params, w, *w.r_, max, start_time, blocked,
                               sharing, elevations, dir) &&
                         should_continue;
@@ -1165,7 +1155,58 @@ std::vector<std::optional<path>> route(
         result[j] = std::move(p);
         ++found;
       }
-      if (found == result.size()) {
+      return found == result.size();
+    };
+
+    auto exact_return_backward = dir == direction::kBackward;
+    if (exact_return_backward) {
+      exact_return_backward = false;
+      for (auto i = std::size_t{0U}; i != from_match.size(); ++i) {
+        if (from_match.exact_return(i)) {
+          exact_return_backward = true;
+          break;
+        }
+      }
+    }
+
+    auto source_matches = ranked_match_cursor{from_match};
+    if (exact_return_backward) {
+      auto const [closest_foot, closest_vehicle] = source_matches.next();
+      if (closest_foot.has_value()) {
+        add_relevant_source(*closest_foot);
+      }
+      if (closest_vehicle.has_value()) {
+        add_relevant_source(*closest_vehicle);
+      }
+      if (!d.pq_.empty() && run_and_collect()) {
+        return result;
+      }
+
+      for (auto i = std::size_t{0U}; i != from_match.size(); ++i) {
+        if (i == closest_foot || i == closest_vehicle ||
+            (!should_continue && component_seen(w, from_match, i))) {
+          continue;
+        }
+        add_relevant_source(i);
+        if (!d.pq_.empty() && run_and_collect()) {
+          return result;
+        }
+      }
+      return result;
+    }
+
+    for (auto stage = 0U; stage != ranked_match_cursor::kStageCount; ++stage) {
+      auto const exhausted = source_matches.for_each_in_stage(
+          stage,
+          [&](std::size_t const start_idx) { add_relevant_source(start_idx); });
+
+      if (d.pq_.empty()) {
+        if (exhausted) {
+          break;
+        }
+        continue;
+      }
+      if (run_and_collect()) {
         return result;
       }
     }
