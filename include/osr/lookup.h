@@ -218,6 +218,23 @@ struct lookup {
   std::vector<raw_way_candidate> get_raw_match(location const&,
                                                double max_match_distance) const;
 
+  // True if `wc` yields at least one routable node for `P`.
+  template <Profile P>
+  bool is_raw_usable(P::parameters const& params,
+                     raw_way_candidate const& wc,
+                     location const& query) const {
+    auto n = match_result::nodes{
+        .left_ = {.node_ = wc.left_.node_,
+                  .dist_to_node_ = wc.left_.dist_to_node_},
+        .right_ = {.node_ = wc.right_.node_,
+                   .dist_to_node_ = wc.right_.dist_to_node_}};
+    apply_node_cost<P>(params, wc.way_, n.left_, direction::kBackward, query,
+                       false, direction::kForward, nullptr, std::nullopt);
+    apply_node_cost<P>(params, wc.way_, n.right_, direction::kForward, query,
+                       false, direction::kForward, nullptr, std::nullopt);
+    return n.left_.valid() || n.right_.valid();
+  }
+
   // Turns precomputed (geometric) candidates into profile aware ones and
   // appends them to `out` as one match. Falls back to a fresh geometric match
   // if none of the precomputed candidates is usable.
