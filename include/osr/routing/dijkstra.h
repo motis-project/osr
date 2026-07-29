@@ -83,7 +83,7 @@ struct dijkstra {
            bitvec<node_idx_t> const* blocked,
            sharing_data const* sharing,
            elevation_storage const* elevations) {
-    while (!pq_.empty()) {
+    while (!pq_.empty() && pq_.current_bucket_ < max) {
       auto l = pq_.pop();
 
       if (get_cost(l.get_node()) < l.cost()) {
@@ -134,6 +134,7 @@ struct dijkstra {
             auto const total = static_cast<std::uint64_t>(l.cost()) + cost;
             if (total >= max) {
               max_reached_ = true;
+              pq_.push({l, total});
               return;
             }
             if (cost_[neighbor.get_key()].update(
