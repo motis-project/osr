@@ -87,6 +87,10 @@ TEST(simple_dijkstra, monaco) {
       route(params, w, l, search_profile::kFoot, from, to, from_matches_span,
             to_matches_span, max_cost, dir, nullptr, nullptr, nullptr,
             routing_algorithm::kDijkstraBi);
+  auto const cch_result =
+      route(params, w, l, search_profile::kFoot, from, to, from_matches_span,
+            to_matches_span, max_cost, dir, nullptr, nullptr, nullptr,
+            routing_algorithm::kCCH);
 
   if (dijkstra_result.has_value()) {
     fmt::println("dijkstra found path | cost: {} | dist: {:.2f}",
@@ -100,6 +104,12 @@ TEST(simple_dijkstra, monaco) {
   } else {
     fmt::println("bidir found no path");
   }
+  if (cch_result.has_value()) {
+    fmt::println("cch found path | cost: {} | dist: {:.2f}", cch_result->cost_,
+                 cch_result->dist_);
+  } else {
+    fmt::println("cch found no path");
+  }
 
   if (dijkstra_result.has_value() != bidir_result.has_value()) {
     fmt::println("comparison mismatch | dijkstra_has_path: {} | bidir_has_path: {}",
@@ -108,5 +118,13 @@ TEST(simple_dijkstra, monaco) {
     fmt::println("comparison | cost equal: {} | dist equal: {}",
                  dijkstra_result->cost_ == bidir_result->cost_,
                  dijkstra_result->dist_ == bidir_result->dist_);
+  }
+  if (dijkstra_result.has_value() != cch_result.has_value()) {
+    fmt::println("cch comparison mismatch | dijkstra_has_path: {} | cch_has_path: {}",
+                 dijkstra_result.has_value(), cch_result.has_value());
+  } else if (dijkstra_result.has_value() && cch_result.has_value()) {
+    fmt::println("cch comparison | cost equal: {} | dist equal: {}",
+                 dijkstra_result->cost_ == cch_result->cost_,
+                 dijkstra_result->dist_ == cch_result->dist_);
   }
 }

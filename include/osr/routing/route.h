@@ -28,6 +28,9 @@ struct bidirectional;
 template <Profile, bool EarlyTermination>
 struct dijkstra_bidir;
 
+template <Profile, bool EarlyTermination>
+struct cch;
+
 struct sharing_data;
 
 template <Profile P>
@@ -38,6 +41,9 @@ dijkstra<P, false>& get_dijkstra();
 
 template <Profile P>
 dijkstra_bidir<P, false>& get_dijkstra_bidir();
+
+template <Profile P>
+cch<P, false>& get_cch();
 
 std::vector<std::optional<path>> route(
     profile_parameters const&,

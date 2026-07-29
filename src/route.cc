@@ -15,6 +15,7 @@
 #include "osr/elevation_storage.h"
 #include "osr/lookup.h"
 #include "osr/routing/bidirectional.h"
+#include "osr/routing/cch.h"
 #include "osr/routing/dijkstra.h"
 #include "osr/routing/dijkstra_bidir.h"
 #include "osr/routing/path_reconstruction.h"
@@ -61,12 +62,22 @@ dijkstra_bidir<P>& get_dijkstra_bidir() {
   return *s.get();
 }
 
+template <Profile P>
+cch<P>& get_cch() {
+  static auto s = boost::thread_specific_ptr<cch<P>>{};
+  if (s.get() == nullptr) {
+    s.reset(new cch<P>{});
+  }
+  return *s.get();
+}
+
 routing_algorithm to_algorithm(std::string_view s) {
   switch (cista::hash(s)) {
     case cista::hash("dijkstra"): return routing_algorithm::kDijkstra;
     case cista::hash("bidirectional"): return routing_algorithm::kAStarBi;
     // TODO: review POC implementation
     case cista::hash("dijkstra_bidir"): return routing_algorithm::kDijkstraBi;
+    case cista::hash("cch"): return routing_algorithm::kCCH;
   }
   throw utl::fail("unknown routing algorithm: {}", s);
 }
@@ -1023,6 +1034,35 @@ std::optional<path> route_dijkstra_bidir(profile_parameters const& params,
   });
 }
 
+std::optional<path> route_cch(profile_parameters const& params,
+                              ways const& w,
+                              lookup const& l,
+                              search_profile const profile,
+                              location const& from,
+                              location const& to,
+                              cost_t const max,
+                              direction const dir,
+                              double const max_match_distance,
+                              bitvec<node_idx_t> const* blocked,
+                              sharing_data const* sharing,
+                              elevation_storage const* elevations) {
+  return with_profile(profile, [&]<Profile P>(P&&) -> std::optional<path> {
+    auto const& pp = std::get<typename P::parameters>(params);
+    auto const from_match =
+        l.match<P>(pp, from, false, dir, max_match_distance, blocked);
+    auto const to_match =
+        l.match<P>(pp, to, true, dir, max_match_distance, blocked);
+
+    if (from_match.empty() || to_match.empty()) {
+      return std::nullopt;
+    }
+
+    return route_dijkstra_bidir(pp, w, l, get_cch<P>(), from, to, from_match,
+                                to_match, max, dir, blocked, sharing,
+                                elevations);
+  });
+}
+
 std::vector<std::optional<path>> route(
     profile_parameters const& params,
     ways const& w,
@@ -1092,6 +1132,13 @@ std::optional<path> route(profile_parameters const& params,
                                     from_match, to_match, max, dir, blocked,
                                     sharing, elevations);
       });
+    case routing_algorithm::kCCH:
+      return with_profile(profile, [&]<Profile P>(P&&) {
+        return route_dijkstra_bidir(std::get<typename P::parameters>(params), w,
+                                    l, get_cch<P>(), from, to, from_match,
+                                    to_match, max, dir, blocked, sharing,
+                                    elevations);
+      });
   }
   throw utl::fail("not implemented");
 }
@@ -1127,6 +1174,9 @@ std::optional<path> route(profile_parameters const& params,
       return route_dijkstra_bidir(params, w, l, profile, from, to, max, dir,
                                   max_match_distance, blocked, sharing,
                                   elevations);
+    case routing_algorithm::kCCH:
+      return route_cch(params, w, l, profile, from, to, max, dir,
+                       max_match_distance, blocked, sharing, elevations);
   }
   throw utl::fail("not implemented");
 }
