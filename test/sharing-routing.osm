@@ -21,6 +21,9 @@
   <node id="64" lat="49.020000" lon="8.003000"/>
   <node id="71" lat="49.020040" lon="8.000100"/>
   <node id="72" lat="49.020040" lon="8.000300"/>
+  <node id="82" lat="49.030000" lon="8.001000">
+    <tag k="bicycle" v="no"/>
+  </node>
 
   <way id="100">
     <nd ref="1"/>
@@ -101,5 +104,12 @@
     <tag k="highway" v="service"/>
     <tag k="oneway" v="yes"/>
     <tag k="oneway:foot" v="yes"/>
+  </way>
+
+  <way id="800">
+    <nd ref="64"/>
+    <nd ref="82"/>
+    <tag k="highway" v="footway"/>
+    <tag k="bicycle" v="no"/>
   </way>
 </osm>

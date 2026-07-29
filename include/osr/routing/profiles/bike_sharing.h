@@ -535,7 +535,9 @@ struct bike_sharing {
         if (n.is_initial_foot_node() || n.is_trailing_foot_node()) {
           continue_on_foot(n.type_, n.is_trailing_foot_node());
           if (n.is_trailing_foot_node() &&
-              is_allowed(sharing->end_allowed_, n.n_)) {
+              is_allowed(sharing->end_allowed_, n.n_) &&
+              bikep::node_cost(params.bike_, w.node_properties_[n.n_]).cost_ !=
+                  kInfeasible) {
             // switch to bike
             switch_at_node(node_type::kBike, kEndSwitchPenalty);
           }

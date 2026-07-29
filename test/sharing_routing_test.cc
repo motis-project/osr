@@ -398,5 +398,32 @@ TEST_F(sharing_routing_test, car_falls_back_to_second_source_match) {
       search_profile::kCarSharing);
 }
 
+TEST_F(sharing_routing_test, bike_does_not_switch_at_bike_inaccessible_node) {
+  auto const& w = *ways_;
+  auto const data = test_sharing_data{w};
+  auto const sharing = data.view(w);
+  auto const params = bike_sharing::parameters{};
+  auto const node = w.find_node_idx(osm_node_idx_t{82U});
+  ASSERT_TRUE(node.has_value());
+  ASSERT_FALSE(w.r_->node_properties_[*node].is_bike_accessible());
+
+  // make sure that we don't switch to bike at a node that is not bike
+  // accessible in bwd search, because in fwd search the equivalent foot -> bike
+  // switch also isn't allowed - needs to be consistent (although whether the
+  // switch should be allowed in either direction is debatable)
+
+  auto switched_to_bike = false;
+  bike_sharing::adjacent<direction::kBackward, false>(
+      params, *w.r_, timezone_cache_t{},
+      bike_sharing::node{.n_ = *node,
+                         .type_ = bike_sharing::node_type::kTrailingFoot,
+                         .lvl_ = kNoLevel},
+      duration_t{0U}, std::nullopt, nullptr, &sharing, nullptr,
+      [&](bike_sharing::node const neighbor, auto...) {
+        switched_to_bike |= neighbor.n_ == *node && neighbor.is_bike_node();
+      });
+  EXPECT_FALSE(switched_to_bike);
+}
+
 }  // namespace
 }  // namespace osr
