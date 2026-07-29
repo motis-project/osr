@@ -6,6 +6,8 @@
 
 #include "boost/thread/tss.hpp"
 
+#include "osr/routing/profile.h"
+#include "osr/ways.h"
 #include "utl/concat.h"
 #include "utl/enumerate.h"
 #include "utl/helpers/algorithm.h"
@@ -360,6 +362,121 @@ std::optional<path> try_direct(osr::location const& from,
   }
 }
 
+template <search_profile profile>
+struct search_state {
+  using profile_t = profile_selector<profile>::type;
+
+  search_state(location const& from,
+               std::vector<location> const& to,
+               match_view_t const& from_match,
+               std::vector<match_t> const& to_match,
+               direction dir,
+               cost_t const max_distance,
+               bitvec<node_idx_t> const* blocked,
+               sharing_data const* sharing,
+               elevation_storage const* elevations)
+      : d_(get_dijkstra<profile_t>()),
+        from_(from),
+        to_(to),
+        from_match_(from_match),
+        to_match_(to_match),
+        dir_(dir),
+        max_distance_(max_distance),
+        blocked_(blocked),
+        sharing_(sharing),
+        elevations_(elevations) {}
+
+  void init() {
+    d_.reset(max_distance_);
+    for (auto const [i, start] : utl::enumerate(from_match_)) {
+      if (can_continue_ && component_seen(w, from_match_, i)) {
+        continue;
+      }
+
+      if (utl::none_of(to_match_, [&](auto const dest) {
+            return w.r_->way_component_[start.way_] ==
+                   w.r_->way_component_[dest.way_];
+          })) {
+        continue;
+      }
+
+      auto const start_way = start.way_;
+      for (auto const* nc : {&start.left_, &start.right_}) {
+        if (nc->valid() && nc->cost_ < max_distance_) {
+          profile_t::resolve_start_node(
+              *w.r_, start.way_, nc->node_, from_.lvl_, dir_,
+              [&](auto const node) {
+                auto label = typename profile_t::label{node, nc->cost_};
+                label.track(label, *w.r_, start_way, node.get_node(), false);
+                d_.add_start(w, label);
+              });
+        }
+      }
+
+      can_continue_ = !d_.run(...) || can_continue_;
+    }
+  }
+
+  bool run(cost_t const distance) {
+    if (d_.pq_.empty()) {
+      can_continue_ = false;
+      init();
+      return can_continue_;
+    }
+
+    return !d_.run(...);
+  }
+
+  std::vector<std::optional<path>> results(
+      std::function<bool(path const&)> const& do_reconstruct) {
+    auto const distance_lng_degrees =
+        geo::approx_distance_lng_degrees(from_.pos_);
+
+    auto results = std::vector<std::optional<path>>{};
+
+    for (auto const [m, t] : utl::zip(to_match_, to_)) {
+      if (auto const direct = try_direct(from_, t); direct.has_value()) {
+        results.push_back(direct);
+      } else {
+        auto const limit_squared_max_matching_distance =
+            geo::approx_squared_distance(from_.pos_, t.pos_,
+                                         distance_lng_degrees) /
+            kMaxMatchingDistanceSquaredRatio;
+
+        for (auto const start : from_match_) {
+          auto const c =
+              best_candidate(params, w, d_, t.lvl_, m, distance_, dir_, true,
+                             start, limit_squared_max_matching_distance);
+
+          if (c.has_value()) {
+            auto [nc, wc, n, p] = *c;
+            d.cost_.at(n.get_key()).write(n, p);
+            if (do_reconstruct(p)) {
+              p = reconstruct<P>(params, w, l, blocked, sharing, elevations, d_,
+                                 from, t, start, *wc, *nc, n, p.cost_, dir);
+              p.uses_elevator_ = true;
+            }
+            results.push_back(p);
+          }
+        }
+      }
+    }
+  }
+
+  dijkstra<profile_t, false> d_;
+  location const& from_;
+  std::vector<location> const& to_;
+  match_view_t const& from_match_;
+  std::vector<match_t> const& to_match_;
+  direction const dir_;
+  cost_t const max_distance_;
+  bitvec<node_idx_t> const* const blocked_;
+  sharing_data const* const sharing_;
+  elevation_storage const* const elevations_;
+  cost_t distance_;
+  bool can_continue_ = false;
+};
+
 template <Profile P>
 std::optional<path> route_bidirectional(typename P::parameters const& params,
                                         ways const& w,
@@ -601,61 +718,6 @@ std::vector<std::optional<path>> route(
   }
 
   return result;
-}
-
-template <Profile P>
-search_state<P> route(typename P::parameters const& params,
-                      ways const& w,
-                      lookup const& l,
-                      dijkstra<P>& d,
-                      location const& from,
-                      std::vector<location> const& to,
-                      match_view_t from_match,
-                      std::vector<match_t> const& to_match,
-                      cost_t const distance,
-                      cost_t const max_distane,
-                      direction const dir,
-                      bitvec<node_idx_t> const* blocked,
-                      sharing_data const* sharing,
-                      elevation_storage const* elevations,
-                      std::function<bool(path const&)> const& do_reconstruct) {
-  auto state = search_state<P>{.d_ = get_dijkstra<P>(),
-                               .from_ = from,
-                               .to_ = to,
-                               .from_match_ = from_match,
-                               .to_match_ = to_match,
-                               .dir_ = dir};
-  d.reset(distance);
-  auto max_reached = false;
-  for (auto const [i, start] : utl::enumerate(from_match)) {
-    if (max_reached && component_seen(w, from_match, i)) {
-      continue;
-    }
-
-    if (utl::none_of(to_match, [&](auto const dest) {
-          return w.r_->way_component_[start.way_] ==
-                 w.r_->way_component_[dest.way_];
-        })) {
-      continue;
-    }
-
-    auto const start_way = start.way_;
-    for (auto const* nc : {&start.left_, &start.right_}) {
-      if (nc->valid() && nc->cost_ < max_distane) {
-        P::resolve_start_node(
-            *w.r_, start.way_, nc->node_, from.lvl_, dir, [&](auto const node) {
-              auto label = typename P::label{node, nc->cost_};
-              label.track(label, *w.r_, start_way, node.get_node(), false);
-              d.add_start(w, label);
-            });
-      }
-    }
-
-    max_reached =
-        !d.run(params, w, *w.r_, distance, blocked, sharing, elevations, dir) ||
-        max_reached;
-  }
-  return state;
 }
 
 std::vector<std::optional<path>> route(

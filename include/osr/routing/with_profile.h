@@ -9,6 +9,7 @@
 #include "osr/routing/profiles/ferry.h"
 #include "osr/routing/profiles/foot.h"
 #include "osr/routing/profiles/railway.h"
+#include "osr/routing/tracking.h"
 
 namespace osr {
 
@@ -43,4 +44,6 @@ auto with_profile(search_profile const p, Fn&& fn) {
   throw utl::fail("with_profile not implemented for {}", to_str(p));
 }
 
+template <search_profile P>
+struct profile_selector {};
 }  // namespace osr
