@@ -393,76 +393,37 @@ bool component_seen(ways const& w,
   return false;
 }
 
-struct ranked_match_cursor {
-  explicit ranked_match_cursor(match_view_t const& matches,
-                               bool const single_after_first = false)
-      : matches_{matches}, single_after_first_{single_after_first} {}
-
-  std::pair<std::optional<std::size_t>, std::optional<std::size_t>> next() {
-    return {next(foot_idx_, false), next(vehicle_idx_, true)};
+std::optional<std::size_t> next_match(match_view_t const& matches,
+                                      std::size_t& idx,
+                                      bool const vehicle) {
+  while (idx != matches.size() && matches.vehicle_match(idx) != vehicle) {
+    ++idx;
   }
+  return idx == matches.size() ? std::nullopt : std::optional{idx++};
+}
 
-  template <typename Fn>
-  bool for_each_in_stage(unsigned const stage, Fn&& fn) {
-    if (single_after_first_ && stage != 0U) {
-      while (next_idx_ != matches_.size() &&
-             (next_idx_ == first_foot_ || next_idx_ == first_vehicle_)) {
-        ++next_idx_;
-      }
-      if (next_idx_ == matches_.size()) {
-        return true;
-      }
-      fn(next_idx_++);
-      return next_idx_ == matches_.size();
+std::pair<std::optional<std::size_t>, std::optional<std::size_t>>
+closest_matches(match_view_t const& matches) {
+  auto foot_idx = std::size_t{};
+  auto vehicle_idx = std::size_t{};
+  return {next_match(matches, foot_idx, false),
+          next_match(matches, vehicle_idx, true)};
+}
+
+template <typename Fn>
+void consume_match(match_view_t const& matches,
+                   std::size_t const idx,
+                   std::vector<std::uint8_t>& consumed,
+                   Fn&& fn) {
+  // Foot and vehicle variants of one geometric match share the same way.
+  auto const way = matches.way_[idx];
+  for (auto i = std::size_t{0U}; i != matches.size(); ++i) {
+    if (!consumed[i] && matches.way_[i] == way) {
+      consumed[i] = true;
+      fn(i);
     }
-
-    do {
-      auto const [foot, vehicle] = next();
-      if (!foot.has_value() && !vehicle.has_value()) {
-        return true;
-      }
-      if (stage == 0U) {
-        first_foot_ = foot;
-        first_vehicle_ = vehicle;
-      }
-      if (foot.has_value()) {
-        fn(*foot);
-      }
-      if (vehicle.has_value()) {
-        fn(*vehicle);
-      }
-    } while (stage == kAllRemainingStage);
-    return false;
   }
-
-  unsigned stage_count() const {
-    return single_after_first_ ? static_cast<unsigned>(matches_.size() + 1U)
-                               : kStageCount;
-  }
-
-  static constexpr auto kStageCount = 3U;
-
-private:
-  static constexpr auto kAllRemainingStage = kStageCount - 1U;
-
-  std::optional<std::size_t> next(std::size_t& idx, bool const vehicle) {
-    while (idx != matches_.size() && matches_.vehicle_match(idx) != vehicle) {
-      ++idx;
-    }
-    if (idx == matches_.size()) {
-      return std::nullopt;
-    }
-    return idx++;
-  }
-
-  match_view_t matches_;
-  bool single_after_first_{};
-  std::size_t foot_idx_{};
-  std::size_t vehicle_idx_{};
-  std::size_t next_idx_{};
-  std::optional<std::size_t> first_foot_{};
-  std::optional<std::size_t> first_vehicle_{};
-};
+}
 
 template <SharingProfile P>
 struct source_seed {
@@ -644,12 +605,14 @@ best_candidate(typename P::parameters const& params,
   };
 
   if constexpr (SharingProfile<P>) {
-    auto matches = ranked_match_cursor{m};
+    auto foot_idx = std::size_t{};
+    auto vehicle_idx = std::size_t{};
     auto component_seen_ctr = 0U;
     for (auto rank = 0U;; ++rank) {
       auto selected = std::optional<result_t>{};
       auto stop = false;
-      auto const [foot, vehicle] = matches.next();
+      auto const foot = next_match(m, foot_idx, false);
+      auto const vehicle = next_match(m, vehicle_idx, true);
       if (!foot.has_value() && !vehicle.has_value()) {
         break;
       }
@@ -861,31 +824,48 @@ std::optional<path> route_dijkstra(
   if constexpr (SharingProfile<P>) {
     d.reset(max);
     auto seeds = std::vector<source_seed<P>>{};
-    auto source_matches = ranked_match_cursor{from_match};
+    auto consumed = std::vector<std::uint8_t>(from_match.size());
+    auto const [closest_foot, closest_vehicle] = closest_matches(from_match);
     auto should_continue = true;
-    for (auto stage = 0U; stage != ranked_match_cursor::kStageCount; ++stage) {
-      auto const exhausted = source_matches.for_each_in_stage(
-          stage, [&](std::size_t const start_idx) {
-            auto const start_way = from_match.way_[start_idx];
-            auto const same_component = [&] {
-              for (auto k = std::size_t{0U}; k != to_match.size(); ++k) {
-                if (w.r_->way_component_[start_way] ==
-                    w.r_->way_component_[to_match.way_[k]]) {
-                  return true;
-                }
-              }
-              return false;
-            }();
-            if (same_component) {
-              add_source_match<P>(params, w, from.lvl_, from_match, start_idx,
-                                  max, dir, start_time, seeds, d);
+    for (auto iteration = std::size_t{0U}; iteration != from_match.size() + 1U;
+         ++iteration) {
+      auto const add = [&](std::size_t const start_idx) {
+        auto const start_way = from_match.way_[start_idx];
+        auto const same_component = [&] {
+          for (auto k = std::size_t{0U}; k != to_match.size(); ++k) {
+            if (w.r_->way_component_[start_way] ==
+                w.r_->way_component_[to_match.way_[k]]) {
+              return true;
             }
-          });
+          }
+          return false;
+        }();
+        if (same_component) {
+          add_source_match<P>(params, w, from.lvl_, from_match, start_idx, max,
+                              dir, start_time, seeds, d);
+        }
+      };
+
+      if (iteration == 0U) {
+        if (closest_foot.has_value()) {
+          consume_match(from_match, *closest_foot, consumed, add);
+        }
+        if (closest_vehicle.has_value() && !consumed[*closest_vehicle]) {
+          consume_match(from_match, *closest_vehicle, consumed, add);
+        }
+      } else {
+        auto const start_idx = iteration - 1U;
+        if (consumed[start_idx]) {
+          continue;
+        }
+        if (!should_continue && component_seen(w, from_match, start_idx)) {
+          consume_match(from_match, start_idx, consumed, [](std::size_t) {});
+          continue;
+        }
+        consume_match(from_match, start_idx, consumed, add);
+      }
 
       if (d.pq_.empty()) {
-        if (exhausted) {
-          break;
-        }
         continue;
       }
       should_continue = d.run(params, w, *w.r_, max, start_time, blocked,
@@ -1122,54 +1102,54 @@ std::vector<std::optional<path>> route(
     }
     d.reset(max);
     auto seeds = std::vector<source_seed<P>>{};
-    auto exact_return_backward = dir == direction::kBackward;
-    if (exact_return_backward) {
-      exact_return_backward = false;
-      for (auto i = std::size_t{0U}; i != from_match.size(); ++i) {
-        if (from_match.exact_return(i)) {
-          exact_return_backward = true;
-          break;
-        }
-      }
-    }
-
-    auto source_matches =
-        ranked_match_cursor{from_match, exact_return_backward};
+    auto consumed = std::vector<std::uint8_t>(from_match.size());
+    auto const [closest_foot, closest_vehicle] = closest_matches(from_match);
     auto should_continue = true;
-    for (auto stage = 0U; stage != source_matches.stage_count(); ++stage) {
-      auto const exhausted = source_matches.for_each_in_stage(
-          stage, [&](std::size_t const start_idx) {
-            if (exact_return_backward && stage != 0U && !should_continue &&
-                component_seen(w, from_match, start_idx)) {
-              return;
+    for (auto iteration = std::size_t{0U}; iteration != from_match.size() + 1U;
+         ++iteration) {
+      auto const add = [&](std::size_t const start_idx) {
+        auto const start_way = from_match.way_[start_idx];
+        auto relevant = false;
+        for (auto j = std::size_t{0U}; j != to_match.size() && !relevant; ++j) {
+          if (result[j].has_value()) {
+            continue;
+          }
+          auto const destinations =
+              to_match[match_idx_t{static_cast<match_idx_t::value_t>(j)}];
+          for (auto k = std::size_t{0U}; k != destinations.size(); ++k) {
+            if (w.r_->way_component_[start_way] ==
+                w.r_->way_component_[destinations.way_[k]]) {
+              relevant = true;
+              break;
             }
-            auto const start_way = from_match.way_[start_idx];
-            auto relevant = false;
-            for (auto j = std::size_t{0U}; j != to_match.size() && !relevant;
-                 ++j) {
-              if (result[j].has_value()) {
-                continue;
-              }
-              auto const destinations =
-                  to_match[match_idx_t{static_cast<match_idx_t::value_t>(j)}];
-              for (auto k = std::size_t{0U}; k != destinations.size(); ++k) {
-                if (w.r_->way_component_[start_way] ==
-                    w.r_->way_component_[destinations.way_[k]]) {
-                  relevant = true;
-                  break;
-                }
-              }
-            }
-            if (relevant) {
-              add_source_match<P>(params, w, from.lvl_, from_match, start_idx,
-                                  max, dir, start_time, seeds, d);
-            }
-          });
+          }
+        }
+        if (relevant) {
+          add_source_match<P>(params, w, from.lvl_, from_match, start_idx, max,
+                              dir, start_time, seeds, d);
+        }
+      };
+
+      if (iteration == 0U) {
+        if (closest_foot.has_value()) {
+          consume_match(from_match, *closest_foot, consumed, add);
+        }
+        if (closest_vehicle.has_value() && !consumed[*closest_vehicle]) {
+          consume_match(from_match, *closest_vehicle, consumed, add);
+        }
+      } else {
+        auto const start_idx = iteration - 1U;
+        if (consumed[start_idx]) {
+          continue;
+        }
+        if (!should_continue && component_seen(w, from_match, start_idx)) {
+          consume_match(from_match, start_idx, consumed, [](std::size_t) {});
+          continue;
+        }
+        consume_match(from_match, start_idx, consumed, add);
+      }
 
       if (d.pq_.empty()) {
-        if (exhausted) {
-          break;
-        }
         continue;
       }
       should_continue = d.run(params, w, *w.r_, max, start_time, blocked,
