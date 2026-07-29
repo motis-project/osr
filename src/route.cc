@@ -603,6 +603,27 @@ std::vector<std::optional<path>> route(
   return result;
 }
 
+template <Profile P>
+search_state<P> route(typename P::parameters const& params,
+                      ways const& w,
+                      lookup const& l,
+                      dijkstra<P>& d,
+                      location const& from,
+                      std::vector<location> const& to,
+                      match_view_t from_match,
+                      std::vector<match_t> const& to_match,
+                      cost_t const max,
+                      direction const dir,
+                      bitvec<node_idx_t> const* blocked,
+                      sharing_data const* sharing,
+                      elevation_storage const* elevations,
+                      std::function<bool(path const&)> const& do_reconstruct) {
+  auto state = search_state<P>{};
+  // add starts
+  // run once
+  return state;
+}
+
 std::vector<std::optional<path>> route(
     profile_parameters const& params,
     ways const& w,

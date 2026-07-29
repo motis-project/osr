@@ -13,6 +13,7 @@
 #include "osr/routing/parameters.h"
 #include "osr/routing/path.h"
 #include "osr/routing/profile.h"
+#include "osr/routing/with_profile.h"
 #include "osr/types.h"
 
 namespace osr {
@@ -32,6 +33,19 @@ bidirectional<P>& get_bidirectional();
 
 template <Profile P>
 dijkstra<P, false>& get_dijkstra();
+
+template <Profile P>
+struct search_state {
+  search_state() : d_(get_dijkstra<P>()) {}
+
+  void run(/* params that can change during resume*/) {
+    can_continue_ = !d_.run(...);
+  }
+
+  std::vector<std::optional<path>> paths_;
+  dijkstra<P, false> d_;
+  bool can_continue_ = true;
+};
 
 std::vector<std::optional<path>> route(
     profile_parameters const&,
