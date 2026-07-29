@@ -8,6 +8,9 @@
 
 #include "osr/extract/extract.h"
 #include "osr/lookup.h"
+#include "osr/routing/astar.h"
+#include "osr/routing/bidirectional.h"
+#include "osr/routing/dijkstra.h"
 #include "osr/routing/profiles/bike_sharing.h"
 #include "osr/routing/profiles/car_sharing.h"
 #include "osr/routing/route.h"
@@ -91,6 +94,41 @@ std::optional<std::size_t> find_match(match_view_t const& matches, Fn&& fn) {
     }
   }
   return std::nullopt;
+}
+
+using tracked_car_sharing = car_sharing<track_node_tracking>;
+
+struct car_return_transition {
+  node_idx_t return_node_;
+  tracked_car_sharing::node rental_;
+  tracked_car_sharing::node trailing_foot_;
+};
+
+car_return_transition get_car_return_transition(ways const& w) {
+  // Returning the rental car at node 4 changes to trailing-foot mode.  That
+  // mode switch is the edge which marks node 4 as the tracked return node.
+  auto const return_node = w.find_node_idx(osm_node_idx_t{4U}).value();
+  auto rental = std::optional<tracked_car_sharing::node>{};
+  tracked_car_sharing::resolve_all(
+      *w.r_, return_node, kNoLevel, [&](tracked_car_sharing::node const n) {
+        if (!rental.has_value() && n.is_rental_node()) {
+          rental = n;
+        }
+      });
+  return {
+      .return_node_ = return_node,
+      .rental_ = rental.value(),
+      .trailing_foot_ = {.n_ = return_node,
+                         .type_ = tracked_car_sharing::node_type::kTrailingFoot,
+                         .lvl_ = kNoLevel}};
+}
+
+void expect_tracked_return_node(tracked_car_sharing::entry const& entry,
+                                tracked_car_sharing::node const trailing_foot,
+                                node_idx_t const return_node) {
+  auto result = path{};
+  entry.write(trailing_foot, result);
+  EXPECT_EQ(return_node, result.track_node_);
 }
 
 template <typename Profile>
@@ -358,6 +396,67 @@ TEST_F(sharing_routing_test, bike_returns_at_destination_road_node) {
 TEST_F(sharing_routing_test, car_returns_at_destination_road_node) {
   verify_sharing_route<car_sharing<track_node_tracking>>(
       search_profile::kCarSharing, mode::kCar);
+}
+
+TEST_F(sharing_routing_test, dijkstra_tracks_car_return_node) {
+  auto const& w = *ways_;
+  auto const data = test_sharing_data{w};
+  auto const sharing = data.view(w);
+  auto const transition = get_car_return_transition(w);
+
+  auto search = dijkstra<tracked_car_sharing>{};
+  search.reset(3600U);
+  search.add_start(w,
+                   tracked_car_sharing::label{transition.rental_, cost_t{0U}});
+  search.run(tracked_car_sharing::parameters{}, w, *w.r_, 3600U, std::nullopt,
+             nullptr, &sharing, nullptr, direction::kForward);
+
+  expect_tracked_return_node(
+      search.cost_.at(transition.trailing_foot_.get_key()),
+      transition.trailing_foot_, transition.return_node_);
+}
+
+TEST_F(sharing_routing_test, astar_tracks_car_return_node) {
+  auto const& w = *ways_;
+  auto const data = test_sharing_data{w};
+  auto const sharing = data.view(w);
+  auto const transition = get_car_return_transition(w);
+  auto const location = osr::location{w.get_node_pos(transition.return_node_)};
+  auto const params = tracked_car_sharing::parameters{};
+
+  auto search = astar<tracked_car_sharing>{};
+  search.reset(3600U, location, location);
+  search.add_destination(params, w, &sharing, transition.trailing_foot_);
+  search.add_start(params, w, &sharing,
+                   tracked_car_sharing::label{transition.rental_, cost_t{0U}});
+  search.run(params, w, *w.r_, 3600U, nullptr, &sharing, nullptr,
+             direction::kForward);
+
+  expect_tracked_return_node(
+      search.cost_.at(transition.trailing_foot_.get_key()),
+      transition.trailing_foot_, transition.return_node_);
+}
+
+TEST_F(sharing_routing_test, bidirectional_tracks_car_return_node) {
+  auto const& w = *ways_;
+  auto const data = test_sharing_data{w};
+  auto const sharing = data.view(w);
+  auto const transition = get_car_return_transition(w);
+  auto const location = osr::location{w.get_node_pos(transition.return_node_)};
+  auto const params = tracked_car_sharing::parameters{};
+
+  auto search = bidirectional<tracked_car_sharing>{};
+  search.reset(params, 3600U, location, location);
+  search.add_start(params, w,
+                   tracked_car_sharing::label{transition.rental_, cost_t{0U}},
+                   &sharing);
+  search.run_single<direction::kForward, false, direction::kForward>(
+      params, w, *w.r_, 3600U, nullptr, &sharing, nullptr, search.pq1_,
+      search.cost1_);
+
+  expect_tracked_return_node(
+      search.cost1_.at(transition.trailing_foot_.get_key()),
+      transition.trailing_foot_, transition.return_node_);
 }
 
 TEST_F(sharing_routing_test, bike_return_at_exact_node_has_no_walk_segment) {
