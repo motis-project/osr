@@ -6,9 +6,13 @@
 
 #include "boost/thread/tss.hpp"
 
+#include "osr/routing/parameters.h"
+#include "osr/routing/profile.h"
+#include "osr/ways.h"
 #include "utl/concat.h"
 #include "utl/enumerate.h"
 #include "utl/helpers/algorithm.h"
+#include "utl/logging.h"
 #include "utl/to_vec.h"
 #include "utl/verify.h"
 
@@ -24,7 +28,6 @@
 #include "osr/routing/profiles/car_sharing.h"
 #include "osr/routing/profiles/foot.h"
 #include "osr/routing/sharing_data.h"
-#include "osr/routing/with_profile.h"
 #include "osr/util/infinite.h"
 #include "osr/util/reverse.h"
 
@@ -253,7 +256,7 @@ path reconstruct(typename P::parameters const& params,
 bool component_seen(ways const& w,
                     match_view_t matches,
                     size_t match_idx,
-                    unsigned times = 1) {
+                    unsigned times) {
   auto this_component = w.r_->way_component_[matches[match_idx].way_];
   for (auto j = 0U; j < match_idx; ++j) {
     if (w.r_->way_component_[matches[j].way_] == this_component) {
@@ -601,61 +604,6 @@ std::vector<std::optional<path>> route(
   }
 
   return result;
-}
-
-template <Profile P>
-search_state<P> route(typename P::parameters const& params,
-                      ways const& w,
-                      lookup const& l,
-                      dijkstra<P>& d,
-                      location const& from,
-                      std::vector<location> const& to,
-                      match_view_t from_match,
-                      std::vector<match_t> const& to_match,
-                      cost_t const distance,
-                      cost_t const max_distane,
-                      direction const dir,
-                      bitvec<node_idx_t> const* blocked,
-                      sharing_data const* sharing,
-                      elevation_storage const* elevations,
-                      std::function<bool(path const&)> const& do_reconstruct) {
-  auto state = search_state<P>{.d_ = get_dijkstra<P>(),
-                               .from_ = from,
-                               .to_ = to,
-                               .from_match_ = from_match,
-                               .to_match_ = to_match,
-                               .dir_ = dir};
-  d.reset(distance);
-  auto max_reached = false;
-  for (auto const [i, start] : utl::enumerate(from_match)) {
-    if (max_reached && component_seen(w, from_match, i)) {
-      continue;
-    }
-
-    if (utl::none_of(to_match, [&](auto const dest) {
-          return w.r_->way_component_[start.way_] ==
-                 w.r_->way_component_[dest.way_];
-        })) {
-      continue;
-    }
-
-    auto const start_way = start.way_;
-    for (auto const* nc : {&start.left_, &start.right_}) {
-      if (nc->valid() && nc->cost_ < max_distane) {
-        P::resolve_start_node(
-            *w.r_, start.way_, nc->node_, from.lvl_, dir, [&](auto const node) {
-              auto label = typename P::label{node, nc->cost_};
-              label.track(label, *w.r_, start_way, node.get_node(), false);
-              d.add_start(w, label);
-            });
-      }
-    }
-
-    max_reached =
-        !d.run(params, w, *w.r_, distance, blocked, sharing, elevations, dir) ||
-        max_reached;
-  }
-  return state;
 }
 
 std::vector<std::optional<path>> route(
