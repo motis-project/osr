@@ -65,6 +65,8 @@ routing_algorithm to_algorithm(std::string_view s) {
   switch (cista::hash(s)) {
     case cista::hash("dijkstra"): return routing_algorithm::kDijkstra;
     case cista::hash("bidirectional"): return routing_algorithm::kAStarBi;
+    // TODO: review POC implementation
+    case cista::hash("dijkstra_bidir"): return routing_algorithm::kDijkstraBi;
   }
   throw utl::fail("unknown routing algorithm: {}", s);
 }
@@ -261,79 +263,143 @@ path reconstruct(typename P::parameters const& params,
 }
 
 template <Profile P>
-path reconstruct_bidir(typename P::parameters const& params,
-                       ways const& w,
-                       lookup const& l,
-                       bitvec<node_idx_t> const* blocked,
-                       sharing_data const* sharing,
-                       elevation_storage const* elevations,
-                       dijkstra_bidir<P> const& d,
-                       location const& from,
-                       location const& to,
-                       way_candidate const& start,
-                       way_candidate const& dest,
-                       node_candidate const& dest_nc,
-                       typename P::node const dest_node,
-                       cost_t const cost,
-                       direction const dir) {
+// TODO: review POC implementation
+std::optional<path> reconstruct_dijkstra_bidir(
+    typename P::parameters const& params,
+    ways const& w,
+    lookup const& l,
+    bitvec<node_idx_t> const* blocked,
+    sharing_data const* sharing,
+    elevation_storage const* elevations,
+    dijkstra_bidir<P> const& d,
+    location const& from,
+    location const& to,
+    way_candidate const& start,
+    way_candidate const& dest,
+    direction const dir) {
+  if (d.meet_.get_node() == node_idx_t::invalid()) {
+    return std::nullopt;
+  }
 
-  auto n = dest_node;
-  auto segments = std::vector<path::segment>{
-      {.polyline_ = l.get_node_candidate_path(dest, dest_nc,
-                                              dir == direction::kForward, to),
-       .from_level_ = dest_nc.lvl_,
-       .to_level_ = dest_nc.lvl_,
-       .from_ =
-           dir == direction::kForward ? n.get_node() : node_idx_t::invalid(),
-       .to_ =
-           dir == direction::kBackward ? n.get_node() : node_idx_t::invalid(),
-       .way_ = way_idx_t::invalid(),
-       .cost_ = dest_nc.cost_,
-       .dist_ = static_cast<distance_t>(dest_nc.dist_to_node_),
-       .mode_ = dest_node.get_mode()}};
-  auto dist = 0.0;
+  // Walk from the meeting node back to the selected start candidate through the
+  // predecessor chain produced by the forward search.
+  auto forward_n = d.meet_;
+  auto forward_segments = std::vector<path::segment>{};
+  auto forward_dist = 0.0;
   while (true) {
-    auto const& e = d.costForward_.at(n.get_key());
-    auto const pred = e.pred(n);
+    auto const& e = d.costForward_.at(forward_n.get_key());
+    auto const pred = e.pred(forward_n);
     if (pred.has_value()) {
       auto const expected_cost =
-          static_cast<cost_t>(e.cost(n) -
+          static_cast<cost_t>(e.cost(forward_n) -
                               d.template get_cost<direction::kForward>(*pred));
-      dist += add_path<P>(params, w, *w.r_, blocked, sharing, elevations, *pred,
-                          n, expected_cost, segments, dir);
+      forward_dist +=
+          add_path<P>(params, w, *w.r_, blocked, sharing, elevations, *pred,
+                      forward_n, expected_cost, forward_segments, dir);
     } else {
       break;
     }
-    n = *pred;
+    forward_n = *pred;
   }
 
   auto const& start_nc =
-      n.get_node() == start.left_.node_ ? start.left_ : start.right_;
-  segments.push_back(
-      {.polyline_ = l.get_node_candidate_path(
-           start, start_nc, dir == direction::kBackward, from),
+      forward_n.get_node() == start.left_.node_ ? start.left_ : start.right_;
+  // Add the off-graph segment from the requested start location to the first
+  // graph node used by the forward search.
+  forward_segments.push_back(
+      {.polyline_ =
+           l.get_node_candidate_path(start, start_nc, dir == direction::kBackward,
+                                     from),
        .from_level_ = start_nc.lvl_,
        .to_level_ = start_nc.lvl_,
-       .from_ =
-           dir == direction::kBackward ? n.get_node() : node_idx_t::invalid(),
-       .to_ = dir == direction::kForward ? n.get_node() : node_idx_t::invalid(),
+       .from_ = dir == direction::kBackward ? forward_n.get_node()
+                                            : node_idx_t::invalid(),
+       .to_ = dir == direction::kForward ? forward_n.get_node()
+                                         : node_idx_t::invalid(),
        .way_ = way_idx_t::invalid(),
        .cost_ = start_nc.cost_,
        .dist_ = static_cast<distance_t>(start_nc.dist_to_node_),
-       .mode_ = n.get_mode()});
-  if (dir == direction::kForward) {
-    std::reverse(begin(segments), end(segments));
+       .mode_ = forward_n.get_mode()});
+
+  // Walk from the meeting node back to the selected destination candidate
+  // through the predecessor chain produced by the backward search.
+  auto backward_n = d.meet_;
+  auto backward_segments = std::vector<path::segment>{};
+  auto backward_dist = 0.0;
+  while (true) {
+    auto const& e = d.costBackward_.at(backward_n.get_key());
+    auto const pred = e.pred(backward_n);
+    if (pred.has_value()) {
+      auto const expected_cost =
+          static_cast<cost_t>(e.cost(backward_n) -
+                              d.template get_cost<direction::kBackward>(*pred));
+      backward_dist += add_path<P>(
+          params, w, *w.r_, blocked, sharing, elevations, *pred, backward_n,
+          expected_cost, backward_segments, opposite(dir));
+    } else {
+      break;
+    }
+    backward_n = *pred;
   }
+
+  auto const* dest_nc = static_cast<node_candidate const*>(nullptr);
+  auto const seed_cost = d.template get_cost<direction::kBackward>(backward_n);
+  for (auto const* nc : {&dest.left_, &dest.right_}) {
+    if (nc->valid() && nc->node_ == backward_n.get_node()) {
+      dest_nc = nc;
+      if (nc->cost_ == seed_cost) {
+        break;
+      }
+    }
+  }
+  if (dest_nc == nullptr) {
+    for (auto const* nc : {&dest.left_, &dest.right_}) {
+      if (nc->valid()) {
+        dest_nc = nc;
+        break;
+      }
+    }
+  }
+  if (dest_nc == nullptr) {
+    return std::nullopt;
+  }
+
+  // Add the off-graph segment from the final graph node to the requested
+  // destination location.
+  backward_segments.push_back(
+      {.polyline_ = l.get_node_candidate_path(dest, *dest_nc,
+                                              dir == direction::kForward, to),
+       .from_level_ = dest_nc->lvl_,
+       .to_level_ = dest_nc->lvl_,
+       .from_ = dir == direction::kForward ? backward_n.get_node()
+                                           : node_idx_t::invalid(),
+       .to_ = dir == direction::kBackward ? backward_n.get_node()
+                                          : node_idx_t::invalid(),
+       .way_ = way_idx_t::invalid(),
+       .cost_ = dest_nc->cost_,
+       .dist_ = static_cast<distance_t>(dest_nc->dist_to_node_),
+       .mode_ = backward_n.get_mode()});
+
+  // Both predecessor walks append segments in predecessor-chain order. Reverse
+  // the half that points away from the requested output direction.
+  if (dir == direction::kForward) {
+    std::reverse(begin(forward_segments), end(forward_segments));
+  } else {
+    std::reverse(begin(backward_segments), end(backward_segments));
+  }
+  forward_segments.insert(end(forward_segments), begin(backward_segments),
+                          end(backward_segments));
+
   auto path_elevation = elevation_storage::elevation{};
-  for (auto const& segment : segments) {
+  for (auto const& segment : forward_segments) {
     path_elevation += segment.elevation_;
   }
-  auto p = path{.cost_ = cost,
-                .dist_ = start_nc.dist_to_node_ + dist + dest_nc.dist_to_node_,
-                .elevation_ = path_elevation,
-                .segments_ = segments};
-  d.costForward_.at(dest_node.get_key()).write(dest_node, p);
-  return p;
+
+  return path{.cost_ = d.mu_,
+              .dist_ = start_nc.dist_to_node_ + forward_dist + backward_dist +
+                       dest_nc->dist_to_node_,
+              .elevation_ = path_elevation,
+              .segments_ = forward_segments};
 }
 
 bool component_seen(ways const& w,
@@ -697,11 +763,6 @@ std::optional<path> route_dijkstra_bidir(typename P::parameters const& params,
     return *direct;
   }
 
-  auto const limit_squared_max_matching_distance =
-      std::pow(geo::distance(from.pos_, to.pos_), 2) /
-      kMaxMatchingDistanceSquaredRatio;
-
-  d.reset(max);
   auto should_continue = true;
   for (auto const [i, start] : utl::enumerate(from_match)) {
     if (!should_continue && component_seen(w, from_match, i)) {
@@ -714,18 +775,24 @@ std::optional<path> route_dijkstra_bidir(typename P::parameters const& params,
       continue;
     }
 
-    for (auto const* nc : {&start.left_, &start.right_}) {
-      if (nc->valid() && nc->cost_ < max) {
-        P::resolve_start_node(
-            *w.r_, start.way_, nc->node_, from.lvl_, dir,
-            [&](auto const node) { d.add_start(w, {node, nc->cost_}); });
-      }
-    }
-
     for (auto const& end : to_match) {
       if (w.r_->way_component_[start.way_] != w.r_->way_component_[end.way_]) {
         continue;
       }
+
+      // Keep one destination match per prototype run. This makes the
+      // reconstruction use the exact end candidate that seeded the backward
+      // queue instead of guessing among all destination candidates afterwards.
+      // TODO: review POC implementation
+      d.reset(max);
+      for (auto const* nc : {&start.left_, &start.right_}) {
+        if (nc->valid() && nc->cost_ < max) {
+          P::resolve_start_node(
+              *w.r_, start.way_, nc->node_, from.lvl_, dir,
+              [&](auto const node) { d.add_start(w, {node, nc->cost_}); });
+        }
+      }
+
       auto const end_way = end.way_;
       for (auto const* nc : {&end.left_, &end.right_}) {
         if (nc->valid() && nc->cost_ < max) {
@@ -734,24 +801,21 @@ std::optional<path> route_dijkstra_bidir(typename P::parameters const& params,
               [&](auto const node) { d.add_destination(w, {node, nc->cost_}); });
         }
       }
-    }
 
-    if (d.pqForward_.empty() || d.pqBackward_.empty()) {
-      continue;
-    }
+      if (d.pqForward_.empty() || d.pqBackward_.empty()) {
+        continue;
+      }
 
-    should_continue =
-        d.run(params, w, *w.r_, max, blocked, sharing, elevations, dir) &&
-        should_continue;
+      should_continue =
+          d.run(params, w, *w.r_, max, blocked, sharing, elevations, dir) &&
+          should_continue;
 
-    auto const c = best_candidate_bidir(params, w, d, to.lvl_, to_match, max,
-                                        dir, should_continue, start,
-                                        limit_squared_max_matching_distance);
-    if (c.has_value()) {
-      auto const [nc, wc, node, p] = *c;
-      return reconstruct_bidir<P>(params, w, l, blocked, sharing, elevations, d,
-                                  from, to, start, *wc, *nc, node, p.cost_,
-                                  dir);
+      if (d.mu_ != kInfeasible) {
+        // TODO: review POC implementation
+        return reconstruct_dijkstra_bidir<P>(params, w, l, blocked, sharing,
+                                             elevations, d, from, to, start,
+                                             end, dir);
+      }
     }
   }
 

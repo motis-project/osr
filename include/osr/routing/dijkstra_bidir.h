@@ -45,6 +45,7 @@ struct dijkstra_bidir {
     settledForward_.clear();
     settledBackward_.clear();
     mu_ = kInfeasible;
+    meet_ = node::invalid();
     max_reached_ = false;
   }
 
@@ -98,13 +99,14 @@ struct dijkstra_bidir {
     }
   }
 
-  void update_mu(node const n) {
-    auto const f = get_cost<direction::kForward>(n);
-    auto const b = get_cost<direction::kBackward>(n);
+  void update_mu(node const n, cost_t const f, cost_t const b) {
     if (f != kInfeasible && b != kInfeasible) {
-      mu_ = std::min(
-          mu_, clamp_cost(static_cast<std::uint64_t>(f) +
-                          static_cast<std::uint64_t>(b)));
+      auto const candidate = clamp_cost(static_cast<std::uint64_t>(f) +
+                                        static_cast<std::uint64_t>(b));
+      if (candidate < mu_) {
+        mu_ = candidate;
+        meet_ = n;
+      }
     }
   }
 
@@ -114,15 +116,9 @@ struct dijkstra_bidir {
       if (!settledForward_.insert(n.get_key()).second) {
         return false;
       }
-      if (settledBackward_.contains(n.get_key())) {
-        update_mu(n);
-      }
     } else {
       if (!settledBackward_.insert(n.get_key()).second) {
         return false;
-      }
-      if (settledForward_.contains(n.get_key())) {
-        update_mu(n);
       }
     }
     return true;
@@ -222,8 +218,13 @@ struct dijkstra_bidir {
           return;
         }
         if (forward) {
-          if (costForward_[neighbor.get_key()].update(
-                  l, neighbor, static_cast<cost_t>(total), curr)) {
+          auto const total_cost = static_cast<cost_t>(total);
+          auto const improved =
+              costForward_[neighbor.get_key()].update(l, neighbor, total_cost,
+                                                      curr);
+          update_mu(neighbor, get_cost<direction::kForward>(neighbor),
+                    get_cost<direction::kBackward>(neighbor));
+          if (improved) {
             auto next = label{neighbor, static_cast<cost_t>(total)};
             next.track(l, r, way, neighbor.get_node(), track);
             pqForward_.push(std::move(next));
@@ -237,8 +238,13 @@ struct dijkstra_bidir {
             }
           }
         } else {
-          if (costBackward_[neighbor.get_key()].update(
-                  l, neighbor, static_cast<cost_t>(total), curr)) {
+          auto const total_cost = static_cast<cost_t>(total);
+          auto const improved =
+              costBackward_[neighbor.get_key()].update(l, neighbor, total_cost,
+                                                       curr);
+          update_mu(neighbor, get_cost<direction::kForward>(neighbor),
+                    get_cost<direction::kBackward>(neighbor));
+          if (improved) {
             auto next = label{neighbor, static_cast<cost_t>(total)};
             next.track(l, r, way, neighbor.get_node(), track);
             pqBackward_.push(std::move(next));
@@ -298,6 +304,7 @@ struct dijkstra_bidir {
   settled_set settledForward_;
   settled_set settledBackward_;
   cost_t mu_{kInfeasible};
+  node meet_{node::invalid()};
 
   // for early termination
   std::vector<node> destinations_;
