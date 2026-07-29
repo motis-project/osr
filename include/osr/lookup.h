@@ -395,7 +395,6 @@ struct lookup {
       search_profile,
       bool exact_return_allowed,
       std::optional<std::span<raw_way_candidate const>> raw_way_candidates,
-      bool include_non_exact_vehicle_matches,
       match_result& out) const;
 
   // Matches `query` against the street network and appends the result to
@@ -437,8 +436,7 @@ struct lookup {
       match_result& out,
       std::optional<routing_time_t> const start_time = std::nullopt,
       std::optional<std::span<raw_way_candidate const>> raw_way_candidates =
-          std::nullopt,
-      bool const include_non_exact_vehicle_matches = true) const {
+          std::nullopt) const {
     auto raw_way_candidates_storage = std::vector<raw_way_candidate>{};
     if constexpr (SharingProfile<P>) {
       if (exact_return_allowed && !raw_way_candidates.has_value()) {
@@ -473,48 +471,6 @@ struct lookup {
                                       reverse, search_dir, max_match_distance,
                                       blocked, vehicle_result, start_time);
         }
-      } else if (include_non_exact_vehicle_matches) {
-        if (raw_way_candidates.has_value()) {
-          complete_match<typename P::vehiclep>(
-              P::vehicle_parameters(params), query, reverse, search_dir,
-              max_match_distance, blocked, start_time, *raw_way_candidates,
-              vehicle_result);
-        } else {
-          vehicle_result.start(query.lvl_);
-          auto const approx_distance_lng_degrees =
-              geo::approx_distance_lng_degrees(query.pos_);
-          for (auto i = std::size_t{0U}; i != regular.size(); ++i) {
-            auto const way = regular.way_[i];
-            auto const [squared_dist, best, segment_idx] =
-                geo::approx_squared_distance_to_polyline<
-                    std::tuple<double, geo::latlng, size_t>>(
-                    query.pos_, ways_.way_polylines_[way],
-                    approx_distance_lng_degrees);
-            auto const dist_to_way = std::sqrt(squared_dist);
-            auto const left = find_next_node<typename P::vehiclep>(
-                P::vehicle_parameters(params), way, dist_to_way, query,
-                direction::kBackward, query.lvl_, reverse, search_dir, blocked,
-                approx_distance_lng_degrees, best, segment_idx, start_time);
-            auto const right = find_next_node<typename P::vehiclep>(
-                P::vehicle_parameters(params), way, dist_to_way, query,
-                direction::kForward, query.lvl_, reverse, search_dir, blocked,
-                approx_distance_lng_degrees, best, segment_idx, start_time);
-            if (left.valid() || right.valid()) {
-              vehicle_result.add(
-                  static_cast<float>(dist_to_way), way,
-                  match_result::nodes{
-                      .left_ = {.node_ = left.node_,
-                                .dist_to_node_ =
-                                    static_cast<float>(left.dist_to_node_),
-                                .cost_ = left.cost_},
-                      .right_ = {.node_ = right.node_,
-                                 .dist_to_node_ =
-                                     static_cast<float>(right.dist_to_node_),
-                                 .cost_ = right.cost_}});
-            }
-          }
-          vehicle_result.finish();
-        }
       }
     }
 
@@ -526,22 +482,6 @@ struct lookup {
       auto regular_idx = std::size_t{0U};
       auto vehicle_idx = std::size_t{0U};
       while (regular_idx != regular.size() || vehicle_idx != vehicle.size()) {
-        while (vehicle_idx != vehicle.size() && !exact_return_allowed &&
-               raw_way_candidates.has_value()) {
-          auto const vehicle_way = vehicle.way_[vehicle_idx];
-          auto const matches_regular = [&] {
-            for (auto i = std::size_t{0U}; i != regular.size(); ++i) {
-              if (regular.way_[i] == vehicle_way) {
-                return true;
-              }
-            }
-            return false;
-          }();
-          if (matches_regular) {
-            break;
-          }
-          ++vehicle_idx;
-        }
         if (regular_idx == regular.size() && vehicle_idx == vehicle.size()) {
           break;
         }

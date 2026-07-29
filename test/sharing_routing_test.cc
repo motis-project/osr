@@ -139,7 +139,7 @@ void verify_sharing_route(search_profile const profile,
   auto const data = test_sharing_data{w};
   auto const sharing = data.view(w);
   auto const from = location{{49.000000, 8.000000}, kNoLevel};
-  auto const to = location{{49.000045, 8.002800}, kNoLevel};
+  auto const to = location{{49.000005, 8.009800}, kNoLevel};
   auto const params = typename Profile::parameters{};
 
   auto const forward =
@@ -155,23 +155,9 @@ void verify_sharing_route(search_profile const profile,
   auto const closest_foot = find_match(
       backward_source_matches,
       [&](auto const i) { return !backward_source_matches.vehicle_match(i); });
-  auto const closest_vehicle = find_match(
-      backward_source_matches,
-      [&](auto const i) { return backward_source_matches.vehicle_match(i); });
   ASSERT_TRUE(closest_foot.has_value());
-  ASSERT_TRUE(closest_vehicle.has_value());
-  EXPECT_EQ(osm_way_idx_t{200U},
-            w.way_osm_idx_[backward_source_matches.way_[*closest_foot]]);
-  EXPECT_EQ(osm_way_idx_t{100U},
-            w.way_osm_idx_[backward_source_matches.way_[*closest_vehicle]]);
-
-  auto station_result = match_result{};
-  l.match_endpoint<Profile>(params, to, false, direction::kBackward, 50.0,
-                            nullptr, false, station_result, std::nullopt,
-                            std::nullopt, false);
-  auto const station_matches = station_result[match_idx_t{0U}];
-  EXPECT_FALSE(find_match(station_matches, [&](auto const i) {
-                 return station_matches.vehicle_match(i);
+  EXPECT_FALSE(find_match(backward_source_matches, [&](auto const i) {
+                 return backward_source_matches.vehicle_match(i);
                }).has_value());
 
   auto const backward =
@@ -190,7 +176,9 @@ void verify_sharing_route(search_profile const profile,
   EXPECT_EQ(forward->duration_, backward_many.front()->duration_);
   EXPECT_TRUE(backward_many.front()->segments_.empty());
 
-  auto const expected_return_node = w.find_node_idx(osm_node_idx_t{4U}).value();
+  auto const expected_return = w.find_node_idx(osm_node_idx_t{5U});
+  ASSERT_TRUE(expected_return.has_value());
+  auto const expected_return_node = *expected_return;
   auto const switch_segment =
       utl::find_if(forward->segments_, [&](path::segment const& s) {
         return s.from_ == expected_return_node &&
@@ -253,7 +241,7 @@ void verify_exact_coordinate_return(search_profile const profile,
   auto endpoint_result = match_result{};
   l.match_endpoint<Profile>(params, to, true, direction::kForward, 50.0,
                             nullptr, true, endpoint_result, std::nullopt,
-                            std::nullopt, false);
+                            std::nullopt);
   auto const endpoint_matches = endpoint_result[match_idx_t{0U}];
   auto const regular_road = find_match(endpoint_matches, [&](auto const i) {
     return w.way_osm_idx_[endpoint_matches.way_[i]] == osm_way_idx_t{100U} &&
@@ -329,18 +317,13 @@ void verify_destination_match_fallback(search_profile const profile) {
   auto const matches = match_result[match_idx_t{0U}];
   auto const closest_foot = find_match(
       matches, [&](auto const i) { return !matches.vehicle_match(i); });
-  auto const closest_vehicle = find_match(
-      matches, [&](auto const i) { return matches.vehicle_match(i); });
   auto const fallback_foot = find_match(matches, [&](auto const i) {
     return !matches.vehicle_match(i) &&
            w.way_osm_idx_[matches.way_[i]] == osm_way_idx_t{300U};
   });
   ASSERT_TRUE(closest_foot.has_value());
-  ASSERT_TRUE(closest_vehicle.has_value());
   ASSERT_TRUE(fallback_foot.has_value());
   EXPECT_EQ(osm_way_idx_t{400U}, w.way_osm_idx_[matches.way_[*closest_foot]]);
-  EXPECT_EQ(osm_way_idx_t{400U},
-            w.way_osm_idx_[matches.way_[*closest_vehicle]]);
   EXPECT_EQ(w.r_->way_component_[matches.way_[*closest_foot]],
             w.r_->way_component_[matches.way_[*fallback_foot]]);
 
@@ -367,18 +350,13 @@ void verify_source_match_fallback(search_profile const profile) {
   auto const matches = match_result[match_idx_t{0U}];
   auto const closest_foot = find_match(
       matches, [&](auto const i) { return !matches.vehicle_match(i); });
-  auto const closest_vehicle = find_match(
-      matches, [&](auto const i) { return matches.vehicle_match(i); });
   auto const fallback_foot = find_match(matches, [&](auto const i) {
     return !matches.vehicle_match(i) &&
            w.way_osm_idx_[matches.way_[i]] == osm_way_idx_t{500U};
   });
   ASSERT_TRUE(closest_foot.has_value());
-  ASSERT_TRUE(closest_vehicle.has_value());
   ASSERT_TRUE(fallback_foot.has_value());
   EXPECT_EQ(osm_way_idx_t{600U}, w.way_osm_idx_[matches.way_[*closest_foot]]);
-  EXPECT_EQ(osm_way_idx_t{600U},
-            w.way_osm_idx_[matches.way_[*closest_vehicle]]);
   EXPECT_EQ(w.r_->way_component_[matches.way_[*closest_foot]],
             w.r_->way_component_[matches.way_[*fallback_foot]]);
 

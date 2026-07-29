@@ -166,13 +166,12 @@ void lookup::match_endpoint(
     search_profile const p,
     bool const exact_return_allowed,
     std::optional<std::span<raw_way_candidate const>> raw_way_candidates,
-    bool const include_non_exact_vehicle_matches,
     match_result& out) const {
   with_profile(p, [&]<Profile P>(P&&) {
     match_endpoint<P>(std::get<typename P::parameters>(params), query, reverse,
                       search_dir, max_match_distance, blocked,
                       exact_return_allowed, out, std::nullopt,
-                      raw_way_candidates, include_non_exact_vehicle_matches);
+                      raw_way_candidates);
   });
 }
 
