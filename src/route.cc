@@ -1242,6 +1242,11 @@ std::vector<std::optional<path>> route(
               geo::approx_squared_distance(from.pos_, t.pos_,
                                            distance_lng_degrees) /
               kMaxMatchingDistanceSquaredRatio;
+          if (std::pow(from_match.dist_to_way_[i], 2) >
+                  limit_squared_max_matching_distance &&
+              i > kBottomKDefinitelyConsidered) {
+            continue;
+          }
           auto const c = best_candidate<P>(
               params, w, d, t.lvl_, m, max, dir, start_time, should_continue,
               start_way, limit_squared_max_matching_distance);
