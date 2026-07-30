@@ -34,6 +34,7 @@ namespace osr {
 
 constexpr auto const kMaxMatchingDistanceSquaredRatio = 9.0;
 constexpr auto const kBottomKDefinitelyConsidered = 5;
+constexpr auto const kMinCostSettled = cost_t{900};
 
 template <Profile P>
 bidirectional<P>& get_bidirectional() {
@@ -379,7 +380,7 @@ best_candidate(typename P::parameters const& params,
     if (start_component != w.r_->way_component_[dest_way]) {
       continue;
     }
-    if (!should_continue && ++component_seen_ctr > 10) {
+    if (!should_continue && ++component_seen_ctr > 1) {
       break;
     }
     if (std::pow(m.dist_to_way_[j], 2) > limit_squared_max_matching_distance &&
@@ -443,8 +444,8 @@ std::optional<path> route_bidirectional(typename P::parameters const& params,
     return *direct;
   }
 
-  b.reset(params, max, from, to);
-  if (b.radius_ == max) {
+  b.reset(params, std::max(kMinCostSettled, max), from, to);
+  if (b.radius_ == std::max(kMinCostSettled, max)) {
     return std::nullopt;
   }
 
@@ -510,7 +511,8 @@ std::optional<path> route_bidirectional(typename P::parameters const& params,
         continue;
       }
       auto const should_continue =
-          b.run(params, w, *w.r_, max, blocked, sharing, elevations, dir);
+          b.run(params, w, *w.r_, std::max(kMinCostSettled, max), blocked,
+                sharing, elevations, dir);
 
       if (b.meet_point_1_.get_node() == node_idx_t::invalid()) {
         if (should_continue) {
@@ -520,6 +522,10 @@ std::optional<path> route_bidirectional(typename P::parameters const& params,
       }
 
       auto const cost = b.get_cost_to_mp(b.meet_point_1_, b.meet_point_2_);
+
+      if (cost >= max) {
+        return std::nullopt;
+      }
 
       return reconstruct_bi(params, w, l, blocked, sharing, elevations, b, from,
                             to, start_way, start_left, start_right, end_way,
@@ -557,7 +563,7 @@ std::optional<path> route_dijkstra(
       std::pow(geo::distance(from.pos_, to.pos_), 2) /
       kMaxMatchingDistanceSquaredRatio;
 
-  d.reset(max);
+  d.reset(std::max(kMinCostSettled, max));
   auto should_continue = true;
   for (auto i = std::size_t{0U}; i != from_match.size(); ++i) {
     if (!should_continue && component_seen(w, from_match, i)) {
@@ -600,8 +606,8 @@ std::optional<path> route_dijkstra(
       continue;
     }
 
-    should_continue = d.run(params, w, *w.r_, max, start_time, blocked, sharing,
-                            elevations, dir) &&
+    should_continue = d.run(params, w, *w.r_, std::max(kMinCostSettled, max),
+                            start_time, blocked, sharing, elevations, dir) &&
                       should_continue;
 
     auto const c = best_candidate<P>(params, w, d, to.lvl_, to_match, max, dir,
@@ -641,7 +647,7 @@ std::optional<path> route_astar(typename P::parameters const& params,
       std::pow(geo::distance(from.pos_, to.pos_), 2) /
       kMaxMatchingDistanceSquaredRatio;
 
-  a.reset(max, from, to);
+  a.reset(std::max(kMinCostSettled, max), from, to);
   auto should_continue = true;
   for (auto i = std::size_t{0U}; i != from_match.size(); ++i) {
     if (!should_continue && component_seen(w, from_match, i)) {
@@ -663,13 +669,14 @@ std::optional<path> route_astar(typename P::parameters const& params,
       continue;
     }
 
-    a.reset(max, from, to);
+    a.reset(std::max(kMinCostSettled, max), from, to);
+    auto component_seen_ctr = 0;
     for (auto j = std::size_t{0U}; j != to_match.size(); ++j) {
       auto const end_way = to_match.way_[j];
       if (w.r_->way_component_[start_way] != w.r_->way_component_[end_way]) {
         continue;
       }
-      if (!should_continue && component_seen(w, to_match, j, 10)) {
+      if (!should_continue && ++component_seen_ctr > 1) {
         continue;
       }
       if (std::pow(to_match.dist_to_way_[j], 2) >
@@ -722,8 +729,8 @@ std::optional<path> route_astar(typename P::parameters const& params,
       continue;
     }
 
-    should_continue = a.run(params, w, *w.r_, max, start_time, blocked, sharing,
-                            elevations, dir) &&
+    should_continue = a.run(params, w, *w.r_, std::max(kMinCostSettled, max),
+                            start_time, blocked, sharing, elevations, dir) &&
                       should_continue;
 
     auto const c = best_candidate<P>(params, w, a, to.lvl_, to_match, max, dir,
@@ -766,7 +773,7 @@ std::vector<std::optional<path>> route(
 
   auto const distance_lng_degrees = geo::approx_distance_lng_degrees(from.pos_);
 
-  d.reset(max);
+  d.reset(std::max(kMinCostSettled, max));
   auto should_continue = true;
   for (auto i = std::size_t{0U}; i != from_match.size(); ++i) {
     if (!should_continue && component_seen(w, from_match, i)) {
@@ -794,8 +801,8 @@ std::vector<std::optional<path>> route(
       }
     }
 
-    should_continue = d.run(params, w, *w.r_, max, start_time, blocked, sharing,
-                            elevations, dir) &&
+    should_continue = d.run(params, w, *w.r_, std::max(kMinCostSettled, max),
+                            start_time, blocked, sharing, elevations, dir) &&
                       should_continue;
 
     auto found = 0U;
