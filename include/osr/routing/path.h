@@ -19,12 +19,14 @@ struct path {
     node_idx_t to_{node_idx_t::invalid()};
     way_idx_t way_{way_idx_t::invalid()};
     cost_t cost_{kInfeasible};
+    duration_t duration_{0};
     distance_t dist_{0};
     elevation_storage::elevation elevation_{};
     mode mode_{mode::kFoot};
   };
 
   cost_t cost_{kInfeasible};
+  duration_t duration_{0};
   double dist_{0.0};
   elevation_storage::elevation elevation_{};
   std::vector<segment> segments_{};

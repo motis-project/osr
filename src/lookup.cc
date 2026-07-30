@@ -1,5 +1,8 @@
 #include "osr/lookup.h"
 
+#include "utl/helpers/algorithm.h"
+#include "utl/parallel_for.h"
+
 #include "osr/routing/parameters.h"
 #include "osr/routing/profiles/bike.h"
 #include "osr/routing/profiles/bike_sharing.h"
@@ -24,7 +27,23 @@ lookup::lookup(ways const& ways,
       ways_{ways} {}
 
 void lookup::build_rtree() {
-  for (auto way = way_idx_t{0U}; way != ways_.n_ways(); ++way) {
+  auto sorted_ways = std::vector<way_idx_t>();
+  sorted_ways.resize(ways_.n_ways());
+  std::iota(sorted_ways.begin(), sorted_ways.end(), way_idx_t{0});
+  auto curve = vec_map<way_idx_t, std::uint64_t>{};
+  curve.resize(ways_.n_ways());
+
+  utl::parallel_for(sorted_ways, [&](way_idx_t const way) {
+    curve[way] = geo::morton_encode(
+        ways_.way_polylines_[way][ways_.way_polylines_[way].size() / 2]);
+  });
+
+  std::stable_sort(sorted_ways.begin(), sorted_ways.end(),
+                   [&](way_idx_t const a, way_idx_t const b) {
+                     return curve[a] < curve[b];
+                   });
+
+  for (auto way : sorted_ways) {
     auto b = geo::box{};
     for (auto const& c : ways_.way_polylines_[way]) {
       b.extend(c);
@@ -65,9 +84,25 @@ std::vector<raw_way_candidate> lookup::get_raw_way_candidates(
 
 std::vector<raw_way_candidate> lookup::get_raw_match(
     location const& query, double max_match_distance) const {
+  auto const covers_all_base_profiles =
+      [&](std::vector<raw_way_candidate> const& candidates) {
+        return utl::all_of(
+            std::array{search_profile::kFoot, search_profile::kBike,
+                       search_profile::kCar},
+            [&](search_profile const p) {
+              auto const params = get_parameters(p);
+              return with_profile(p, [&]<Profile P>(P&&) {
+                return utl::any_of(candidates, [&](auto const& wc) {
+                  return is_raw_usable<P>(
+                      std::get<typename P::parameters>(params), wc, query);
+                });
+              });
+            });
+      };
+
   auto way_candidates = get_raw_way_candidates(query, max_match_distance);
   auto i = 0U;
-  while (way_candidates.empty() && i++ < 4U) {
+  while (!covers_all_base_profiles(way_candidates) && i++ < 4U) {
     max_match_distance *= 2U;
     way_candidates = get_raw_way_candidates(query, max_match_distance);
   }
@@ -105,19 +140,19 @@ raw_node_candidate lookup::find_raw_next_node(
   return c;
 }
 
-match_t lookup::match(profile_parameters const& params,
-                      location const& query,
-                      bool const reverse,
-                      direction const search_dir,
-                      double const max_match_distance,
-                      bitvec<node_idx_t> const* blocked,
-                      search_profile const p,
-                      std::optional<std::span<raw_way_candidate const>>
-                          raw_way_candidates) const {
-  return with_profile(p, [&]<Profile P>(P&&) {
-    return match<P>(std::get<typename P::parameters>(params), query, reverse,
-                    search_dir, max_match_distance, blocked,
-                    raw_way_candidates);
+void lookup::match(profile_parameters const& params,
+                   location const& query,
+                   bool const reverse,
+                   direction const search_dir,
+                   double const max_match_distance,
+                   bitvec<node_idx_t> const* blocked,
+                   search_profile const p,
+                   std::span<raw_way_candidate const> const raw_way_candidates,
+                   match_result& out) const {
+  with_profile(p, [&]<Profile P>(P&&) {
+    complete_match<P>(std::get<typename P::parameters>(params), query, reverse,
+                      search_dir, max_match_distance, blocked, std::nullopt,
+                      raw_way_candidates, out);
   });
 }
 

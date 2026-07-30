@@ -17,6 +17,7 @@ profile_parameters get_parameters(search_profile const p) {
     case search_profile::kBikeElevationHigh:
       return bike<bike_costing::kSafe, kElevationHighCost>::parameters{};
     case search_profile::kCar: return car::parameters{};
+    case search_profile::kHgv: return hgv::parameters{};
     case search_profile::kCarDropOff:
       return car_parking<false, false>::parameters{};
     case search_profile::kCarDropOffWheelchair:
