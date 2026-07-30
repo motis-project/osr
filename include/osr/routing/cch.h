@@ -2,6 +2,7 @@
 
 #include <cstdint>
 #include <algorithm>
+#include <cmath>
 #include <vector>
 
 #include "fmt/core.h"
@@ -145,6 +146,24 @@ struct cch {
            static_cast<std::uint64_t>(mu_);
   }
 
+  bool is_upward(ways::routing const& r, node const from, node const to) const {
+    return r.node_importance_[to.get_node()] >
+           r.node_importance_[from.get_node()];
+  }
+
+  // POC customization: shortcuts currently store only distance, so the query
+  // derives a profile cost with the same distance-to-time rule as the foot
+  // profile. A real customization would store profile-specific shortcut costs.
+  static cost_t shortcut_cost(P::parameters const& params,
+                              distance_t const distance) {
+    if constexpr (requires { params.speed_meters_per_second_; }) {
+      return static_cast<cost_t>(
+          std::round(distance / params.speed_meters_per_second_));
+    } else {
+      return static_cast<cost_t>(distance);
+    }
+  }
+
   template <direction SearchDir, bool WithBlocked>
   bool run(P::parameters const& params,
            ways const& w,
@@ -203,6 +222,12 @@ struct cch {
           neighbor.print(std::cout, w);
         }
 
+        // CCH queries only relax upward edges. The profile still decides which
+        // original graph edges are usable; CCH filters the accepted neighbors.
+        if (!is_upward(r, curr, neighbor)) {
+          return;
+        }
+
         auto const total = static_cast<std::uint64_t>(l.cost()) + cost;
         if (total >= max) {
           max_reached_ = true;
@@ -251,12 +276,33 @@ struct cch {
         }
       };
 
+      auto relax_shortcut = [&](shortcut const& s) {
+        // Shortcuts are stored outside the profile graph, so add them as extra
+        // CCH edges after normal profile adjacency has been expanded.
+        auto const neighbor =
+            P::create_node(s.to_, kNoLevel, way_pos_t{0U}, SearchDir);
+        if (!is_upward(r, curr, neighbor)) {
+          return;
+        }
+        if constexpr (WithBlocked) {
+          if (blocked->test(s.to_)) {
+            return;
+          }
+        }
+        relax_neighbor(neighbor, shortcut_cost(params, s.distance_),
+                       s.distance_, way_idx_t::invalid(), 0U, 0U,
+                       elevation_storage::elevation{}, false);
+      };
+
       if (forward) {
         P::template adjacent<SearchDir, WithBlocked>(
             params, r, curr, blocked, sharing, elevations, relax_neighbor);
       } else {
         P::template adjacent<opposite(SearchDir), WithBlocked>(
             params, r, curr, blocked, sharing, elevations, relax_neighbor);
+      }
+      for (auto const& s : r.shortcuts_[curr.get_node()]) {
+        relax_shortcut(s);
       }
     }
     return !max_reached_ && mu_ == kInfeasible;

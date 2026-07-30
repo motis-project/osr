@@ -414,6 +414,15 @@ std::optional<path> reconstruct_dijkstra_bidir(
 }
 
 template <Profile P>
+double add_cch_path(typename P::parameters const& params,
+                    ways const& w,
+                    typename P::node from,
+                    typename P::node to,
+                    cost_t expected_cost,
+                    std::vector<path::segment>& segments,
+                    direction dir);
+
+template <Profile P>
 // TODO: review POC implementation
 std::optional<path> reconstruct_cch(
     typename P::parameters const& params,
@@ -428,6 +437,10 @@ std::optional<path> reconstruct_cch(
     way_candidate const& start,
     way_candidate const& dest,
     direction const dir) {
+  (void)blocked;
+  (void)sharing;
+  (void)elevations;
+
   if (c.meet_.get_node() == node_idx_t::invalid()) {
     return std::nullopt;
   }
@@ -444,9 +457,8 @@ std::optional<path> reconstruct_cch(
       auto const expected_cost =
           static_cast<cost_t>(e.cost(forward_n) -
                               c.template get_cost<direction::kForward>(*pred));
-      forward_dist +=
-          add_path<P>(params, w, *w.r_, blocked, sharing, elevations, *pred,
-                      forward_n, expected_cost, forward_segments, dir);
+      forward_dist += add_cch_path<P>(params, w, *pred, forward_n,
+                                      expected_cost, forward_segments, dir);
     } else {
       break;
     }
@@ -484,9 +496,9 @@ std::optional<path> reconstruct_cch(
       auto const expected_cost =
           static_cast<cost_t>(e.cost(backward_n) -
                               c.template get_cost<direction::kBackward>(*pred));
-      backward_dist += add_path<P>(
-          params, w, *w.r_, blocked, sharing, elevations, *pred, backward_n,
-          expected_cost, backward_segments, opposite(dir));
+      backward_dist += add_cch_path<P>(params, w, *pred, backward_n,
+                                       expected_cost, backward_segments,
+                                       opposite(dir));
     } else {
       break;
     }
@@ -551,6 +563,97 @@ std::optional<path> reconstruct_cch(
                        dest_nc->dist_to_node_,
               .elevation_ = path_elevation,
               .segments_ = forward_segments};
+}
+
+template <Profile P>
+shortcut const* find_cch_shortcut(ways::routing const& r,
+                                  typename P::node const from,
+                                  typename P::node const to) {
+  for (auto const& s : r.shortcuts_[from.get_node()]) {
+    if (s.to_ == to.get_node()) {
+      return &s;
+    }
+  }
+  return nullptr;
+}
+
+template <Profile P>
+std::optional<distance_t> get_direct_cch_distance(ways::routing const& r,
+                                                  typename P::node const from,
+                                                  typename P::node const to) {
+  // Shortcut unpacking bottoms out at original neighboring graph nodes.
+  for (auto const [way, from_idx] :
+       utl::zip(r.node_ways_[from.get_node()],
+                r.node_in_way_idx_[from.get_node()])) {
+    auto const nodes = r.way_nodes_[way];
+    if (from_idx != 0U && nodes[from_idx - 1U] == to.get_node()) {
+      return r.get_way_node_distance(way, from_idx - 1U);
+    }
+    if (from_idx + 1U < nodes.size() && nodes[from_idx + 1U] == to.get_node()) {
+      return r.get_way_node_distance(way, from_idx);
+    }
+  }
+  return std::nullopt;
+}
+
+template <Profile P>
+cost_t get_cch_edge_cost(typename P::parameters const& params,
+                         ways::routing const& r,
+                         typename P::node const from,
+                         typename P::node const to) {
+  if (auto const* s = find_cch_shortcut<P>(r, from, to); s != nullptr) {
+    return cch<P>::shortcut_cost(params, s->distance_);
+  }
+  if (auto const direct = get_direct_cch_distance<P>(r, from, to);
+      direct.has_value()) {
+    return cch<P>::shortcut_cost(params, *direct);
+  }
+  return kInfeasible;
+}
+
+template <Profile P>
+double add_direct_cch_path(ways const& w,
+                           typename P::node const from,
+                           typename P::node const to,
+                           cost_t const expected_cost,
+                           std::vector<path::segment>& segments) {
+  auto const dist = get_direct_cch_distance<P>(*w.r_, from, to);
+  utl::verify(dist.has_value(), "no direct CCH base edge node/{} -> node/{}",
+              to_idx(w.node_to_osm_[from.get_node()]),
+              to_idx(w.node_to_osm_[to.get_node()]));
+
+  segments.push_back(path::segment{
+      .polyline_ = {w.get_node_pos(from.get_node()).as_latlng(),
+                    w.get_node_pos(to.get_node()).as_latlng()},
+      .from_level_ = level_t{0.F},
+      .to_level_ = level_t{0.F},
+      .from_ = from.get_node(),
+      .to_ = to.get_node(),
+      .way_ = way_idx_t::invalid(),
+      .cost_ = expected_cost,
+      .dist_ = *dist,
+      .mode_ = to.get_mode()});
+  return *dist;
+}
+
+template <Profile P>
+double add_cch_path(typename P::parameters const& params,
+                    ways const& w,
+                    typename P::node const from,
+                    typename P::node const to,
+                    cost_t const expected_cost,
+                    std::vector<path::segment>& segments,
+                    direction const dir) {
+  if (auto const* s = find_cch_shortcut<P>(*w.r_, from, to); s != nullptr) {
+    // CCH predecessor edges can be shortcuts. Recursively unpack them through
+    // their contracted via-node until only original graph edges remain.
+    auto const via = P::create_node(s->via_, kNoLevel, way_pos_t{0U}, dir);
+    auto const first_cost = get_cch_edge_cost<P>(params, *w.r_, from, via);
+    auto const second_cost = get_cch_edge_cost<P>(params, *w.r_, via, to);
+    return add_cch_path<P>(params, w, from, via, first_cost, segments, dir) +
+           add_cch_path<P>(params, w, via, to, second_cost, segments, dir);
+  }
+  return add_direct_cch_path<P>(w, from, to, expected_cost, segments);
 }
 
 bool component_seen(ways const& w,
