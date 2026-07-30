@@ -445,7 +445,7 @@ std::optional<path> route_bidirectional(typename P::parameters const& params,
   }
 
   b.reset(params, std::max(kMinCostSettled, max), from, to);
-  if (b.radius_ == std::max(kMinCostSettled, max)) {
+  if (!b.search_bounds_valid_) {
     return std::nullopt;
   }
 
