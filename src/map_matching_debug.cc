@@ -20,6 +20,7 @@
 #include "osr/routing/profiles/car_sharing.h"
 #include "osr/routing/profiles/ferry.h"
 #include "osr/routing/profiles/foot.h"
+#include "osr/routing/profiles/hgv.h"
 #include "osr/routing/profiles/railway.h"
 
 namespace osr {
@@ -170,11 +171,13 @@ boost::json::object build_map_match_debug_json(
         {"railway", p.is_railway_accessible()},
         {"railwayWithPenalty", p.is_railway_accessible_with_penalty()},
         {"ferry", p.is_ferry_accessible()},
+        {"lowEmissionZone", p.is_in_low_emission_zone()},
         {"isBigStreet", p.is_big_street()},
         {"isDestination", p.is_destination()},
         {"onewayCar", p.is_oneway_car()},
         {"onewayBike", p.is_oneway_bike()},
         {"onewayPsv", p.is_oneway_bus_psv()},
+        {"onewayReverse", p.is_oneway_reverse()},
         {"maxSpeedKmh", p.max_speed_km_per_h()},
         {"speedLimit", p.speed_limit_},
         {"fromLevel", p.from_level().to_float()},
@@ -368,7 +371,7 @@ boost::json::object build_map_match_debug_json(
     max_segment_cost = std::max(max_segment_cost, seg.min_cost_);
 
     auto const to_debug_mps =
-        [&](node_candidate const& nc) -> debug_match_point_segment {
+        [&](candidate_node const& nc) -> debug_match_point_segment {
       if (!nc.valid()) {
         return {};
       }
@@ -1048,6 +1051,16 @@ template boost::json::object build_map_match_debug_json<car>(
     std::vector<location> const&,
     std::vector<point_data<car>> const&,
     std::vector<segment_data<car>> const&,
+    matched_route const&,
+    std::function<geo::latlng(node_idx_t)> const&);
+
+template boost::json::object build_map_match_debug_json<hgv>(
+    ways const&,
+    lookup const&,
+    hgv::parameters const&,
+    std::vector<location> const&,
+    std::vector<point_data<hgv>> const&,
+    std::vector<segment_data<hgv>> const&,
     matched_route const&,
     std::function<geo::latlng(node_idx_t)> const&);
 

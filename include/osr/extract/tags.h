@@ -1,9 +1,16 @@
 #pragma once
 
+#include <ranges>
+#include <string_view>
+#include <tuple>
+#include <utility>
+#include <vector>
+
 #include "cista/hash.h"
 
 #include "osmium/osm/object.hpp"
 
+#include "osr/conditional.h"
 #include "osr/types.h"
 
 namespace osr {
@@ -14,8 +21,24 @@ enum class override : std::uint8_t { kNone, kWhitelist, kBlacklist };
 
 struct tags {
   explicit tags(osmium::OSMObject const& o) {
-    auto const add_levels = [](auto&& t, level_bits_t& level_bits) {
-      auto s = utl::cstr{t.value()};
+    parse(o.type() == osmium::item_type::relation,
+          o.tags() | std::views::transform([](auto const& tag) {
+            return std::pair{std::string_view{tag.key()},
+                             std::string_view{tag.value()}};
+          }));
+  }
+
+  template <typename TagRange>
+  tags(osm_obj_type const type, TagRange&& tag_range) {
+    parse(type == osm_obj_type::kRelation, std::forward<TagRange>(tag_range));
+  }
+
+private:
+  template <typename TagRange>
+  void parse(bool const is_relation, TagRange&& tag_range) {
+    auto const add_levels = [](std::string_view const value,
+                               level_bits_t& level_bits) {
+      auto s = utl::cstr{value};
       while (s) {
         auto l = 0.0F;
         utl::parse_arg(s, l);
@@ -29,58 +52,68 @@ struct tags {
 
     auto circular = false;
     auto oneway_defined = false;
-    for (auto const& t : o.tags()) {
-      switch (cista::hash(std::string_view{t.key()})) {
+    for (auto const& [key, value] : tag_range) {
+      if (is_supported_conditional_restriction_key(key)) {
+        conditional_tags_.emplace_back(key, value);
+      }
+
+      switch (cista::hash(key)) {
         using namespace std::string_view_literals;
-        case cista::hash("ramp"): is_ramp_ |= t.value() != "no"sv; break;
+        case cista::hash("ramp"): is_ramp_ |= value != "no"sv; break;
         case cista::hash("type"):
-          is_route_ |=
-              o.type() == osmium::item_type::relation && t.value() == "route"sv;
+          is_route_ |= is_relation && value == "route"sv;
           break;
         case cista::hash("parking"): is_parking_ = true; break;
         case cista::hash("amenity"):
           is_parking_ |=
-              (t.value() == "parking"sv || t.value() == "parking_entrance"sv);
+              (value == "parking"sv || value == "parking_entrance"sv);
           break;
         case cista::hash("building"):
-          is_parking_ |= t.value() == "parking"sv;
+          is_parking_ |= value == "parking"sv;
           landuse_ = true;
           break;
         case cista::hash("landuse"): landuse_ = true; break;
         case cista::hash("railway"):
-          railway_ = t.value();
+          railway_ = value;
           landuse_ |= railway_ == "station_area"sv;
           break;
         case cista::hash("oneway"):
           oneway_defined = true;
-          oneway_ |= t.value() == "yes"sv;
+          oneway_reverse_ |= value == "-1"sv;
+          oneway_ |= value == "yes"sv || oneway_reverse_;
           break;
         case cista::hash("junction"):
-          oneway_ |= t.value() == "roundabout"sv;
-          circular |= t.value() == "circular"sv;
+          oneway_ |= value == "roundabout"sv;
+          circular |= value == "circular"sv;
           break;
         case cista::hash("oneway:bicycle"):
-          not_oneway_bike_ = t.value() == "no"sv;
+          not_oneway_bike_ = value == "no"sv;
           break;
         case cista::hash("oneway:bus"):
         case cista::hash("oneway:psv"):
-          not_oneway_bus_psv_ |= t.value() == "no"sv;
+          not_oneway_bus_psv_ |= value == "no"sv;
           break;
         case cista::hash("busway"):
         case cista::hash("busway:left"):
         case cista::hash("busway:right"):
         case cista::hash("busway:both"):
-          not_oneway_bus_psv_ |= t.value() == "opposite_lane"sv;
+          not_oneway_bus_psv_ |= value == "opposite_lane"sv;
           break;
         case cista::hash("motor_vehicle:forward"):
         case cista::hash("motor_vehicle"):
-          motor_vehicle_ = t.value();
+          motor_vehicle_ = value;
           is_destination_ |= motor_vehicle_ == "destination"sv;
           break;
-        case cista::hash("foot"): foot_ = t.value(); break;
-        case cista::hash("bicycle"): bicycle_ = t.value(); break;
+        case cista::hash("hgv:forward"): hgv_forward_ = value; break;
+        case cista::hash("hgv:backward"): hgv_backward_ = value; break;
+        case cista::hash("hgv"): hgv_ = value; break;
+        case cista::hash("hgv:trailer"): hgv_trailer_ = value; break;
+        case cista::hash("hazmat"): hazmat_ = value; break;
+        case cista::hash("hazmat:water"): hazmat_water_ = value; break;
+        case cista::hash("foot"): foot_ = value; break;
+        case cista::hash("bicycle"): bicycle_ = value; break;
         case cista::hash("highway"):
-          highway_ = t.value();
+          highway_ = value;
           if (highway_ == "elevator") {
             is_elevator_ = true;
           }
@@ -91,35 +124,35 @@ struct tags {
         case cista::hash("indoor:level"): [[fallthrough]];
         case cista::hash("level"):
           has_level_ = true;
-          add_levels(t, level_bits_);
+          add_levels(value, level_bits_);
           break;
-        case cista::hash("name"): name_ = t.value(); break;
-        case cista::hash("ref"): ref_ = t.value(); break;
+        case cista::hash("name"): name_ = value; break;
+        case cista::hash("ref"): ref_ = value; break;
         case cista::hash("entrance"): is_entrance_ = true; break;
         case cista::hash("sidewalk"):
         case cista::hash("sidewalk:both"):
         case cista::hash("sidewalk:left"): [[fallthrough]];
         case cista::hash("sidewalk:right"):
-          if (t.value() == "separate"sv) {
+          if (value == "separate"sv) {
             sidewalk_separate_ = true;
           }
           break;
-        case cista::hash("cycleway"): cycleway_ = t.value(); break;
+        case cista::hash("cycleway"): cycleway_ = value; break;
         case cista::hash("motorcar"):
-          motorcar_ = t.value();
+          motorcar_ = value;
           is_destination_ |= motorcar_ == "destination";
           break;
-        case cista::hash("barrier"): barrier_ = t.value(); break;
+        case cista::hash("barrier"): barrier_ = value; break;
         case cista::hash("platform_edge"): is_platform_ = true; break;
         case cista::hash("public_transport"):
-          switch (cista::hash(std::string_view{t.value()})) {
+          switch (cista::hash(std::string_view{value})) {
             case cista::hash("platform"):
             case cista::hash("stop_position"): is_platform_ = true;
           }
           break;
         case cista::hash("construction"): is_construction_ = true; break;
         case cista::hash("vehicle"):
-          switch (cista::hash(std::string_view{t.value()})) {
+          switch (cista::hash(std::string_view{value})) {
             case cista::hash("private"):
             case cista::hash("delivery"):
             case cista::hash("no"): vehicle_ = override::kBlacklist; break;
@@ -133,16 +166,15 @@ struct tags {
           break;
         case cista::hash("psv"):
           if (bus_ == override::kNone) {
-            bus_ = t.value() == "no"sv ? override::kBlacklist
-                                       : override::kWhitelist;
+            bus_ =
+                value == "no"sv ? override::kBlacklist : override::kWhitelist;
           }
           break;
         case cista::hash("bus"):  // more specific than psv
-          bus_ =
-              t.value() == "no"sv ? override::kBlacklist : override::kWhitelist;
+          bus_ = value == "no"sv ? override::kBlacklist : override::kWhitelist;
           break;
         case cista::hash("access"):
-          switch (cista::hash(std::string_view{t.value()})) {
+          switch (cista::hash(std::string_view{value})) {
             case cista::hash("no"):
             case cista::hash("agricultural"):
             case cista::hash("forestry"):
@@ -170,24 +202,35 @@ struct tags {
         case cista::hash("access:conditional"): {
           constexpr auto const kPrefix = "no @ ("sv;
           constexpr auto const kPostfix = ")"sv;
-          auto const value = std::string_view{t.value()};
           if (value.starts_with(kPrefix) && value.ends_with(kPostfix)) {
             access_conditional_no_ =
                 value.substr(kPrefix.size(), value.length() - kPrefix.length() -
                                                  kPostfix.length());
           }
         } break;
-        case cista::hash("maxspeed"): max_speed_ = t.value(); break;
-        case cista::hash("toll"): toll_ = t.value() == "yes"sv; break;
+        case cista::hash("maxspeed"): max_speed_ = value; break;
+        case cista::hash("maxspeed:hgv"): max_speed_hgv_ = value; break;
+        case cista::hash("maxlength"): max_length_ = value; break;
+        case cista::hash("maxlength:hgv"): max_length_hgv_ = value; break;
+        case cista::hash("maxweightrating"): max_weightrating_ = value; break;
+        case cista::hash("maxweightrating:hgv"):
+          max_weightrating_hgv_ = value;
+          break;
+        case cista::hash("maxheight"): max_height_ = value; break;
+        case cista::hash("maxwidth"): max_width_ = value; break;
+        case cista::hash("maxweight"): max_weight_ = value; break;
+        case cista::hash("maxaxleload"): max_axle_load_ = value; break;
+        case cista::hash("maxaxles"): max_axles_ = value; break;
+        case cista::hash("toll"): toll_ = value == "yes"sv; break;
         case cista::hash("incline"): {
-          auto const value = std::string_view{t.value()};
-          is_incline_down_ = t.value() == "down"sv || value.starts_with("-"sv);
+          has_incline_ = true;
+          is_incline_down_ = value == "down"sv || value.starts_with("-"sv);
         } break;
         case cista::hash("route"):
-          route_type_ = t.value();
-          is_ferry_route_ = t.value() == "ferry"sv;
+          route_type_ = value;
+          is_ferry_route_ = value == "ferry"sv;
           break;
-        case cista::hash("service"): service_ = t.value(); break;
+        case cista::hash("service"): service_ = value; break;
       }
     }
     if (circular && !oneway_defined) {
@@ -195,6 +238,7 @@ struct tags {
     }
   }
 
+public:
   bool is_platform() const { return is_platform_ && !is_construction_; }
 
   bool is_public_transport_route() const {
@@ -214,6 +258,8 @@ struct tags {
     }
   }
 
+  bool is_detour_route() const { return is_route_ && route_type_ == "detour"; }
+
   // https://wiki.openstreetmap.org/wiki/Relation:route
   bool is_route_{false};
 
@@ -226,6 +272,9 @@ struct tags {
   // https://wiki.openstreetmap.org/wiki/Key:oneway
   // https://wiki.openstreetmap.org/wiki/Tag:junction=roundabout
   bool oneway_{false};
+
+  // https://wiki.openstreetmap.org/wiki/Key:oneway
+  bool oneway_reverse_{false};
 
   // https://wiki.openstreetmap.org/wiki/Key:oneway:bicycle
   bool not_oneway_bike_{false};
@@ -241,6 +290,24 @@ struct tags {
 
   // https://wiki.openstreetmap.org/wiki/Key:motor_vehicle
   std::string_view motor_vehicle_;
+
+  // https://wiki.openstreetmap.org/wiki/Key:hgv
+  std::string_view hgv_;
+
+  // https://wiki.openstreetmap.org/wiki/Key:hgv
+  std::string_view hgv_forward_;
+
+  // https://wiki.openstreetmap.org/wiki/Key:hgv
+  std::string_view hgv_backward_;
+
+  // https://wiki.openstreetmap.org/wiki/Key:hgv:trailer
+  std::string_view hgv_trailer_;
+
+  // https://wiki.openstreetmap.org/wiki/Key:hazmat
+  std::string_view hazmat_;
+
+  // https://wiki.openstreetmap.org/wiki/Key:hazmat:water
+  std::string_view hazmat_water_;
 
   // https://wiki.openstreetmap.org/wiki/Key:foot
   std::string_view foot_;
@@ -262,6 +329,36 @@ struct tags {
 
   // https://wiki.openstreetmap.org/wiki/Key:maxspeed
   std::string_view max_speed_;
+
+  // https://wiki.openstreetmap.org/wiki/Key:maxspeed:hgv
+  std::string_view max_speed_hgv_;
+
+  // https://wiki.openstreetmap.org/wiki/Key:maxlength
+  std::string_view max_length_;
+
+  // https://wiki.openstreetmap.org/wiki/Key:maxlength:hgv
+  std::string_view max_length_hgv_;
+
+  // https://wiki.openstreetmap.org/wiki/Key:maxweightrating
+  std::string_view max_weightrating_;
+
+  // https://wiki.openstreetmap.org/wiki/Key:maxweightrating:hgv
+  std::string_view max_weightrating_hgv_;
+
+  // https://wiki.openstreetmap.org/wiki/Key:maxheight
+  std::string_view max_height_;
+
+  // https://wiki.openstreetmap.org/wiki/Key:maxwidth
+  std::string_view max_width_;
+
+  // https://wiki.openstreetmap.org/wiki/Key:maxweight
+  std::string_view max_weight_;
+
+  // https://wiki.openstreetmap.org/wiki/Key:maxaxleload
+  std::string_view max_axle_load_;
+
+  // https://wiki.openstreetmap.org/wiki/Key:maxaxles
+  std::string_view max_axles_;
 
   // https://wiki.openstreetmap.org/wiki/Key:name
   std::string_view name_;
@@ -307,6 +404,7 @@ struct tags {
   level_bits_t level_bits_{0U};
 
   // https://wiki.openstreetmap.org/wiki/Key:incline
+  bool has_incline_{false};
   bool is_incline_down_{false};
 
   // https://wiki.openstreetmap.org/wiki/Key:toll
@@ -314,6 +412,7 @@ struct tags {
 
   // https://wiki.openstreetmap.org/wiki/Conditional_restrictions
   std::string_view access_conditional_no_;
+  std::vector<std::pair<std::string_view, std::string_view>> conditional_tags_;
 
   // https://wiki.openstreetmap.org/wiki/Key:service
   std::string_view service_;
