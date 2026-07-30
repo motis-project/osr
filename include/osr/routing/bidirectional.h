@@ -64,12 +64,13 @@ struct bidirectional {
             : end_loc_.pos_);
     auto const diameter = P::lower_bound_heuristic(
         params, distapprox(start_loc_.pos_, end_loc_.pos_));
-    radius_ =
+    search_bounds_valid_ =
         diameter < max && max + std::max(diameter, kLongestNodeDistance * 2.0) <
-                              std::numeric_limits<cost_t>::max()
-            ? std::max(static_cast<cost_t>(diameter * 0.5),
-                       kLongestNodeDistance)
-            : max;
+                              std::numeric_limits<cost_t>::max();
+    radius_ = search_bounds_valid_
+                  ? std::max(static_cast<cost_t>(diameter * 0.5),
+                             kLongestNodeDistance)
+                  : max;
     max_reached_1_ = false;
     max_reached_2_ = false;
   }
@@ -376,7 +377,7 @@ struct bidirectional {
            bitvec<node_idx_t> const* blocked,
            sharing_data const* sharing,
            elevation_storage const* elevations) {
-    if (radius_ == max) {
+    if (!search_bounds_valid_) {
       return false;
     }
     while (!pq1_.empty() || !pq2_.empty()) {
@@ -432,6 +433,7 @@ struct bidirectional {
   ankerl::unordered_dense::map<key, entry, hash> cost2_;
   cost_t radius_;
   double distance_lon_degrees_;
+  bool search_bounds_valid_{};
   bool max_reached_1_;
   bool max_reached_2_;
 };
