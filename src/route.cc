@@ -869,9 +869,8 @@ std::optional<path> route_dijkstra(
       if (d.pq_.empty()) {
         continue;
       }
-      should_continue = d.run(params, w, *w.r_,
-                              std::max(kMinCostSettled, max), start_time,
-                              blocked, sharing, elevations, dir) &&
+      should_continue = d.run(params, w, *w.r_, std::max(kMinCostSettled, max),
+                              start_time, blocked, sharing, elevations, dir) &&
                         should_continue;
       auto const c = best_candidate<P>(
           params, w, d, to.lvl_, to_match, max, dir, start_time,
@@ -929,9 +928,8 @@ std::optional<path> route_dijkstra(
         continue;
       }
 
-      should_continue = d.run(params, w, *w.r_,
-                              std::max(kMinCostSettled, max), start_time,
-                              blocked, sharing, elevations, dir) &&
+      should_continue = d.run(params, w, *w.r_, std::max(kMinCostSettled, max),
+                              start_time, blocked, sharing, elevations, dir) &&
                         should_continue;
       auto const c = best_candidate<P>(
           params, w, d, to.lvl_, to_match, max, dir, start_time,
@@ -1156,9 +1154,8 @@ std::vector<std::optional<path>> route(
       if (d.pq_.empty()) {
         continue;
       }
-      should_continue = d.run(params, w, *w.r_,
-                              std::max(kMinCostSettled, max), start_time,
-                              blocked, sharing, elevations, dir) &&
+      should_continue = d.run(params, w, *w.r_, std::max(kMinCostSettled, max),
+                              start_time, blocked, sharing, elevations, dir) &&
                         should_continue;
 
       auto found = 0U;
@@ -1225,9 +1222,8 @@ std::vector<std::optional<path>> route(
         }
       }
 
-      should_continue = d.run(params, w, *w.r_,
-                              std::max(kMinCostSettled, max), start_time,
-                              blocked, sharing, elevations, dir) &&
+      should_continue = d.run(params, w, *w.r_, std::max(kMinCostSettled, max),
+                              start_time, blocked, sharing, elevations, dir) &&
                         should_continue;
 
       auto found = 0U;
