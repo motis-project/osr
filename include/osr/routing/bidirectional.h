@@ -33,7 +33,7 @@ struct bidirectional {
   constexpr static auto const kDebug = false;
   constexpr static auto const kDistanceLatDegrees =
       geo::kEarthRadiusMeters * geo::kPI / 180;
-  constexpr static auto const kLongestNodeDistance = cost_t{300};
+  constexpr static auto const kLongestNodeDistance = cost_t{1800};
 
   struct get_bucket {
     cost_t operator()(label const& l) { return l.cost(); }
@@ -190,6 +190,8 @@ struct bidirectional {
                   elevation_storage const* elevations,
                   dial<label, get_bucket>& pq,
                   cost_map& costs) {
+    auto const adjusted_max = std::min(
+        clamp_cost(static_cast<std::uint64_t>(max) / 2 + radius_), max);
     auto const is_fwd = PathDir == direction::kForward;
 
     auto const l = pq.pop();
@@ -227,7 +229,7 @@ struct bidirectional {
               clamp_cost(static_cast<std::int64_t>(total) +
                          static_cast<std::int64_t>(heuristic(
                              params, w, neighbor.n_, PathDir, sharing)));
-          if (total >= max) {
+          if (total >= adjusted_max) {
             if (is_fwd) {
               max_reached_1_ = true;
             } else {
