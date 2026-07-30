@@ -10,7 +10,7 @@
 #include "cista/io.h"
 
 // uncomment the following line to enable IFC
-// #define USE_INERTIAL_FLOW_CUT
+#define USE_INERTIAL_FLOW_CUT
 #ifdef USE_INERTIAL_FLOW_CUT
 #include "inertialflowcutter/run.h"
 #endif
@@ -268,74 +268,73 @@ void ways::add_shortcuts() {
   r_->shortcuts_.clear();
   r_->shortcuts_.resize(n_nodes());
 
-  // Process contraction ranks from low to high.
-  auto max_importance = std::uint32_t{0U};
-  for (auto const importance : r_->node_importance_) {
-    if (importance > max_importance) {
-      max_importance = importance;
-    }
+  // Build the contraction order from the unique ranks assigned during
+  // preprocessing. CCH ranks must be a permutation of [0, n_nodes).
+  auto rank_to_node = std::vector<node_idx_t>(n_nodes(), node_idx_t::invalid());
+  for (auto i = node_idx_t{0U}; i != n_nodes(); ++i) {
+    auto const rank = r_->node_importance_[i];
+    utl::verify(rank < n_nodes(), "CCH rank out of bounds: {} >= {}", rank,
+                n_nodes());
+    utl::verify(rank_to_node[rank] == node_idx_t::invalid(),
+                "duplicate CCH rank: {}", rank);
+    rank_to_node[rank] = i;
   }
 
-  for (auto c = std::uint32_t{0U}; c <= max_importance; ++c) {
-    for (auto i = node_idx_t{0U}; i != n_nodes(); ++i) {
-      if (r_->node_importance_[i] != c) {
-        continue;
-      }
+  for (auto rank = std::uint32_t{0U}; rank != n_nodes(); ++rank) {
+    auto const i = rank_to_node[rank];
+    utl::verify(i != node_idx_t::invalid(), "missing CCH rank: {}", rank);
 
-      auto higher_neighbors = std::vector<neighbor>{};
-      // Candidate endpoints are only nodes with a higher rank than i.
-      auto add_neighbor = [&](node_idx_t const node,
-                              distance_t const distance) {
-        if (node == i || r_->node_importance_[node] <= c) {
+    auto higher_neighbors = std::vector<neighbor>{};
+    // Candidate endpoints are only nodes with a higher rank than i.
+    auto add_neighbor = [&](node_idx_t const node, distance_t const distance) {
+      if (node == i || r_->node_importance_[node] <= rank) {
+        return;
+      }
+      for (auto& n : higher_neighbors) {
+        if (n.node_ == node) {
+          n.distance_ = std::min(n.distance_, distance);
           return;
         }
-        for (auto& n : higher_neighbors) {
-          if (n.node_ == node) {
-            n.distance_ = std::min(n.distance_, distance);
-            return;
-          }
-        }
-        higher_neighbors.push_back(neighbor{node, distance});
-      };
-
-      // Collect higher-ranked neighbors reachable through original graph edges.
-      for (auto const [way, node_in_way_idx] :
-           utl::zip(r_->node_ways_[i], r_->node_in_way_idx_[i])) {
-        auto const nodes = r_->way_nodes_[way];
-        if (node_in_way_idx != 0U) {
-          add_neighbor(nodes[node_in_way_idx - 1U],
-                       r_->get_way_node_distance(way, node_in_way_idx - 1U));
-        }
-        if (node_in_way_idx + 1U < nodes.size()) {
-          add_neighbor(nodes[node_in_way_idx + 1U],
-                       r_->get_way_node_distance(way, node_in_way_idx));
-        }
       }
+      higher_neighbors.push_back(neighbor{node, distance});
+    };
 
-      // Previously created shortcuts may also make higher-ranked neighbors.
-      for (auto const& s : r_->shortcuts_[i]) {
-        add_neighbor(s.to_, s.distance_);
+    // Collect higher-ranked neighbors reachable through original graph edges.
+    for (auto const [way, node_in_way_idx] :
+         utl::zip(r_->node_ways_[i], r_->node_in_way_idx_[i])) {
+      auto const nodes = r_->way_nodes_[way];
+      if (node_in_way_idx != 0U) {
+        add_neighbor(nodes[node_in_way_idx - 1U],
+                     r_->get_way_node_distance(way, node_in_way_idx - 1U));
       }
+      if (node_in_way_idx + 1U < nodes.size()) {
+        add_neighbor(nodes[node_in_way_idx + 1U],
+                     r_->get_way_node_distance(way, node_in_way_idx));
+      }
+    }
 
-      // Connect every pair of higher-ranked neighbors through the contracted
-      // node i unless a direct original graph edge already exists.
-      for (auto from = std::size_t{0U}; from < higher_neighbors.size();
-           ++from) {
-        for (auto to = from + 1U; to < higher_neighbors.size(); ++to) {
-          auto const a = higher_neighbors[from];
-          auto const b = higher_neighbors[to];
-          if (direct_edge_exists(a.node_, b.node_)) {
-            continue;
-          }
+    // Previously created shortcuts may also make higher-ranked neighbors.
+    for (auto const& s : r_->shortcuts_[i]) {
+      add_neighbor(s.to_, s.distance_);
+    }
 
-          auto const sum = static_cast<std::uint64_t>(a.distance_) +
-                           static_cast<std::uint64_t>(b.distance_);
-          auto const distance = static_cast<distance_t>(
-              std::min(sum, static_cast<std::uint64_t>(
-                                std::numeric_limits<distance_t>::max())));
-          add_or_update_shortcut(a.node_, b.node_, i, distance);
-          add_or_update_shortcut(b.node_, a.node_, i, distance);
+    // Connect every pair of higher-ranked neighbors through the contracted
+    // node i unless a direct original graph edge already exists.
+    for (auto from = std::size_t{0U}; from < higher_neighbors.size(); ++from) {
+      for (auto to = from + 1U; to < higher_neighbors.size(); ++to) {
+        auto const a = higher_neighbors[from];
+        auto const b = higher_neighbors[to];
+        if (direct_edge_exists(a.node_, b.node_)) {
+          continue;
         }
+
+        auto const sum = static_cast<std::uint64_t>(a.distance_) +
+                         static_cast<std::uint64_t>(b.distance_);
+        auto const distance = static_cast<distance_t>(
+            std::min(sum, static_cast<std::uint64_t>(
+                              std::numeric_limits<distance_t>::max())));
+        add_or_update_shortcut(a.node_, b.node_, i, distance);
+        add_or_update_shortcut(b.node_, a.node_, i, distance);
       }
     }
   }
