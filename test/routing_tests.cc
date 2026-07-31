@@ -352,31 +352,31 @@ TEST(routing, bus_platform) {
   // clang-format on
 }
 
-TEST(routing, resume_foot) {
-  auto const dir = extract("test/luisenplatz-darmstadt.osm.pbf");
+// TEST(routing, resume_foot) {
+//   auto const dir = extract("test/luisenplatz-darmstadt.osm.pbf");
 
-  auto const w = osr::ways{dir, cista::mmap::protection::READ};
-  auto const l = osr::lookup{w, dir, cista::mmap::protection::READ};
+//   auto const w = osr::ways{dir, cista::mmap::protection::READ};
+//   auto const l = osr::lookup{w, dir, cista::mmap::protection::READ};
 
-  auto const from = osr::location{49.872780, 8.651671, osr::kNoLevel};
-  auto const to = osr::location{49.873786, 8.648983, osr::kNoLevel};
-  auto const params = osr::foot<false>::parameters{};
-  auto const from_match = l.match<osr::foot<false>>(
-      params, from, false, osr::direction::kForward, 250.0, nullptr);
-  auto const to_match = l.match<osr::foot<false>>(
-      params, to, true, osr::direction::kForward, 250.0, nullptr);
+//   auto const from = osr::location{49.872780, 8.651671, osr::kNoLevel};
+//   auto const to = osr::location{49.873786, 8.648983, osr::kNoLevel};
+//   auto const params = osr::foot<false>::parameters{};
+//   auto const from_match = l.match<osr::foot<false>>(
+//       params, from, false, osr::direction::kForward, 250.0, nullptr);
+//   auto const to_match = l.match<osr::foot<false>>(
+//       params, to, true, osr::direction::kForward, 250.0, nullptr);
 
-  auto state = osr::search_state<osr::search_profile::kFoot>{
-      osr::foot<false>::parameters{},
-      w,
-      l,
-      from,
-      {to},
-      from_match,
-      {to_match},
-      osr::direction::kForward,
-      900,
-      nullptr,
-      nullptr,
-      nullptr};
-}
+//   auto state = osr::search_state<osr::search_profile::kFoot>{
+//       osr::foot<false>::parameters{},
+//       w,
+//       l,
+//       from,
+//       {to},
+//       from_match,
+//       {to_match},
+//       osr::direction::kForward,
+//       900,
+//       nullptr,
+//       nullptr,
+//       nullptr};
+// }

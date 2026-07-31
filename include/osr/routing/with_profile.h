@@ -1,6 +1,5 @@
 #pragma once
 
-#include "osr/elevation_storage.h"
 #include "osr/routing/profile.h"
 #include "osr/routing/profiles/bike.h"
 #include "osr/routing/profiles/bike_sharing.h"
