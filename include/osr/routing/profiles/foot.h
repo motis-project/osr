@@ -168,7 +168,7 @@ struct foot {
     auto levels = hash_set<level_t>{};
     for (auto i = way_pos_t{0U}; i != ways.size(); ++i) {
       // TODO what's with stairs? need to resolve to from_level or to_level?
-      auto const p = w.way_properties_[w.node_ways_[n][i]];
+      auto const p = w.way_properties_[ways[i]];
       if (lvl == kNoLevel) {
         if (levels.emplace(p.from_level()).second) {
           f(node{n, p.from_level()});

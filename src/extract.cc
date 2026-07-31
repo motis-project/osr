@@ -50,6 +50,7 @@
 #include "osr/lookup.h"
 #include "osr/platforms.h"
 #include "osr/preprocessing/elevation/provider.h"
+#include "osr/routing/parking_matching.h"
 #include "osr/ways.h"
 
 namespace fs = std::filesystem;
@@ -311,6 +312,7 @@ way_properties get_way_properties(
   p.is_railway_accessible_with_penalty_ =
       is_accessible_with_penalty<railway_profile>(t, obj_type);
   p.is_detour_ = t.is_detour_route();
+  // p.is_parking_aisle_ = t.service_ == "parking_aisle"sv;
   return p;
 }
 
@@ -367,11 +369,13 @@ struct way_handler : public osmium::handler::Handler {
   way_handler(ways& w,
               platforms* platforms,
               rel_ways_t const& rel_ways,
-              hash_map<osm_node_idx_t, level_bits_t>& elevator_nodes)
+              hash_map<osm_node_idx_t, level_bits_t>& elevator_nodes,
+              vec_map<way_idx_t, way_extra_properties>& way_extra)
       : w_{w},
         platforms_{platforms},
         rel_ways_{rel_ways},
-        elevator_nodes_{elevator_nodes} {
+        elevator_nodes_{elevator_nodes},
+        way_extra_{way_extra} {
     strings_set_.hash_function().strings_ = &w_.strings_;
     strings_set_.key_eq().strings_ = &w_.strings_;
   }
@@ -502,6 +506,8 @@ struct way_handler : public osmium::handler::Handler {
       w_.way_conditional_access_no_.emplace_back(
           way_idx, register_string(t.access_conditional_no_));
     }
+
+    way_extra_.emplace_back(way_extra_properties{t});
   }
 
   using strings_set_t = hash_set<string_idx_t, strings_hash, strings_equals>;
@@ -514,6 +520,7 @@ struct way_handler : public osmium::handler::Handler {
 
   std::mutex elevator_nodes_mutex_;
   hash_map<osm_node_idx_t, level_bits_t>& elevator_nodes_;
+  vec_map<way_idx_t, way_extra_properties>& way_extra_;
 };
 
 // A turn-restriction relation with its way/node members already resolved,
@@ -843,10 +850,11 @@ void extract(bool const with_platforms,
   }
 
   auto elevator_nodes = hash_map<osm_node_idx_t, level_bits_t>{};
+  auto way_extra = std::optional{vec_map<way_idx_t, way_extra_properties>{}};
   {  // Pass 2: extract streets, collect area member way geometries.
     pt->status("Load OSM / Ways").in_high(blocks.size()).out_bounds(15, 38);
 
-    auto h = way_handler{w, pl.get(), rel_ways, elevator_nodes};
+    auto h = way_handler{w, pl.get(), rel_ways, elevator_nodes, *way_extra};
 
     struct pass2_ctx {
       osmium::memory::Buffer scratch_{1U << 12U,
@@ -918,7 +926,7 @@ void extract(bool const with_platforms,
   w.sync();
 
   w.connect_ways();
-  w.build_components();
+  auto const n_components = w.build_components();
 
   auto r = std::vector<resolved_restriction>{};
   {  // Pass 3: node properties + turn restrictions.
@@ -1058,10 +1066,14 @@ void extract(bool const with_platforms,
 
   pt->status("Big Street Neighbors").in_high(w.n_ways()).out_bounds(95, 99);
   w.compute_big_street_neighbors();
-  w.r_->write(out);
 
   pt->status("Build R-Tree").in_high(1).out_bounds(99, 100);
-  lookup{w, out, cista::mmap::protection::WRITE}.build_rtree();
+  auto l = lookup{w, out, cista::mmap::protection::WRITE};
+  l.build_rtree();
+  connect_parking_ways(w, l, *way_extra, static_cast<unsigned>(n_components));
+  way_extra.reset();
+
+  w.r_->write(out);
 }
 
 }  // namespace osr

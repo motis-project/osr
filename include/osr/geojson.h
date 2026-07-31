@@ -17,6 +17,7 @@
 #include "osr/platforms.h"
 #include "osr/routing/dijkstra.h"
 #include "osr/routing/profiles/foot.h"
+#include "osr/types.h"
 #include "osr/ways.h"
 
 namespace osr {
@@ -41,6 +42,19 @@ boost::json::value to_line_string(std::initializer_list<T>&& line) {
   return to_line_string(line);
 }
 
+template <typename Collection>
+boost::json::value to_multi_line_string(Collection const& multi_line) {
+  auto x = boost::json::array{};
+  for (auto const& line : multi_line) {
+    auto y = boost::json::array{};
+    for (auto const& p : line) {
+      y.emplace_back(to_array(p));
+    }
+    x.emplace_back(std::move(y));
+  }
+  return {{"type", "MultiLineString"}, {"coordinates", std::move(x)}};
+}
+
 inline boost::json::object to_featurecollection_value(
     ways const& w,
     std::optional<osr::path> const& p,
@@ -62,7 +76,8 @@ inline boost::json::object to_featurecollection_value(
                                      ? 0U
                                      : to_idx(w.way_osm_idx_[s.way_])},
                   {"cost", s.cost_},
-                  {"distance", s.dist_}},
+                  {"distance", s.dist_},
+                  {"mode", to_str(s.mode_)}},
              },
              {"geometry", to_line_string(s.polyline_)}};
        }) | utl::emplace_back_to<boost::json::array>()}};
@@ -657,6 +672,45 @@ struct geojson_writer {
 
     nodes_.insert(begin(nodes), end(nodes));
     ++n;
+  }
+
+  void write_parking_edges(bitvec<parking_edge_idx_t> const& parking_edges) {
+    parking_edges.for_each_set_bit([&](parking_edge_idx_t const
+                                           parking_edge_idx) {
+      auto const& parking_edge = w_.r_->parking_edges_[parking_edge_idx];
+      auto geom = vec<vec<point>>{parking_edge.connection_};
+      if (parking_edge.car_left_ != node_idx_t::invalid()) {
+        geom.emplace_back(vec{w_.r_->node_positions_[parking_edge.car_left_],
+                              parking_edge.connection_.front()});
+      }
+      if (parking_edge.car_right_ != node_idx_t::invalid()) {
+        geom.emplace_back(vec{w_.r_->node_positions_[parking_edge.car_right_],
+                              parking_edge.connection_.front()});
+      }
+      if (parking_edge.foot_left_ != node_idx_t::invalid()) {
+        geom.emplace_back(vec{w_.r_->node_positions_[parking_edge.foot_left_],
+                              parking_edge.connection_.back()});
+      }
+      if (parking_edge.foot_right_ != node_idx_t::invalid()) {
+        geom.emplace_back(vec{w_.r_->node_positions_[parking_edge.foot_right_],
+                              parking_edge.connection_.back()});
+      }
+
+      features_.emplace_back(boost::json::value{
+          {"type", "Feature"},
+          {"properties",
+           {
+               {"type", "parking-edge"},
+               {"internal_id", to_idx(parking_edge_idx)},
+               {"car_left", parking_edge.car_left_ != node_idx_t::invalid()},
+               {"car_right", parking_edge.car_right_ != node_idx_t::invalid()},
+               {"foot_left", parking_edge.foot_left_ != node_idx_t::invalid()},
+               {"foot_right",
+                parking_edge.foot_right_ != node_idx_t::invalid()},
+           }},
+          {"geometry", to_multi_line_string(geom)}});
+    });
+    //
   }
 
   template <typename Dijkstra>

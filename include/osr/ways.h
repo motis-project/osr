@@ -29,6 +29,7 @@
 #include "utl/zip.h"
 
 #include "osr/conditional.h"
+#include "osr/extract/tags.h"
 #include "osr/point.h"
 #include "osr/routing/turns.h"
 #include "osr/types.h"
@@ -324,7 +325,7 @@ struct ways {
   void compute_big_street_neighbors();
   void connect_ways();
   void compute_turn_bearings();
-  void build_components();
+  unsigned build_components();
 
   std::optional<way_idx_t> find_way(osm_way_idx_t const i) {
     auto const it = std::lower_bound(
@@ -458,6 +459,8 @@ struct ways {
     }
 
     bool is_loop(way_idx_t const w) const {
+      utl::verify(w < way_nodes_.size(), "invalid way_idx: {} > {}", w,
+                  way_nodes_.size());
       return way_nodes_[w].back() == way_nodes_[w].front();
     }
 
@@ -524,6 +527,26 @@ struct ways {
       distance_t distance_{};
     };
 
+    struct parking_edge {
+      CISTA_COMPARABLE()
+
+      static way_idx_t encode_parking_edge(
+          ways::routing const& r, parking_edge_idx_t const parking_edge_idx) {
+        return way_idx_t{r.way_component_.size() + to_idx(parking_edge_idx)};
+      }
+
+      static parking_edge_idx_t decode_parking_edge(ways::routing const& r,
+                                                    way_idx_t const way_idx) {
+        return parking_edge_idx_t{to_idx(way_idx) - r.way_component_.size()};
+      }
+
+      node_idx_t car_left_;
+      node_idx_t car_right_;
+      vec<point> connection_;
+      node_idx_t foot_left_;
+      node_idx_t foot_right_;
+    };
+
     vec_map<node_idx_t, node_properties> node_properties_;
     vec_map<way_idx_t, way_properties> way_properties_;
     vec<pair<way_idx_t, hgv_way_info>> way_hgv_info_;
@@ -560,6 +583,10 @@ struct ways {
     vec<pair<node_idx_t, level_bits_t>> multi_level_elevators_;
 
     vec_map<way_idx_t, component_idx_t> way_component_;
+
+    bitvec<node_idx_t> has_parking_edges_;
+    vec<pair<node_idx_t, parking_edge_idx_t>> node_parking_edges_;
+    vec_map<parking_edge_idx_t, parking_edge> parking_edges_;
   };
 
   cista::wrapped<routing> r_;
@@ -576,6 +603,23 @@ struct ways {
   mm_vec<pair<way_idx_t, string_idx_t>> way_conditional_access_no_;
 
   multi_counter<> node_way_counter_;
+};
+
+struct way_extra_properties {
+  // Properties only required for extract
+  explicit way_extra_properties(tags const&);
+
+  constexpr bool is_foot_usable() const { return is_foot_usable_; }
+  constexpr bool is_car_usable() const { return is_car_usable_; }
+  constexpr bool is_parking_aisle() const { return is_parking_aisle_; }
+  constexpr bool is_preferred_footpath() const {
+    return is_preferred_footpath_;
+  }
+
+  std::uint8_t is_foot_usable_ : 1 = 0U;
+  std::uint8_t is_car_usable_ : 1 = 0U;
+  std::uint8_t is_parking_aisle_ : 1 = 0U;
+  std::uint8_t is_preferred_footpath_ : 1 = 0U;
 };
 
 }  // namespace osr

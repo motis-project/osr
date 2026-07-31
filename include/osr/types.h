@@ -163,6 +163,8 @@ using component_idx_t = cista::strong<std::uint32_t, struct component_idx_>;
 
 using platform_idx_t = cista::strong<std::uint32_t, struct platform_idx_>;
 
+using parking_edge_idx_t = cista::strong<std::uint32_t, struct parking_edge_idx_>;
+
 using multi_level_elevator_idx_t =
     cista::strong<std::uint32_t, struct multi_level_elevator_idx_>;
 

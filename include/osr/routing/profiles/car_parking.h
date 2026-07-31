@@ -8,6 +8,7 @@
 #include "utl/helpers/algorithm.h"
 
 #include "osr/elevation_storage.h"
+#include "osr/routing/for_each_parking_edge.h"
 #include "osr/routing/mode.h"
 #include "osr/routing/path.h"
 #include "osr/routing/profiles/car.h"
@@ -107,6 +108,7 @@ struct car_parking {
     direction dir_;
     way_pos_t way_;
   };
+  static_assert(sizeof(std::declval<node>()) == 8);
 
   struct label {
     label(node const n, cost_t const c)
@@ -327,6 +329,72 @@ struct car_parking {
                clamp_add_duration(duration, switch_duration), dist, way, from,
                to, elevation, false);
           });
+    }
+
+    if constexpr (UseParking) {
+      if (kFwd && n.is_car_node()) {
+        if (w.has_parking_edges_.test(n.n_)) {
+          for_each_parking_edge(
+              w, n.n_, [&](parking_edge_idx_t const parking_edge_idx) {
+                auto const& parking_edge = w.parking_edges_[parking_edge_idx];
+                for (auto car_offset = 0U; car_offset < 2U; ++car_offset) {
+                  auto const car_node = car_offset == 0
+                                            ? parking_edge.car_left_
+                                            : parking_edge.car_right_;
+                  if (car_node != n.n_) {
+                    continue;
+                  }
+                  for (auto foot_offset = 0U; foot_offset < 2U; ++foot_offset) {
+                    auto const foot_node = foot_offset == 0
+                                               ? parking_edge.foot_left_
+                                               : parking_edge.foot_right_;
+                    if (foot_node == node_idx_t::invalid()) {
+                      continue;
+                    }
+                    auto const lvl = w.node_properties_[foot_node].from_level();
+                    auto const cost = kSwitchPenalty;  // TODO:offset- Add costs
+                    fn({foot_node, node_type::kFoot, lvl, SearchDir, 0U}, cost,
+                       clamp_add_duration(duration_t{0},
+                                          duration_from_cost(kSwitchPenalty)),
+                       0,
+                       ways::routing::parking_edge::encode_parking_edge(
+                           w, parking_edge_idx),
+                       0, 0, elevation_storage::elevation{}, false);
+                  }
+                }
+              });
+        }
+      }
+      if (kBwd && n.is_foot_node()) {
+        if (w.has_parking_edges_.test(n.n_)) {
+          for_each_parking_edge(
+              w, n.n_, [&](parking_edge_idx_t const parking_edge_idx) {
+                auto const& parking_edge = w.parking_edges_[parking_edge_idx];
+                if (parking_edge.foot_left_ != n.n_ &&
+                    parking_edge.foot_right_ != n.n_) {
+                  return;
+                }
+                for (auto const car_node :
+                     {parking_edge.car_left_, parking_edge.car_right_}) {
+                  if (car_node == node_idx_t::invalid()) {
+                    continue;
+                  }
+                  auto const lvl = w.node_properties_[car_node].from_level();
+                  auto const cost = kSwitchPenalty;  // TODO:offset- Add costs
+                  fn({car_node, node_type::kCar, lvl, SearchDir, 0U}, cost,
+                     clamp_add_duration(duration_t{0},
+                                        duration_from_cost(kSwitchPenalty)),
+                     0,
+                     ways::routing::parking_edge::encode_parking_edge(
+                         w, parking_edge_idx),
+                     0, 0, elevation_storage::elevation{}, false);
+                }
+              });
+        }
+      }
+      // TODO
+      // If forward && is_extra_node && extra_node.car_* == n
+      // => Add edge n -> extra -> foot_* (<= 2 paths)
     }
   }
 
