@@ -33,7 +33,6 @@
 
 namespace osr {
 
-constexpr auto const kMaxMatchingDistanceSquaredRatio = 9.0;
 constexpr auto const kBottomKDefinitelyConsidered = 5;
 constexpr auto const kMinCostSettled = cost_t{900};
 
@@ -382,7 +381,7 @@ path reconstruct(typename P::parameters const& params,
 bool component_seen(ways const& w,
                     match_view_t const& matches,
                     size_t match_idx,
-                    unsigned times = 1) {
+                    unsigned times) {
   auto this_component = w.r_->way_component_[matches.way_[match_idx]];
   for (auto j = 0U; j < match_idx; ++j) {
     if (w.r_->way_component_[matches.way_[j]] == this_component) {
@@ -682,6 +681,60 @@ std::optional<path> try_direct(osr::location const& from,
         .uses_elevator_ = false}};
   } else {
     return std::nullopt;
+  }
+}
+
+template <search_profile profile>
+std::vector<std::optional<path>> get_results(
+    search_state<profile> const& state,
+    location const& from,
+    std::vector<location> to,
+    match_view_t const& from_match,
+    match_result const& to_match,
+    std::function<bool(path const&)> const& do_reconstruct) {
+  auto const distance_lng_degrees = geo::approx_distance_lng_degrees(from.pos_);
+
+  auto results = std::vector<std::optional<path>>{};
+
+  for (auto i = std::size_t{0}; i != to_match.size(); ++i) {
+    if (auto const direct = try_direct(from, to[i]); direct.has_value()) {
+      results.push_back(direct);
+    } else {
+      auto const limit_squared_max_matching_distance =
+          geo::approx_squared_distance(from.pos_, to[i].pos_,
+                                       distance_lng_degrees) /
+          kMaxMatchingDistanceSquaredRatio;
+
+      auto const m =
+          to_match[match_idx_t{static_cast<match_idx_t::value_t>(i)}];
+      for (auto k = std::size_t{0}; k != from_match.size(); ++k) {
+        if (std::pow(from_match.dist_to_way_[k], 2) >
+                limit_squared_max_matching_distance &&
+            k > kBottomKDefinitelyConsidered) {
+          continue;
+        }
+
+        auto const c = best_candidate(
+            state.params_, state.w_, state.d_, to[i].lvl_, m, state.distance_,
+            state.dir_, state.start_time_, true, from_match.way_[k],
+            limit_squared_max_matching_distance);
+
+        if (c.has_value()) {
+          auto [nc, dest_way, dest_exact, n, p] = *c;
+          state.d_.cost_.at(n.get_key()).write(n, p);
+          if (do_reconstruct(p)) {
+            p = reconstruct<search_state<profile>::profile_t>(
+                state.params_, state.w_, state.l_, state.blocked_,
+                state.sharing_, state.elevations_, state.d_, from, to[i],
+                from_match.way_[k], from_match.left(k), from_match.right(k),
+                false, dest_way, nc, dest_exact, n, p.cost_, state.dir_,
+                state.start_time_);
+            p.uses_elevator_ = true;  // TODO: why?
+          }
+          results.push_back(std::move(p));
+        }
+      }
+    }
   }
 }
 
