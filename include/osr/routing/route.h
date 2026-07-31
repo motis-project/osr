@@ -1,6 +1,9 @@
 #pragma once
 
+#include <iterator>
 #include <vector>
+
+#include "utl/enumerate.h"
 
 #include "osr/elevation_storage.h"
 #include "osr/location.h"
@@ -27,6 +30,8 @@ struct bidirectional;
 
 struct sharing_data;
 
+constexpr auto const kMaxMatchingDistanceSquaredRatio = 9.0;
+
 struct route_endpoint_options {
   bool exact_return_at_from_{};
   std::vector<bool> exact_return_at_to_{};
@@ -45,6 +50,48 @@ dijkstra<P, false>& get_dijkstra();
 template <Profile P>
 astar<P, false>& get_astar();
 
+bool component_seen(ways const&,
+                    match_view_t const&,
+                    size_t,
+                    unsigned times = 1);
+
+template <Profile P, typename Search>
+std::optional<
+    std::tuple<candidate_node, way_idx_t, bool, typename P::node, path>>
+best_candidate(typename P::parameters const&,
+               ways const&,
+               Search& search,
+               level_t const,
+               match_view_t const&,
+               cost_t const,
+               direction const,
+               std::optional<routing_time_t> const,
+               bool,
+               std::optional<way_idx_t> const,
+               double const);
+
+template <Profile P, typename Search>
+path reconstruct(typename P::parameters const&,
+                 ways const&,
+                 lookup const&,
+                 bitvec<node_idx_t> const*,
+                 sharing_data const*,
+                 elevation_storage const*,
+                 Search const&,
+                 location const&,
+                 location const&,
+                 way_idx_t const,
+                 candidate_node const&,
+                 candidate_node const&,
+                 bool const,
+                 way_idx_t const,
+                 candidate_node const&,
+                 bool const,
+                 typename P::node const,
+                 cost_t const,
+                 direction const,
+                 std::optional<routing_time_t> const);
+
 template <search_profile profile>
 struct search_state {
   using profile_t = profile_selector<profile>::type;
@@ -55,126 +102,114 @@ struct search_state {
                location const& from,
                std::vector<location> const& to,
                match_view_t const& from_match,
-               std::vector<match_t> const& to_match,
+               match_result const& to_match,
                direction dir,
+               cost_t const init_distance,
+               cost_t const step_size,
                cost_t const max_distance,
                bitvec<node_idx_t> const* blocked,
                sharing_data const* sharing,
-               elevation_storage const* elevations)
+               elevation_storage const* elevations,
+               std::optional<routing_time_t> start_time)
       : d_(get_dijkstra<profile_t>()),
         params_(std::get<profile_t::parameters>(params)),
         w_(w),
         l_(l),
         from_(from),
-        to_(to),
         from_match_(from_match),
         to_match_(to_match),
         dir_(dir),
+        distance_(init_distance),
+        step_size_(step_size),
         max_distance_(max_distance),
         blocked_(blocked),
         sharing_(sharing),
-        elevations_(elevations) {}
-
-  void init() {
+        elevations_(elevations),
+        start_time_(start_time) {
     d_.reset(max_distance_);
-    for (auto const [i, start] : utl::enumerate(from_match_)) {
-      if (can_continue_ && component_seen(w_, from_match_, i)) {
-        continue;
+  }
+
+  bool run() {
+    while (iteration_ != from_match_.size()) {
+      if (!can_continue_ || !component_seen(w_, from_match_, iteration_)) {
+        break;
       }
 
-      if (utl::none_of(to_match_, [&](auto const dest) {
-            return w_.r_->way_component_[start.way_] ==
+      if (utl::any_of(to_match_, [&](auto const dest) {
+            return w_.r_->way_component_[from_match_.way_[iteration_]] ==
                    w_.r_->way_component_[dest.way_];
           })) {
-        continue;
+        break;
       }
 
-      auto const start_way = start.way_;
-      for (auto const* nc : {&start.left_, &start.right_}) {
+      iteration_++;
+    }
+
+    if (iteration_ != from_match_.size()) {
+      auto const start_way = from_match_.way_[iteration_];
+      auto const start_left = from_match_.left(iteration_);
+      auto const start_right = from_match_.right(iteration_);
+      for (auto const* nc : {&start_left, &start_right}) {
         if (nc->valid() && nc->cost_ < max_distance_) {
-          profile_t::resolve_start_node(
-              *w_.r_, start.way_, nc->node_, from_.lvl_, dir_,
+          // TODO: why is this needed?
+          // What is the difference between start_cost and nc->cost_?
+          auto const start_cost = get_endpoint_cost<profile_t>(
+              params_, w_, start_way, *nc, false, flip(dir_, nc->way_dir_),
+              start_time_, duration_t{0}, dir_);
+          if (start_cost.cost_ == kInfeasible ||
+              start_cost.cost_ >= max_distance_) {
+            continue;
+          }
+
+          resolve_endpoint_node<profile_t>(
+              *w_.r_, start_way, false, nc->node_, from_.lvl_, dir_,
               [&](auto const node) {
-                auto label = typename profile_t::label{node, nc->cost_};
+                auto label = typename profile_t::label{node, start_cost.cost_};
                 label.track(label, *w_.r_, start_way, node.get_node(), false);
-                d_.add_start(w_, label);
+                d_.add_start(w_, label, start_cost.duration_);
               });
         }
       }
-
-      can_continue_ = !d_.run(params_, w_, *w_.r_, distance_, blocked_,
-                              sharing_, elevations_, dir_) ||
-                      can_continue_;
-    }
-  }
-
-  bool run(cost_t const distance) {
-    distance_ = std::min(distance_ + distance, max_distance_);
-
-    if (d_.pq_.empty() && can_continue_) {
-      can_continue_ = false;
-      init();
-      return can_continue_;
+    } else {
+      distance_ = std::min(distance_ + step_size_, max_distance_);
     }
 
     can_continue_ = !d_.run(params_, w_, *w_.r_, distance_, blocked_, sharing_,
-                            elevations_, dir_);
-    return can_continue_;
-  }
+                            elevations_, dir_) ||
+                    can_continue_;
 
-  std::vector<std::optional<path>> results(
-      std::function<bool(path const&)> const& do_reconstruct) {
-    auto const distance_lng_degrees =
-        geo::approx_distance_lng_degrees(from_.pos_);
-
-    auto results = std::vector<std::optional<path>>{};
-
-    for (auto const [m, t] : utl::zip(to_match_, to_)) {
-      if (auto const direct = try_direct(from_, t); direct.has_value()) {
-        results.push_back(direct);
-      } else {
-        auto const limit_squared_max_matching_distance =
-            geo::approx_squared_distance(from_.pos_, t.pos_,
-                                         distance_lng_degrees) /
-            kMaxMatchingDistanceSquaredRatio;
-
-        for (auto const& start : from_match_) {
-          auto const c =
-              best_candidate(params_, w_, d_, t.lvl_, m, distance_, dir_, true,
-                             start, limit_squared_max_matching_distance);
-
-          if (c.has_value()) {
-            auto [nc, wc, n, p] = *c;
-            d_.cost_.at(n.get_key()).write(n, p);
-            if (do_reconstruct(p)) {
-              p = reconstruct<profile_t>(params_, w_, l_, blocked_, sharing_,
-                                         elevations_, d_, from_, t, start, *wc,
-                                         *nc, n, p.cost_, dir_);
-              p.uses_elevator_ = true;  // TODO: why?
-            }
-            results.push_back(p);
-          }
-        }
-      }
-    }
+    return can_continue_ && (distance_ != max_distance_);
   }
 
   dijkstra<profile_t, false> d_;
+  std::size_t iteration_ = {0};
   profile_t::parameters const& params_;
   ways const& w_;
   lookup const& l_;
   location const& from_;
-  std::vector<location> const& to_;
   match_view_t const& from_match_;
-  std::vector<match_t> const& to_match_;
+  match_result const& to_match_;
   direction const dir_;
+  cost_t const step_size_;
   cost_t const max_distance_;
   bitvec<node_idx_t> const* blocked_;
   sharing_data const* sharing_;
   elevation_storage const* elevations_;
   cost_t distance_;
   bool can_continue_ = true;
+  std::optional<routing_time_t> const start_time_;
 };
+
+template <search_profile profile>
+std::vector<std::optional<path>> get_results(
+    search_state<profile> const& state,
+    location const& from,
+    std::vector<location> to,
+    match_view_t const& from_match,
+    match_result const& to_match,
+    std::function<bool(path const&)> const& do_reconstruct = [](path const&) {
+      return false;
+    });
 
 std::vector<std::optional<path>> route(
     profile_parameters const&,
