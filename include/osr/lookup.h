@@ -97,6 +97,11 @@ struct match_result {
     node left_{}, right_{};
   };
 
+  struct flags {
+    bool vehicle_match_{};
+    bool exact_return_{};
+  };
+
   // View of a single match (= all way candidates of one query location).
   struct view {
     bool empty() const { return way_.empty(); }
@@ -111,9 +116,17 @@ struct match_result {
       return {n.node_, n.dist_to_node_, n.cost_, direction::kForward, lvl_};
     }
 
+    bool vehicle_match(std::size_t const j) const {
+      return flags_[j].vehicle_match_;
+    }
+    bool exact_return(std::size_t const j) const {
+      return flags_[j].exact_return_;
+    }
+
     std::span<float const> dist_to_way_{};
     std::span<way_idx_t const> way_{};
     std::span<nodes const> nodes_{};
+    std::span<flags const> flags_{};
     level_t lvl_{kNoLevel};
   };
 
@@ -126,6 +139,7 @@ struct match_result {
     dist_to_way_.clear();
     way_.clear();
     nodes_.clear();
+    flags_.clear();
   }
 
   std::size_t size() const { return lvl_.size(); }
@@ -135,9 +149,17 @@ struct match_result {
   void start(level_t const lvl) { lvl_.emplace_back(lvl); }
 
   void add(float const dist_to_way, way_idx_t const w, nodes const& n) {
+    add(dist_to_way, w, n, flags{false, false});
+  }
+
+  void add(float const dist_to_way,
+           way_idx_t const w,
+           nodes const& n,
+           flags const f) {
     dist_to_way_.emplace_back(dist_to_way);
     way_.emplace_back(w);
     nodes_.emplace_back(n);
+    flags_.emplace_back(f);
   }
 
   void finish() { begin_.emplace_back(way_candidate_idx_t{(way_.size())}); }
@@ -148,7 +170,7 @@ struct match_result {
     auto const v = src[i];
     start(v.lvl_);
     for (auto j = std::size_t{0U}; j != v.size(); ++j) {
-      add(v.dist_to_way_[j], v.way_[j], v.nodes_[j]);
+      add(v.dist_to_way_[j], v.way_[j], v.nodes_[j], v.flags_[j]);
     }
     finish();
   }
@@ -169,6 +191,7 @@ struct match_result {
     return view{.dist_to_way_ = at(dist_to_way_),
                 .way_ = at(way_),
                 .nodes_ = at(nodes_),
+                .flags_ = at(flags_),
                 .lvl_ = lvl_[i]};
   }
 
@@ -177,6 +200,7 @@ struct match_result {
   vec_map<way_candidate_idx_t, float> dist_to_way_{};
   vec_map<way_candidate_idx_t, way_idx_t> way_{};
   vec_map<way_candidate_idx_t, nodes> nodes_{};
+  vec_map<way_candidate_idx_t, flags> flags_{};
 };
 
 // One match, borrowed from the `match_result` that owns it.
@@ -361,6 +385,18 @@ struct lookup {
              std::span<raw_way_candidate const> raw_way_candidates,
              match_result& out) const;
 
+  void match_endpoint(
+      profile_parameters const& params,
+      location const& query,
+      bool reverse,
+      direction search_dir,
+      double max_match_distance,
+      bitvec<node_idx_t> const* blocked,
+      search_profile,
+      bool exact_return_allowed,
+      std::optional<std::span<raw_way_candidate const>> raw_way_candidates,
+      match_result& out) const;
+
   // Matches `query` against the street network and appends the result to
   // `out` as one match. If nothing is found, the search is retried at twice
   // the distance, up to four times.
@@ -384,6 +420,91 @@ struct lookup {
       found =
           get_way_candidates<P>(params, query, reverse, search_dir,
                                 max_match_distance, blocked, out, start_time);
+    }
+    out.finish();
+  }
+
+  template <Profile P>
+  void match_endpoint(
+      P::parameters const& params,
+      location const& query,
+      bool const reverse,
+      direction const search_dir,
+      double const max_match_distance,
+      bitvec<node_idx_t> const* blocked,
+      bool const exact_return_allowed,
+      match_result& out,
+      std::optional<routing_time_t> const start_time = std::nullopt,
+      std::optional<std::span<raw_way_candidate const>> raw_way_candidates =
+          std::nullopt) const {
+    auto raw_way_candidates_storage = std::vector<raw_way_candidate>{};
+    if constexpr (SharingProfile<P>) {
+      if (exact_return_allowed && !raw_way_candidates.has_value()) {
+        // Reuse one geometric/R-tree match for both the regular foot endpoint
+        // and the exact vehicle return endpoint.
+        raw_way_candidates_storage = get_raw_match(query, max_match_distance);
+        raw_way_candidates = raw_way_candidates_storage;
+      }
+    }
+
+    auto regular_result = match_result{};
+    if (raw_way_candidates.has_value()) {
+      complete_match<P>(params, query, reverse, search_dir, max_match_distance,
+                        blocked, start_time, *raw_way_candidates,
+                        regular_result);
+    } else {
+      match<P>(params, query, reverse, search_dir, max_match_distance, blocked,
+               regular_result, start_time);
+    }
+    auto const regular = regular_result[match_idx_t{0U}];
+
+    auto vehicle_result = match_result{};
+    if constexpr (SharingProfile<P>) {
+      if (exact_return_allowed) {
+        if (raw_way_candidates.has_value()) {
+          complete_match<typename P::vehiclep>(
+              P::vehicle_parameters(params), query, reverse, search_dir,
+              max_match_distance, blocked, start_time, *raw_way_candidates,
+              vehicle_result);
+        } else {
+          match<typename P::vehiclep>(P::vehicle_parameters(params), query,
+                                      reverse, search_dir, max_match_distance,
+                                      blocked, vehicle_result, start_time);
+        }
+      }
+    }
+
+    out.start(query.lvl_);
+    if constexpr (SharingProfile<P>) {
+      auto const vehicle = vehicle_result.empty()
+                               ? match_view_t{}
+                               : vehicle_result[match_idx_t{0U}];
+      auto regular_idx = std::size_t{0U};
+      auto vehicle_idx = std::size_t{0U};
+      while (regular_idx != regular.size() || vehicle_idx != vehicle.size()) {
+        if (regular_idx == regular.size() && vehicle_idx == vehicle.size()) {
+          break;
+        }
+        auto const take_regular = vehicle_idx == vehicle.size() ||
+                                  (regular_idx != regular.size() &&
+                                   regular.dist_to_way_[regular_idx] <=
+                                       vehicle.dist_to_way_[vehicle_idx]);
+        if (take_regular) {
+          out.add(regular.dist_to_way_[regular_idx], regular.way_[regular_idx],
+                  regular.nodes_[regular_idx]);
+          ++regular_idx;
+        } else {
+          out.add(
+              vehicle.dist_to_way_[vehicle_idx], vehicle.way_[vehicle_idx],
+              vehicle.nodes_[vehicle_idx],
+              {.vehicle_match_ = true, .exact_return_ = exact_return_allowed});
+          ++vehicle_idx;
+        }
+      }
+    } else {
+      for (auto i = std::size_t{0U}; i != regular.size(); ++i) {
+        out.add(regular.dist_to_way_[i], regular.way_[i], regular.nodes_[i]);
+      }
     }
     out.finish();
   }

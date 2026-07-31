@@ -148,11 +148,11 @@ struct dijkstra {
             }
             auto const total_duration =
                 clamp_add_duration(curr_duration, duration);
-            if (cost_[neighbor.get_key()].update(l, neighbor,
+            auto next = label{neighbor, static_cast<cost_t>(total)};
+            next.track(l, r, way, neighbor.get_node(), track);
+            if (cost_[neighbor.get_key()].update(next, neighbor,
                                                  static_cast<cost_t>(total),
                                                  curr, total_duration)) {
-              auto next = label{neighbor, static_cast<cost_t>(total)};
-              next.track(l, r, way, neighbor.get_node(), track);
               pq_.push(std::move(next));
 
               if constexpr (kDebug) {

@@ -201,12 +201,21 @@ struct astar {
             }
             auto const total_duration = clamp_add_duration(
                 cost_.at(curr_node.get_key()).duration(curr_node), duration);
-            if (heur < max && cost_[neighbor.get_key()].update(
-                                  l, neighbor, static_cast<cost_t>(total),
-                                  curr_node, total_duration)) {
+            auto const updated = [&]() {
+              if (heur >= max) {
+                return false;
+              }
               auto next = label{neighbor, static_cast<cost_t>(heur)};
               next.track(l, r, way, neighbor.get_node(), track);
+              if (!cost_[neighbor.get_key()].update(
+                      next, neighbor, static_cast<cost_t>(total), curr_node,
+                      total_duration)) {
+                return false;
+              }
               pq_.push(std::move(next));
+              return true;
+            }();
+            if (updated) {
 
               if constexpr (kDebug) {
                 std::cout << " -> PUSH\n";

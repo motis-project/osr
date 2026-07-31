@@ -1,0 +1,126 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<osm version="0.6" generator="osr-test">
+  <node id="1" lat="49.000000" lon="8.000000"/>
+  <node id="2" lat="49.000000" lon="8.001000"/>
+  <node id="3" lat="49.000000" lon="8.002000"/>
+  <node id="4" lat="49.000000" lon="8.003000"/>
+  <node id="5" lat="49.000000" lon="8.010000"/>
+  <node id="12" lat="49.000050" lon="8.002000"/>
+  <node id="13" lat="49.000050" lon="8.003000"/>
+  <node id="14" lat="49.000050" lon="8.010000"/>
+  <node id="21" lat="48.999500" lon="8.000000"/>
+  <node id="24" lat="48.999500" lon="8.003000"/>
+  <node id="31" lat="49.010000" lon="8.000000"/>
+  <node id="32" lat="49.010000" lon="8.001000"/>
+  <node id="33" lat="49.010000" lon="8.002000"/>
+  <node id="34" lat="49.010000" lon="8.003000"/>
+  <node id="41" lat="49.010040" lon="8.002700"/>
+  <node id="42" lat="49.010040" lon="8.002900"/>
+  <node id="51" lat="49.009500" lon="8.000000"/>
+  <node id="61" lat="49.020000" lon="8.000000"/>
+  <node id="62" lat="49.020000" lon="8.001000"/>
+  <node id="63" lat="49.020000" lon="8.002000"/>
+  <node id="64" lat="49.020000" lon="8.003000"/>
+  <node id="71" lat="49.020040" lon="8.000100"/>
+  <node id="72" lat="49.020040" lon="8.000300"/>
+  <node id="82" lat="49.030000" lon="8.001000">
+    <tag k="bicycle" v="no"/>
+  </node>
+
+  <way id="100">
+    <nd ref="1"/>
+    <nd ref="2"/>
+    <nd ref="3"/>
+    <nd ref="4"/>
+    <nd ref="5"/>
+    <tag k="highway" v="residential"/>
+  </way>
+
+  <way id="101">
+    <nd ref="21"/>
+    <nd ref="1"/>
+    <tag k="highway" v="cycleway"/>
+    <tag k="foot" v="no"/>
+  </way>
+
+  <way id="104">
+    <nd ref="4"/>
+    <nd ref="24"/>
+    <tag k="highway" v="cycleway"/>
+    <tag k="foot" v="no"/>
+  </way>
+
+  <way id="200">
+    <nd ref="2"/>
+    <nd ref="12"/>
+    <nd ref="13"/>
+    <nd ref="14"/>
+    <tag k="highway" v="footway"/>
+    <tag k="footway" v="sidewalk"/>
+  </way>
+
+  <way id="201">
+    <nd ref="5"/>
+    <nd ref="14"/>
+    <tag k="highway" v="footway"/>
+    <tag k="footway" v="sidewalk"/>
+  </way>
+
+  <way id="300">
+    <nd ref="31"/>
+    <nd ref="32"/>
+    <nd ref="33"/>
+    <nd ref="34"/>
+    <tag k="highway" v="residential"/>
+  </way>
+
+  <way id="400">
+    <nd ref="41"/>
+    <nd ref="42"/>
+    <tag k="highway" v="residential"/>
+  </way>
+
+  <way id="301">
+    <nd ref="51"/>
+    <nd ref="31"/>
+    <tag k="highway" v="cycleway"/>
+    <tag k="foot" v="no"/>
+  </way>
+
+  <way id="401">
+    <nd ref="42"/>
+    <nd ref="34"/>
+    <tag k="highway" v="service"/>
+    <tag k="oneway" v="yes"/>
+    <tag k="oneway:foot" v="yes"/>
+  </way>
+
+  <way id="500">
+    <nd ref="61"/>
+    <nd ref="62"/>
+    <nd ref="63"/>
+    <nd ref="64"/>
+    <tag k="highway" v="residential"/>
+  </way>
+
+  <way id="600">
+    <nd ref="71"/>
+    <nd ref="72"/>
+    <tag k="highway" v="residential"/>
+  </way>
+
+  <way id="601">
+    <nd ref="61"/>
+    <nd ref="71"/>
+    <tag k="highway" v="service"/>
+    <tag k="oneway" v="yes"/>
+    <tag k="oneway:foot" v="yes"/>
+  </way>
+
+  <way id="800">
+    <nd ref="64"/>
+    <nd ref="82"/>
+    <tag k="highway" v="footway"/>
+    <tag k="bicycle" v="no"/>
+  </way>
+</osm>

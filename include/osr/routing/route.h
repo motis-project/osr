@@ -27,8 +27,14 @@ struct bidirectional;
 
 struct sharing_data;
 
-template <search_profile>
-struct search_state;
+struct route_endpoint_options {
+  bool exact_return_at_from_{};
+  std::vector<bool> exact_return_at_to_{};
+
+  bool exact_return_at_to(std::size_t const i) const {
+    return i < exact_return_at_to_.size() && exact_return_at_to_[i];
+  }
+};
 
 template <Profile P>
 bidirectional<P>& get_bidirectional();
@@ -37,45 +43,7 @@ template <Profile P>
 dijkstra<P, false>& get_dijkstra();
 
 template <Profile P>
-path reconstruct(typename P::parameters const& params,
-                 ways const& w,
-                 lookup const& l,
-                 bitvec<node_idx_t> const* blocked,
-                 sharing_data const* sharing,
-                 elevation_storage const* elevations,
-                 dijkstra<P, false> const& d,
-                 location const& from,
-                 location const& to,
-                 way_candidate const& start,
-                 way_candidate const& dest,
-                 node_candidate const& dest_nc,
-                 typename P::node const dest_node,
-                 cost_t const cost,
-                 direction const dir);
-
-bool component_seen(ways const& w,
-                    match_view_t matches,
-                    size_t match_idx,
-                    unsigned times = 1);
-
-template <Profile P>
-std::optional<std::tuple<node_candidate const*,
-                         way_candidate const*,
-                         typename P::node,
-                         path>>
-best_candidate(typename P::parameters const& params,
-               ways const& w,
-               dijkstra<P, false>& d,
-               level_t const lvl,
-               match_view_t m,
-               cost_t const max,
-               direction const dir,
-               bool should_continue,
-               way_candidate const& start,
-               double const limit_squared_max_matching_distance);
-
-std::optional<path> try_direct(osr::location const& from,
-                               osr::location const& to);
+astar<P, false>& get_astar();
 
 template <search_profile profile>
 struct search_state {
@@ -207,8 +175,6 @@ struct search_state {
   cost_t distance_;
   bool can_continue_ = true;
 };
-template <Profile P>
-astar<P, false>& get_astar();
 
 std::vector<std::optional<path>> route(
     profile_parameters const&,
@@ -225,7 +191,8 @@ std::vector<std::optional<path>> route(
     elevation_storage const* = nullptr,
     std::function<bool(path const&)> const& do_reconstruct =
         [](path const&) { return false; },
-    std::optional<routing_time_t> = std::nullopt);
+    std::optional<routing_time_t> = std::nullopt,
+    route_endpoint_options const& = {});
 
 std::optional<path> route(profile_parameters const&,
                           ways const&,
@@ -240,7 +207,8 @@ std::optional<path> route(profile_parameters const&,
                           sharing_data const* sharing = nullptr,
                           elevation_storage const* = nullptr,
                           routing_algorithm = routing_algorithm::kDijkstra,
-                          std::optional<routing_time_t> = std::nullopt);
+                          std::optional<routing_time_t> = std::nullopt,
+                          route_endpoint_options const& = {});
 
 std::optional<path> route_bidirectional(
     profile_parameters const&,
