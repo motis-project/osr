@@ -1,7 +1,10 @@
 #include "osr/routing/parking_matching.h"
+#include <concepts>
 
 #include <functional>
 #include <optional>
+
+#include "utl/concat.h"
 
 #include "osr/location.h"
 #include "osr/lookup.h"
@@ -184,6 +187,32 @@ void connect_parking_ways(
         .segment_idx_ = 0}};
   };
 
+  auto const make_connection =
+      [&](geo::box const& bbox, double const approx_distance_lng_degrees,
+          way_candidate const& car_offset,
+          geo::polyline_candidate const& car_entrance,
+          geo::polyline_candidate const& foot_entrance,
+          way_candidate const& foot_offset) -> vec<point> {
+    auto conn = vec<point>{};
+    auto const center = bbox.centroid();
+    auto const is_closer = [&](geo::latlng const& c, geo::latlng const& other) {
+      return geo::approx_squared_distance(c, other,
+                                          approx_distance_lng_degrees) <
+             geo::approx_squared_distance(c, center,
+                                          approx_distance_lng_degrees);
+    };
+
+    conn.emplace_back(point::from_latlng(car_offset.closest_point_on_way_));
+    if (is_closer(car_offset.closest_point_on_way_, car_entrance.best_)) {
+      conn.emplace_back(point::from_latlng(car_entrance.best_));
+    }
+    if (is_closer(foot_offset.closest_point_on_way_, foot_entrance.best_)) {
+      conn.emplace_back(point::from_latlng(foot_entrance.best_));
+    }
+    conn.emplace_back(point::from_latlng(foot_offset.closest_point_on_way_));
+
+    return conn;
+  };
   w.r_->has_parking_edges_.resize(w.n_nodes());
   auto const add_parking_edge = [&](node_idx_t const node_idx,
                                     parking_edge_idx_t const parking_edge_idx) {
@@ -265,10 +294,8 @@ void connect_parking_ways(
           parking_edge_idx_t{w.r_->parking_edges_.size()};
       w.r_->parking_edges_.emplace_back(
           car_offset->left_.node_, car_offset->right_.node_,
-          point::from_latlng(car_offset->closest_point_on_way_),
-          point::from_latlng(car_entrance.best_),
-          point::from_latlng(foot_entrance.best_),
-          point::from_latlng(foot_offset->closest_point_on_way_),
+          make_connection(bbox, approx_distance_lng_degrees, *car_offset,
+                          car_entrance, foot_entrance, *foot_offset),
           foot_offset->left_.node_, foot_offset->right_.node_);
       if (way_idx == 1643) {  // DEBUG only
         fmt::println(
@@ -308,9 +335,13 @@ geo::polyline parking_way_polyline(ways::routing const& r,
   auto const& parking_edge =
       r.parking_edges_[ways::routing::parking_edge::decode_parking_edge(
           r, way_idx)];
-  return {r.node_positions_[from],          parking_edge.car_extra_point_,
-          parking_edge.car_entrance_point_, parking_edge.foot_entrance_point_,
-          parking_edge.foot_extra_point_,   r.node_positions_[to]};
+  auto line = geo::polyline{};
+  line.emplace_back(r.node_positions_[from]);
+  for (auto const& p : parking_edge.connection_) {
+    line.emplace_back(p);
+  }
+  line.emplace_back(r.node_positions_[to]);
+  return line;
 }
 
 }  // namespace osr
