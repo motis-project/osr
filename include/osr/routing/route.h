@@ -1,9 +1,6 @@
 #pragma once
 
-#include <iterator>
 #include <vector>
-
-#include "utl/enumerate.h"
 
 #include "osr/elevation_storage.h"
 #include "osr/location.h"
@@ -54,43 +51,6 @@ bool component_seen(ways const&,
                     match_view_t const&,
                     size_t,
                     unsigned times = 1);
-
-template <Profile P, typename Search>
-std::optional<
-    std::tuple<candidate_node, way_idx_t, bool, typename P::node, path>>
-best_candidate(typename P::parameters const&,
-               ways const&,
-               Search& search,
-               level_t const,
-               match_view_t const&,
-               cost_t const,
-               direction const,
-               std::optional<routing_time_t> const,
-               bool,
-               std::optional<way_idx_t> const,
-               double const);
-
-template <Profile P, typename Search>
-path reconstruct(typename P::parameters const&,
-                 ways const&,
-                 lookup const&,
-                 bitvec<node_idx_t> const*,
-                 sharing_data const*,
-                 elevation_storage const*,
-                 Search const&,
-                 location const&,
-                 location const&,
-                 way_idx_t const,
-                 candidate_node const&,
-                 candidate_node const&,
-                 bool const,
-                 way_idx_t const,
-                 candidate_node const&,
-                 bool const,
-                 typename P::node const,
-                 cost_t const,
-                 direction const,
-                 std::optional<routing_time_t> const);
 
 template <search_profile profile>
 struct search_state {
@@ -182,7 +142,7 @@ struct search_state {
   }
 
   dijkstra<profile_t, false> d_;
-  std::size_t iteration_ = {0};
+  std::size_t iteration_{0};
   profile_t::parameters const& params_;
   ways const& w_;
   lookup const& l_;
