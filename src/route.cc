@@ -366,6 +366,7 @@ best_candidate(typename P::parameters const& params,
   auto const start_component = w.r_->way_component_[start.way_];
   auto component_seen_ctr = 0;
   for (auto const [j, dest] : utl::enumerate(m)) {
+    // TODO: MK - Should switching components be allowed for parking profiles?
     if (start_component != w.r_->way_component_[dest.way_]) {
       continue;
     }
@@ -547,6 +548,7 @@ std::optional<path> route_dijkstra(
     if (!should_continue && component_seen(w, from_match, i)) {
       continue;
     }
+    // TODO: MK - Should switching components be allowed for parking profiles?
     if (utl::none_of(to_match, [&](way_candidate const& end) {
           return w.r_->way_component_[start.way_] ==
                  w.r_->way_component_[end.way_];
