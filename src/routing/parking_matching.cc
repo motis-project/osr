@@ -16,7 +16,6 @@ namespace osr {
 
 namespace {
 
-// TODO:outdated - Remove
 geo::box get_bounding_box(ways const& w, way_idx_t const& way_idx) {
   // ?? TODO Optional matching distance ??
   auto bbox = geo::box{};
@@ -46,6 +45,20 @@ struct fit {
   bool is_preferred_{false};  // For example parking-aisle
   std::size_t component_size_{};
 };
+
+vec_map<component_idx_t, std::size_t> compute_component_sizes(
+    ways const& w, unsigned const n_components) {
+  auto component_sizes =
+      vec_map<component_idx_t, std::size_t>(n_components, std::size_t{0U});
+  for (auto i = 0U; i != w.n_ways(); ++i) {
+    auto const way_idx = way_idx_t{i};
+    auto const component = w.r_->way_component_[way_idx];
+    utl::verify(static_cast<std::size_t>(component.v_) < n_components,
+                "Invalid component index {} (>= {})", component, n_components);
+    ++component_sizes[component];
+  }
+  return component_sizes;
+}
 
 std::tuple<geo::box, double> get_bbox(ways const& w, way_idx_t const& way_idx) {
   auto const bbox = get_bounding_box(w, way_idx);
@@ -116,16 +129,7 @@ void connect_parking_ways(
     lookup const& l,
     vec_map<way_idx_t, way_extra_properties> const& way_extra,
     unsigned const n_components) {
-  // Compute component sizes
-  auto component_sizes =
-      vec_map<component_idx_t, std::size_t>(n_components, std::size_t{0U});
-  for (auto i = 0U; i != w.n_ways(); ++i) {
-    auto const way_idx = way_idx_t{i};
-    auto const component = w.r_->way_component_[way_idx];
-    utl::verify(static_cast<std::size_t>(component.v_) < n_components,
-                "Invalid component index {} (>= {})", component, n_components);
-    ++component_sizes[component];
-  }
+  auto const component_sizes = compute_component_sizes(w, n_components);
 
   auto const is_connected =
       [&](way_idx_t const way_idx,
@@ -213,6 +217,7 @@ void connect_parking_ways(
 
     return conn;
   };
+
   w.r_->has_parking_edges_.resize(w.n_nodes());
   auto const add_parking_edge = [&](node_idx_t const node_idx,
                                     parking_edge_idx_t const parking_edge_idx) {
@@ -262,7 +267,8 @@ void connect_parking_ways(
                                     return {props.is_car_usable(),
                                             props.is_parking_aisle()};
                                   });
-      if (way_idx == 1643) {  // DEBUG only
+      if (way_idx == 1643 || way_idx == 14200 ||
+          way_idx == 14201) {  // DEBUG only
         fmt::println(
             "DEBUG OFFSETS: way {}  foot_connected: {}  car_connected: {}  "
             "has_foot: {}  has_car: {}",
