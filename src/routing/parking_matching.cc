@@ -368,7 +368,6 @@ geo::polyline parking_way_polyline(ways const& w,
   auto const& parking_edge =
       r.parking_edges_[ways::routing::parking_edge::decode_parking_edge(
           r, way_idx)];
-  auto const is_from = dir == direction::kForward;
 
   auto line = geo::polyline{};
   auto const reverse = [](vec<point>&& points) {
@@ -384,10 +383,11 @@ geo::polyline parking_way_polyline(ways const& w,
       }
     }
   };
-  add_points(
-      reverse(parking_edge_offset_polyline(w, parking_edge, is_from, from)));
+  add_points(reverse(parking_edge_offset_polyline(
+      w, parking_edge, true, dir == direction::kForward ? from : to)));
   add_points(parking_edge.connection_);
-  add_points(parking_edge_offset_polyline(w, parking_edge, !is_from, to));
+  add_points(parking_edge_offset_polyline(
+      w, parking_edge, false, dir == direction::kForward ? to : from));
 
   return line;
 }
