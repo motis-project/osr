@@ -17,6 +17,7 @@
 
 #include "osr/platforms.h"
 #include "osr/routing/dijkstra.h"
+#include "osr/routing/for_each_parking_edge.h"
 #include "osr/routing/profiles/foot.h"
 #include "osr/types.h"
 #include "osr/ways.h"
@@ -682,42 +683,13 @@ struct geojson_writer {
       auto const& parking_edge = w_.r_->parking_edges_[parking_edge_idx];
       auto geom = vec<vec<point>>{parking_edge.connection_};
 
-      auto const get_path = [&](point const& p, way_idx_t const way_idx,
-                                unsigned const segment_idx,
-                                node_idx_t const node_idx,
-                                bool const is_left_node) -> vec<point> {
-        auto path = vec{p};
-        auto const add_point = [&](unsigned const i) {
-          path.push_back(w.way_polylines_[way_idx][i]);
-        };
-        auto const stop_node = w.node_to_osm_[node_idx];
-        if (is_left_node) {
-          auto i = segment_idx;
-          for (; i != 0U && w.way_osm_nodes_[way_idx][i] != stop_node; --i) {
-            add_point(i);
-          }
-          add_point(i);
-        } else {
-          auto i = segment_idx + 1;
-          for (; i < w.way_osm_nodes_[way_idx].size(); ++i) {
-            add_point(i);
-            if (w.way_osm_nodes_[way_idx][i] == stop_node) {
-              break;
-            }
-          }
-        }
-        return path;
-      };
-
       for (auto const [i, offset] : utl::enumerate(
                std::initializer_list{parking_edge.from_, parking_edge.to_})) {
-        auto const conn = (i == 0) ? parking_edge.connection_.front()
-                                   : parking_edge.connection_.back();
         for (auto const [j, node_idx] : utl::enumerate(
                  std::initializer_list{offset.left_, offset.right_})) {
           if (node_idx != node_idx_t::invalid()) {
             geom.emplace_back(
-                get_path(conn, offset.way_, offset.segment_, node_idx, j == 0));
+                parking_edge_offset_polyline(w, parking_edge, i == 0, j == 0));
           }
         }
       }

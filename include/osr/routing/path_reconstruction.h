@@ -203,7 +203,9 @@ inline double add_path(typename P::parameters const& params,
     if constexpr (is_parking<P>()) {
       segment.mode_ = mode::kParking;
       segment.polyline_ =
-          parking_way_polyline(*w.r_, way, segment.from_, segment.to_);
+          parking_way_polyline(w, way, dir, segment.from_, segment.to_);
+      // segment.polyline_ =
+      //     parking_way_polyline(*w.r_, way, segment.from_, segment.to_);
     } else {
       segment.polyline_ = {get_node_pos(segment.from_),
                            get_node_pos(segment.to_)};

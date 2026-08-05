@@ -8,6 +8,7 @@
 
 #include "osr/location.h"
 #include "osr/lookup.h"
+#include "osr/routing/for_each_parking_edge.h"
 #include "osr/routing/profile.h"
 #include "osr/types.h"
 #include "osr/ways.h"
@@ -356,21 +357,38 @@ bool is_parking_way(ways::routing const& r, way_idx_t const way_idx) {
          way_idx < r.way_component_.size() + r.parking_edges_.size();
 }
 
-geo::polyline parking_way_polyline(ways::routing const& r,
+geo::polyline parking_way_polyline(ways const& w,
                                    way_idx_t const way_idx,
+                                   direction const dir,
                                    node_idx_t const from,
                                    node_idx_t const to) {
+  auto const& r = *w.r_;
   utl::verify(is_parking_way(r, way_idx), "way {} is not a valid parking edge",
               way_idx);
   auto const& parking_edge =
       r.parking_edges_[ways::routing::parking_edge::decode_parking_edge(
           r, way_idx)];
+  auto const is_from = dir == direction::kForward;
+
   auto line = geo::polyline{};
-  line.emplace_back(r.node_positions_[from]);
-  for (auto const& p : parking_edge.connection_) {
-    line.emplace_back(p);
-  }
-  line.emplace_back(r.node_positions_[to]);
+  auto const reverse = [](vec<point>&& points) {
+    std::reverse(begin(points), end(points));
+    return points;
+  };
+  auto previous = geo::latlng();
+  auto const add_points = [&](vec<point> const& points) {
+    for (auto const& p : points) {
+      if (line.empty() || previous != p) {
+        line.emplace_back(p.as_latlng());
+        previous = p;
+      }
+    }
+  };
+  add_points(
+      reverse(parking_edge_offset_polyline(w, parking_edge, is_from, from)));
+  add_points(parking_edge.connection_);
+  add_points(parking_edge_offset_polyline(w, parking_edge, !is_from, to));
+
   return line;
 }
 
