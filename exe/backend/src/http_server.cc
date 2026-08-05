@@ -216,7 +216,7 @@ struct http_server::impl {
       gj.write_way(w);
       mark_parking_edges(w);
     });
-    gj.write_parking_edges(parking_edges);
+    gj.write_parking_edges(w_, parking_edges);
 
     with_profile(profile,
                  [&]<Profile P>(P&&) { send_graph_response<P>(req, cb, gj); });

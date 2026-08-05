@@ -1,5 +1,6 @@
 #include <algorithm>
 #include <array>
+#include <initializer_list>
 #include <optional>
 #include <sstream>
 #include <string>
@@ -674,26 +675,51 @@ struct geojson_writer {
     ++n;
   }
 
-  void write_parking_edges(bitvec<parking_edge_idx_t> const& parking_edges) {
+  void write_parking_edges(ways const& w,
+                           bitvec<parking_edge_idx_t> const& parking_edges) {
     parking_edges.for_each_set_bit([&](parking_edge_idx_t const
                                            parking_edge_idx) {
       auto const& parking_edge = w_.r_->parking_edges_[parking_edge_idx];
       auto geom = vec<vec<point>>{parking_edge.connection_};
-      if (parking_edge.from_.left_ != node_idx_t::invalid()) {
-        geom.emplace_back(vec{w_.r_->node_positions_[parking_edge.from_.left_],
-                              parking_edge.connection_.front()});
-      }
-      if (parking_edge.from_.right_ != node_idx_t::invalid()) {
-        geom.emplace_back(vec{w_.r_->node_positions_[parking_edge.from_.right_],
-                              parking_edge.connection_.front()});
-      }
-      if (parking_edge.to_.left_ != node_idx_t::invalid()) {
-        geom.emplace_back(vec{w_.r_->node_positions_[parking_edge.to_.left_],
-                              parking_edge.connection_.back()});
-      }
-      if (parking_edge.to_.right_ != node_idx_t::invalid()) {
-        geom.emplace_back(vec{w_.r_->node_positions_[parking_edge.to_.right_],
-                              parking_edge.connection_.back()});
+
+      auto const get_path = [&](point const& p, way_idx_t const way_idx,
+                                unsigned const segment_idx,
+                                node_idx_t const node_idx,
+                                bool const is_left_node) -> vec<point> {
+        auto path = vec{p};
+        auto const add_point = [&](unsigned const i) {
+          path.push_back(w.way_polylines_[way_idx][i]);
+        };
+        auto const stop_node = w.node_to_osm_[node_idx];
+        if (is_left_node) {
+          auto i = segment_idx;
+          for (; i != 0U && w.way_osm_nodes_[way_idx][i] != stop_node; --i) {
+            add_point(i);
+          }
+          add_point(i);
+        } else {
+          auto i = segment_idx + 1;
+          for (; i < w.way_osm_nodes_[way_idx].size(); ++i) {
+            add_point(i);
+            if (w.way_osm_nodes_[way_idx][i] == stop_node) {
+              break;
+            }
+          }
+        }
+        return path;
+      };
+
+      for (auto const [i, offset] : utl::enumerate(
+               std::initializer_list{parking_edge.from_, parking_edge.to_})) {
+        auto const conn = (i == 0) ? parking_edge.connection_.front()
+                                   : parking_edge.connection_.back();
+        for (auto const [j, node_idx] : utl::enumerate(
+                 std::initializer_list{offset.left_, offset.right_})) {
+          if (node_idx != node_idx_t::invalid()) {
+            geom.emplace_back(
+                get_path(conn, offset.way_, offset.segment_, node_idx, j == 0));
+          }
+        }
       }
 
       features_.emplace_back(boost::json::value{
@@ -702,11 +728,11 @@ struct geojson_writer {
            {
                {"type", "parking-edge"},
                {"internal_id", to_idx(parking_edge_idx)},
-               {"car_left", parking_edge.from_.left_ != node_idx_t::invalid()},
-               {"car_right",
+               {"from.left", parking_edge.from_.left_ != node_idx_t::invalid()},
+               {"from.right",
                 parking_edge.from_.right_ != node_idx_t::invalid()},
-               {"foot_left", parking_edge.to_.left_ != node_idx_t::invalid()},
-               {"foot_right", parking_edge.to_.right_ != node_idx_t::invalid()},
+               {"to.left", parking_edge.to_.left_ != node_idx_t::invalid()},
+               {"to.right", parking_edge.to_.right_ != node_idx_t::invalid()},
            }},
           {"geometry", to_multi_line_string(geom)}});
     });
