@@ -16,6 +16,13 @@ namespace osr {
 
 namespace {
 
+ways::routing::parking_edge::offset to_offset(way_candidate const& wc) {
+  return {.way_ = wc.way_,
+          .segment_ = wc.segment_idx_,
+          .left_ = wc.left_.node_,
+          .right_ = wc.right_.node_};
+}
+
 geo::box get_bounding_box(ways const& w, way_idx_t const& way_idx) {
   // ?? TODO Optional matching distance ??
   auto bbox = geo::box{};
@@ -318,10 +325,9 @@ void connect_parking_ways(
     auto const parking_edge_idx =
         parking_edge_idx_t{w.r_->parking_edges_.size()};
     w.r_->parking_edges_.emplace_back(
-        car_offset->left_.node_, car_offset->right_.node_,
         make_connection(bbox, approx_distance_lng_degrees, *car_offset,
                         car_entrance, foot_entrance, *foot_offset),
-        foot_offset->left_.node_, foot_offset->right_.node_);
+        to_offset(*car_offset), to_offset(*foot_offset));
     if (way_idx == 1643) {  // DEBUG only
       fmt::println(
           "Added nodes: car/left: {}  car/right: {}  foot/left: {}  "

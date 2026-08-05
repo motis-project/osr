@@ -339,15 +339,15 @@ struct car_parking {
                 auto const& parking_edge = w.parking_edges_[parking_edge_idx];
                 for (auto car_offset = 0U; car_offset < 2U; ++car_offset) {
                   auto const car_node = car_offset == 0
-                                            ? parking_edge.car_left_
-                                            : parking_edge.car_right_;
+                                            ? parking_edge.from_.left_
+                                            : parking_edge.from_.right_;
                   if (car_node != n.n_) {
                     continue;
                   }
                   for (auto foot_offset = 0U; foot_offset < 2U; ++foot_offset) {
                     auto const foot_node = foot_offset == 0
-                                               ? parking_edge.foot_left_
-                                               : parking_edge.foot_right_;
+                                               ? parking_edge.to_.left_
+                                               : parking_edge.to_.right_;
                     if (foot_node == node_idx_t::invalid()) {
                       continue;
                     }
@@ -370,12 +370,12 @@ struct car_parking {
           for_each_parking_edge(
               w, n.n_, [&](parking_edge_idx_t const parking_edge_idx) {
                 auto const& parking_edge = w.parking_edges_[parking_edge_idx];
-                if (parking_edge.foot_left_ != n.n_ &&
-                    parking_edge.foot_right_ != n.n_) {
+                if (parking_edge.to_.left_ != n.n_ &&
+                    parking_edge.to_.right_ != n.n_) {
                   return;
                 }
                 for (auto const car_node :
-                     {parking_edge.car_left_, parking_edge.car_right_}) {
+                     {parking_edge.from_.left_, parking_edge.from_.right_}) {
                   if (car_node == node_idx_t::invalid()) {
                     continue;
                   }

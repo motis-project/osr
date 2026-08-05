@@ -679,20 +679,20 @@ struct geojson_writer {
                                            parking_edge_idx) {
       auto const& parking_edge = w_.r_->parking_edges_[parking_edge_idx];
       auto geom = vec<vec<point>>{parking_edge.connection_};
-      if (parking_edge.car_left_ != node_idx_t::invalid()) {
-        geom.emplace_back(vec{w_.r_->node_positions_[parking_edge.car_left_],
+      if (parking_edge.from_.left_ != node_idx_t::invalid()) {
+        geom.emplace_back(vec{w_.r_->node_positions_[parking_edge.from_.left_],
                               parking_edge.connection_.front()});
       }
-      if (parking_edge.car_right_ != node_idx_t::invalid()) {
-        geom.emplace_back(vec{w_.r_->node_positions_[parking_edge.car_right_],
+      if (parking_edge.from_.right_ != node_idx_t::invalid()) {
+        geom.emplace_back(vec{w_.r_->node_positions_[parking_edge.from_.right_],
                               parking_edge.connection_.front()});
       }
-      if (parking_edge.foot_left_ != node_idx_t::invalid()) {
-        geom.emplace_back(vec{w_.r_->node_positions_[parking_edge.foot_left_],
+      if (parking_edge.to_.left_ != node_idx_t::invalid()) {
+        geom.emplace_back(vec{w_.r_->node_positions_[parking_edge.to_.left_],
                               parking_edge.connection_.back()});
       }
-      if (parking_edge.foot_right_ != node_idx_t::invalid()) {
-        geom.emplace_back(vec{w_.r_->node_positions_[parking_edge.foot_right_],
+      if (parking_edge.to_.right_ != node_idx_t::invalid()) {
+        geom.emplace_back(vec{w_.r_->node_positions_[parking_edge.to_.right_],
                               parking_edge.connection_.back()});
       }
 
@@ -702,11 +702,11 @@ struct geojson_writer {
            {
                {"type", "parking-edge"},
                {"internal_id", to_idx(parking_edge_idx)},
-               {"car_left", parking_edge.car_left_ != node_idx_t::invalid()},
-               {"car_right", parking_edge.car_right_ != node_idx_t::invalid()},
-               {"foot_left", parking_edge.foot_left_ != node_idx_t::invalid()},
-               {"foot_right",
-                parking_edge.foot_right_ != node_idx_t::invalid()},
+               {"car_left", parking_edge.from_.left_ != node_idx_t::invalid()},
+               {"car_right",
+                parking_edge.from_.right_ != node_idx_t::invalid()},
+               {"foot_left", parking_edge.to_.left_ != node_idx_t::invalid()},
+               {"foot_right", parking_edge.to_.right_ != node_idx_t::invalid()},
            }},
           {"geometry", to_multi_line_string(geom)}});
     });

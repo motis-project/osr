@@ -540,11 +540,18 @@ struct ways {
         return parking_edge_idx_t{to_idx(way_idx) - r.way_component_.size()};
       }
 
-      node_idx_t car_left_;
-      node_idx_t car_right_;
+      struct offset {
+        CISTA_COMPARABLE()
+
+        way_idx_t way_;
+        unsigned segment_;
+        node_idx_t left_;
+        node_idx_t right_;
+      };
+
       vec<point> connection_;
-      node_idx_t foot_left_;
-      node_idx_t foot_right_;
+      offset from_;
+      offset to_;
     };
 
     vec_map<node_idx_t, node_properties> node_properties_;
