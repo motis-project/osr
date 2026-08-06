@@ -1,11 +1,11 @@
 [boost]
   url=git@github.com:motis-project/boost.git
   branch=boost-1.89.0
-  commit=77467bf580d98ea06716e2931cbe3b1f28e0cd37
+  commit=b050b3988ba25ea7757462d26a38d225bfe20f75
 [cista]
   url=git@github.com:felixguendling/cista.git
   branch=master
-  commit=10abc43279bd99586d3433ea3b419727f46b8dd9
+  commit=427f0a873be43f1de94289bd53d5678e07cd243f
 [conf]
   url=git@github.com:motis-project/conf.git
   branch=master
@@ -17,11 +17,11 @@
 [fmt]
   url=git@github.com:motis-project/fmt.git
   branch=master
-  commit=dc10f83be70ac2873d5f8d1ce317596f1fd318a2
+  commit=34a5bee1df1f0d144de0e127807d161d08670472
 [geo]
   url=git@github.com:motis-project/geo.git
   branch=master
-  commit=31b1ac29d386d7b53d0112dccaad37e84b8ae567
+  commit=7c78f91a7ae9a9fdb9ed29ce5ba2e8c19acc8cb1
 [googletest]
   url=git@github.com:motis-project/googletest.git
   branch=master
@@ -61,7 +61,7 @@
 [utl]
   url=git@github.com:motis-project/utl.git
   branch=master
-  commit=5ddd9956455b18fc96fd5f8095f7552d5be92c17
+  commit=158339cb270d6cb2ed2d6e2baf876b8c32faeef0
 [zlib-ng]
   url=git@github.com:motis-project/zlib-ng.git
   branch=develop
