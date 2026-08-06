@@ -182,8 +182,9 @@ void connect_parking_ways(
     auto const center = bbox.centroid();
     auto best = way_idx_t::invalid();
     auto best_dist = 0.0;
+    auto best_segment = 0U;
     auto best_node = node_idx_t::invalid();
-    for (auto const node_idx : w.r_->way_nodes_[way_idx]) {
+    for (auto const [i, node_idx] : utl::enumerate(w.r_->way_nodes_[way_idx])) {
       for (auto const connecting_way : w.r_->node_ways_[node_idx]) {
         if (connecting_way != way_idx &&
             pred(w.r_->way_properties_[connecting_way])) {
@@ -193,6 +194,7 @@ void connect_parking_ways(
           if (best == way_idx_t::invalid() || dist < best_dist) {
             best = way_idx;
             best_dist = dist;
+            best_segment = static_cast<unsigned>(i);
             best_node = node_idx;
             break;
           }
@@ -210,7 +212,7 @@ void connect_parking_ways(
                   {}},
         .right_ = {},
         .closest_point_on_way_ = w.r_->node_positions_[best_node].as_latlng(),
-        .segment_idx_ = 0}};
+        .segment_idx_ = best_segment}};
   };
 
   auto const make_connection =
