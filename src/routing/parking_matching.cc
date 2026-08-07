@@ -5,6 +5,7 @@
 #include <optional>
 
 #include "utl/concat.h"
+#include "utl/erase_if.h"
 
 #include "osr/location.h"
 #include "osr/lookup.h"
@@ -34,24 +35,6 @@ geo::box get_bounding_box(ways const& w, way_idx_t const& way_idx) {
   bbox.extend(max_matching_distance);
   return bbox;
 }
-
-struct fit {
-  bool worse_than(way_candidate const& c, bool const is_designated) const {
-    if (best_ == std::nullopt) {
-      return true;
-    }
-    return score(*best_, is_preferred_) < score(c, is_designated);
-  }
-
-  double static score(way_candidate const& c, bool const is_preferred) {
-    // Penalize not designated ways
-    // Add shift to maybe (?) find preferred way, like nearest footpath
-    return -((is_preferred ? 1.0 : 5.0) * (c.dist_to_way_ + 2.5));
-  }
-
-  std::optional<way_candidate> best_{std::nullopt};
-  bool is_preferred_{false};  // For example parking-aisle
-};
 
 vec_map<component_idx_t, std::size_t> compute_component_sizes(
     ways const& w, unsigned const n_components) {
@@ -97,52 +80,38 @@ std::optional<way_candidate> find_closest(
     ways const& w,
     lookup const& l,
     vec_map<way_idx_t, way_extra_properties> const& way_extra,
-    geo::box const& bbox,
+    location const& loc,
     component_idx_t const matching_component,
-    double const approx_distance_lng_degrees,
     std::function<std::tuple<bool, bool>(way_extra_properties const&)> const&
         pred) {
   auto const params = typename P::parameters{};
-  auto const center = bbox.centroid();
-  auto const loc = location{.pos_ = center, .lvl_ = kNoLevel};
-  auto const find_best = [&](way_idx_t const candidate_way) -> way_candidate {
-    auto const [squared_dist, best, segment_idx] =
-        geo::approx_squared_distance_to_polyline<
-            std::tuple<double, geo::latlng, size_t>>(
-            center, w.way_polylines_[candidate_way],
-            approx_distance_lng_degrees);
-    auto wc = way_candidate{.dist_to_way_ = std::sqrt(squared_dist),
-                            .way_ = candidate_way,
-                            .closest_point_on_way_ = best,
-                            .segment_idx_ = static_cast<unsigned>(segment_idx)};
-    wc.left_ =
-        l.find_next_node<P>(params, wc, loc, direction::kBackward, kNoLevel,
-                            false, direction::kForward, nullptr,
-                            approx_distance_lng_degrees, best, segment_idx);
-    wc.right_ =
-        l.find_next_node<P>(params, wc, loc, direction::kForward, kNoLevel,
-                            false, direction::kForward, nullptr,
-                            approx_distance_lng_degrees, best, segment_idx);
-    return wc;
+
+  auto const score = [&](way_candidate const& wc) {
+    // Penalize not designated ways
+    // Add shift to find nearby preferred ways, like nearest footpath
+    // Lower penalty to not match with ways too far away
+    auto const is_preferred = std::get<1>(pred(way_extra[wc.way_]));
+    return -((1 + ((is_preferred ? 0.0 : 4.0) / (wc.dist_to_way_ + 1.0))) *
+             (wc.dist_to_way_ + 2.5));
   };
-
-  auto best_fit = fit{};
-  l.find(bbox, [&](way_idx_t const candidate_way) {
-    if (w.r_->way_component_[candidate_way] != matching_component) {
-      return;
-    }
-    auto const [is_usable, is_preferred] = pred(way_extra[candidate_way]);
-    if (!is_usable) {
-      return;
-    }
-    auto const candidate = static_cast<way_candidate>(find_best(candidate_way));
-    if (best_fit.worse_than(candidate, is_preferred)) {
-      best_fit.best_ = candidate;
-      best_fit.is_preferred_ = is_preferred;
-    }
+  auto way_candidates =
+      l.match<P>(params, loc, false, direction::kForward, 250.0, nullptr,
+                 std::nullopt, std::nullopt, false);
+  utl::erase_if(way_candidates, [&](way_candidate const& wc) {
+    auto const is_matching_component =
+        w.r_->way_component_[wc.way_] == matching_component;
+    auto const is_usable = std::get<0>(pred(way_extra[wc.way_]));
+    return !(is_matching_component && is_usable);
   });
+  if (way_candidates.size() == 0) {
+    return std::nullopt;
+  }
+  auto const best = utl::max_element(
+      way_candidates, [&](way_candidate const& a, way_candidate const& b) {
+        return score(a) < score(b);
+      });
 
-  return best_fit.best_;
+  return std::optional{*best};
 }
 
 }  // namespace
@@ -285,19 +254,19 @@ void connect_parking_ways(
     auto const is_same_component =
         w.r_->way_component_[way_idx] == matching_component;
 
+    auto const loc = location{center, kNoLevel};
     auto const foot_offset =
         (is_same_component && is_foot_connected)
             ? get_connected_way(way_idx, center, approx_distance_lng_degrees,
                                 is_foot_accessible)
-            : find_closest<foot<false>>(
-                  w, l, way_extra, bbox, matching_component,
-                  approx_distance_lng_degrees, is_foot_usable);
+            : find_closest<foot<false>>(w, l, way_extra, loc,
+                                        matching_component, is_foot_usable);
     auto const car_offset =
         (is_same_component && is_car_connected)
             ? get_connected_way(way_idx, center, approx_distance_lng_degrees,
                                 is_car_accessible)
-            : find_closest<car>(w, l, way_extra, bbox, matching_component,
-                                approx_distance_lng_degrees, is_car_usable);
+            : find_closest<car>(w, l, way_extra, loc, matching_component,
+                                is_car_usable);
     if (!foot_offset.has_value() || !car_offset.has_value()) {
       fmt::println(
           "WARNING: No usable way candidate found for way {}"

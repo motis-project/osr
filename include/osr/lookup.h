@@ -195,21 +195,22 @@ struct lookup {
                 bitvec<node_idx_t> const* blocked,
                 std::optional<routing_time_t> const start_time = std::nullopt,
                 std::optional<std::span<raw_way_candidate const>>
-                    raw_way_candidates = std::nullopt) const {
+                    raw_way_candidates = std::nullopt,
+                bool const valid_only = true) const {
     if (raw_way_candidates.has_value()) {
       return complete_match<P>(params, query, reverse, search_dir,
                                max_match_distance, blocked, start_time,
                                *raw_way_candidates);
     }
-    auto way_candidates =
-        get_way_candidates<P>(params, query, reverse, search_dir,
-                              max_match_distance, blocked, start_time);
+    auto way_candidates = get_way_candidates<P>(
+        params, query, reverse, search_dir, max_match_distance, blocked,
+        valid_only, start_time);
     auto i = 0U;
     while (way_candidates.empty() && i++ < 4U) {
       max_match_distance *= 2U;
-      way_candidates =
-          get_way_candidates<P>(params, query, reverse, search_dir,
-                                max_match_distance, blocked, start_time);
+      way_candidates = get_way_candidates<P>(params, query, reverse, search_dir,
+                                             max_match_distance, blocked,
+                                             valid_only, start_time);
     }
     return way_candidates;
   }
@@ -236,6 +237,7 @@ struct lookup {
       direction const search_dir,
       double const max_match_distance,
       bitvec<node_idx_t> const* blocked,
+      bool const valid_only = true,
       std::optional<routing_time_t> const start_time = std::nullopt) const {
     auto way_candidates = std::vector<way_candidate>{};
     auto const approx_distance_lng_degrees =
@@ -261,7 +263,7 @@ struct lookup {
                                       query.lvl_, reverse, search_dir, blocked,
                                       approx_distance_lng_degrees, best,
                                       segment_idx, start_time);
-        if (wc.left_.valid() || wc.right_.valid()) {
+        if (!valid_only || (wc.left_.valid() || wc.right_.valid())) {
           way_candidates.emplace_back(std::move(wc));
         }
       }
