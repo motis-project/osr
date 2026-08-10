@@ -19,4 +19,11 @@ vec<point> parking_edge_offset_polyline(ways const&,
                                         bool is_from,
                                         node_idx_t);
 
+vec<point> parking_edge_offset_polyline(ways const&,
+                                        point const&,
+                                        node_idx_t,
+                                        way_idx_t,
+                                        unsigned segment_idx,
+                                        bool is_left);
+
 }  // namespace osr

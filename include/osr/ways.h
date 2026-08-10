@@ -547,11 +547,14 @@ struct ways {
         unsigned segment_;
         node_idx_t left_;
         node_idx_t right_;
+        std::uint16_t dist_left_;  // Distance on segment to left node
+        std::uint16_t dist_right_;  // Distance on segment to right node
       };
 
       vec<point> connection_;
       offset from_;
       offset to_;
+      std::uint16_t dist_;
     };
 
     vec_map<node_idx_t, node_properties> node_properties_;

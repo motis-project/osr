@@ -705,6 +705,11 @@ struct geojson_writer {
                 parking_edge.from_.right_ != node_idx_t::invalid()},
                {"to.left", parking_edge.to_.left_ != node_idx_t::invalid()},
                {"to.right", parking_edge.to_.right_ != node_idx_t::invalid()},
+               {"edge_dist", parking_edge.dist_},
+               {"from.left_dist", parking_edge.from_.dist_left_},
+               {"from.right_dist", parking_edge.from_.dist_right_},
+               {"to.left_dist", parking_edge.to_.dist_left_},
+               {"to.right_dist", parking_edge.to_.dist_right_},
            }},
           {"geometry", to_multi_line_string(geom)}});
     });

@@ -1,10 +1,12 @@
 #include "osr/routing/parking_matching.h"
+
 #include <concepts>
-
 #include <functional>
+#include <iterator>
+#include <limits>
 #include <optional>
+#include <ranges>
 
-#include "utl/concat.h"
 #include "utl/erase_if.h"
 
 #include "osr/location.h"
@@ -18,11 +20,38 @@ namespace osr {
 
 namespace {
 
-ways::routing::parking_edge::offset to_offset(way_candidate const& wc) {
+template <typename C>
+  requires std::ranges::forward_range<C> &&
+           std::same_as<std::iter_value_t<C>, point>
+geo::polyline to_polyline(C const& c) {
+  auto p = geo::polyline{};
+  for (auto const& x : c) {
+    p.push_back(x.as_latlng());
+  }
+  return p;
+}
+
+ways::routing::parking_edge::offset to_offset(ways const& w,
+                                              way_candidate const& wc,
+                                              point const& start_point) {
+  auto const dist_left =
+      wc.left_.node_ != node_idx_t::invalid()
+          ? geo::length(to_polyline(
+                parking_edge_offset_polyline(w, start_point, wc.left_.node_,
+                                             wc.way_, wc.segment_idx_, true)))
+          : 0U;
+  auto const dist_right =
+      wc.right_.node_ != node_idx_t::invalid()
+          ? geo::length(to_polyline(
+                parking_edge_offset_polyline(w, start_point, wc.right_.node_,
+                                             wc.way_, wc.segment_idx_, false)))
+          : 0U;
   return {.way_ = wc.way_,
           .segment_ = wc.segment_idx_,
           .left_ = wc.left_.node_,
-          .right_ = wc.right_.node_};
+          .right_ = wc.right_.node_,
+          .dist_left_ = static_cast<std::uint16_t>(dist_left),
+          .dist_right_ = static_cast<std::uint16_t>(dist_right)};
 }
 
 geo::box get_bounding_box(ways const& w, way_idx_t const& way_idx) {
@@ -196,13 +225,13 @@ void connect_parking_ways(
         .segment_idx_ = segment}};
   };
 
-  auto const make_connection =
-      [&](geo::box const& bbox, double const approx_distance_lng_degrees,
-          way_candidate const& car_offset,
-          geo::polyline_candidate const& car_entrance,
-          geo::polyline_candidate const& foot_entrance,
-          way_candidate const& foot_offset) -> vec<point> {
-    auto conn = vec<point>{};
+  auto const make_connection = [&](geo::box const& bbox,
+                                   double const approx_distance_lng_degrees,
+                                   way_candidate const& car_offset,
+                                   geo::polyline_candidate const& car_entrance,
+                                   geo::polyline_candidate const& foot_entrance,
+                                   way_candidate const& foot_offset)
+      -> std::tuple<vec<point>, std::uint16_t> {
     auto const center = bbox.centroid();
     auto const is_closer = [&](geo::latlng const& c, geo::latlng const& other) {
       return geo::approx_squared_distance(c, other,
@@ -211,6 +240,7 @@ void connect_parking_ways(
                                           approx_distance_lng_degrees);
     };
 
+    auto conn = vec<point>{};
     conn.emplace_back(point::from_latlng(car_offset.closest_point_on_way_));
     if (is_closer(car_offset.closest_point_on_way_, car_entrance.best_)) {
       conn.emplace_back(point::from_latlng(car_entrance.best_));
@@ -220,7 +250,7 @@ void connect_parking_ways(
     }
     conn.emplace_back(point::from_latlng(foot_offset.closest_point_on_way_));
 
-    return conn;
+    return {conn, static_cast<std::uint16_t>(geo::length(to_polyline(conn)))};
   };
 
   w.r_->has_parking_edges_.resize(w.n_nodes());
@@ -254,7 +284,7 @@ void connect_parking_ways(
     auto const is_same_component =
         w.r_->way_component_[way_idx] == matching_component;
 
-    auto const loc = location{center, kNoLevel};
+    auto const loc = location{.pos_ = center, .lvl_ = kNoLevel};
     auto const foot_offset =
         (is_same_component && is_foot_connected)
             ? get_connected_way(way_idx, center, approx_distance_lng_degrees,
@@ -272,6 +302,16 @@ void connect_parking_ways(
           "WARNING: No usable way candidate found for way {}"
           " (osm: {}, centroid: {})",
           way_idx, w.way_osm_idx_[way_idx], bbox.centroid());
+      continue;
+    }
+    if (!foot_offset->left_.valid() && !foot_offset->right_.valid()) {
+      fmt::println("Connected footpath not usable! Way: {}  at: {}",
+                   foot_offset->way_, foot_offset->closest_point_on_way_);
+      continue;
+    }
+    if (!car_offset->left_.valid() && !car_offset->right_.valid()) {
+      fmt::println("Connected carpath not usable! Way: {}  at: {}",
+                   car_offset->way_, car_offset->closest_point_on_way_);
       continue;
     }
 
@@ -292,10 +332,12 @@ void connect_parking_ways(
         approx_distance_lng_degrees);
     auto const parking_edge_idx =
         parking_edge_idx_t{w.r_->parking_edges_.size()};
-    w.r_->parking_edges_.emplace_back(
+    auto [conn, dist] =
         make_connection(bbox, approx_distance_lng_degrees, *car_offset,
-                        car_entrance, foot_entrance, *foot_offset),
-        to_offset(*car_offset), to_offset(*foot_offset));
+                        car_entrance, foot_entrance, *foot_offset);
+    w.r_->parking_edges_.emplace_back(
+        std::move(conn), to_offset(w, *car_offset, conn.front()),
+        to_offset(w, *foot_offset, conn.back()), dist);
     if (way_idx == 1643) {  // DEBUG only
       fmt::println(
           "Added nodes: car/left: {}  car/right: {}  foot/left: {}  "
