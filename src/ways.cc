@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <limits>
+#include <optional>
 #include <vector>
 
 #include "utl/pairwise.h"
@@ -347,62 +348,139 @@ void ways::add_shortcuts() {
   fmt::println("shortcuts: {}", shortcut_count);
 
   // Basic Customization POC
+  struct customization_edge {
+    node_idx_t to_{};
+    distance_t distance_{};
+    shortcut* shortcut_{};
+  };
+
   auto is_upward = [&](node_idx_t const from, node_idx_t const to) {
     return r_->node_importance_[to] > r_->node_importance_[from];
   };
 
-  auto customize_edge = [&](node_idx_t const u, node_idx_t const v,
-                            distance_t const distance, shortcut* s) {
-    // Shared customization hook for every upward edge x -> y. Original graph
-    // edges pass s == nullptr; shortcut edges pass the stored shortcut so later
-    // customization code can write the updated value back.
-    //
-    // iterate over all possible w (neighbor of u) in ascending rank order and
-    // rank(w)>rank(v)
-    if (s == nullptr) {
-      // TODO: customize original upward edge from -> to.
-    } else {
-      // TODO: customize shortcut upward edge from -> to.
+  auto add_or_update_edge =
+      [](std::vector<customization_edge>& edges,
+         node_idx_t const to,
+         distance_t const distance,
+         shortcut* s) {
+        for (auto& e : edges) {
+          if (e.to_ == to) {
+            if (distance < e.distance_) {
+              e.distance_ = distance;
+              e.shortcut_ = s;
+            }
+            return;
+          }
+        }
+        edges.push_back(
+            customization_edge{.to_ = to, .distance_ = distance, .shortcut_ = s});
+      };
+
+  auto add_original_edges = [&](std::vector<customization_edge>& edges,
+                                node_idx_t const from,
+                                node_idx_t const to) {
+    if (!is_upward(from, to)) {
+      return;
     }
-    (void)u;
-    (void)v;
-    (void)distance;
+    for (auto const [way, node_in_way_idx] :
+         utl::zip(r_->node_ways_[from], r_->node_in_way_idx_[from])) {
+      auto const nodes = r_->way_nodes_[way];
+      if (node_in_way_idx != 0U && nodes[node_in_way_idx - 1U] == to) {
+        add_or_update_edge(
+            edges, to, r_->get_way_node_distance(way, node_in_way_idx - 1U),
+            nullptr);
+      }
+      if (node_in_way_idx + 1U < nodes.size() &&
+          nodes[node_in_way_idx + 1U] == to) {
+        add_or_update_edge(edges, to,
+                           r_->get_way_node_distance(way, node_in_way_idx),
+                           nullptr);
+      }
+    }
+  };
+
+  auto collect_upward_edges = [&](node_idx_t const from) {
+    auto edges = std::vector<customization_edge>{};
+    for (auto const [way, node_in_way_idx] :
+         utl::zip(r_->node_ways_[from], r_->node_in_way_idx_[from])) {
+      auto const nodes = r_->way_nodes_[way];
+      if (node_in_way_idx != 0U) {
+        auto const to = nodes[node_in_way_idx - 1U];
+        if (is_upward(from, to)) {
+          add_or_update_edge(
+              edges, to, r_->get_way_node_distance(way, node_in_way_idx - 1U),
+              nullptr);
+        }
+      }
+      if (node_in_way_idx + 1U < nodes.size()) {
+        auto const to = nodes[node_in_way_idx + 1U];
+        if (is_upward(from, to)) {
+          add_or_update_edge(edges, to,
+                             r_->get_way_node_distance(way, node_in_way_idx),
+                             nullptr);
+        }
+      }
+    }
+
+    for (auto& s : r_->shortcuts_[from]) {
+      if (is_upward(from, s.to_)) {
+        add_or_update_edge(edges, s.to_, s.distance_, &s);
+      }
+    }
+
+    std::sort(begin(edges), end(edges), [&](auto const& a, auto const& b) {
+      return r_->node_importance_[a.to_] < r_->node_importance_[b.to_];
+    });
+    return edges;
+  };
+
+  auto find_edge = [&](node_idx_t const from, node_idx_t const to)
+      -> std::optional<customization_edge> {
+    auto edges = std::vector<customization_edge>{};
+    add_original_edges(edges, from, to);
+    if (is_upward(from, to)) {
+      for (auto& s : r_->shortcuts_[from]) {
+        if (s.to_ == to) {
+          add_or_update_edge(edges, to, s.distance_, &s);
+        }
+      }
+    }
+    if (edges.empty()) {
+      return std::nullopt;
+    }
+    return edges.front();
+  };
+
+  auto customize_edge = [&](node_idx_t const u,
+                            customization_edge const& v_edge,
+                            customization_edge const& w_edge) {
+    auto const v = v_edge.to_;
+    auto const w = w_edge.to_;
+    auto vw = find_edge(v, w);
+    if (!vw.has_value() || vw->shortcut_ == nullptr) {
+      return;
+    }
+
+    auto const sum = static_cast<std::uint64_t>(v_edge.distance_) +
+                     static_cast<std::uint64_t>(w_edge.distance_);
+    auto const candidate = static_cast<distance_t>(
+        std::min(sum, static_cast<std::uint64_t>(
+                          std::numeric_limits<distance_t>::max())));
+    if (candidate < vw->shortcut_->distance_) {
+      vw->shortcut_->distance_ = candidate;
+      vw->shortcut_->via_ = u;
+    }
   };
 
   for (auto rank = std::uint32_t{0U}; rank != n_nodes(); ++rank) {
     auto const x = rank_to_node[rank];
     utl::verify(x != node_idx_t::invalid(), "missing CCH rank: {}", rank);
 
-    // Iterate original graph edges incident to x and keep only E_upward.
-    for (auto const [way, node_in_way_idx] :
-         utl::zip(r_->node_ways_[x], r_->node_in_way_idx_[x])) {
-      auto const nodes = r_->way_nodes_[way];
-      if (node_in_way_idx != 0U) {
-        auto const y = nodes[node_in_way_idx - 1U];
-        if (!is_upward(x, y)) {
-          continue;
-        }
-        customize_edge(x, y,
-                       r_->get_way_node_distance(way, node_in_way_idx - 1U),
-                       nullptr);
+    auto const upward_edges = collect_upward_edges(x);
+    for (auto v = std::size_t{0U}; v < upward_edges.size(); ++v) {
+      for (auto w = v + 1U; w < upward_edges.size(); ++w) {
+        customize_edge(x, upward_edges[v], upward_edges[w]);
       }
-      if (node_in_way_idx + 1U < nodes.size()) {
-        auto const y = nodes[node_in_way_idx + 1U];
-        if (!is_upward(x, y)) {
-          continue;
-        }
-        customize_edge(x, y, r_->get_way_node_distance(way, node_in_way_idx),
-                       nullptr);
-      }
-    }
-
-    // Iterate shortcut edges incident to x and keep only E_upward.
-    for (auto& s : r_->shortcuts_[x]) {
-      auto const y = s.to_;
-      if (!is_upward(x, y)) {
-        continue;
-      }
-      customize_edge(x, y, s.distance_, &s);
     }
   }
 }
