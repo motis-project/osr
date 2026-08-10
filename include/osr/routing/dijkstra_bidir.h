@@ -219,9 +219,8 @@ struct dijkstra_bidir {
         }
         if (forward) {
           auto const total_cost = static_cast<cost_t>(total);
-          auto const improved =
-              costForward_[neighbor.get_key()].update(l, neighbor, total_cost,
-                                                      curr);
+          auto const improved = costForward_[neighbor.get_key()].update(
+              l, neighbor, total_cost, curr);
           update_mu(neighbor, get_cost<direction::kForward>(neighbor),
                     get_cost<direction::kBackward>(neighbor));
           if (improved) {
@@ -239,9 +238,8 @@ struct dijkstra_bidir {
           }
         } else {
           auto const total_cost = static_cast<cost_t>(total);
-          auto const improved =
-              costBackward_[neighbor.get_key()].update(l, neighbor, total_cost,
-                                                       curr);
+          auto const improved = costBackward_[neighbor.get_key()].update(
+              l, neighbor, total_cost, curr);
           update_mu(neighbor, get_cost<direction::kForward>(neighbor),
                     get_cost<direction::kBackward>(neighbor));
           if (improved) {

@@ -345,6 +345,66 @@ void ways::add_shortcuts() {
     shortcut_count += shortcuts.size();
   }
   fmt::println("shortcuts: {}", shortcut_count);
+
+  // Basic Customization POC
+  auto is_upward = [&](node_idx_t const from, node_idx_t const to) {
+    return r_->node_importance_[to] > r_->node_importance_[from];
+  };
+
+  auto customize_edge = [&](node_idx_t const u, node_idx_t const v,
+                            distance_t const distance, shortcut* s) {
+    // Shared customization hook for every upward edge x -> y. Original graph
+    // edges pass s == nullptr; shortcut edges pass the stored shortcut so later
+    // customization code can write the updated value back.
+    //
+    // iterate over all possible w (neighbor of u) in ascending rank order and
+    // rank(w)>rank(v)
+    if (s == nullptr) {
+      // TODO: customize original upward edge from -> to.
+    } else {
+      // TODO: customize shortcut upward edge from -> to.
+    }
+    (void)u;
+    (void)v;
+    (void)distance;
+  };
+
+  for (auto rank = std::uint32_t{0U}; rank != n_nodes(); ++rank) {
+    auto const x = rank_to_node[rank];
+    utl::verify(x != node_idx_t::invalid(), "missing CCH rank: {}", rank);
+
+    // Iterate original graph edges incident to x and keep only E_upward.
+    for (auto const [way, node_in_way_idx] :
+         utl::zip(r_->node_ways_[x], r_->node_in_way_idx_[x])) {
+      auto const nodes = r_->way_nodes_[way];
+      if (node_in_way_idx != 0U) {
+        auto const y = nodes[node_in_way_idx - 1U];
+        if (!is_upward(x, y)) {
+          continue;
+        }
+        customize_edge(x, y,
+                       r_->get_way_node_distance(way, node_in_way_idx - 1U),
+                       nullptr);
+      }
+      if (node_in_way_idx + 1U < nodes.size()) {
+        auto const y = nodes[node_in_way_idx + 1U];
+        if (!is_upward(x, y)) {
+          continue;
+        }
+        customize_edge(x, y, r_->get_way_node_distance(way, node_in_way_idx),
+                       nullptr);
+      }
+    }
+
+    // Iterate shortcut edges incident to x and keep only E_upward.
+    for (auto& s : r_->shortcuts_[x]) {
+      auto const y = s.to_;
+      if (!is_upward(x, y)) {
+        continue;
+      }
+      customize_edge(x, y, s.distance_, &s);
+    }
+  }
 }
 
 void ways::connect_ways() {
