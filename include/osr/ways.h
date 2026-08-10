@@ -71,6 +71,17 @@ struct shortcut {
   distance_t distance_{};
 };
 
+struct cch_edge {
+  friend bool operator==(cch_edge, cch_edge) = default;
+
+  // Customized directed CCH edge from the owning cch_edge_weights_ bucket to
+  // to_. via_ stays invalid for an original/base edge and is set when the edge
+  // weight represents an unpackable path through a lower-rank node.
+  node_idx_t to_{};
+  node_idx_t via_{node_idx_t::invalid()};
+  distance_t distance_{};
+};
+
 struct way_properties {
   constexpr bool is_accessible() const {
     return is_car_accessible() || is_bike_accessible() ||
@@ -378,6 +389,8 @@ struct ways {
     vecvec<node_idx_t, turn_bearing> node_turn_bearings_;
     // Shortcut adjacency, bucketed by source node.
     vecvec<node_idx_t, shortcut> shortcuts_;
+    // Customized CCH edge weights, bucketed by source node.
+    vecvec<node_idx_t, cch_edge> cch_edge_weights_;
 
     bitvec<node_idx_t> node_is_restricted_;
     vecvec<node_idx_t, restriction> node_restrictions_;

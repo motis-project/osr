@@ -578,6 +578,28 @@ shortcut const* find_cch_shortcut(ways::routing const& r,
 }
 
 template <Profile P>
+cch_edge const* find_directed_cch_edge(ways::routing const& r,
+                                       typename P::node const from,
+                                       typename P::node const to) {
+  for (auto const& e : r.cch_edge_weights_[from.get_node()]) {
+    if (e.to_ == to.get_node()) {
+      return &e;
+    }
+  }
+  return nullptr;
+}
+
+template <Profile P>
+cch_edge const* find_cch_edge(ways::routing const& r,
+                              typename P::node const from,
+                              typename P::node const to) {
+  if (auto const* e = find_directed_cch_edge<P>(r, from, to); e != nullptr) {
+    return e;
+  }
+  return find_directed_cch_edge<P>(r, to, from);
+}
+
+template <Profile P>
 std::optional<distance_t> get_direct_cch_distance(ways::routing const& r,
                                                   typename P::node const from,
                                                   typename P::node const to) {
@@ -601,6 +623,9 @@ cost_t get_cch_edge_cost(typename P::parameters const& params,
                          ways::routing const& r,
                          typename P::node const from,
                          typename P::node const to) {
+  if (auto const* e = find_cch_edge<P>(r, from, to); e != nullptr) {
+    return cch<P>::shortcut_cost(params, e->distance_);
+  }
   if (auto const* s = find_cch_shortcut<P>(r, from, to); s != nullptr) {
     return cch<P>::shortcut_cost(params, s->distance_);
   }
@@ -644,6 +669,16 @@ double add_cch_path(typename P::parameters const& params,
                     cost_t const expected_cost,
                     std::vector<path::segment>& segments,
                     direction const dir) {
+  if (auto const* e = find_cch_edge<P>(*w.r_, from, to);
+      e != nullptr && e->via_ != node_idx_t::invalid()) {
+    // Customized CCH edges can represent a path through a lower-rank via-node,
+    // even when the edge is also an original graph edge.
+    auto const via = P::create_node(e->via_, kNoLevel, way_pos_t{0U}, dir);
+    auto const first_cost = get_cch_edge_cost<P>(params, *w.r_, from, via);
+    auto const second_cost = get_cch_edge_cost<P>(params, *w.r_, via, to);
+    return add_cch_path<P>(params, w, from, via, first_cost, segments, dir) +
+           add_cch_path<P>(params, w, via, to, second_cost, segments, dir);
+  }
   if (auto const* s = find_cch_shortcut<P>(*w.r_, from, to); s != nullptr) {
     // CCH predecessor edges can be shortcuts. Recursively unpack them through
     // their contracted via-node until only original graph edges remain.

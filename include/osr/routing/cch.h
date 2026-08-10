@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <algorithm>
 #include <cmath>
+#include <optional>
 #include <vector>
 
 #include "fmt/core.h"
@@ -151,9 +152,19 @@ struct cch {
            r.node_importance_[from.get_node()];
   }
 
-  // POC customization: shortcuts currently store only distance, so the query
-  // derives a profile cost with the same distance-to-time rule as the foot
-  // profile. A real customization would store profile-specific shortcut costs.
+  static std::optional<distance_t> customized_distance(
+      ways::routing const& r, node_idx_t const from, node_idx_t const to) {
+    for (auto const& e : r.cch_edge_weights_[from]) {
+      if (e.to_ == to) {
+        return e.distance_;
+      }
+    }
+    return std::nullopt;
+  }
+
+  // POC customization: CCH currently stores only distance, so the query derives
+  // a profile cost with the same distance-to-time rule as the foot profile. A
+  // real customization would store profile-specific edge costs.
   static cost_t shortcut_cost(P::parameters const& params,
                               distance_t const distance) {
     if constexpr (requires { params.speed_meters_per_second_; }) {
@@ -228,7 +239,11 @@ struct cch {
           return;
         }
 
-        auto const total = static_cast<std::uint64_t>(l.cost()) + cost;
+        auto const customized =
+            customized_distance(r, curr.get_node(), neighbor.get_node());
+        auto const edge_cost =
+            customized.has_value() ? shortcut_cost(params, *customized) : cost;
+        auto const total = static_cast<std::uint64_t>(l.cost()) + edge_cost;
         if (total >= max) {
           max_reached_ = true;
           return;
