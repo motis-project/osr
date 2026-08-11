@@ -74,12 +74,16 @@ struct shortcut {
 struct cch_edge {
   friend bool operator==(cch_edge, cch_edge) = default;
 
-  // Customized directed CCH edge from the owning cch_edge_weights_ bucket to
-  // to_. via_ stays invalid for an original/base edge and is set when the edge
-  // weight represents an unpackable path through a lower-rank node.
+  // Customized CCH edge from the owning lower-rank cch_edge_weights_ bucket to
+  // higher-rank to_. Up values model low -> high travel, down values model
+  // high -> low travel.
   node_idx_t to_{};
-  node_idx_t via_{node_idx_t::invalid()};
-  distance_t distance_{};
+  node_idx_t up_via_{node_idx_t::invalid()};
+  node_idx_t down_via_{node_idx_t::invalid()};
+  distance_t up_distance_{};
+  distance_t down_distance_{};
+  cost_t up_cost_{kInfeasible};
+  cost_t down_cost_{kInfeasible};
 };
 
 struct way_properties {

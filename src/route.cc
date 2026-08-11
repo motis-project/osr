@@ -577,26 +577,25 @@ shortcut const* find_cch_shortcut(ways::routing const& r,
   return nullptr;
 }
 
-template <Profile P>
-cch_edge const* find_directed_cch_edge(ways::routing const& r,
-                                       typename P::node const from,
-                                       typename P::node const to) {
-  for (auto const& e : r.cch_edge_weights_[from.get_node()]) {
-    if (e.to_ == to.get_node()) {
-      return &e;
-    }
-  }
-  return nullptr;
-}
+struct cch_edge_ref {
+  cch_edge const* edge_{};
+  bool up_{};
+};
 
 template <Profile P>
-cch_edge const* find_cch_edge(ways::routing const& r,
-                              typename P::node const from,
-                              typename P::node const to) {
-  if (auto const* e = find_directed_cch_edge<P>(r, from, to); e != nullptr) {
-    return e;
+cch_edge_ref find_cch_edge_ref(ways::routing const& r,
+                               typename P::node const from,
+                               typename P::node const to) {
+  auto const up = r.node_importance_[from.get_node()] <
+                  r.node_importance_[to.get_node()];
+  auto const low = up ? from.get_node() : to.get_node();
+  auto const high = up ? to.get_node() : from.get_node();
+  for (auto const& e : r.cch_edge_weights_[low]) {
+    if (e.to_ == high) {
+      return {.edge_ = &e, .up_ = up};
+    }
   }
-  return find_directed_cch_edge<P>(r, to, from);
+  return {};
 }
 
 template <Profile P>
@@ -623,8 +622,11 @@ cost_t get_cch_edge_cost(typename P::parameters const& params,
                          ways::routing const& r,
                          typename P::node const from,
                          typename P::node const to) {
-  if (auto const* e = find_cch_edge<P>(r, from, to); e != nullptr) {
-    return cch<P>::shortcut_cost(params, e->distance_);
+  if constexpr (cch<P>::uses_customized_cost_overlay()) {
+    auto const e = find_cch_edge_ref<P>(r, from, to);
+    if (e.edge_ != nullptr) {
+      return e.up_ ? e.edge_->up_cost_ : e.edge_->down_cost_;
+    }
   }
   if (auto const* s = find_cch_shortcut<P>(r, from, to); s != nullptr) {
     return cch<P>::shortcut_cost(params, s->distance_);
@@ -669,15 +671,21 @@ double add_cch_path(typename P::parameters const& params,
                     cost_t const expected_cost,
                     std::vector<path::segment>& segments,
                     direction const dir) {
-  if (auto const* e = find_cch_edge<P>(*w.r_, from, to);
-      e != nullptr && e->via_ != node_idx_t::invalid()) {
-    // Customized CCH edges can represent a path through a lower-rank via-node,
-    // even when the edge is also an original graph edge.
-    auto const via = P::create_node(e->via_, kNoLevel, way_pos_t{0U}, dir);
-    auto const first_cost = get_cch_edge_cost<P>(params, *w.r_, from, via);
-    auto const second_cost = get_cch_edge_cost<P>(params, *w.r_, via, to);
-    return add_cch_path<P>(params, w, from, via, first_cost, segments, dir) +
-           add_cch_path<P>(params, w, via, to, second_cost, segments, dir);
+  if constexpr (cch<P>::uses_customized_cost_overlay()) {
+    auto const e = find_cch_edge_ref<P>(*w.r_, from, to);
+    auto const via_node =
+        e.edge_ == nullptr
+            ? node_idx_t::invalid()
+            : (e.up_ ? e.edge_->up_via_ : e.edge_->down_via_);
+    if (via_node != node_idx_t::invalid()) {
+      // Customized CCH edges can represent a path through a lower-rank via-node,
+      // even when the edge is also an original graph edge.
+      auto const via = P::create_node(via_node, kNoLevel, way_pos_t{0U}, dir);
+      auto const first_cost = get_cch_edge_cost<P>(params, *w.r_, from, via);
+      auto const second_cost = get_cch_edge_cost<P>(params, *w.r_, via, to);
+      return add_cch_path<P>(params, w, from, via, first_cost, segments, dir) +
+             add_cch_path<P>(params, w, via, to, second_cost, segments, dir);
+    }
   }
   if (auto const* s = find_cch_shortcut<P>(*w.r_, from, to); s != nullptr) {
     // CCH predecessor edges can be shortcuts. Recursively unpack them through

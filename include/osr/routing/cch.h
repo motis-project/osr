@@ -3,7 +3,6 @@
 #include <cstdint>
 #include <algorithm>
 #include <cmath>
-#include <optional>
 #include <vector>
 
 #include "fmt/core.h"
@@ -152,14 +151,23 @@ struct cch {
            r.node_importance_[from.get_node()];
   }
 
-  static std::optional<distance_t> customized_distance(
-      ways::routing const& r, node_idx_t const from, node_idx_t const to) {
+  static constexpr bool uses_customized_cost_overlay() {
+    if constexpr (requires { P::node::get_mode(); }) {
+      return P::node::get_mode() == mode::kCar;
+    } else {
+      return false;
+    }
+  }
+
+  static cch_edge const* customized_edge(ways::routing const& r,
+                                         node_idx_t const from,
+                                         node_idx_t const to) {
     for (auto const& e : r.cch_edge_weights_[from]) {
       if (e.to_ == to) {
-        return e.distance_;
+        return &e;
       }
     }
-    return std::nullopt;
+    return nullptr;
   }
 
   // POC customization: CCH currently stores only distance, so the query derives
@@ -239,11 +247,7 @@ struct cch {
           return;
         }
 
-        auto const customized =
-            customized_distance(r, curr.get_node(), neighbor.get_node());
-        auto const edge_cost =
-            customized.has_value() ? shortcut_cost(params, *customized) : cost;
-        auto const total = static_cast<std::uint64_t>(l.cost()) + edge_cost;
+        auto const total = static_cast<std::uint64_t>(l.cost()) + cost;
         if (total >= max) {
           max_reached_ = true;
           return;
@@ -309,15 +313,35 @@ struct cch {
                        elevation_storage::elevation{}, false);
       };
 
-      if (forward) {
-        P::template adjacent<SearchDir, WithBlocked>(
-            params, r, curr, blocked, sharing, elevations, relax_neighbor);
+      if constexpr (uses_customized_cost_overlay()) {
+        for (auto const& e : r.cch_edge_weights_[curr.get_node()]) {
+          auto const edge_cost = forward ? e.up_cost_ : e.down_cost_;
+          if (edge_cost == kInfeasible) {
+            continue;
+          }
+          auto const neighbor =
+              P::create_node(e.to_, kNoLevel, way_pos_t{0U}, SearchDir);
+          if constexpr (WithBlocked) {
+            if (blocked->test(e.to_)) {
+              continue;
+            }
+          }
+          relax_neighbor(neighbor, edge_cost,
+                         forward ? e.up_distance_ : e.down_distance_,
+                         way_idx_t::invalid(), 0U, 0U,
+                         elevation_storage::elevation{}, false);
+        }
       } else {
-        P::template adjacent<opposite(SearchDir), WithBlocked>(
-            params, r, curr, blocked, sharing, elevations, relax_neighbor);
-      }
-      for (auto const& s : r.shortcuts_[curr.get_node()]) {
-        relax_shortcut(s);
+        if (forward) {
+          P::template adjacent<SearchDir, WithBlocked>(
+              params, r, curr, blocked, sharing, elevations, relax_neighbor);
+        } else {
+          P::template adjacent<opposite(SearchDir), WithBlocked>(
+              params, r, curr, blocked, sharing, elevations, relax_neighbor);
+        }
+        for (auto const& s : r.shortcuts_[curr.get_node()]) {
+          relax_shortcut(s);
+        }
       }
     }
     return !max_reached_ && mu_ == kInfeasible;

@@ -9,6 +9,8 @@
 
 #include "cista/io.h"
 
+#include "osr/routing/profiles/car.h"
+
 // uncomment the following line to enable IFC
 #define USE_INERTIAL_FLOW_CUT
 #ifdef USE_INERTIAL_FLOW_CUT
@@ -349,29 +351,92 @@ void ways::add_shortcuts() {
   // Basic Customization POC
   struct customization_edge {
     node_idx_t to_{};
-    node_idx_t via_{node_idx_t::invalid()};
-    distance_t distance_{};
+    distance_t up_distance_{};
+    distance_t down_distance_{};
+    cost_t up_cost_{kInfeasible};
+    cost_t down_cost_{kInfeasible};
   };
 
-  auto is_upward = [&](node_idx_t const from, node_idx_t const to) {
-    return r_->node_importance_[to] > r_->node_importance_[from];
+  auto const car_params = car::parameters{};
+
+  auto lower_rank = [&](node_idx_t const a, node_idx_t const b) {
+    return r_->node_importance_[a] < r_->node_importance_[b] ? a : b;
   };
 
-  auto add_or_update_cch_edge = [&](node_idx_t const from,
-                                    node_idx_t const to,
-                                    node_idx_t const via,
-                                    distance_t const distance) {
-    for (auto& e : r_->cch_edge_weights_[from]) {
-      if (e.to_ == to) {
-        if (distance < e.distance_) {
-          e.via_ = via;
-          e.distance_ = distance;
-        }
-        return;
+  auto higher_rank = [&](node_idx_t const a, node_idx_t const b) {
+    return r_->node_importance_[a] < r_->node_importance_[b] ? b : a;
+  };
+
+  auto find_cch_edge = [&](node_idx_t const low,
+                           node_idx_t const high) -> cch_edge* {
+    for (auto& e : r_->cch_edge_weights_[low]) {
+      if (e.to_ == high) {
+        return &e;
       }
     }
-    r_->cch_edge_weights_[from].push_back(
-        cch_edge{.to_ = to, .via_ = via, .distance_ = distance});
+    return nullptr;
+  };
+
+  auto ensure_cch_edge = [&](node_idx_t const low,
+                             node_idx_t const high) -> cch_edge& {
+    if (auto* e = find_cch_edge(low, high); e != nullptr) {
+      return *e;
+    }
+    r_->cch_edge_weights_[low].push_back(cch_edge{.to_ = high});
+    return r_->cch_edge_weights_[low].back();
+  };
+
+  auto relax_up_value = [](cch_edge& e,
+                           node_idx_t const via,
+                           distance_t const distance,
+                           cost_t const cost) {
+    if (cost < e.up_cost_ ||
+        (cost == e.up_cost_ && distance < e.up_distance_)) {
+      e.up_via_ = via;
+      e.up_distance_ = distance;
+      e.up_cost_ = cost;
+    }
+  };
+
+  auto relax_down_value = [](cch_edge& e,
+                             node_idx_t const via,
+                             distance_t const distance,
+                             cost_t const cost) {
+    if (cost < e.down_cost_ ||
+        (cost == e.down_cost_ && distance < e.down_distance_)) {
+      e.down_via_ = via;
+      e.down_distance_ = distance;
+      e.down_cost_ = cost;
+    }
+  };
+
+  auto add_car_base_edge = [&](node_idx_t const from,
+                               node_idx_t const to,
+                               way_idx_t const way,
+                               std::uint16_t const from_idx,
+                               std::uint16_t const to_idx) {
+    auto const target_node_cost =
+        car::node_cost(car_params, r_->node_properties_[to]);
+    if (target_node_cost == kInfeasible) {
+      return;
+    }
+    auto const way_dir =
+        from_idx < to_idx ? direction::kForward : direction::kBackward;
+    auto const distance = r_->get_way_node_distance(way, std::min(from_idx, to_idx));
+    auto const way_cost =
+        car::way_cost(car_params, r_->way_properties_[way], way_dir, distance);
+    if (way_cost == kInfeasible) {
+      return;
+    }
+
+    auto& e = ensure_cch_edge(lower_rank(from, to), higher_rank(from, to));
+    auto const cost =
+        clamp_cost(static_cast<std::uint64_t>(way_cost) + target_node_cost);
+    if (r_->node_importance_[from] < r_->node_importance_[to]) {
+      relax_up_value(e, node_idx_t::invalid(), distance, cost);
+    } else {
+      relax_down_value(e, node_idx_t::invalid(), distance, cost);
+    }
   };
 
   r_->cch_edge_weights_.clear();
@@ -382,54 +447,31 @@ void ways::add_shortcuts() {
          utl::zip(r_->node_ways_[from], r_->node_in_way_idx_[from])) {
       auto const nodes = r_->way_nodes_[way];
       if (node_in_way_idx != 0U) {
-        auto const to = nodes[node_in_way_idx - 1U];
-        if (is_upward(from, to)) {
-          add_or_update_cch_edge(
-              from, to, node_idx_t::invalid(),
-              r_->get_way_node_distance(way, node_in_way_idx - 1U));
-        }
+        add_car_base_edge(from, nodes[node_in_way_idx - 1U], way,
+                          node_in_way_idx, node_in_way_idx - 1U);
       }
       if (node_in_way_idx + 1U < nodes.size()) {
-        auto const to = nodes[node_in_way_idx + 1U];
-        if (is_upward(from, to)) {
-          add_or_update_cch_edge(from, to, node_idx_t::invalid(),
-                                 r_->get_way_node_distance(way, node_in_way_idx));
-        }
+        add_car_base_edge(from, nodes[node_in_way_idx + 1U], way,
+                          node_in_way_idx, node_in_way_idx + 1U);
       }
     }
 
     for (auto const& s : r_->shortcuts_[from]) {
-      if (is_upward(from, s.to_)) {
-        add_or_update_cch_edge(from, s.to_, s.via_, s.distance_);
-      }
+      ensure_cch_edge(lower_rank(from, s.to_), higher_rank(from, s.to_));
     }
   }
-
-  auto find_cch_edge = [&](node_idx_t const from,
-                           node_idx_t const to) -> cch_edge* {
-    for (auto& e : r_->cch_edge_weights_[from]) {
-      if (e.to_ == to) {
-        return &e;
-      }
-    }
-    return nullptr;
-  };
-
-  auto find_shortcut = [&](node_idx_t const from,
-                           node_idx_t const to) -> shortcut* {
-    for (auto& s : r_->shortcuts_[from]) {
-      if (s.to_ == to) {
-        return &s;
-      }
-    }
-    return nullptr;
-  };
 
   auto collect_upward_edges = [&](node_idx_t const from) {
     auto edges = std::vector<customization_edge>{};
     for (auto const& e : r_->cch_edge_weights_[from]) {
-      edges.push_back(customization_edge{
-          .to_ = e.to_, .via_ = e.via_, .distance_ = e.distance_});
+      if (e.up_cost_ == kInfeasible && e.down_cost_ == kInfeasible) {
+        continue;
+      }
+      edges.push_back(customization_edge{.to_ = e.to_,
+                                         .up_distance_ = e.up_distance_,
+                                         .down_distance_ = e.down_distance_,
+                                         .up_cost_ = e.up_cost_,
+                                         .down_cost_ = e.down_cost_});
     }
     std::sort(begin(edges), end(edges), [&](auto const& a, auto const& b) {
       return r_->node_importance_[a.to_] < r_->node_importance_[b.to_];
@@ -437,28 +479,34 @@ void ways::add_shortcuts() {
     return edges;
   };
 
+  auto combine_distance = [](distance_t const a, distance_t const b) {
+    auto const sum = static_cast<std::uint64_t>(a) + static_cast<std::uint64_t>(b);
+    return static_cast<distance_t>(
+        std::min(sum, static_cast<std::uint64_t>(
+                          std::numeric_limits<distance_t>::max())));
+  };
+
   auto customize_edge = [&](node_idx_t const u,
                             customization_edge const& v_edge,
                             customization_edge const& w_edge) {
-    auto const v = v_edge.to_;
-    auto const w = w_edge.to_;
-    auto* vw = find_cch_edge(v, w);
+    auto* vw = find_cch_edge(v_edge.to_, w_edge.to_);
     if (vw == nullptr) {
       return;
     }
 
-    auto const sum = static_cast<std::uint64_t>(v_edge.distance_) +
-                     static_cast<std::uint64_t>(w_edge.distance_);
-    auto const candidate = static_cast<distance_t>(
-        std::min(sum, static_cast<std::uint64_t>(
-                          std::numeric_limits<distance_t>::max())));
-    if (candidate < vw->distance_) {
-      vw->distance_ = candidate;
-      vw->via_ = u;
-      if (auto* s = find_shortcut(v, w); s != nullptr) {
-        s->distance_ = candidate;
-        s->via_ = u;
-      }
+    if (v_edge.down_cost_ != kInfeasible && w_edge.up_cost_ != kInfeasible) {
+      relax_up_value(
+          *vw, u,
+          combine_distance(v_edge.down_distance_, w_edge.up_distance_),
+          clamp_cost(static_cast<std::uint64_t>(v_edge.down_cost_) +
+                     static_cast<std::uint64_t>(w_edge.up_cost_)));
+    }
+    if (w_edge.down_cost_ != kInfeasible && v_edge.up_cost_ != kInfeasible) {
+      relax_down_value(
+          *vw, u,
+          combine_distance(w_edge.down_distance_, v_edge.up_distance_),
+          clamp_cost(static_cast<std::uint64_t>(w_edge.down_cost_) +
+                     static_cast<std::uint64_t>(v_edge.up_cost_)));
     }
   };
 
