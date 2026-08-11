@@ -123,8 +123,9 @@ std::optional<way_candidate> find_closest(
     return -((1 + ((is_preferred ? 0.0 : 4.0) / (wc.dist_to_way_ + 1.0))) *
              (wc.dist_to_way_ + 2.5));
   };
+  // TODO: MK - Use kForward for foot, kBackward for car
   auto way_candidates =
-      l.match<P>(params, loc, false, direction::kForward, 250.0, nullptr,
+      l.match<P>(params, loc, false, direction::kBackward, 250.0, nullptr,
                  std::nullopt, std::nullopt, false);
   utl::erase_if(way_candidates, [&](way_candidate const& wc) {
     auto const is_matching_component =
