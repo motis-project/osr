@@ -13,6 +13,9 @@
 #include "osr/lookup.h"
 #include "osr/routing/for_each_parking_edge.h"
 #include "osr/routing/profile.h"
+#include "osr/routing/profiles/car.h"
+#include "osr/routing/profiles/car_parking.h"
+#include "osr/routing/profiles/foot.h"
 #include "osr/types.h"
 #include "osr/ways.h"
 
@@ -110,6 +113,7 @@ std::optional<way_candidate> find_closest(
     lookup const& l,
     vec_map<way_idx_t, way_extra_properties> const& way_extra,
     location const& loc,
+    direction const dir,
     component_idx_t const matching_component,
     std::function<std::tuple<bool, bool>(way_extra_properties const&)> const&
         pred) {
@@ -123,10 +127,8 @@ std::optional<way_candidate> find_closest(
     return -((1 + ((is_preferred ? 0.0 : 4.0) / (wc.dist_to_way_ + 1.0))) *
              (wc.dist_to_way_ + 2.5));
   };
-  // TODO: MK - Use kForward for foot, kBackward for car
-  auto way_candidates =
-      l.match<P>(params, loc, false, direction::kBackward, 250.0, nullptr,
-                 std::nullopt, std::nullopt, false);
+  auto way_candidates = l.match<P>(params, loc, false, dir, 250.0, nullptr,
+                                   std::nullopt, std::nullopt, false);
   utl::erase_if(way_candidates, [&](way_candidate const& wc) {
     auto const is_matching_component =
         w.r_->way_component_[wc.way_] == matching_component;
@@ -291,13 +293,14 @@ void connect_parking_ways(
             ? get_connected_way(way_idx, center, approx_distance_lng_degrees,
                                 is_foot_accessible)
             : find_closest<foot<false>>(w, l, way_extra, loc,
-                                        matching_component, is_foot_usable);
+                                        direction::kForward, matching_component,
+                                        is_foot_usable);
     auto const car_offset =
         (is_same_component && is_car_connected)
             ? get_connected_way(way_idx, center, approx_distance_lng_degrees,
                                 is_car_accessible)
-            : find_closest<car>(w, l, way_extra, loc, matching_component,
-                                is_car_usable);
+            : find_closest<car>(w, l, way_extra, loc, direction::kBackward,
+                                matching_component, is_car_usable);
     if (!foot_offset.has_value() || !car_offset.has_value()) {
       fmt::println(
           "WARNING: No usable way candidate found for way {}"
