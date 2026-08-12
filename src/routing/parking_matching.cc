@@ -111,29 +111,16 @@ template <Profile P>
 std::optional<way_candidate> find_closest(
     ways const& w,
     lookup const& l,
-    vec_map<way_idx_t, way_extra_properties> const& way_extra,
     location const& loc,
     direction const dir,
     component_idx_t const matching_component,
-    std::function<std::tuple<bool, bool>(way_extra_properties const&)> const&
-        pred) {
+    std::function<double(way_candidate const&)> const& score) {
   auto const params = typename P::parameters{};
 
-  auto const score = [&](way_candidate const& wc) {
-    // Penalize not designated ways
-    // Add shift to find nearby preferred ways, like nearest footpath
-    // Lower penalty to not match with ways too far away
-    auto const is_preferred = std::get<1>(pred(way_extra[wc.way_]));
-    return -((1 + ((is_preferred ? 0.0 : 4.0) / (wc.dist_to_way_ + 1.0))) *
-             (wc.dist_to_way_ + 2.5));
-  };
   auto way_candidates = l.match<P>(params, loc, false, dir, 250.0, nullptr,
-                                   std::nullopt, std::nullopt, false);
+                                   std::nullopt, std::nullopt);
   utl::erase_if(way_candidates, [&](way_candidate const& wc) {
-    auto const is_matching_component =
-        w.r_->way_component_[wc.way_] == matching_component;
-    auto const is_usable = std::get<0>(pred(way_extra[wc.way_]));
-    return !(is_matching_component && is_usable);
+    return w.r_->way_component_[wc.way_] != matching_component;
   });
   if (way_candidates.size() == 0) {
     return std::nullopt;
@@ -175,13 +162,19 @@ void connect_parking_ways(
   auto const is_foot_accessible = [&](way_properties const& props) {
     return props.is_foot_accessible();
   };
-  auto const is_car_usable =
-      [&](way_extra_properties const& props) -> std::tuple<bool, bool> {
-    return {props.is_car_usable(), props.is_parking_aisle()};
+
+  auto const score = [&](double const dist_to_way, bool const is_preferred) {
+    // Penalize not designated ways
+    // Add shift to find nearby preferred ways, like nearest footpath
+    // Lower penalty to not match with ways too far away
+    return -((1 + ((is_preferred ? 0.0 : 4.0) / (dist_to_way + 1.0))) *
+             (dist_to_way + 2.5));
   };
-  auto const is_foot_usable =
-      [&](way_extra_properties const& props) -> std::tuple<bool, bool> {
-    return {props.is_foot_usable(), props.is_preferred_footpath()};
+  auto const car_score = [&](way_candidate const& wc) -> double {
+    return score(wc.dist_to_way_, way_extra[wc.way_].is_parking_aisle());
+  };
+  auto const foot_score = [&](way_candidate const& wc) -> double {
+    return score(wc.dist_to_way_, way_extra[wc.way_].is_preferred_footpath());
   };
 
   auto const get_connected_way =
@@ -292,15 +285,14 @@ void connect_parking_ways(
         (is_same_component && is_foot_connected)
             ? get_connected_way(way_idx, center, approx_distance_lng_degrees,
                                 is_foot_accessible)
-            : find_closest<foot<false>>(w, l, way_extra, loc,
-                                        direction::kForward, matching_component,
-                                        is_foot_usable);
+            : find_closest<foot<false>>(w, l, loc, direction::kForward,
+                                        matching_component, foot_score);
     auto const car_offset =
         (is_same_component && is_car_connected)
             ? get_connected_way(way_idx, center, approx_distance_lng_degrees,
                                 is_car_accessible)
-            : find_closest<car>(w, l, way_extra, loc, direction::kBackward,
-                                matching_component, is_car_usable);
+            : find_closest<car>(w, l, loc, direction::kBackward,
+                                matching_component, car_score);
     if (!foot_offset.has_value() || !car_offset.has_value()) {
       fmt::println(
           "WARNING: No usable way candidate found for way {}"
