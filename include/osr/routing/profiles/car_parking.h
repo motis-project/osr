@@ -390,15 +390,6 @@ struct car_parking {
                         cost_and_duration{
                             .cost_ = kSwitchPenalty,
                             .duration_ = duration_from_cost(kSwitchPenalty)});
-                    // fmt::println(
-                    //     "PARKING EDGE FW: {} ({}) -> {} ({})   cost: {}  "
-                    //     "duration: {}  dist: {}   fw: {}/{}  +switch: {} {}",
-                    //     car_node, parking_edge.from_.way_, foot_node,
-                    //     parking_edge.to_.way_, cost.cost_, cost.duration_,
-                    //     dist, car_dir == direction::kForward, foot_dir ==
-                    //     direction::kForward, cost.cost_ + kSwitchPenalty,
-                    //     clamp_add_duration(cost.duration_,
-                    //                        duration_from_cost(kSwitchPenalty)));
                     fn({foot_node, node_type::kFoot, lvl, SearchDir, 0U},
                        cost.cost_, cost.duration_, dist,
                        ways::routing::parking_edge::encode_parking_edge(

@@ -28,7 +28,6 @@ vec<point> parking_edge_connection_polyline(
     line.push_back(p);
   }
   line.push_back(parking_edge.to_.additional_point_);
-	fmt::println("CONN: {}  [{} -> {}] ({}  {})", line, parking_edge.from_.additional_point_, parking_edge.to_.additional_point_, parking_edge.connection_.size(), line.size());
 
   return line;
 }
@@ -41,13 +40,11 @@ vec<point> parking_edge_offset_polyline(
 
   auto const way_idx = offset.way_;
   auto const target_node = is_left ? offset.left_ : offset.right_;
-	// fmt::println("OFFSET  way: {}  left: {}  node: {}", way_idx, is_left, target_node);
   if (target_node == node_idx_t::invalid()) {
     return {};
   }
   auto const stop_node = w.node_to_osm_[target_node];
   auto const add_point = [&](unsigned const i) {
-		// fmt::println("ADDING polylin[{}][{}]  (<{})", way_idx, i, w.way_polylines_[way_idx].size());
     line.push_back(w.way_polylines_[way_idx][i]);
   };
 
@@ -65,7 +62,6 @@ vec<point> parking_edge_offset_polyline(
       }
     }
   }
-	// fmt::println("DONE OFFSET  way: {}", way_idx);
 
   return line;
 }

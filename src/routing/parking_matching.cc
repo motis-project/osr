@@ -237,14 +237,12 @@ void connect_parking_ways(
     };
 
     auto conn = vec<point>{};
-    conn.emplace_back(point::from_latlng(car_offset.closest_point_on_way_));
     if (is_closer(car_offset.closest_point_on_way_, car_entrance.best_)) {
       conn.emplace_back(point::from_latlng(car_entrance.best_));
     }
     if (is_closer(foot_offset.closest_point_on_way_, foot_entrance.best_)) {
       conn.emplace_back(point::from_latlng(foot_entrance.best_));
     }
-    conn.emplace_back(point::from_latlng(foot_offset.closest_point_on_way_));
 
     return {conn, static_cast<std::uint16_t>(geo::length(to_polyline(conn)))};
   };
@@ -311,15 +309,6 @@ void connect_parking_ways(
       continue;
     }
 
-    if (way_idx == 1643 || way_idx == 14200 ||
-        way_idx == 14201) {  // DEBUG only
-      fmt::println(
-          "DEBUG OFFSETS: way {}  foot_connected: {}  car_connected: {}  "
-          "has_foot: {}  has_car: {}",
-          way_idx, is_foot_connected, is_car_connected, foot_offset.has_value(),
-          foot_offset.has_value());
-    }
-
     auto const car_entrance = geo::approx_squared_distance_to_polyline(
         car_offset->closest_point_on_way_, w.way_polylines_[way_idx],
         approx_distance_lng_degrees);
@@ -334,14 +323,8 @@ void connect_parking_ways(
     w.r_->parking_edges_.emplace_back(std::move(conn),
                                       to_offset(w, *car_offset),
                                       to_offset(w, *foot_offset), dist);
-    // if (way_idx == 1643) {  // DEBUG only
-    if (way_idx == 8341) {  // DEBUG only
-      fmt::println(
-          "Added nodes: car/left: {}  car/right: {}  foot/left: {}  "
-          "foot/right: {}",
-          car_offset->left_.valid(), car_offset->right_.valid(),
-          foot_offset->left_.valid(), foot_offset->right_.valid());
-    }
+
+    // TODO: MK - Common function
     if (car_offset->left_.valid()) {
       add_parking_edge(car_offset->left_.node_, parking_edge_idx);
     }
@@ -374,15 +357,6 @@ geo::polyline parking_way_polyline(ways const& w,
   auto const& parking_edge =
       r.parking_edges_[ways::routing::parking_edge::decode_parking_edge(
           r, way_idx)];
-  if (ways::routing::parking_edge::decode_parking_edge(r, way_idx) == 4) {
-    fmt::println(
-        "DEBUG PARKING EDGE:  FROM: Way: {} ({}) ({} -> {}),   TO: Way: {} "
-        "({}) ({} -> {})",
-        parking_edge.from_.way_, parking_edge.from_.segment_,
-        parking_edge.from_.left_, parking_edge.from_.right_,
-        parking_edge.to_.way_, parking_edge.to_.segment_,
-        parking_edge.to_.left_, parking_edge.to_.right_);
-  }
 
   return parking_edge_polyline(w, parking_edge,
                                dir == direction::kForward ? from : to,

@@ -680,7 +680,6 @@ struct geojson_writer {
                            bitvec<parking_edge_idx_t> const& parking_edges) {
     parking_edges.for_each_set_bit([&](parking_edge_idx_t const
                                            parking_edge_idx) {
-				   // fmt::println("WRITING PARKING EDGE {}", parking_edge_idx);
       auto const& parking_edge = w_.r_->parking_edges_[parking_edge_idx];
       auto geom =
           vec<vec<point>>{parking_edge_connection_polyline(parking_edge)};
@@ -694,8 +693,6 @@ struct geojson_writer {
           }
         }
       }
-				   // fmt::println("GEOMETRY FOR PARKING EDGE {}", parking_edge_idx);
-				   // fmt::println("GEOM: {}", geom);
 
       features_.emplace_back(boost::json::value{
           {"type", "Feature"},
