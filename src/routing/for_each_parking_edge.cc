@@ -19,43 +19,39 @@ void for_each_parking_edge(ways::routing const& r,
   }
 }
 
+vec<point> parking_edge_connection_polyline(
+    ways::routing::parking_edge const& parking_edge) {
+  auto line = vec<point>{};
+  line.reserve(parking_edge.connection_.size() + 2);
+  line.push_back(parking_edge.from_.additional_point_);
+  for (auto const& p : parking_edge.connection_) {
+    line.push_back(p);
+  }
+  line.push_back(parking_edge.to_.additional_point_);
+	fmt::println("CONN: {}  [{} -> {}] ({}  {})", line, parking_edge.from_.additional_point_, parking_edge.to_.additional_point_, parking_edge.connection_.size(), line.size());
+
+  return line;
+}
+
 vec<point> parking_edge_offset_polyline(
     ways const& w,
-    ways::routing::parking_edge const& parking_edge,
-    bool const is_from,
+    ways::routing::parking_edge::offset const& offset,
     bool const is_left) {
-  auto const offset = is_from ? parking_edge.from_ : parking_edge.to_;
-  return parking_edge_offset_polyline(w,
-                                      is_from ? parking_edge.connection_.front()
-                                              : parking_edge.connection_.back(),
-                                      is_left ? offset.left_ : offset.right_,
-                                      offset.way_, offset.segment_, is_left);
-}
+  auto line = vec{offset.additional_point_};
 
-vec<point> parking_edge_offset_polyline(
-    ways const& w,
-    ways::routing::parking_edge const& parking_edge,
-    bool const is_from,
-    node_idx_t const node_idx) {
-  auto const& offset = is_from ? parking_edge.from_ : parking_edge.to_;
-  auto const is_left = offset.left_ == node_idx;
-  return parking_edge_offset_polyline(w, parking_edge, is_from, is_left);
-}
-
-vec<point> parking_edge_offset_polyline(ways const& w,
-                                        point const& start_point,
-                                        node_idx_t const end_node,
-                                        way_idx_t const way_idx,
-                                        unsigned const segment_idx,
-                                        bool const is_left) {
-  auto path = vec{start_point};
-
-  auto const stop_node = w.node_to_osm_[end_node];
+  auto const way_idx = offset.way_;
+  auto const target_node = is_left ? offset.left_ : offset.right_;
+	// fmt::println("OFFSET  way: {}  left: {}  node: {}", way_idx, is_left, target_node);
+  if (target_node == node_idx_t::invalid()) {
+    return {};
+  }
+  auto const stop_node = w.node_to_osm_[target_node];
   auto const add_point = [&](unsigned const i) {
-    path.push_back(w.way_polylines_[way_idx][i]);
+		// fmt::println("ADDING polylin[{}][{}]  (<{})", way_idx, i, w.way_polylines_[way_idx].size());
+    line.push_back(w.way_polylines_[way_idx][i]);
   };
 
-  auto i = is_left ? segment_idx : segment_idx + 1;
+  auto i = is_left ? offset.segment_ : offset.segment_ + 1;
   if (is_left) {
     for (; i != 0U && w.way_osm_nodes_[way_idx][i] != stop_node; --i) {
       add_point(i);
@@ -69,8 +65,38 @@ vec<point> parking_edge_offset_polyline(ways const& w,
       }
     }
   }
+	// fmt::println("DONE OFFSET  way: {}", way_idx);
 
-  return path;
+  return line;
+}
+
+geo::polyline parking_edge_polyline(
+    ways const& w,
+    ways::routing::parking_edge const& parking_edge,
+    node_idx_t const from,
+    node_idx_t const to) {
+  auto line = geo::polyline{};
+  auto const reverse = [](vec<point>&& points) {
+    std::reverse(begin(points), end(points));
+    return points;
+  };
+  auto previous = geo::latlng();
+  auto const add_points = [&](vec<point> const& points) {
+    for (auto const& p : points) {
+      if (line.empty() || previous != p) {
+        line.emplace_back(p.as_latlng());
+        previous = p;
+      }
+    }
+  };
+
+  add_points(reverse(parking_edge_offset_polyline(
+      w, parking_edge.from_, parking_edge.from_.left_ == from)));
+  add_points(parking_edge_connection_polyline(parking_edge));
+  add_points(parking_edge_offset_polyline(w, parking_edge.to_,
+                                          parking_edge.to_.left_ == to));
+
+  return line;
 }
 
 }  // namespace osr

@@ -543,6 +543,7 @@ struct ways {
       struct offset {
         CISTA_COMPARABLE()
 
+        point additional_point_;
         way_idx_t way_;
         unsigned segment_;
         node_idx_t left_;
@@ -555,6 +556,11 @@ struct ways {
       offset from_;
       offset to_;
       std::uint16_t dist_;
+
+      // TODO: MK - Add bitfield to identify use cases
+      // std::uint8_t is_forward_ : 1 = 0U;  // Needed?
+      // std::uint8_t is_backward_ : 1 = 0U;  // Needed?
+      // std::uint8_t is_parking_ : 1 = 0U;
     };
 
     vec_map<node_idx_t, node_properties> node_properties_;

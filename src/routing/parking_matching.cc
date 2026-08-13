@@ -35,26 +35,26 @@ geo::polyline to_polyline(C const& c) {
 }
 
 ways::routing::parking_edge::offset to_offset(ways const& w,
-                                              way_candidate const& wc,
-                                              point const& start_point) {
-  auto const dist_left =
-      wc.left_.node_ != node_idx_t::invalid()
-          ? geo::length(to_polyline(
-                parking_edge_offset_polyline(w, start_point, wc.left_.node_,
-                                             wc.way_, wc.segment_idx_, true)))
-          : 0U;
-  auto const dist_right =
-      wc.right_.node_ != node_idx_t::invalid()
-          ? geo::length(to_polyline(
-                parking_edge_offset_polyline(w, start_point, wc.right_.node_,
-                                             wc.way_, wc.segment_idx_, false)))
-          : 0U;
-  return {.way_ = wc.way_,
-          .segment_ = wc.segment_idx_,
-          .left_ = wc.left_.node_,
-          .right_ = wc.right_.node_,
-          .dist_left_ = static_cast<std::uint16_t>(dist_left),
-          .dist_right_ = static_cast<std::uint16_t>(dist_right)};
+                                              way_candidate const& wc) {
+  auto offset = ways::routing::parking_edge::offset{
+      .additional_point_ = point::from_latlng(wc.closest_point_on_way_),
+      .way_ = wc.way_,
+      .segment_ = wc.segment_idx_,
+      .left_ = wc.left_.node_,
+      .right_ = wc.right_.node_,
+      .dist_left_ = 0U,
+      .dist_right_ = 0U};
+
+  if (wc.left_.node_ != node_idx_t::invalid()) {
+    offset.dist_left_ =
+        geo::length(to_polyline(parking_edge_offset_polyline(w, offset, true)));
+  }
+  if (wc.right_.node_ != node_idx_t::invalid()) {
+    offset.dist_right_ = geo::length(
+        to_polyline(parking_edge_offset_polyline(w, offset, false)));
+  }
+
+  return offset;
 }
 
 geo::box get_bounding_box(ways const& w, way_idx_t const& way_idx) {
@@ -331,10 +331,11 @@ void connect_parking_ways(
     auto [conn, dist] =
         make_connection(bbox, approx_distance_lng_degrees, *car_offset,
                         car_entrance, foot_entrance, *foot_offset);
-    w.r_->parking_edges_.emplace_back(
-        std::move(conn), to_offset(w, *car_offset, conn.front()),
-        to_offset(w, *foot_offset, conn.back()), dist);
-    if (way_idx == 1643) {  // DEBUG only
+    w.r_->parking_edges_.emplace_back(std::move(conn),
+                                      to_offset(w, *car_offset),
+                                      to_offset(w, *foot_offset), dist);
+    // if (way_idx == 1643) {  // DEBUG only
+    if (way_idx == 8341) {  // DEBUG only
       fmt::println(
           "Added nodes: car/left: {}  car/right: {}  foot/left: {}  "
           "foot/right: {}",
@@ -373,28 +374,19 @@ geo::polyline parking_way_polyline(ways const& w,
   auto const& parking_edge =
       r.parking_edges_[ways::routing::parking_edge::decode_parking_edge(
           r, way_idx)];
+  if (ways::routing::parking_edge::decode_parking_edge(r, way_idx) == 4) {
+    fmt::println(
+        "DEBUG PARKING EDGE:  FROM: Way: {} ({}) ({} -> {}),   TO: Way: {} "
+        "({}) ({} -> {})",
+        parking_edge.from_.way_, parking_edge.from_.segment_,
+        parking_edge.from_.left_, parking_edge.from_.right_,
+        parking_edge.to_.way_, parking_edge.to_.segment_,
+        parking_edge.to_.left_, parking_edge.to_.right_);
+  }
 
-  auto line = geo::polyline{};
-  auto const reverse = [](vec<point>&& points) {
-    std::reverse(begin(points), end(points));
-    return points;
-  };
-  auto previous = geo::latlng();
-  auto const add_points = [&](vec<point> const& points) {
-    for (auto const& p : points) {
-      if (line.empty() || previous != p) {
-        line.emplace_back(p.as_latlng());
-        previous = p;
-      }
-    }
-  };
-  add_points(reverse(parking_edge_offset_polyline(
-      w, parking_edge, true, dir == direction::kForward ? from : to)));
-  add_points(parking_edge.connection_);
-  add_points(parking_edge_offset_polyline(
-      w, parking_edge, false, dir == direction::kForward ? to : from));
-
-  return line;
+  return parking_edge_polyline(w, parking_edge,
+                               dir == direction::kForward ? from : to,
+                               dir == direction::kForward ? to : from);
 }
 
 }  // namespace osr

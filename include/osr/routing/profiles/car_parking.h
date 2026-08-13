@@ -332,7 +332,7 @@ struct car_parking {
           });
     }
 
-    if constexpr (UseParking) {
+    if constexpr (UseParking && false) {
       if (kFwd && n.is_car_node()) {
         if (w.has_parking_edges_.test(n.n_)) {
           for_each_parking_edge(
