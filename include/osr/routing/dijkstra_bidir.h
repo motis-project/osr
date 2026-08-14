@@ -27,7 +27,27 @@ struct dijkstra_bidir {
   using node = typename P::node;
   using entry = typename P::entry;
   using hash = typename P::hash;
-  using settled_set = ankerl::unordered_dense::set<key, hash>;
+
+  struct settled_hash {
+    using is_avalanching = void;
+
+    auto operator()(node const n) const noexcept -> std::uint64_t {
+      using namespace ankerl::unordered_dense::detail;
+
+      auto h = hash{}(n.get_key());
+      if constexpr (requires { n.way_; }) {
+        h = wyhash::mix(h,
+                        wyhash::hash(static_cast<std::uint64_t>(n.way_)));
+      }
+      if constexpr (requires { n.dir_; }) {
+        h = wyhash::mix(
+            h, wyhash::hash(n.dir_ == direction::kForward ? 0ULL : 1ULL));
+      }
+      return h;
+    }
+  };
+
+  using settled_set = ankerl::unordered_dense::set<node, settled_hash>;
 
   static constexpr auto const kDebug = false;
 
@@ -113,11 +133,11 @@ struct dijkstra_bidir {
   template <direction Dir>
   bool settle(node const n) {
     if constexpr (Dir == direction::kForward) {
-      if (!settledForward_.insert(n.get_key()).second) {
+      if (!settledForward_.insert(n).second) {
         return false;
       }
     } else {
-      if (!settledBackward_.insert(n.get_key()).second) {
+      if (!settledBackward_.insert(n).second) {
         return false;
       }
     }

@@ -28,7 +28,27 @@ struct cch {
   using node = typename P::node;
   using entry = typename P::entry;
   using hash = typename P::hash;
-  using settled_set = ankerl::unordered_dense::set<key, hash>;
+
+  struct settled_hash {
+    using is_avalanching = void;
+
+    auto operator()(node const n) const noexcept -> std::uint64_t {
+      using namespace ankerl::unordered_dense::detail;
+
+      auto h = hash{}(n.get_key());
+      if constexpr (requires { n.way_; }) {
+        h = wyhash::mix(h,
+                        wyhash::hash(static_cast<std::uint64_t>(n.way_)));
+      }
+      if constexpr (requires { n.dir_; }) {
+        h = wyhash::mix(
+            h, wyhash::hash(n.dir_ == direction::kForward ? 0ULL : 1ULL));
+      }
+      return h;
+    }
+  };
+
+  using settled_set = ankerl::unordered_dense::set<node, settled_hash>;
 
   static constexpr auto const kDebug = false;
 
@@ -105,11 +125,11 @@ struct cch {
   template <direction Dir>
   bool settle(node const n) {
     if constexpr (Dir == direction::kForward) {
-      if (!settledForward_.insert(n.get_key()).second) {
+      if (!settledForward_.insert(n).second) {
         return false;
       }
     } else {
-      if (!settledBackward_.insert(n.get_key()).second) {
+      if (!settledBackward_.insert(n).second) {
         return false;
       }
     }
@@ -315,12 +335,53 @@ struct cch {
 
       if constexpr (uses_customized_cost_overlay()) {
         for (auto const& e : r.cch_edge_weights_[curr.get_node()]) {
-          auto const edge_cost = forward ? e.up_cost_ : e.down_cost_;
+          auto edge_cost = forward ? e.up_cost_ : e.down_cost_;
           if (edge_cost == kInfeasible) {
             continue;
           }
+          auto const edge_source_way = forward ? e.up_from_way_ : e.down_to_way_;
+          auto const edge_source_dir = forward ? e.up_from_dir_ : e.down_to_dir_;
+          auto const has_pred =
+              forward ? costForward_.at(curr.get_key()).pred(curr).has_value()
+                      : costBackward_.at(curr.get_key()).pred(curr).has_value();
+          if (has_pred) {
+            auto const is_u_turn =
+                forward
+                    ? (curr.way_ == edge_source_way &&
+                       edge_source_dir == opposite(curr.dir_))
+                    : (curr.way_ == edge_source_way &&
+                       curr.dir_ == opposite(edge_source_dir));
+            if (forward) {
+              if (r.template is_restricted<direction::kForward, false>(
+                      curr.get_node(), curr.way_, edge_source_way)) {
+                continue;
+              }
+            } else {
+              if (r.template is_restricted<direction::kForward, false>(
+                      curr.get_node(), edge_source_way, curr.way_)) {
+                continue;
+              }
+            }
+            auto const turn_cost =
+                is_u_turn
+                    ? params.uturn_penalty_
+                    : P::turn_cost(params, forward
+                                               ? r.get_turn_angle(
+                                                     curr.get_node(), curr.way_,
+                                                     curr.dir_, edge_source_way,
+                                                     edge_source_dir)
+                                               : r.get_turn_angle(
+                                                     curr.get_node(),
+                                                     edge_source_way,
+                                                     edge_source_dir, curr.way_,
+                                                     curr.dir_));
+            edge_cost = clamp_cost(static_cast<std::uint64_t>(edge_cost) +
+                                   static_cast<std::uint64_t>(turn_cost));
+          }
           auto const neighbor =
-              P::create_node(e.to_, kNoLevel, way_pos_t{0U}, SearchDir);
+              P::create_node(e.to_, kNoLevel,
+                             forward ? e.up_to_way_ : e.down_from_way_,
+                             forward ? e.up_to_dir_ : e.down_from_dir_);
           if constexpr (WithBlocked) {
             if (blocked->test(e.to_)) {
               continue;

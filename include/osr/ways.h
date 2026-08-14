@@ -84,6 +84,14 @@ struct cch_edge {
   distance_t down_distance_{};
   cost_t up_cost_{kInfeasible};
   cost_t down_cost_{kInfeasible};
+  way_pos_t up_from_way_{};
+  way_pos_t up_to_way_{};
+  way_pos_t down_from_way_{};
+  way_pos_t down_to_way_{};
+  direction up_from_dir_{direction::kForward};
+  direction up_to_dir_{direction::kForward};
+  direction down_from_dir_{direction::kForward};
+  direction down_to_dir_{direction::kForward};
 };
 
 struct way_properties {

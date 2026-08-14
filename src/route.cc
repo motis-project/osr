@@ -420,7 +420,8 @@ double add_cch_path(typename P::parameters const& params,
                     typename P::node to,
                     cost_t expected_cost,
                     std::vector<path::segment>& segments,
-                    direction dir);
+                    direction dir,
+                    std::uint32_t depth = 0U);
 
 template <Profile P>
 // TODO: review POC implementation
@@ -496,9 +497,8 @@ std::optional<path> reconstruct_cch(
       auto const expected_cost =
           static_cast<cost_t>(e.cost(backward_n) -
                               c.template get_cost<direction::kBackward>(*pred));
-      backward_dist += add_cch_path<P>(params, w, *pred, backward_n,
-                                       expected_cost, backward_segments,
-                                       opposite(dir));
+      backward_dist += add_cch_path<P>(params, w, backward_n, *pred,
+                                       expected_cost, backward_segments, dir);
     } else {
       break;
     }
@@ -670,9 +670,41 @@ double add_cch_path(typename P::parameters const& params,
                     typename P::node const to,
                     cost_t const expected_cost,
                     std::vector<path::segment>& segments,
-                    direction const dir) {
+                    direction const dir,
+                    std::uint32_t const depth) {
   if constexpr (cch<P>::uses_customized_cost_overlay()) {
     auto const e = find_cch_edge_ref<P>(*w.r_, from, to);
+    if (e.edge_ != nullptr) {
+      auto const cost = e.up_ ? e.edge_->up_cost_ : e.edge_->down_cost_;
+      auto const distance =
+          e.up_ ? e.edge_->up_distance_ : e.edge_->down_distance_;
+      auto const via =
+          e.up_ ? e.edge_->up_via_ : e.edge_->down_via_;
+      auto const from_way =
+          e.up_ ? e.edge_->up_from_way_ : e.edge_->down_from_way_;
+      auto const to_way = e.up_ ? e.edge_->up_to_way_ : e.edge_->down_to_way_;
+      auto const from_dir =
+          e.up_ ? e.edge_->up_from_dir_ : e.edge_->down_from_dir_;
+      auto const to_dir = e.up_ ? e.edge_->up_to_dir_ : e.edge_->down_to_dir_;
+      if (depth == 0U || cost == kInfeasible) {
+        fmt::println(
+            "cch edge depth {} node/{} -> node/{} | ranks {} -> {} | {} | "
+            "cost {} | expected {} | dist {} | via node/{} | boundary {}:{} "
+            "-> {}:{}",
+            depth, to_idx(w.node_to_osm_[from.get_node()]),
+            to_idx(w.node_to_osm_[to.get_node()]),
+            w.r_->node_importance_[from.get_node()],
+            w.r_->node_importance_[to.get_node()], e.up_ ? "up" : "down", cost,
+            expected_cost, distance,
+            via == node_idx_t::invalid() ? 0U : to_idx(w.node_to_osm_[via]),
+            static_cast<unsigned>(from_way), to_str(from_dir),
+            static_cast<unsigned>(to_way), to_str(to_dir));
+      }
+    } else {
+      fmt::println("cch edge depth {} node/{} -> node/{} | missing overlay edge",
+                   depth, to_idx(w.node_to_osm_[from.get_node()]),
+                   to_idx(w.node_to_osm_[to.get_node()]));
+    }
     auto const via_node =
         e.edge_ == nullptr
             ? node_idx_t::invalid()
@@ -683,8 +715,10 @@ double add_cch_path(typename P::parameters const& params,
       auto const via = P::create_node(via_node, kNoLevel, way_pos_t{0U}, dir);
       auto const first_cost = get_cch_edge_cost<P>(params, *w.r_, from, via);
       auto const second_cost = get_cch_edge_cost<P>(params, *w.r_, via, to);
-      return add_cch_path<P>(params, w, from, via, first_cost, segments, dir) +
-             add_cch_path<P>(params, w, via, to, second_cost, segments, dir);
+      return add_cch_path<P>(params, w, from, via, first_cost, segments, dir,
+                             depth + 1U) +
+             add_cch_path<P>(params, w, via, to, second_cost, segments, dir,
+                             depth + 1U);
     }
   }
   if (auto const* s = find_cch_shortcut<P>(*w.r_, from, to); s != nullptr) {
@@ -693,8 +727,10 @@ double add_cch_path(typename P::parameters const& params,
     auto const via = P::create_node(s->via_, kNoLevel, way_pos_t{0U}, dir);
     auto const first_cost = get_cch_edge_cost<P>(params, *w.r_, from, via);
     auto const second_cost = get_cch_edge_cost<P>(params, *w.r_, via, to);
-    return add_cch_path<P>(params, w, from, via, first_cost, segments, dir) +
-           add_cch_path<P>(params, w, via, to, second_cost, segments, dir);
+    return add_cch_path<P>(params, w, from, via, first_cost, segments, dir,
+                           depth + 1U) +
+           add_cch_path<P>(params, w, via, to, second_cost, segments, dir,
+                           depth + 1U);
   }
   return add_direct_cch_path<P>(w, from, to, expected_cost, segments);
 }

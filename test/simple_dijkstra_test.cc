@@ -45,7 +45,7 @@ TEST(simple_dijkstra, monaco) {
   // auto const raw_data = "test/darmstadt-bismarckstr.osm.pbf";
   // auto const data_dir = "test/darmstadt-bismarckstr";
   auto constexpr dir = direction::kForward;
-  auto constexpr max_cost = 2 * 3600U;
+  auto constexpr max_cost = 4 * 3600U;
 
   if (!fs::exists(raw_data) && !fs::exists(data_dir)) {
     GTEST_SKIP() << raw_data << " not found";
@@ -56,13 +56,13 @@ TEST(simple_dijkstra, monaco) {
   auto const l = osr::lookup{w, data_dir, cista::mmap::protection::READ};
 
   // <-- pick your real-world start/end here (lat, lng) -->
-  // const start = [7.423440329846727, 43.729952584237395]
+  // const start = [7.418807157337369, 43.73319419824978]
   // const destination = [7.4261553024191755, 43.73175634804065];
   //
   auto const from =
-      location{geo::latlng{43.729952584237395, 7.423440329846727}};
+      location{geo::latlng{43.73319419824978, 7.418807157337369}};
   auto const to = location{geo::latlng{43.73175634804065, 7.4261553024191755}};
-  using profile = foot<false, elevator_tracking>;
+  using profile = car;
   auto const params = profile::parameters{};
 
   // Snap the locations onto the routing graph.
@@ -80,15 +80,15 @@ TEST(simple_dijkstra, monaco) {
 
   // Set a breakpoint here (or inside osr::dijkstra) and step into the search.
   auto const dijkstra_result =
-      route(params, w, l, search_profile::kFoot, from, to, from_matches_span,
+      route(params, w, l, search_profile::kCar, from, to, from_matches_span,
             to_matches_span, max_cost, dir, nullptr, nullptr, nullptr,
             routing_algorithm::kDijkstra);
   auto const bidir_result =
-      route(params, w, l, search_profile::kFoot, from, to, from_matches_span,
+      route(params, w, l, search_profile::kCar, from, to, from_matches_span,
             to_matches_span, max_cost, dir, nullptr, nullptr, nullptr,
             routing_algorithm::kDijkstraBi);
   auto const cch_result =
-      route(params, w, l, search_profile::kFoot, from, to, from_matches_span,
+      route(params, w, l, search_profile::kCar, from, to, from_matches_span,
             to_matches_span, max_cost, dir, nullptr, nullptr, nullptr,
             routing_algorithm::kCCH);
 
