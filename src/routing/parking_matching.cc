@@ -57,24 +57,12 @@ ways::routing::parking_edge::offset to_offset(ways const& w,
   return offset;
 }
 
-geo::box get_bounding_box(ways const& w, way_idx_t const& way_idx) {
-  // ?? TODO Optional matching distance ??
-  auto bbox = geo::box{};
-  for (auto const pos : w.way_polylines_[way_idx]) {
-    bbox.extend(pos);
-  }
-  auto const max_matching_distance = 20.0;
-  bbox.extend(max_matching_distance);
-  return bbox;
-}
-
 vec_map<component_idx_t, std::size_t> compute_component_sizes(
     ways const& w, unsigned const n_components) {
   auto component_sizes =
       vec_map<component_idx_t, std::size_t>(n_components, std::size_t{0U});
   for (auto i = 0U; i != w.n_ways(); ++i) {
-    auto const way_idx = way_idx_t{i};
-    auto const component = w.r_->way_component_[way_idx];
+    auto const component = w.r_->way_component_[way_idx_t{i}];
     utl::verify(static_cast<std::size_t>(component.v_) < n_components,
                 "Invalid component index {} (>= {})", component, n_components);
     ++component_sizes[component];
@@ -82,29 +70,40 @@ vec_map<component_idx_t, std::size_t> compute_component_sizes(
   return component_sizes;
 }
 
-component_idx_t find_largest_component(
+std::tuple<geo::latlng, double, component_idx_t> analyze_surroundings(
     ways const& w,
     lookup const& l,
-    geo::box const& bbox,
+    way_idx_t const way_idx,
     vec_map<component_idx_t, std::size_t> const& component_sizes) {
-  auto largest_componet = component_idx_t::invalid();
-  auto largest_size = 0UL;
-  l.find(bbox, [&](way_idx_t const way_idx) {
-    auto const component = w.r_->way_component_[way_idx];
-    auto const size = component_sizes[component];
-    if (size > largest_size) {
-      largest_size = size;
-      largest_componet = component;
+  // Compute bounding box
+  auto const get_bounding_box = [&]() {
+    constexpr auto const kExtensionDistance = 20.0;
+    auto bbox = geo::box{};
+    for (auto const pos : w.way_polylines_[way_idx]) {
+      bbox.extend(pos);
     }
-  });
-  return largest_componet;
-}
+    bbox.extend(kExtensionDistance);
+    return bbox;
+  };
+  // Identify component_idx of largest nearby component
+  auto const get_largest_component_idx = [&](geo::box const& bbox) {
+    auto largest_componet = component_idx_t::invalid();
+    auto largest_size = 0UL;
+    l.find(bbox, [&](way_idx_t const candidate) {
+      auto const component = w.r_->way_component_[candidate];
+      auto const size = component_sizes[component];
+      if (size > largest_size) {
+        largest_size = size;
+        largest_componet = component;
+      }
+    });
+    return largest_componet;
+  };
 
-std::tuple<geo::box, geo::latlng, double> get_bbox(ways const& w,
-                                                   way_idx_t const& way_idx) {
-  auto const bbox = get_bounding_box(w, way_idx);
+  auto const bbox = get_bounding_box();
   auto const center = bbox.centroid();
-  return {bbox, center, geo::approx_distance_lng_degrees(center)};
+  return {center, geo::approx_distance_lng_degrees(center),
+          get_largest_component_idx(bbox)};
 }
 
 template <Profile P>
@@ -221,14 +220,13 @@ void connect_parking_ways(
         .segment_idx_ = segment}};
   };
 
-  auto const make_connection = [&](geo::box const& bbox,
+  auto const make_connection = [&](geo::latlng const& center,
                                    double const approx_distance_lng_degrees,
                                    way_candidate const& car_offset,
                                    geo::polyline_candidate const& car_entrance,
                                    geo::polyline_candidate const& foot_entrance,
                                    way_candidate const& foot_offset)
       -> std::tuple<vec<point>, std::uint16_t> {
-    auto const center = bbox.centroid();
     auto const is_closer = [&](geo::latlng const& c, geo::latlng const& other) {
       return geo::approx_squared_distance(c, other,
                                           approx_distance_lng_degrees) <
@@ -267,10 +265,8 @@ void connect_parking_ways(
       continue;
     }
 
-    auto const [bbox, center, approx_distance_lng_degrees] =
-        get_bbox(w, way_idx);
-    auto const matching_component =
-        find_largest_component(w, l, bbox, component_sizes);
+    auto const [center, approx_distance_lng_degrees, matching_component] =
+        analyze_surroundings(w, l, way_idx, component_sizes);
     if (matching_component == component_idx_t::invalid()) {
       continue;
     }
@@ -295,7 +291,7 @@ void connect_parking_ways(
       fmt::println(
           "WARNING: No usable way candidate found for way {}"
           " (osm: {}, centroid: {})",
-          way_idx, w.way_osm_idx_[way_idx], bbox.centroid());
+          way_idx, w.way_osm_idx_[way_idx], center);
       continue;
     }
     if (!foot_offset->left_.valid() && !foot_offset->right_.valid()) {
@@ -318,7 +314,7 @@ void connect_parking_ways(
     auto const parking_edge_idx =
         parking_edge_idx_t{w.r_->parking_edges_.size()};
     auto [conn, dist] =
-        make_connection(bbox, approx_distance_lng_degrees, *car_offset,
+        make_connection(center, approx_distance_lng_degrees, *car_offset,
                         car_entrance, foot_entrance, *foot_offset);
     w.r_->parking_edges_.emplace_back(std::move(conn),
                                       to_offset(w, *car_offset),
