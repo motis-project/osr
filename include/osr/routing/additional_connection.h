@@ -4,6 +4,7 @@
 
 #include "geo/polyline.h"
 
+#include "osr/lookup.h"
 #include "osr/types.h"
 #include "osr/ways.h"
 
@@ -38,5 +39,8 @@ vec<point> get_additional_connection_offset_points(
     ways const&,
     ways::routing::additional_connection::offset const&,
     bool is_left);
+
+ways::routing::additional_connection::offset to_offset(ways const&,
+                                                       way_candidate const&);
 
 }  // namespace osr

@@ -40,6 +40,10 @@ vec<point> reverse(vec<point>&& points) {
   std::reverse(begin(points), end(points));
   return points;
 }
+
+geo::polyline to_polyline(vec<point> const& points) {
+  return utl::to_vec(points, [](point const& p) { return p.as_latlng(); });
+}
 }  // namespace
 
 void for_each_connection(ways::routing const& r,
@@ -103,11 +107,10 @@ way_idx_t add_additional_connection(
       add_node(node_idx);
     }
   }
-  auto const polyline = utl::to_vec(
-      get_connection(connection, from.connecting_point_, to.connecting_point_),
-      [](point const& p) { return p.as_latlng(); });
-  r.additional_connections_.emplace_back(std::move(connection), std::move(from),
-                                         std::move(to), geo::length(polyline));
+  r.additional_connections_.emplace_back(
+      std::move(connection), std::move(from), std::move(to),
+      geo::length(to_polyline(get_connection(connection, from.connecting_point_,
+                                             to.connecting_point_))));
   return to_way_idx(r, conn_idx);
 }
 
@@ -171,6 +174,29 @@ vec<point> get_additional_connection_offset_points(
   }
 
   return line;
+}
+
+ways::routing::additional_connection::offset to_offset(
+    ways const& w, way_candidate const& wc) {
+  auto offset = ways::routing::additional_connection::offset{
+      .connecting_point_ = point::from_latlng(wc.closest_point_on_way_),
+      .way_ = wc.way_,
+      .segment_ = wc.segment_idx_,
+      .left_ = wc.left_.node_,
+      .right_ = wc.right_.node_,
+      .dist_left_ = 0U,
+      .dist_right_ = 0U};
+
+  if (wc.left_.node_ != node_idx_t::invalid()) {
+    offset.dist_left_ = geo::length(
+        to_polyline(get_additional_connection_offset_points(w, offset, true)));
+  }
+  if (wc.right_.node_ != node_idx_t::invalid()) {
+    offset.dist_right_ = geo::length(
+        to_polyline(get_additional_connection_offset_points(w, offset, false)));
+  }
+
+  return offset;
 }
 
 };  // namespace osr
