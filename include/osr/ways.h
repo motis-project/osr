@@ -527,9 +527,37 @@ struct ways {
       distance_t distance_{};
     };
 
+    struct additional_connection {
+      CISTA_COMPARABLE()
+
+      struct offset {
+        CISTA_COMPARABLE()
+
+        point connecting_point_;
+        way_idx_t way_;
+        unsigned segment_;
+        node_idx_t left_;
+        node_idx_t right_;
+        std::uint16_t dist_left_;  // Distance on segment to left node
+        std::uint16_t dist_right_;  // Distance on segment to right node
+      };
+
+      vec<point> connection_;
+      offset from_;
+      offset to_;
+      std::uint16_t dist_;
+
+      // TODO: MK - Add bitfield to identify use cases
+      // std::uint8_t is_forward_ : 1 = 0U;  // Needed?
+      // std::uint8_t is_backward_ : 1 = 0U;  // Needed?
+      // std::uint8_t is_parking_ : 1 = 0U;
+    };
+
+    // TODO Replace with 'additional_connection'
     struct parking_edge {
       CISTA_COMPARABLE()
 
+      // TODO: MK - Change to support dynamically added ways
       static way_idx_t encode_parking_edge(
           ways::routing const& r, parking_edge_idx_t const parking_edge_idx) {
         return way_idx_t{r.way_component_.size() + to_idx(parking_edge_idx)};
@@ -601,8 +629,11 @@ struct ways {
     vec_map<way_idx_t, component_idx_t> way_component_;
 
     bitvec<node_idx_t> has_parking_edges_;
+    bitvec<node_idx_t> has_additional_connections_;
     vec<pair<node_idx_t, parking_edge_idx_t>> node_parking_edges_;
     vec_map<parking_edge_idx_t, parking_edge> parking_edges_;
+    vec<pair<node_idx_t, connection_idx_t>> additional_node_connections_;
+    vec_map<connection_idx_t, additional_connection> additional_connections_;
   };
 
   cista::wrapped<routing> r_;
