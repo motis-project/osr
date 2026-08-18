@@ -8,6 +8,7 @@
 #include "osr/routing/entry_storage.h"
 #include "osr/routing/mode.h"
 #include "osr/routing/path.h"
+#include "osr/routing/profile.h"
 #include "osr/routing/profiles/car.h"
 #include "osr/routing/profiles/foot.h"
 #include "osr/ways.h"
@@ -350,6 +351,26 @@ struct car_parking {
               [&](footp::node const fn) { f(to_node(fn)); });
   }
 
+  template <endpoint_role Role, typename Fn>
+  static void resolve_endpoint(ways::routing const& w,
+                               way_idx_t const way,
+                               node_idx_t const n,
+                               level_t const lvl,
+                               direction const search_dir,
+                               Fn&& f) {
+    if (search_dir == direction::kForward) {
+      auto const way_properties = w.way_properties_[way];
+      car::template resolve_endpoint<Role>(
+          w, way, n, lvl, search_dir, [&](car::node const cn) {
+            f(to_node(cn, lvl == kNoLevel ? way_properties.from_level() : lvl));
+          });
+    } else {
+      footp::template resolve_endpoint<Role>(
+          w, way, n, lvl, search_dir,
+          [&](typename footp::node const fn) { f(to_node(fn)); });
+    }
+  }
+
   static bool is_dest_reachable(parameters const& params,
                                 ways::routing const& w,
                                 timezone_cache_t const& timezones,
@@ -384,6 +405,27 @@ struct car_parking {
       direction const search_dir) {
     return footp::way_cost(params.foot_, w, timezones, way, e, dir, dist,
                            start_time, current_duration, search_dir);
+  }
+
+  static constexpr cost_and_duration endpoint_way_cost(
+      parameters const& params,
+      ways::routing const& w,
+      timezone_cache_t const& timezones,
+      node const n,
+      way_idx_t const way,
+      way_properties const& properties,
+      direction const way_dir,
+      distance_t const distance,
+      std::optional<routing_time_t> const start_time,
+      duration_t const current_duration,
+      direction const search_dir) {
+    return n.is_car_node()
+               ? car::way_cost(params.car_, w, timezones, way, properties,
+                               way_dir, distance, start_time, current_duration,
+                               search_dir)
+               : footp::way_cost(params.foot_, w, timezones, way, properties,
+                                 way_dir, distance, start_time,
+                                 current_duration, search_dir);
   }
 
   static constexpr cost_and_duration node_cost(parameters const& params,
