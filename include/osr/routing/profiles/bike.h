@@ -6,6 +6,7 @@
 #include "osr/routing/entry_storage_arena.h"
 #include "osr/routing/mode.h"
 #include "osr/routing/path.h"
+#include "osr/routing/profile.h"
 #include "osr/types.h"
 #include "osr/ways.h"
 
@@ -182,6 +183,20 @@ struct bike {
     f(node{n, direction::kBackward});
   }
 
+  template <endpoint_role Role, typename Fn>
+  static void resolve_endpoint(ways::routing const& w,
+                               way_idx_t const way,
+                               node_idx_t const n,
+                               level_t const lvl,
+                               direction const search_dir,
+                               Fn&& f) {
+    if constexpr (Role == endpoint_role::kSource) {
+      resolve_start_node(w, way, n, lvl, search_dir, f);
+    } else {
+      resolve_all(w, n, lvl, f);
+    }
+  }
+
   static bool is_dest_reachable(parameters const& params,
                                 ways::routing const& w,
                                 timezone_cache_t const& timezones,
@@ -309,6 +324,22 @@ struct bike {
     } else {
       return infeasible_cost_and_duration();
     }
+  }
+
+  static constexpr cost_and_duration endpoint_way_cost(
+      parameters const& params,
+      ways::routing const& w,
+      timezone_cache_t const& timezones,
+      node const,
+      way_idx_t const way,
+      way_properties const& properties,
+      direction const way_dir,
+      distance_t const distance,
+      std::optional<routing_time_t> const start_time,
+      duration_t const current_duration,
+      direction const search_dir) {
+    return way_cost(params, w, timezones, way, properties, way_dir, distance,
+                    start_time, current_duration, search_dir);
   }
 
   static constexpr cost_and_duration node_cost(parameters const&,

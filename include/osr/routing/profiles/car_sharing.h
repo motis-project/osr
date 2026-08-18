@@ -14,6 +14,7 @@
 #include "osr/routing/entry_storage.h"
 #include "osr/routing/mode.h"
 #include "osr/routing/path.h"
+#include "osr/routing/profile.h"
 #include "osr/routing/profiles/car.h"
 #include "osr/routing/profiles/foot.h"
 #include "osr/routing/sharing_data.h"
@@ -588,6 +589,42 @@ struct car_sharing {
   static constexpr cost_and_duration node_cost(parameters const& params,
                                                node_properties const n) {
     return footp::node_cost(params.foot_, n);
+  }
+
+  template <endpoint_role Role, typename Fn>
+  static void resolve_endpoint(ways::routing const& w,
+                               way_idx_t const way,
+                               node_idx_t const n,
+                               level_t const lvl,
+                               direction const search_dir,
+                               Fn&& f) {
+    footp::template resolve_endpoint<Role>(
+        w, way, n, lvl, search_dir, [&](footp::node const resolved) {
+          if constexpr (Role == endpoint_role::kSource) {
+            f(to_node(resolved, search_dir == direction::kForward
+                                    ? node_type::kInitialFoot
+                                    : node_type::kTrailingFoot));
+          } else {
+            f(to_node(resolved, node_type::kInitialFoot));
+            f(to_node(resolved, node_type::kTrailingFoot));
+          }
+        });
+  }
+
+  static cost_and_duration endpoint_way_cost(
+      parameters const& params,
+      ways::routing const& w,
+      timezone_cache_t const& timezones,
+      node const,
+      way_idx_t const way,
+      way_properties const& properties,
+      direction const way_dir,
+      distance_t const distance,
+      std::optional<routing_time_t> const start_time,
+      duration_t const current_duration,
+      direction const search_dir) {
+    return footp::way_cost(params.foot_, w, timezones, way, properties, way_dir,
+                           distance, start_time, current_duration, search_dir);
   }
 
   static constexpr double lower_bound_heuristic(parameters const& params,
