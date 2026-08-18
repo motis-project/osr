@@ -32,12 +32,26 @@
   <node id="94" lat="49.040100" lon="8.004000"/>
   <node id="95" lat="49.040270" lon="8.000000"/>
 
+  <!-- Exact-return symmetry: rental pickup is an elevator node. -->
+  <node id="100" lat="49.050000" lon="7.999000"/>
+  <node id="101" lat="49.050000" lon="8.000000"/>
+  <node id="102" lat="49.050000" lon="8.001000">
+    <tag k="bicycle" v="yes"/>
+    <tag k="highway" v="elevator"/>
+  </node>
+  <node id="103" lat="49.050000" lon="8.002000"/>
+  <node id="104" lat="49.050000" lon="8.006000"/>
+
   <!-- Endpoint duration: access penalties affect cost, not travel time. -->
   <node id="109" lat="49.060000" lon="7.999000"/>
   <node id="110" lat="49.060000" lon="8.000000"/>
   <node id="111" lat="49.060000" lon="8.001000"/>
   <node id="112" lat="49.060000" lon="8.002000"/>
   <node id="113" lat="49.060000" lon="8.003000"/>
+
+  <!-- Exact return on a car-only way. -->
+  <node id="120" lat="49.070000" lon="8.000000"/>
+  <node id="121" lat="49.070000" lon="8.002000"/>
 
   <way id="100">
     <nd ref="1"/>
@@ -65,6 +79,15 @@
     <nd ref="112"/>
     <nd ref="113"/>
     <tag k="highway" v="residential"/>
+  </way>
+
+  <way id="1200">
+    <nd ref="113"/>
+    <nd ref="120"/>
+    <nd ref="121"/>
+    <tag k="highway" v="residential"/>
+    <tag k="foot" v="no"/>
+    <tag k="bicycle" v="no"/>
   </way>
 
   <way id="101">
@@ -158,6 +181,20 @@
   <way id="901">
     <nd ref="95"/>
     <nd ref="94"/>
+    <tag k="highway" v="residential"/>
+  </way>
+
+  <way id="1000">
+    <nd ref="100"/>
+    <nd ref="101"/>
+    <nd ref="102"/>
+    <tag k="highway" v="footway"/>
+  </way>
+
+  <way id="1001">
+    <nd ref="102"/>
+    <nd ref="103"/>
+    <nd ref="104"/>
     <tag k="highway" v="residential"/>
   </way>
 </osm>
