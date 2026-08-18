@@ -376,12 +376,13 @@ std::vector<endpoint_root<P>> add_endpoint_roots(
     direction const dir,
     std::optional<routing_time_t> const start_time,
     cost_t const max,
+    bool const exact_return_allowed,
     AddFn&& add) {
   auto roots = std::vector<endpoint_root<P>>{};
   for_each_endpoint_candidate(matches, [&](endpoint_candidate const& endpoint) {
     P::resolve_endpoint(
         *w.r_, endpoint.way_, endpoint.node_.node_, matches.lvl_, end,
-        endpoint_role::kRoot, [&](auto const node) {
+        endpoint_role::kRoot, exact_return_allowed, [&](auto const node) {
           auto const connection = get_endpoint_connection<P>(
               params, w, endpoint, node, end, endpoint_role::kRoot, start_time,
               duration_t{0U}, dir);
@@ -413,7 +414,8 @@ std::optional<destination_candidate<P>> best_candidate(
     match_view_t const& matches,
     cost_t const max,
     direction const dir,
-    std::optional<routing_time_t> const start_time) {
+    std::optional<routing_time_t> const start_time,
+    bool const exact_return_allowed) {
   auto best = std::optional<destination_candidate<P>>{};
   auto const end = route_end_of(opposite(dir));
   for_each_endpoint_candidate(matches, [&](endpoint_candidate const& endpoint) {
@@ -445,7 +447,8 @@ std::optional<destination_candidate<P>> best_candidate(
       }
     };
     P::resolve_endpoint(*w.r_, endpoint.way_, candidate_node.node_,
-                        matches.lvl_, end, endpoint_role::kGoal, consider);
+                        matches.lvl_, end, endpoint_role::kGoal,
+                        exact_return_allowed, consider);
   });
   return best;
 }
@@ -680,13 +683,13 @@ std::optional<path> route_bidirectional(typename P::parameters const& params,
   }
 
   auto const starts = add_endpoint_roots<P>(
-      params, w, from_match, route_end_of(dir), dir, std::nullopt, max,
+      params, w, from_match, route_end_of(dir), dir, std::nullopt, max, false,
       [&](auto&& label, duration_t const duration) {
         b.add_start(std::forward<decltype(label)>(label), duration);
       });
   auto const destinations = add_endpoint_roots<P>(
       params, w, to_match, route_end_of(opposite(dir)), dir, std::nullopt, max,
-      [&](auto&& label, duration_t const duration) {
+      false, [&](auto&& label, duration_t const duration) {
         b.add_end(std::forward<decltype(label)>(label), duration);
       });
   if (starts.empty() || destinations.empty() || b.pq1_.empty() ||
@@ -724,6 +727,7 @@ std::optional<path> route_dijkstra(
     bitvec<node_idx_t> const* blocked,
     sharing_data const* sharing,
     elevation_storage const* elevations,
+    route_options const& options,
     std::optional<path> stretch) {
   auto const search_max = std::max(kMinCostSettled, max);
   d.reset({.profile_ = params,
@@ -739,6 +743,7 @@ std::optional<path> route_dijkstra(
            .end_loc_ = to});
   auto const starts = add_endpoint_roots<P>(
       params, w, from_match, route_end_of(dir), dir, start_time, max,
+      options.exact_return_at_from_,
       [&](auto&& label, duration_t const duration) {
         d.add_start(std::forward<decltype(label)>(label), duration);
       });
@@ -747,7 +752,8 @@ std::optional<path> route_dijkstra(
   }
   d.run();
   auto const find_candidate = [&]() {
-    return best_candidate<P>(params, w, d, to_match, max, dir, start_time);
+    return best_candidate<P>(params, w, d, to_match, max, dir, start_time,
+                             options.exact_return_at_to(0U));
   };
   auto candidate = find_candidate();
   // Settle through the complete cost of the candidate and the direct piece:
@@ -806,13 +812,13 @@ std::optional<path> route_astar(typename P::parameters const& params,
         auto const add = [&](auto const node) { a.add_destination(node); };
         P::resolve_endpoint(*w.r_, endpoint.way_, candidate_node.node_,
                             to_match.lvl_, route_end_of(opposite(dir)),
-                            endpoint_role::kGoal, add);
+                            endpoint_role::kGoal, false, add);
       });
   if (a.destinations_.empty()) {
     return std::nullopt;
   }
   auto const starts = add_endpoint_roots<P>(
-      params, w, from_match, route_end_of(dir), dir, start_time, max,
+      params, w, from_match, route_end_of(dir), dir, start_time, max, false,
       [&](auto&& label, duration_t const duration) {
         a.add_start(std::forward<decltype(label)>(label), duration);
       });
@@ -821,7 +827,7 @@ std::optional<path> route_astar(typename P::parameters const& params,
   }
   a.run();
   auto const candidate =
-      best_candidate<P>(params, w, a, to_match, max, dir, start_time);
+      best_candidate<P>(params, w, a, to_match, max, dir, start_time, false);
   if (!candidate.has_value()) {
     return std::nullopt;
   }
@@ -887,6 +893,7 @@ std::vector<std::optional<path>> route(
     sharing_data const* sharing,
     elevation_storage const* elevations,
     std::function<bool(path const&)> const& do_reconstruct,
+    route_options const& options,
     one_to_many_state_impl<P>* const state = nullptr) {
   auto result = std::vector<std::optional<path>>(to_match.size());
 
@@ -921,6 +928,7 @@ std::vector<std::optional<path>> route(
   auto& starts = state == nullptr ? local_starts : state->starts_;
   starts = add_endpoint_roots<P>(
       params, w, from_match, route_end_of(dir), dir, start_time, max,
+      options.exact_return_at_from_,
       [&](auto&& label, duration_t const duration) {
         d.add_start(std::forward<decltype(label)>(label), duration);
       });
@@ -929,7 +937,7 @@ std::vector<std::optional<path>> route(
     return best_candidate<P>(
         params, w, d,
         to_match[match_idx_t{static_cast<match_idx_t::value_t>(i)}],
-        destination_limits[i], dir, start_time);
+        destination_limits[i], dir, start_time, options.exact_return_at_to(i));
   };
   auto local_candidates =
       std::vector<std::optional<destination_candidate<P>>>{};
@@ -1003,10 +1011,13 @@ std::optional<path> route_bidirectional(profile_parameters const& params,
                                         double const max_match_distance,
                                         bitvec<node_idx_t> const* blocked,
                                         sharing_data const* sharing,
-                                        elevation_storage const* elevations) {
+                                        elevation_storage const* elevations,
+                                        route_options const& options) {
+  utl::verify(!options.wants_exact_return(),
+              "route_bidirectional does not support exact returns");
   return route(params, w, l, profile, from, to, max_duration, dir,
                max_match_distance, blocked, sharing, elevations,
-               routing_algorithm::kAStarBi, std::nullopt);
+               routing_algorithm::kAStarBi, std::nullopt, options);
 }
 
 std::vector<std::optional<path>> route(
@@ -1023,27 +1034,28 @@ std::vector<std::optional<path>> route(
     sharing_data const* sharing,
     elevation_storage const* elevations,
     std::function<bool(path const&)> const& do_reconstruct,
-    std::optional<routing_time_t> const start_time) {
+    std::optional<routing_time_t> const start_time,
+    route_options const& options) {
   auto const duration_limit = to_duration_limit(max_duration);
   return with_profile(
       profile, [&]<Profile P>(P&&) -> std::vector<std::optional<path>> {
         auto const& pp = std::get<typename P::parameters>(params);
         auto from_m = match_result{};
-        l.match<P>(pp, from, false, dir, max_match_distance, blocked, from_m,
-                   start_time);
+        l.match<P>(pp, from, false, dir, max_match_distance, blocked,
+                   options.exact_return_at_from_, from_m, start_time);
         auto const from_match = from_m[match_idx_t{0U}];
         if (from_match.empty()) {
           return std::vector<std::optional<path>>(to.size());
         }
         auto to_match = match_result{};
-        for (auto const& x : to) {
-          l.match<P>(pp, x, true, dir, max_match_distance, blocked, to_match,
-                     start_time);
+        for (auto i = std::size_t{0U}; i != to.size(); ++i) {
+          l.match<P>(pp, to[i], true, dir, max_match_distance, blocked,
+                     options.exact_return_at_to(i), to_match, start_time);
         }
         auto d = dijkstra<P>{};
         return route(pp, w, l, d, from, to, from_match, to_match,
                      duration_limit, dir, start_time, blocked, sharing,
-                     elevations, do_reconstruct);
+                     elevations, do_reconstruct, options);
       });
 }
 
@@ -1060,34 +1072,37 @@ std::optional<path> route_dijkstra(
     bitvec<node_idx_t> const* blocked,
     sharing_data const* sharing,
     elevation_storage const* elevations,
-    std::optional<routing_time_t> const start_time) {
+    std::optional<routing_time_t> const start_time,
+    route_options const& options) {
   return route(params, w, l, profile, from, to, max_duration, dir,
                max_match_distance, blocked, sharing, elevations,
-               routing_algorithm::kDijkstra, start_time);
+               routing_algorithm::kDijkstra, start_time, options);
 }
 
-std::optional<path> route_astar(
-    profile_parameters const& params,
-    ways const& w,
-    lookup const& l,
-    search_profile const profile,
-    location const& from,
-    location const& to,
-    std::chrono::seconds const max_duration,
-    direction const dir,
-    double const max_match_distance,
-    bitvec<node_idx_t> const* blocked,
-    sharing_data const* sharing,
-    elevation_storage const* elevations,
-    std::optional<routing_time_t> const start_time) {
+std::optional<path> route_astar(profile_parameters const& params,
+                                ways const& w,
+                                lookup const& l,
+                                search_profile const profile,
+                                location const& from,
+                                location const& to,
+                                std::chrono::seconds const max_duration,
+                                direction const dir,
+                                double const max_match_distance,
+                                bitvec<node_idx_t> const* blocked,
+                                sharing_data const* sharing,
+                                elevation_storage const* elevations,
+                                std::optional<routing_time_t> const start_time,
+                                route_options const& options) {
   auto const duration_limit = to_duration_limit(max_duration);
+  utl::verify(!options.wants_exact_return(),
+              "route_astar does not support exact returns");
   return with_profile(profile, [&]<Profile P>(P&&) -> std::optional<path> {
     auto const& pp = std::get<typename P::parameters>(params);
     auto from_m = match_result{};
-    l.match<P>(pp, from, false, dir, max_match_distance, blocked, from_m,
+    l.match<P>(pp, from, false, dir, max_match_distance, blocked, false, from_m,
                start_time);
     auto to_m = match_result{};
-    l.match<P>(pp, to, true, dir, max_match_distance, blocked, to_m,
+    l.match<P>(pp, to, true, dir, max_match_distance, blocked, false, to_m,
                start_time);
     auto const from_match = from_m[match_idx_t{0U}];
     auto const to_match = to_m[match_idx_t{0U}];
@@ -1128,7 +1143,8 @@ std::unique_ptr<one_to_many_state> route_one_to_many(
     sharing_data const* sharing,
     elevation_storage const* elevations,
     std::function<bool(path const&)> const& do_reconstruct,
-    std::optional<routing_time_t> const start_time) {
+    std::optional<routing_time_t> const start_time,
+    route_options const& options) {
   auto const duration_limit = to_duration_limit(max_duration);
   return with_profile(
       profile, [&]<Profile P>(P&&) -> std::unique_ptr<one_to_many_state> {
@@ -1137,10 +1153,10 @@ std::unique_ptr<one_to_many_state> route_one_to_many(
           s->results_.resize(to.size());
           return s;
         }
-        s->results_ =
-            route(std::get<typename P::parameters>(params), w, l, s->d_, from,
-                  s->to_, from_match, to_match, duration_limit, dir, start_time,
-                  blocked, sharing, elevations, do_reconstruct, s.get());
+        s->results_ = route(std::get<typename P::parameters>(params), w, l,
+                            s->d_, from, s->to_, from_match, to_match,
+                            duration_limit, dir, start_time, blocked, sharing,
+                            elevations, do_reconstruct, options, s.get());
         return s;
       });
 }
@@ -1159,7 +1175,8 @@ std::optional<path> route(profile_parameters const& params,
                           sharing_data const* sharing,
                           elevation_storage const* elevations,
                           routing_algorithm algo,
-                          std::optional<routing_time_t> const start_time) {
+                          std::optional<routing_time_t> const start_time,
+                          route_options const& options) {
   auto const duration_limit = to_duration_limit(max_duration);
   if (from_match.empty() || to_match.empty()) {
     return std::nullopt;
@@ -1168,6 +1185,10 @@ std::optional<path> route(profile_parameters const& params,
   if (requires_dijkstra(profile)) {
     algo = routing_algorithm::kDijkstra;
   }
+
+  utl::verify(
+      algo != routing_algorithm::kAStarBi || !options.wants_exact_return(),
+      "bidirectional routing does not support exact returns");
 
   auto p = with_profile(profile, [&]<Profile P>(P&&) -> std::optional<path> {
     auto const& pp = std::get<typename P::parameters>(params);
@@ -1192,7 +1213,7 @@ std::optional<path> route(profile_parameters const& params,
         auto d = dijkstra<P>{};
         return route_dijkstra(pp, w, l, d, from, to, from_match, to_match, max,
                               duration_limit, dir, start_time, blocked, sharing,
-                              elevations, std::move(stretch));
+                              elevations, options, std::move(stretch));
       }
     }
     throw utl::fail("not implemented");
@@ -1213,18 +1234,19 @@ std::optional<path> route(profile_parameters const& params,
                           sharing_data const* sharing,
                           elevation_storage const* elevations,
                           routing_algorithm algo,
-                          std::optional<routing_time_t> const start_time) {
+                          std::optional<routing_time_t> const start_time,
+                          route_options const& options) {
   return with_profile(profile, [&]<Profile P>(P&&) {
     auto const& pp = std::get<typename P::parameters>(params);
     auto from_matches = match_result{};
     auto to_matches = match_result{};
-    l.match<P>(pp, from, false, dir, max_match_distance, blocked, from_matches,
-               start_time);
-    l.match<P>(pp, to, true, dir, max_match_distance, blocked, to_matches,
-               start_time);
+    l.match<P>(pp, from, false, dir, max_match_distance, blocked,
+               options.exact_return_at_from_, from_matches, start_time);
+    l.match<P>(pp, to, true, dir, max_match_distance, blocked,
+               options.exact_return_at_to(0U), to_matches, start_time);
     return route(params, w, l, profile, from, to, from_matches[match_idx_t{0U}],
                  to_matches[match_idx_t{0U}], max_duration, dir, blocked,
-                 sharing, elevations, algo, start_time);
+                 sharing, elevations, algo, start_time, options);
   });
 }
 
