@@ -233,6 +233,36 @@ struct generic_car {
     }
   }
 
+  static cost_and_duration endpoint_transition_cost(
+      parameters const& params,
+      ways::routing const& w,
+      timezone_cache_t const&,
+      node const n,
+      way_idx_t const way,
+      direction const way_dir,
+      direction const search_dir,
+      std::optional<routing_time_t>,
+      duration_t) {
+    auto const transition_node =
+        search_dir == direction::kForward ? n : get_reverse(n);
+    auto const transition_dir =
+        search_dir == direction::kForward ? way_dir : opposite(way_dir);
+    return get_endpoint_transition_cost<generic_car>(
+        params, w, transition_node, way, transition_dir, params.uturn_penalty_,
+        [&](way_pos_t const way_pos) {
+          return !w.template is_restricted<IsBus>(n.n_, n.way_, way_pos,
+                                                  search_dir);
+        });
+  }
+
+  // The endpoint way is entered in `way_dir`, so only states that arrived in
+  // that direction are reachable from the endpoint.
+  static constexpr bool endpoint_root_allowed(parameters const&,
+                                              node const n,
+                                              direction const way_dir) {
+    return n.dir_ == way_dir;
+  }
+
   template <direction SearchDir, bool WithBlocked, typename Fn>
   static void adjacent(parameters const& params,
                        ways::routing const& w,
@@ -282,7 +312,7 @@ struct generic_car {
   static bool is_dest_reachable(parameters const& params,
                                 ways::routing const& w,
                                 timezone_cache_t const& timezones,
-                                node const n,
+                                node const,
                                 way_idx_t const way,
                                 direction const way_dir,
                                 direction const search_dir,
@@ -292,11 +322,6 @@ struct generic_car {
     if (way_cost(params, w, timezones, way, target_way_prop, way_dir, 0U,
                  start_time, current_duration, search_dir)
             .cost_ == kInfeasible) {
-      return false;
-    }
-
-    if (w.is_restricted<IsBus>(n.n_, n.way_, w.get_way_pos(n.n_, way),
-                               search_dir)) {
       return false;
     }
 
