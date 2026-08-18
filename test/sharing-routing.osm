@@ -25,11 +25,45 @@
     <tag k="bicycle" v="no"/>
   </node>
 
+  <!-- A close detour and a farther shortcut used to test match preference. -->
+  <node id="91" lat="49.040010" lon="8.000000"/>
+  <node id="92" lat="49.042000" lon="8.000000"/>
+  <node id="93" lat="49.042000" lon="8.004000"/>
+  <node id="94" lat="49.040100" lon="8.004000"/>
+  <node id="95" lat="49.040270" lon="8.000000"/>
+
+  <!-- Endpoint duration: access penalties affect cost, not travel time. -->
+  <node id="109" lat="49.060000" lon="7.999000"/>
+  <node id="110" lat="49.060000" lon="8.000000"/>
+  <node id="111" lat="49.060000" lon="8.001000"/>
+  <node id="112" lat="49.060000" lon="8.002000"/>
+  <node id="113" lat="49.060000" lon="8.003000"/>
+
   <way id="100">
     <nd ref="1"/>
     <nd ref="2"/>
     <nd ref="3"/>
     <nd ref="4"/>
+    <tag k="highway" v="residential"/>
+  </way>
+
+  <way id="1100">
+    <nd ref="110"/>
+    <nd ref="111"/>
+    <nd ref="112"/>
+    <tag k="highway" v="residential"/>
+    <tag k="motor_vehicle" v="destination"/>
+  </way>
+
+  <way id="1090">
+    <nd ref="109"/>
+    <nd ref="110"/>
+    <tag k="highway" v="residential"/>
+  </way>
+
+  <way id="1110">
+    <nd ref="112"/>
+    <nd ref="113"/>
     <tag k="highway" v="residential"/>
   </way>
 
@@ -111,5 +145,19 @@
     <nd ref="82"/>
     <tag k="highway" v="footway"/>
     <tag k="bicycle" v="no"/>
+  </way>
+
+  <way id="900">
+    <nd ref="91"/>
+    <nd ref="92"/>
+    <nd ref="93"/>
+    <nd ref="94"/>
+    <tag k="highway" v="residential"/>
+  </way>
+
+  <way id="901">
+    <nd ref="95"/>
+    <nd ref="94"/>
+    <tag k="highway" v="residential"/>
   </way>
 </osm>
