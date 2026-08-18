@@ -138,10 +138,10 @@ public:
                   osr::location const& to,
                   std::optional<osr::routing_time_t> const start_time =
                       std::nullopt) const {
-    auto result =
-        osr::route(params, *ways_, *lookup_, profile, from, to, 10'000U,
-                   osr::direction::kForward, 50.0, nullptr, nullptr, nullptr,
-                   osr::routing_algorithm::kDijkstra, start_time);
+    auto result = osr::route(params, *ways_, *lookup_, profile, from, to,
+                             osr::cost_t{10'000U}, osr::direction::kForward,
+                             50.0, nullptr, nullptr, nullptr,
+                             osr::routing_algorithm::kDijkstra, start_time);
     EXPECT_TRUE(result.has_value());
     return result.value_or(osr::path{});
   }
