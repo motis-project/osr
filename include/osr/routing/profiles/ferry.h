@@ -174,15 +174,18 @@ struct ferry {
                        Fn&& fn) {
     if (additional != nullptr) {
       for_each_additional_edge<ferry>(
-          params, w, timezones, n, additional,
+          params, w, timezones, n, additional, start_time, current_duration,
+          SearchDir,
           [&](additional_edge const& ae, cost_and_duration const edge_cost,
               direction const) {
             auto const target = node{ae.to_};
             auto total = edge_cost;
 
-            if (!additional->is_additional_node(ae.to_)) {
-              total = clamp_add(total,
-                                node_cost(params, w.node_properties_[ae.to_]));
+            auto const cost_node =
+                SearchDir == direction::kForward ? ae.to_ : n.n_;
+            if (!additional->is_additional_node(cost_node)) {
+              total = clamp_add(
+                  total, node_cost(params, w.node_properties_[cost_node]));
             }
 
             fn(target, total.cost_, total.duration_, ae.distance_,
@@ -200,14 +203,16 @@ struct ferry {
                               std::uint16_t const to) {
         // NOLINTNEXTLINE(clang-analyzer-core.CallAndMessage)
         auto const target_node = w.way_nodes_[way][to];
+        auto const cost_node =
+            SearchDir == direction::kForward ? target_node : n.n_;
         if constexpr (WithBlocked) {
-          if (blocked->test(target_node)) {
+          if (blocked->test(cost_node)) {
             return;
           }
         }
 
-        auto const target_node_prop = w.node_properties_[target_node];
-        if (node_cost(params, target_node_prop).cost_ == kInfeasible) {
+        auto const cost_node_prop = w.node_properties_[cost_node];
+        if (node_cost(params, cost_node_prop).cost_ == kInfeasible) {
           return;
         }
 
@@ -223,7 +228,7 @@ struct ferry {
         auto const step = clamp_add(
             way_cost(params, w, timezones, way, target_way_prop, way_dir, dist,
                      start_time, current_duration, SearchDir),
-            node_cost(params, target_node_prop));
+            node_cost(params, cost_node_prop));
         fn(target, step.cost_, step.duration_, dist, way, from, to,
            elevation_storage::elevation{}, false);
       };

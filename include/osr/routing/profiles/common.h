@@ -196,9 +196,10 @@ void for_each_additional_edge(typename P::parameters const& params,
         continue;
       }
 
-      if (!additional->is_additional_node(ae.to_)) {
-        auto const target_node_prop = w.node_properties_[ae.to_];
-        if (P::node_cost(params, target_node_prop).cost_ == kInfeasible) {
+      auto const cost_node = search_dir == direction::kForward ? ae.to_ : n.n_;
+      if (!additional->is_additional_node(cost_node)) {
+        auto const cost_node_prop = w.node_properties_[cost_node];
+        if (P::node_cost(params, cost_node_prop).cost_ == kInfeasible) {
           continue;
         }
       }
@@ -208,7 +209,7 @@ void for_each_additional_edge(typename P::parameters const& params,
   }
 }
 
-template <WayAwareProfile P>
+template <WayAwareProfile P, direction SearchDir>
 std::tuple<typename P::node, cost_t, duration_t> get_adjacent_additional_node(
     typename P::parameters const& params,
     ways::routing const& w,
@@ -235,8 +236,10 @@ std::tuple<typename P::node, cost_t, duration_t> get_adjacent_additional_node(
     total = clamp_add(total, uturn_penalty, duration_t{0});
   }
 
-  if (!additional->is_additional_node(ae.to_)) {
-    total = clamp_add(total, P::node_cost(params, w.node_properties_[ae.to_]));
+  auto const cost_node = SearchDir == direction::kForward ? ae.to_ : n.n_;
+  if (!additional->is_additional_node(cost_node)) {
+    total =
+        clamp_add(total, P::node_cost(params, w.node_properties_[cost_node]));
   }
 
   return {target, total.cost_, total.duration_};
@@ -283,14 +286,16 @@ void for_each_adjacent_node(typename P::parameters const& params,
                             std::uint16_t const to) {
       // NOLINTNEXTLINE(clang-analyzer-core.CallAndMessage)
       auto const target_node = w.way_nodes_[way][to];
+      auto const cost_node =
+          SearchDir == direction::kForward ? target_node : n.n_;
       if constexpr (WithBlocked) {
-        if (blocked->test(target_node)) {
+        if (blocked->test(cost_node)) {
           return;
         }
       }
 
-      auto const target_node_prop = w.node_properties_[target_node];
-      auto const nc = P::node_cost(params, target_node_prop);
+      auto const cost_node_prop = w.node_properties_[cost_node];
+      auto const nc = P::node_cost(params, cost_node_prop);
       if (nc.cost_ == kInfeasible) {
         return;
       }
@@ -311,8 +316,16 @@ void for_each_adjacent_node(typename P::parameters const& params,
       }
 
       auto const is_u_turn = way_pos == n.way_ && way_dir == opposite(n.dir_);
-      auto const turn_cost =
-          get_profile_turn_cost<P>(params, w, n, way_pos, way_dir, is_u_turn);
+      auto const turn_cost = [&]() {
+        if constexpr (SearchDir == direction::kForward) {
+          return get_profile_turn_cost<P>(params, w, n, way_pos, way_dir,
+                                          is_u_turn);
+        } else {
+          auto const predecessor = typename P::node{n.n_, way_pos, way_dir};
+          return get_profile_turn_cost<P>(params, w, predecessor, n.way_,
+                                          n.dir_, is_u_turn);
+        }
+      }();
       if (turn_cost == kInfeasible) {
         return;
       }
