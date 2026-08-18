@@ -43,7 +43,6 @@ struct hgv_slot {
 struct hgv {
   static constexpr auto const kName = "hgv";
   static constexpr auto const kMaxMatchDistance = 200U;
-  static constexpr auto const kExactBidirectional = true;
   static constexpr auto const kDetourCostFactor = 0.9F;
 
   using key = node_idx_t;

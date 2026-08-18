@@ -155,6 +155,17 @@ struct railway {
 
     void write(node, path&) const {}
 
+    template <typename Fn>
+    static void for_each_state(ways::routing const& w,
+                               node_idx_t const n,
+                               Fn&& fn) {
+      auto const n_ways = static_cast<way_pos_t>(w.node_ways_[n].size());
+      for (auto i = way_pos_t{0U}; i != n_ways; ++i) {
+        fn(node{n, i, direction::kForward});
+        fn(node{n, i, direction::kBackward});
+      }
+    }
+
     static constexpr node get_node(node_idx_t const n,
                                    std::size_t const index) {
       return node{n, static_cast<way_pos_t>(index / 2U),
@@ -255,6 +266,15 @@ struct railway {
                                               node const n,
                                               direction const way_dir) {
     return n.dir_ == way_dir;
+  }
+
+  static constexpr cost_and_duration bidirectional_meet_cost(
+      parameters const& params,
+      ways::routing const& w,
+      node const fwd,
+      node const bwd) {
+    return get_transition_cost<railway>(params, w, get_reverse(bwd), fwd.way_,
+                                        opposite(fwd.dir_), kUturnPenalty);
   }
 
   template <direction SearchDir, bool WithBlocked, typename Fn>
@@ -389,5 +409,9 @@ struct railway {
     return {n.n_, n.way_, opposite(n.dir_)};
   }
 };
+
+template <>
+struct bidirectional_meet_policy<railway>
+    : profile_bidirectional_meet_policy<railway> {};
 
 }  // namespace osr
