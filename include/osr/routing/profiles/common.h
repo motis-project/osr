@@ -56,6 +56,67 @@ constexpr cost_t get_profile_turn_cost(typename P::parameters const& params,
                       w.get_turn_angle(n.n_, n.way_, n.dir_, way_pos, way_dir));
 }
 
+// Cost of continuing from `n` onto `way_pos` in `way_dir`.
+template <WayAwareProfile P>
+constexpr cost_and_duration get_transition_cost(
+    typename P::parameters const& params,
+    ways::routing const& w,
+    typename P::node const n,
+    way_pos_t const way_pos,
+    direction const way_dir,
+    cost_t const uturn_penalty) {
+  auto const is_u_turn = way_pos == n.way_ && way_dir == opposite(n.dir_);
+  auto const turn_cost =
+      get_profile_turn_cost<P>(params, w, n, way_pos, way_dir, is_u_turn);
+  if (turn_cost == kInfeasible) {
+    return infeasible_cost_and_duration();
+  }
+  return {.cost_ = clamp_cost(static_cast<std::uint64_t>(turn_cost) +
+                              (is_u_turn ? uturn_penalty : 0U)),
+          .duration_ = duration_t{0U}};
+}
+
+// Cost of continuing from `n` onto the endpoint way. A way can pass through a
+// node more than once (loops) and each occurrence is a separate routing state:
+// the search would settle the cheapest one, so this has to do the same to stay
+// cost-equivalent in both search directions.
+template <WayAwareProfile P, typename IsAllowed>
+constexpr cost_and_duration get_endpoint_transition_cost(
+    typename P::parameters const& params,
+    ways::routing const& w,
+    typename P::node const n,
+    way_idx_t const way,
+    direction const way_dir,
+    cost_t const uturn_penalty,
+    IsAllowed&& is_allowed) {
+  auto best = infeasible_cost_and_duration();
+  auto const ways = w.node_ways_[n.n_];
+  for (auto way_pos = way_pos_t{0U}; way_pos != ways.size(); ++way_pos) {
+    if (ways[way_pos] != way || !is_allowed(way_pos)) {
+      continue;
+    }
+    auto const c =
+        get_transition_cost<P>(params, w, n, way_pos, way_dir, uturn_penalty);
+    if (c.cost_ < best.cost_) {
+      best = c;
+    }
+  }
+  return best;
+}
+
+template <WayAwareProfile P>
+constexpr cost_and_duration get_endpoint_transition_cost(
+    typename P::parameters const& params,
+    ways::routing const& w,
+    typename P::node const n,
+    way_idx_t const way,
+    direction const way_dir,
+    cost_t const uturn_penalty) {
+  return get_endpoint_transition_cost<P>(params, w, n, way, way_dir,
+                                         uturn_penalty,
+                                         [](way_pos_t) { return true; });
+}
+
 template <WayAwareProfile P>
 constexpr cost_t get_profile_additional_turn_cost(
     typename P::parameters const& params,

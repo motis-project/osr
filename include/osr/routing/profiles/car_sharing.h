@@ -627,6 +627,25 @@ struct car_sharing {
                            distance, start_time, current_duration, search_dir);
   }
 
+  static constexpr bool endpoint_root_allowed(parameters const&,
+                                              node const,
+                                              direction) {
+    return true;
+  }
+
+  static constexpr cost_and_duration endpoint_transition_cost(
+      parameters const&,
+      ways::routing const&,
+      timezone_cache_t const&,
+      node const,
+      way_idx_t,
+      direction,
+      direction,
+      std::optional<routing_time_t>,
+      duration_t) {
+    return {};
+  }
+
   static constexpr double lower_bound_heuristic(parameters const& params,
                                                 double const dist) {
     return car::lower_bound_heuristic(params.car_, dist);

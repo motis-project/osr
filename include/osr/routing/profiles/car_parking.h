@@ -371,6 +371,30 @@ struct car_parking {
     }
   }
 
+  static cost_and_duration endpoint_transition_cost(
+      parameters const& params,
+      ways::routing const& w,
+      timezone_cache_t const& timezones,
+      node const n,
+      way_idx_t const way,
+      direction const way_dir,
+      direction const search_dir,
+      std::optional<routing_time_t> const start_time,
+      duration_t const current_duration) {
+    return n.is_car_node()
+               ? car::endpoint_transition_cost(
+                     params.car_, w, timezones, to_car(n), way, way_dir,
+                     search_dir, start_time, current_duration)
+               : cost_and_duration{};
+  }
+
+  static constexpr bool endpoint_root_allowed(parameters const& params,
+                                              node const n,
+                                              direction const way_dir) {
+    return !n.is_car_node() ||
+           car::endpoint_root_allowed(params.car_, to_car(n), way_dir);
+  }
+
   static bool is_dest_reachable(parameters const& params,
                                 ways::routing const& w,
                                 timezone_cache_t const& timezones,
