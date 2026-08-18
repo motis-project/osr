@@ -18,6 +18,7 @@
 #include "osr/routing/entry_storage.h"
 #include "osr/routing/mode.h"
 #include "osr/routing/path.h"
+#include "osr/routing/profile.h"
 #include "osr/routing/profiles/common.h"
 #include "osr/routing/sharing_data.h"
 #include "osr/routing/turns.h"
@@ -250,6 +251,20 @@ struct hgv {
     }
   }
 
+  template <endpoint_role Role, typename Fn>
+  static void resolve_endpoint(ways::routing const& w,
+                               way_idx_t const way,
+                               node_idx_t const n,
+                               level_t const lvl,
+                               direction const search_dir,
+                               Fn&& f) {
+    if constexpr (Role == endpoint_role::kSource) {
+      resolve_start_node(w, way, n, lvl, search_dir, f);
+    } else {
+      resolve_all(w, n, lvl, f);
+    }
+  }
+
   template <direction SearchDir, bool WithBlocked, typename Fn>
   static void adjacent(parameters const& params,
                        ways::routing const& w,
@@ -442,6 +457,22 @@ struct hgv {
                                    state.hgv_access_, state.max_speed_km_h_),
             .duration_ = distance_duration(params, e, state.info_, dist,
                                            state.max_speed_km_h_)};
+  }
+
+  static cost_and_duration endpoint_way_cost(
+      parameters const& params,
+      ways::routing const& w,
+      timezone_cache_t const& timezones,
+      node const,
+      way_idx_t const way,
+      way_properties const& properties,
+      direction const way_dir,
+      distance_t const distance,
+      std::optional<routing_time_t> const start_time,
+      duration_t const current_duration,
+      direction const search_dir) {
+    return way_cost(params, w, timezones, way, properties, way_dir, distance,
+                    start_time, current_duration, search_dir);
   }
 
   static constexpr cost_and_duration node_cost(parameters const&,

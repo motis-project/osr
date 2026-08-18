@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstddef>
 #include <cstdint>
 
 #include <concepts>
@@ -19,6 +20,11 @@
 #include "osr/ways.h"
 
 namespace osr {
+
+enum class endpoint_role : std::uint8_t {
+  kSource,  // where the *search* starts (fwd search: route start, bwd: end)
+  kTarget,  // where the *search* ends (fwd search: route end, bwd: start)
+};
 
 template <typename Parameters, typename Profile>
 concept IsParameters =
@@ -102,6 +108,18 @@ concept Profile =
         P::resolve_start_node(r, w, node_idx, lvl, dir, f)
       } -> std::same_as<void>;
       { P::resolve_all(r, node_idx, lvl, f) } -> std::same_as<void>;
+      // for resolve_endpoint, dir describes the endpoint, not the search:
+      //   dir == direction::kForward: *route* starts here
+      //   dir == direction::kBackward: *route* ends here
+      // (= search direction for kSource, its opposite for kTarget)
+      {
+        P::template resolve_endpoint<endpoint_role::kSource>(r, w, node_idx,
+                                                             lvl, dir, f)
+      } -> std::same_as<void>;
+      {
+        P::template resolve_endpoint<endpoint_role::kTarget>(r, w, node_idx,
+                                                             lvl, dir, f)
+      } -> std::same_as<void>;
     } &&
     requires(typename P::parameters const& params,
              typename P::node const node,
@@ -122,6 +140,11 @@ concept Profile =
         P::way_cost(params, r, timezones, w, w_props, dir,
                     std::declval<distance_t>(), start_time, current_duration,
                     dir)
+      } -> std::same_as<cost_and_duration>;
+      {
+        P::endpoint_way_cost(params, r, timezones, node, w, w_props, dir,
+                             std::declval<distance_t>(), start_time,
+                             current_duration, dir)
       } -> std::same_as<cost_and_duration>;
       { P::node_cost(params, n_props) } -> std::same_as<cost_and_duration>;
       { P::lower_bound_heuristic(params, dist) } -> std::same_as<double>;
