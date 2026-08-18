@@ -288,7 +288,7 @@ struct generic_car {
             }
 
             auto const [target, cost, duration] =
-                get_adjacent_additional_node<generic_car>(
+                get_adjacent_additional_node<generic_car, SearchDir>(
                     params, w, n, additional, ae, edge_dir, edge_cost,
                     params.uturn_penalty_);
             if (cost == kInfeasible) {
