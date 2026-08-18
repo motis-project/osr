@@ -146,6 +146,11 @@ concept Profile =
                              std::declval<distance_t>(), start_time,
                              current_duration, dir)
       } -> std::same_as<cost_and_duration>;
+      { P::endpoint_root_allowed(params, node, dir) } -> std::same_as<bool>;
+      {
+        P::endpoint_transition_cost(params, r, timezones, node, w, dir, dir,
+                                    start_time, current_duration)
+      } -> std::same_as<cost_and_duration>;
       { P::node_cost(params, n_props) } -> std::same_as<cost_and_duration>;
       { P::lower_bound_heuristic(params, dist) } -> std::same_as<double>;
       { P::upper_bound_heuristic(params, dist) } -> std::same_as<double>;
