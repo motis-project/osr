@@ -275,9 +275,9 @@ struct railway {
           [&](additional_edge const& ae, cost_and_duration const edge_cost,
               direction const edge_dir) {
             auto const [target, cost, duration] =
-                get_adjacent_additional_node<railway>(params, w, n, additional,
-                                                      ae, edge_dir, edge_cost,
-                                                      kUturnPenalty);
+                get_adjacent_additional_node<railway, SearchDir>(
+                    params, w, n, additional, ae, edge_dir, edge_cost,
+                    kUturnPenalty);
             if (cost == kInfeasible) {
               return;
             }

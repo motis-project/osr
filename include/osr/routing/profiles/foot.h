@@ -254,14 +254,16 @@ struct foot {
                               std::uint16_t const to) {
         // NOLINTNEXTLINE(clang-analyzer-core.CallAndMessage)
         auto const target_node = w.way_nodes_[way][to];
+        auto const cost_node =
+            SearchDir == direction::kForward ? target_node : n.n_;
         if constexpr (WithBlocked) {
-          if (blocked->test(target_node)) {
+          if (blocked->test(cost_node)) {
             return;
           }
         }
 
-        auto const target_node_prop = w.node_properties_[target_node];
-        if (node_cost(params, target_node_prop).cost_ == kInfeasible) {
+        auto const cost_node_prop = w.node_properties_[cost_node];
+        if (node_cost(params, cost_node_prop).cost_ == kInfeasible) {
           return;
         }
 
@@ -281,7 +283,7 @@ struct foot {
                     clamp_add(way_cost(params, w, timezones, way,
                                        target_way_prop, way_dir, dist,
                                        start_time, current_duration, SearchDir),
-                              node_cost(params, target_node_prop));
+                              node_cost(params, cost_node_prop));
                 fn(node{target_node, target_lvl}, step.cost_, step.duration_,
                    dist, way, from, to, elevation_storage::elevation{}, false);
               });
@@ -295,7 +297,7 @@ struct foot {
           auto const step = clamp_add(
               way_cost(params, w, timezones, way, target_way_prop, way_dir,
                        dist, start_time, current_duration, SearchDir),
-              node_cost(params, target_node_prop));
+              node_cost(params, cost_node_prop));
           fn(node{target_node, *target_lvl}, step.cost_, step.duration_, dist,
              way, from, to, elevation_storage::elevation{}, false);
         }
