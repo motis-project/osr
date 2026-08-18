@@ -102,13 +102,7 @@ struct bike_sharing {
   };
 
   struct key {
-    friend bool operator==(key const a, key const b) {
-      auto const is_zero = [](level_t const l) {
-        return l == kNoLevel || l == level_t{0.F};
-      };
-      return a.n_ == b.n_ &&
-             (a.lvl_ == b.lvl_ || (is_zero(a.lvl_) && is_zero(b.lvl_)));
-    }
+    friend constexpr bool operator==(key const&, key const&) = default;
 
     node_idx_t n_{node_idx_t::invalid()};
     level_t lvl_{};
@@ -118,11 +112,7 @@ struct bike_sharing {
 
   struct node {
     friend bool operator==(node const a, node const b) {
-      auto const is_zero = [](level_t const l) {
-        return l == kNoLevel || l == level_t{0.F};
-      };
-      return a.n_ == b.n_ && a.type_ == b.type_ &&
-             (a.lvl_ == b.lvl_ || (is_zero(a.lvl_) && is_zero(b.lvl_)));
+      return a.n_ == b.n_ && a.type_ == b.type_ && a.lvl_ == b.lvl_;
     }
 
     friend constexpr bool operator<(node const& a, node const& b) noexcept {
@@ -340,8 +330,7 @@ struct bike_sharing {
     };
 
     auto const& continue_on_foot = [&](node_type const nt,
-                                       bool const include_additional_edges,
-                                       cost_t const switch_penalty = 0) {
+                                       bool const include_additional_edges) {
       footp::template adjacent<SearchDir, WithBlocked>(
           params.foot_, w, timezones, to_foot(n), current_duration, start_time,
           blocked, nullptr, elevations,
@@ -350,9 +339,8 @@ struct bike_sharing {
               way_idx_t const way, std::uint16_t const from,
               std::uint16_t const to,
               elevation_storage::elevation const elevation, bool) {
-            fn(to_node(neighbor, nt), cost + switch_penalty,
-               clamp_add_duration(duration, duration_from_cost(switch_penalty)),
-               dist, way, from, to, elevation, false);
+            fn(to_node(neighbor, nt), cost, duration, dist, way, from, to,
+               elevation, false);
           });
       if (include_additional_edges) {
         // walk to station or free-floating bike
@@ -361,19 +349,40 @@ struct bike_sharing {
           for (auto const& ae : it->second) {
             handle_additional_edge(
                 ae, nt,
-                clamp_add(
-                    footp::way_cost(
-                        params.foot_, w, timezones, way_idx_t::invalid(),
-                        kAdditionalWayProperties, direction::kForward,
-                        ae.distance_, start_time, current_duration, SearchDir),
-                    switch_penalty));
+                footp::way_cost(params.foot_, w, timezones,
+                                way_idx_t::invalid(), kAdditionalWayProperties,
+                                direction::kForward, ae.distance_, start_time,
+                                current_duration, SearchDir));
           }
         }
       }
     };
 
-    auto const& continue_on_bike = [&](bool const include_additional_edges,
-                                       cost_t const switch_penalty = 0) {
+    auto const& return_bike = [&]() {
+      if (!is_allowed(sharing->end_allowed_, n.n_) ||
+          bikep::node_cost(params.bike_, w.node_properties_[n.n_]).cost_ ==
+              kInfeasible) {
+        return;
+      }
+      auto const emit = [&](node const target) {
+        fn(target, kEndSwitchPenalty, duration_from_cost(kEndSwitchPenalty),
+           distance_t{0U}, way_idx_t::invalid(), 0U, 0U,
+           elevation_storage::elevation{}, false);
+      };
+      if constexpr (SearchDir == direction::kForward) {
+        footp::resolve_all(
+            w, n.n_, kNoLevel, [&](footp::node const foot_state) {
+              emit(to_node(foot_state, node_type::kTrailingFoot));
+            });
+      } else if (is_resolved_foot_state<footp>(
+                     w, n, [&](footp::node const foot_state) {
+                       return to_node(foot_state, n.type_);
+                     })) {
+        emit(to_node(bikep::node{n.n_, direction::kForward}, kNoLevel));
+      }
+    };
+
+    auto const& continue_on_bike = [&]() {
       bikep::adjacent<SearchDir, WithBlocked>(
           params.bike_, w, timezones, to_bike(n), current_duration, start_time,
           blocked, nullptr, elevations,
@@ -382,27 +391,25 @@ struct bike_sharing {
               way_idx_t const way, std::uint16_t const from,
               std::uint16_t const to,
               elevation_storage::elevation const elevation, bool) {
-            if (is_allowed(sharing->through_allowed_, neighbor.n_)) {
-              fn(to_node(neighbor, kNoLevel), cost + switch_penalty,
-                 clamp_add_duration(duration,
-                                    duration_from_cost(switch_penalty)),
-                 dist, way, from, to, elevation, false);
+            // the forward orientation of this edge arrives at `neighbor`
+            // going forward and at `n` going backward
+            if (is_allowed(
+                    sharing->through_allowed_,
+                    SearchDir == direction::kForward ? neighbor.n_ : n.n_)) {
+              fn(to_node(neighbor, kNoLevel), cost, duration, dist, way, from,
+                 to, elevation, false);
             }
           });
-      if (include_additional_edges) {
-        // drive to station
-        if (auto const it = sharing->additional_edges_.find(n.n_);
-            it != end(sharing->additional_edges_)) {
-          for (auto const& ae : it->second) {
-            handle_additional_edge(
-                ae, node_type::kBike,
-                clamp_add(
-                    bikep::way_cost(
-                        params.bike_, w, timezones, way_idx_t::invalid(),
-                        kAdditionalWayProperties, direction::kForward,
-                        ae.distance_, start_time, current_duration, SearchDir),
-                    switch_penalty));
-          }
+      // drive to station
+      if (auto const it = sharing->additional_edges_.find(n.n_);
+          it != end(sharing->additional_edges_)) {
+        for (auto const& ae : it->second) {
+          handle_additional_edge(
+              ae, node_type::kBike,
+              bikep::way_cost(params.bike_, w, timezones, way_idx_t::invalid(),
+                              kAdditionalWayProperties, direction::kForward,
+                              ae.distance_, start_time, current_duration,
+                              SearchDir));
         }
       }
     };
@@ -442,12 +449,8 @@ struct bike_sharing {
         if (n.is_initial_foot_node() || n.is_trailing_foot_node()) {
           continue_on_foot(n.type_, n.is_initial_foot_node());
         } else if (n.is_bike_node()) {
-          continue_on_bike(true);
-          if (is_allowed(sharing->end_allowed_, n.n_)) {
-            // switch to foot
-            continue_on_foot(node_type::kTrailingFoot, false,
-                             kEndSwitchPenalty);
-          }
+          continue_on_bike();
+          return_bike();
         }
       }
 
@@ -485,15 +488,11 @@ struct bike_sharing {
       } else {
         if (n.is_initial_foot_node() || n.is_trailing_foot_node()) {
           continue_on_foot(n.type_, n.is_trailing_foot_node());
-          if (n.is_trailing_foot_node() &&
-              is_allowed(sharing->end_allowed_, n.n_) &&
-              bikep::node_cost(params.bike_, w.node_properties_[n.n_]).cost_ !=
-                  kInfeasible) {
-            // switch to bike
-            continue_on_bike(false, kEndSwitchPenalty);
+          if (n.is_trailing_foot_node()) {
+            return_bike();
           }
         } else if (n.is_bike_node()) {
-          continue_on_bike(true);
+          continue_on_bike();
         }
       }
     }
@@ -508,8 +507,7 @@ struct bike_sharing {
                                 direction const search_dir,
                                 std::optional<routing_time_t> const start_time,
                                 duration_t const current_duration) {
-    return !n.is_bike_node() &&
-           footp::is_dest_reachable(params.foot_, w, timezones, to_foot(n), way,
+    return footp::is_dest_reachable(params.foot_, w, timezones, to_foot(n), way,
                                     way_dir, search_dir, start_time,
                                     current_duration);
   }
