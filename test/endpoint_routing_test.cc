@@ -356,8 +356,8 @@ TEST_F(endpoint_routing, matching_penalty_saturates_before_integer_conversion) {
   auto from_matches = match_result{};
   auto to_matches = match_result{};
   l_->match<foot_t>(params, from, false, direction::kForward, 2.0, nullptr,
-                    from_matches);
-  l_->match<foot_t>(params, to, true, direction::kForward, 2.0, nullptr,
+                    false, from_matches);
+  l_->match<foot_t>(params, to, true, direction::kForward, 2.0, nullptr, false,
                     to_matches);
   auto const fm = from_matches[match_idx_t{0U}];
   ASSERT_FALSE(fm.empty());
@@ -387,8 +387,8 @@ TEST_F(endpoint_routing, duration_budget_includes_both_matching_penalties) {
   auto from_matches = match_result{};
   auto to_matches = match_result{};
   l_->match<foot_t>(params, from, false, direction::kForward, 2.0, nullptr,
-                    from_matches);
-  l_->match<foot_t>(params, to, true, direction::kForward, 2.0, nullptr,
+                    false, from_matches);
+  l_->match<foot_t>(params, to, true, direction::kForward, 2.0, nullptr, false,
                     to_matches);
   auto const penalize = [](match_view_t const& matches) {
     auto out = match_result{};
