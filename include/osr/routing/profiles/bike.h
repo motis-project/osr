@@ -342,6 +342,25 @@ struct bike {
                     start_time, current_duration, search_dir);
   }
 
+  static constexpr bool endpoint_root_allowed(parameters const&,
+                                              node const,
+                                              direction) {
+    return true;
+  }
+
+  static constexpr cost_and_duration endpoint_transition_cost(
+      parameters const&,
+      ways::routing const&,
+      timezone_cache_t const&,
+      node const,
+      way_idx_t,
+      direction,
+      direction,
+      std::optional<routing_time_t>,
+      duration_t) {
+    return {};
+  }
+
   static constexpr cost_and_duration node_cost(parameters const&,
                                                node_properties const n) {
     return n.is_bike_accessible() ? cost_and_duration_from_cost(0U)

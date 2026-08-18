@@ -233,6 +233,30 @@ struct railway {
     }
   }
 
+  static constexpr cost_and_duration endpoint_transition_cost(
+      parameters const& params,
+      ways::routing const& w,
+      timezone_cache_t const&,
+      node const n,
+      way_idx_t const way,
+      direction const way_dir,
+      direction const search_dir,
+      std::optional<routing_time_t>,
+      duration_t) {
+    auto const transition_node =
+        search_dir == direction::kForward ? n : get_reverse(n);
+    auto const transition_dir =
+        search_dir == direction::kForward ? way_dir : opposite(way_dir);
+    return get_endpoint_transition_cost<railway>(
+        params, w, transition_node, way, transition_dir, kUturnPenalty);
+  }
+
+  static constexpr bool endpoint_root_allowed(parameters const&,
+                                              node const n,
+                                              direction const way_dir) {
+    return n.dir_ == way_dir;
+  }
+
   template <direction SearchDir, bool WithBlocked, typename Fn>
   static void adjacent(parameters const& params,
                        ways::routing const& w,
