@@ -13,6 +13,18 @@ namespace osr {
 struct additional_edge;
 struct sharing_data;
 
+template <typename FootProfile, typename Node, typename ToNode>
+bool is_resolved_foot_state(ways::routing const& w,
+                            Node const n,
+                            ToNode&& to_node) {
+  auto found = false;
+  FootProfile::resolve_all(w, n.n_, kNoLevel,
+                           [&](typename FootProfile::node const foot_state) {
+                             found = found || to_node(foot_state) == n;
+                           });
+  return found;
+}
+
 template <Profile P, typename Fn>
 void for_each_additional_edge(typename P::parameters const&,
                               ways::routing const&,
