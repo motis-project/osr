@@ -176,6 +176,7 @@ struct bike {
                                level_t,
                                route_end,
                                endpoint_role,
+                               bool const,
                                Fn&& f) {
     resolve_all(w, n, std::forward<Fn>(f));
   }
@@ -346,8 +347,8 @@ struct bike {
     return node_cost(params, n);
   }
 
-  static constexpr component_classes endpoint_component_classes(
-      route_end) noexcept {
+  static constexpr component_classes endpoint_component_classes(route_end,
+                                                                bool) noexcept {
     return {component_class::kBike};
   }
 

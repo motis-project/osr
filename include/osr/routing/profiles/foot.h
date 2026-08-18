@@ -177,6 +177,7 @@ struct foot {
                                level_t const lvl,
                                route_end const end,
                                endpoint_role,
+                               bool const,
                                Fn&& f) {
     auto const p = w.way_properties_[way];
     auto const level_compatible =
@@ -454,8 +455,8 @@ struct foot {
     return node_cost(params, n);
   }
 
-  static constexpr component_classes endpoint_component_classes(
-      route_end) noexcept {
+  static constexpr component_classes endpoint_component_classes(route_end,
+                                                                bool) noexcept {
     return {component_class::kFoot};
   }
 
