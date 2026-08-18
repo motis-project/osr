@@ -336,9 +336,9 @@ struct hgv {
             }
 
             auto const [target, cost, duration] =
-                get_adjacent_additional_node<hgv>(params, w, n, additional, ae,
-                                                  edge_dir, edge_cost,
-                                                  params.uturn_penalty_);
+                get_adjacent_additional_node<hgv, SearchDir>(
+                    params, w, n, additional, ae, edge_dir, edge_cost,
+                    params.uturn_penalty_);
             if (cost == kInfeasible) {
               return;
             }
