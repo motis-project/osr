@@ -26,6 +26,31 @@ enum class endpoint_role : std::uint8_t {
   kTarget,  // where the *search* ends (fwd search: route end, bwd: start)
 };
 
+template <typename P>
+struct bidirectional_meet_policy {
+  static constexpr auto const kEnumerateStates = false;
+};
+
+template <typename P>
+struct profile_bidirectional_meet_policy {
+  static constexpr auto const kEnumerateStates = true;
+
+  template <typename Fn>
+  static void for_each_state(ways::routing const& w,
+                             typename P::key const key,
+                             Fn&& fn) {
+    P::entry::for_each_state(w, key, std::forward<Fn>(fn));
+  }
+
+  static constexpr cost_and_duration transition_cost(
+      typename P::parameters const& params,
+      ways::routing const& w,
+      typename P::node const fwd,
+      typename P::node const bwd) {
+    return P::bidirectional_meet_cost(params, w, fwd, bwd);
+  }
+};
+
 template <typename Parameters, typename Profile>
 concept IsParameters =
     std::is_default_constructible_v<Parameters> &&

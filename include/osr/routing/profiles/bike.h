@@ -148,6 +148,14 @@ struct bike {
       return node{n, index == 0U ? direction::kForward : direction::kBackward};
     }
 
+    template <typename Fn>
+    static void for_each_state(ways::routing const&,
+                               node_idx_t const n,
+                               Fn&& fn) {
+      fn(node{n, direction::kForward});
+      fn(node{n, direction::kBackward});
+    }
+
     void write(node, path&) const {}
 
     std::array<node_idx_t, 2U> pred_;
@@ -195,6 +203,11 @@ struct bike {
     } else {
       resolve_all(w, n, lvl, f);
     }
+  }
+
+  static constexpr cost_and_duration bidirectional_meet_cost(
+      parameters const&, ways::routing const&, node const, node const) {
+    return {};
   }
 
   static bool is_dest_reachable(parameters const& params,
@@ -380,8 +393,16 @@ struct bike {
   }
 
   static constexpr node get_reverse(node const n) {
-    return {n, opposite(n.dir_)};
+    return {n.n_, opposite(n.dir_)};
   }
 };
+
+template <bike_costing Costing,
+          unsigned int ElevationUpCost,
+          unsigned int ElevationExponentThousandth>
+struct bidirectional_meet_policy<
+    bike<Costing, ElevationUpCost, ElevationExponentThousandth>>
+    : profile_bidirectional_meet_policy<
+          bike<Costing, ElevationUpCost, ElevationExponentThousandth>> {};
 
 }  // namespace osr

@@ -155,6 +155,17 @@ struct generic_car {
 
     void write(node, path&) const {}
 
+    template <typename Fn>
+    static void for_each_state(ways::routing const& w,
+                               node_idx_t const n,
+                               Fn&& fn) {
+      auto const n_ways = static_cast<way_pos_t>(w.node_ways_[n].size());
+      for (auto i = way_pos_t{0U}; i != n_ways; ++i) {
+        fn(node{n, i, direction::kForward});
+        fn(node{n, i, direction::kBackward});
+      }
+    }
+
     static constexpr node get_node(node_idx_t const n,
                                    std::size_t const index) {
       return node{n, static_cast<way_pos_t>(index / 2U),
@@ -261,6 +272,20 @@ struct generic_car {
                                               node const n,
                                               direction const way_dir) {
     return n.dir_ == way_dir;
+  }
+
+  static constexpr cost_and_duration bidirectional_meet_cost(
+      parameters const& params,
+      ways::routing const& w,
+      node const fwd,
+      node const bwd) {
+    if (w.template is_restricted<IsBus>(fwd.n_, fwd.way_, bwd.way_,
+                                        direction::kForward)) {
+      return infeasible_cost_and_duration();
+    }
+    return get_transition_cost<generic_car>(params, w, get_reverse(bwd),
+                                            fwd.way_, opposite(fwd.dir_),
+                                            params.uturn_penalty_);
   }
 
   template <direction SearchDir, bool WithBlocked, typename Fn>
@@ -441,5 +466,9 @@ struct generic_car {
 
 using car = generic_car<false>;
 using bus = generic_car<true>;
+
+template <bool IsBus>
+struct bidirectional_meet_policy<generic_car<IsBus>>
+    : profile_bidirectional_meet_policy<generic_car<IsBus>> {};
 
 }  // namespace osr
