@@ -164,7 +164,7 @@ TEST_F(endpoint_matching_test, unreachable_closest_match_uses_farther_match) {
 
   auto to_matches = match_result{};
   l.match<car>(profile_params, to, true, direction::kForward, 50.0, nullptr,
-               to_matches);
+               false, to_matches);
   auto const matches = to_matches[match_idx_t{0U}];
   ASSERT_GE(matches.size(), 2U);
   EXPECT_EQ(std::optional<std::int64_t>{400}, w.get_osm_way(matches.way_[0]));

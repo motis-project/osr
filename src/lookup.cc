@@ -146,13 +146,15 @@ void lookup::match(profile_parameters const& params,
                    direction const search_dir,
                    double const max_match_distance,
                    bitvec<node_idx_t> const* blocked,
+                   bool const exact_return_allowed,
                    search_profile const p,
                    std::span<raw_way_candidate const> const raw_way_candidates,
                    match_result& out) const {
   with_profile(p, [&]<Profile P>(P&&) {
     complete_match<P>(std::get<typename P::parameters>(params), query, reverse,
-                      search_dir, max_match_distance, blocked, std::nullopt,
-                      raw_way_candidates, out);
+                      search_dir, max_match_distance, blocked,
+                      exact_return_allowed, std::nullopt, raw_way_candidates,
+                      out);
   });
 }
 

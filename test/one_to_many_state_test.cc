@@ -102,11 +102,11 @@ void check(graph const& g,
 
   auto const& pp = std::get<typename P::parameters>(params);
   auto from_m = match_result{};
-  l.match<P>(pp, from, false, dir, kMaxMatchDistance, nullptr, from_m,
+  l.match<P>(pp, from, false, dir, kMaxMatchDistance, nullptr, false, from_m,
              std::nullopt);
   auto to_m = match_result{};
   for (auto const& x : to) {
-    l.match<P>(pp, x, true, dir, kMaxMatchDistance, nullptr, to_m,
+    l.match<P>(pp, x, true, dir, kMaxMatchDistance, nullptr, false, to_m,
                std::nullopt);
   }
   auto const from_match = from_m[match_idx_t{0U}];
@@ -182,7 +182,8 @@ TEST(one_to_many_state, empty_from_match) {
   auto to_m = match_result{};
   g.l_->match<foot<false, elevator_tracking>>(
       std::get<foot<false, elevator_tracking>::parameters>(params), to[0], true,
-      direction::kForward, kMaxMatchDistance, nullptr, to_m, std::nullopt);
+      direction::kForward, kMaxMatchDistance, nullptr, false, to_m,
+      std::nullopt);
   auto const state =
       route_one_to_many(params, *g.w_, *g.l_, search_profile::kFoot, to[0], to,
                         match_view_t{}, to_m, kMax, direction::kForward);

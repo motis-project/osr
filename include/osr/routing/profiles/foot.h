@@ -177,6 +177,7 @@ struct foot {
                                level_t const lvl,
                                route_end const end,
                                endpoint_role,
+                               bool const,
                                Fn&& f) {
     auto const p = w.way_properties_[way];
     auto const level_compatible =
