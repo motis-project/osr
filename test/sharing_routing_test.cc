@@ -105,6 +105,31 @@ struct test_sharing_data {
   hash_map<node_idx_t, std::vector<additional_edge>> additional_edges_{};
 };
 
+TEST_F(sharing_routing_test, endpoint_matches_work_with_all_algorithms) {
+  auto const& w = *ways_;
+  auto const& l = *lookup_;
+  auto const from = location{{49.010000, 8.000000}, kNoLevel};
+  auto const to = location{{49.010045, 8.002800}, kNoLevel};
+  auto const params = get_parameters(search_profile::kFoot);
+
+  auto const dijkstra =
+      route_dijkstra(params, w, l, search_profile::kFoot, from, to,
+                     cost_t{3600U}, direction::kForward, 50.0);
+  auto const astar = route_astar(params, w, l, search_profile::kFoot, from, to,
+                                 cost_t{3600U}, direction::kForward, 50.0);
+  auto const bidirectional =
+      route_bidirectional(params, w, l, search_profile::kFoot, from, to,
+                          cost_t{3600U}, direction::kForward, 50.0);
+
+  ASSERT_TRUE(dijkstra.has_value());
+  ASSERT_TRUE(astar.has_value());
+  ASSERT_TRUE(bidirectional.has_value());
+  EXPECT_EQ(dijkstra->cost_, astar->cost_);
+  EXPECT_EQ(dijkstra->cost_, bidirectional->cost_);
+  EXPECT_EQ(dijkstra->duration_, astar->duration_);
+  EXPECT_EQ(dijkstra->duration_, bidirectional->duration_);
+}
+
 TEST_F(sharing_routing_test, reconstructed_duration_excludes_matching_penalty) {
   auto const& w = *ways_;
   auto const& l = *lookup_;

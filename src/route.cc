@@ -529,8 +529,7 @@ std::optional<path> route_bidirectional(typename P::parameters const& params,
     return std::nullopt;
   }
   return reconstruct_bi(params, w, l, blocked, sharing, elevations, b, from, to,
-                        start, destination, cost, duration_from_cost(cost),
-                        dir);
+                        start, destination, cost, b.best_duration_, dir);
 }
 
 template <Profile P>
@@ -983,9 +982,18 @@ std::optional<path> route(profile_parameters const& params,
       return with_profile(profile, [&]<Profile P>(P&&) {
         auto const& pp = std::get<typename P::parameters>(params);
         auto b = bidirectional<P>{};
-        return route_bidirectional(pp, w, l, b, from, to, from_match, to_match,
-                                   max, dir, blocked, sharing, elevations,
-                                   options.matching_penalty_factor_);
+        auto result = route_bidirectional(
+            pp, w, l, b, from, to, from_match, to_match, max, dir, blocked,
+            sharing, elevations, options.matching_penalty_factor_);
+        if constexpr (bidirectional_meet_policy<P>::kEnumerateStates) {
+          if (!result.has_value()) {
+            auto d = dijkstra<P>{};
+            return route_dijkstra(pp, w, l, d, from, to, from_match, to_match,
+                                  max, dir, start_time, blocked, sharing,
+                                  elevations, options);
+          }
+        }
+        return result;
       });
   }
   throw utl::fail("not implemented");
