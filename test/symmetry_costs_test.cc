@@ -75,4 +75,27 @@ TEST(symmetry_costs, node_penalties_are_charged_in_both_directions) {
   }
 }
 
+TEST(symmetry_levels, elevator_endpoint_is_direction_independent) {
+  auto const dir = fs::temp_directory_path() / "osr-symmetry-levels-test";
+  auto ec = std::error_code{};
+  fs::remove_all(dir, ec);
+  fs::create_directories(dir, ec);
+  extract(false, "test/station-border.osm.pbf", dir, {});
+  auto w = ways{dir, cista::mmap::protection::READ};
+  auto const l = lookup{w, dir, cista::mmap::protection::READ};
+  auto const params = get_parameters(search_profile::kFoot);
+
+  auto const from = location{48.7265456, 2.259178, kNoLevel};
+  auto const to = location{48.7263761, 2.2576106, kNoLevel};
+
+  auto const fwd = route(params, w, l, search_profile::kFoot, from, to,
+                         cost_t{100'000U}, direction::kForward, 250.0);
+  auto const bwd = route(params, w, l, search_profile::kFoot, to, from,
+                         cost_t{100'000U}, direction::kBackward, 250.0);
+  ASSERT_TRUE(fwd.has_value());
+  ASSERT_TRUE(bwd.has_value());
+  EXPECT_EQ(fwd->cost_, bwd->cost_);
+  EXPECT_EQ(fwd->duration_, bwd->duration_);
+}
+
 }  // namespace osr

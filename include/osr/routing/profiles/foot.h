@@ -25,13 +25,7 @@ struct foot {
   };
 
   struct node {
-    friend bool operator==(node const a, node const b) {
-      auto const is_zero = [](level_t const l) {
-        return l == kNoLevel || l == level_t{0.F};
-      };
-      return a.n_ == b.n_ &&
-             (a.lvl_ == b.lvl_ || (is_zero(a.lvl_) && is_zero(b.lvl_)));
-    }
+    friend constexpr bool operator==(node const&, node const&) = default;
 
     friend constexpr bool operator<(node const& a, node const& b) noexcept {
       return std::tie(a.n_, a.lvl_) < std::tie(b.n_, b.lvl_);
@@ -126,10 +120,9 @@ struct foot {
     using is_avalanching = void;
     auto operator()(auto const n) const noexcept -> std::uint64_t {
       using namespace ankerl::unordered_dense::detail;
-      return wyhash::mix(
-          wyhash::hash(static_cast<std::uint64_t>(
-              to_idx(n.lvl_ == kNoLevel ? level_t{0.F} : n.lvl_))),
-          wyhash::hash(static_cast<std::uint64_t>(to_idx(n.n_))));
+      auto const packed = (static_cast<std::uint64_t>(to_idx(n.lvl_)) << 32U) |
+                          static_cast<std::uint64_t>(to_idx(n.n_));
+      return wyhash::hash(packed);
     }
   };
 
@@ -274,32 +267,46 @@ struct foot {
           return;
         }
 
-        if (can_use_elevator(w, target_node, n.lvl_)) {
-          for_each_elevator_level(
-              w, target_node, [&](level_t const target_lvl) {
-                auto const dist =
-                    w.get_way_node_distance(way, std::min(from, to));
-                auto const step =
-                    clamp_add(way_cost(params, w, timezones, way,
-                                       target_way_prop, way_dir, dist,
-                                       start_time, current_duration, SearchDir),
-                              node_cost(params, cost_node_prop));
-                fn(node{target_node, target_lvl}, step.cost_, step.duration_,
-                   dist, way, from, to, elevation_storage::elevation{}, false);
-              });
-        } else {
-          auto const target_lvl = get_target_level(w, n.n_, n.lvl_, way);
-          if (!target_lvl.has_value()) {
-            return;
-          }
-
+        auto const emit = [&](level_t const target_lvl) {
           auto const dist = w.get_way_node_distance(way, std::min(from, to));
           auto const step = clamp_add(
               way_cost(params, w, timezones, way, target_way_prop, way_dir,
                        dist, start_time, current_duration, SearchDir),
               node_cost(params, cost_node_prop));
-          fn(node{target_node, *target_lvl}, step.cost_, step.duration_, dist,
+          fn(node{target_node, target_lvl}, step.cost_, step.duration_, dist,
              way, from, to, elevation_storage::elevation{}, false);
+        };
+
+        if constexpr (SearchDir == direction::kForward) {
+          if (can_use_elevator(w, target_node, n.lvl_)) {
+            for_each_elevator_level(w, target_node, emit);
+          } else if (auto const target_lvl =
+                         get_target_level(w, n.n_, n.lvl_, way);
+                     target_lvl.has_value()) {
+            emit(*target_lvl);
+          }
+        } else {
+          auto levels = std::uint64_t{0U};
+          auto const consider = [&](level_t const predecessor_lvl) {
+            auto const mask = std::uint64_t{1U} << to_idx(predecessor_lvl);
+            if ((levels & mask) != 0U) {
+              return;
+            }
+            levels |= mask;
+            if (can_use_elevator(w, n.n_, predecessor_lvl, n.lvl_)) {
+              emit(predecessor_lvl);
+            } else if (auto const reached = get_target_level(
+                           w, target_node, predecessor_lvl, way);
+                       reached.has_value() && node{n.n_, *reached} == n) {
+              emit(predecessor_lvl);
+            }
+          };
+          resolve_all(w, target_node, kNoLevel, [&](node const predecessor) {
+            consider(predecessor.lvl_);
+          });
+          if (w.node_properties_[target_node].is_elevator()) {
+            for_each_elevator_level(w, target_node, consider);
+          }
         }
       };
 
@@ -360,7 +367,8 @@ struct foot {
       } else {
         return std::nullopt;
       }
-    } else if (can_use_elevator(w, to_way, from_level)) {
+    } else if (from_level != kNoLevel &&
+               can_use_elevator(w, to_way, from_level)) {
       return from_level;
     } else if (can_use_elevator(w, from_node, way_prop.from_level(),
                                 from_level)) {
