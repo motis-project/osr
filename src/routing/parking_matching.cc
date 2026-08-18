@@ -24,30 +24,6 @@ namespace osr {
 
 namespace {
 
-// ways::routing::parking_edge::offset to_offset(ways const& w,
-//                                               way_candidate const& wc) {
-//   auto offset = ways::routing::parking_edge::offset{
-//       .additional_point_ = point::from_latlng(wc.closest_point_on_way_),
-//       .way_ = wc.way_,
-//       .segment_ = wc.segment_idx_,
-//       .left_ = wc.left_.node_,
-//       .right_ = wc.right_.node_,
-//       .dist_left_ = 0U,
-//       .dist_right_ = 0U};
-//
-//   if (wc.left_.node_ != node_idx_t::invalid()) {
-//     offset.dist_left_ =
-//         geo::length(to_polyline(parking_edge_offset_polyline(w, offset,
-//         true)));
-//   }
-//   if (wc.right_.node_ != node_idx_t::invalid()) {
-//     offset.dist_right_ = geo::length(
-//         to_polyline(parking_edge_offset_polyline(w, offset, false)));
-//   }
-//
-//   return offset;
-// }
-
 vec_map<component_idx_t, std::size_t> compute_component_sizes(
     ways const& w, unsigned const n_components) {
   auto component_sizes =
@@ -232,12 +208,9 @@ void connect_parking_ways(
       conn.emplace_back(point::from_latlng(foot_entrance.best_));
     }
 
-    // return {conn,
-    // static_cast<std::uint16_t>(geo::length(to_polyline(conn)))};
     return conn;
   };
 
-  w.r_->has_parking_edges_.resize(w.n_nodes());
   w.r_->has_additional_connections_.resize(w.n_nodes());
 
   for (auto i = 0U; i != w.n_ways(); ++i) {
@@ -299,8 +272,6 @@ void connect_parking_ways(
     auto const foot_entrance = geo::approx_squared_distance_to_polyline(
         foot_offset->closest_point_on_way_, w.way_polylines_[way_idx],
         approx_distance_lng_degrees);
-    // auto const parking_edge_idx =
-    //     parking_edge_idx_t{w.r_->parking_edges_.size()};
     auto conn =
         make_connection(center, approx_distance_lng_degrees, *car_offset,
                         car_entrance, foot_entrance, *foot_offset);
@@ -309,28 +280,6 @@ void connect_parking_ways(
                               true);
   }
   utl::sort(w.r_->additional_node_connections_);
-}
-
-bool is_parking_way(ways::routing const& r, way_idx_t const way_idx) {
-  return way_idx >= r.way_component_.size() &&
-         way_idx < r.way_component_.size() + r.parking_edges_.size();
-}
-
-geo::polyline parking_way_polyline(ways const& w,
-                                   way_idx_t const way_idx,
-                                   direction const dir,
-                                   node_idx_t const from,
-                                   node_idx_t const to) {
-  auto const& r = *w.r_;
-  utl::verify(is_parking_way(r, way_idx), "way {} is not a valid parking edge",
-              way_idx);
-  auto const& parking_edge =
-      r.parking_edges_[ways::routing::parking_edge::decode_parking_edge(
-          r, way_idx)];
-
-  return parking_edge_polyline(w, parking_edge,
-                               dir == direction::kForward ? from : to,
-                               dir == direction::kForward ? to : from);
 }
 
 }  // namespace osr

@@ -33,9 +33,9 @@ void connect_parking_ways(ways&,
                           vec_map<way_idx_t, way_extra_properties> const&,
                           unsigned n_components);
 
-bool is_parking_way(ways::routing const&, way_idx_t);
-
-geo::polyline parking_way_polyline(
-    ways const&, way_idx_t, direction, node_idx_t, node_idx_t);
+// bool is_parking_way(ways::routing const&, way_idx_t);
+//
+// geo::polyline parking_way_polyline(
+//     ways const&, way_idx_t, direction, node_idx_t, node_idx_t);
 
 }  // namespace osr

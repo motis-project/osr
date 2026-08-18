@@ -20,8 +20,8 @@
 
 #include "osr/geojson.h"
 #include "osr/lookup.h"
+#include "osr/routing/additional_connection.h"
 #include "osr/routing/algorithms.h"
-#include "osr/routing/for_each_parking_edge.h"
 #include "osr/routing/parameters.h"
 #include "osr/routing/profiles/bike.h"
 #include "osr/routing/profiles/bike_sharing.h"
@@ -200,23 +200,23 @@ struct http_server::impl {
     auto const max =
         geo::latlng{waypoints[3].as_double(), waypoints[2].as_double()};
 
-    auto parking_edges =
-        bitvec<parking_edge_idx_t>(w_.r_->parking_edges_.size());
-    auto const mark_parking_edges = [&](way_idx_t const w) {
+    auto connections =
+        bitvec<connection_idx_t>(w_.r_->additional_connections_.size());
+    auto const mark_connections = [&](way_idx_t const w) {
       for (auto const node_idx : w_.r_->way_nodes_[w]) {
-        for_each_parking_edge(*w_.r_, node_idx,
-                              [&](parking_edge_idx_t const parking_edge_idx) {
-                                parking_edges.set(parking_edge_idx);
-                              });
+        for_each_connection(*w_.r_, node_idx,
+                            [&](connection_idx_t const connection_idx) {
+                              connections.set(connection_idx);
+                            });
       }
     };
 
     auto gj = geojson_writer{.w_ = w_};
     l_.find({min, max}, [&](way_idx_t const w) {
       gj.write_way(w);
-      mark_parking_edges(w);
+      mark_connections(w);
     });
-    gj.write_parking_edges(w_, parking_edges);
+    gj.write_additional_connections(w_, connections);
 
     with_profile(profile,
                  [&]<Profile P>(P&&) { send_graph_response<P>(req, cb, gj); });

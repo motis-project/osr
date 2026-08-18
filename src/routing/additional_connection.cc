@@ -8,12 +8,6 @@
 namespace osr {
 
 namespace {
-// bool is_additional_connection_idx(ways::routing const& r,
-//                                   way_idx_t const way_idx) {
-//   return way_idx != way_idx_t::invalid() && way_idx >=
-//   r.way_component_.size();
-// }
-
 connection_idx_t to_connection_idx(ways::routing const& r,
                                    way_idx_t const way_idx) {
   utl::verify(way_idx >= r.way_component_.size(), "way_idx too low: {} < {}",
@@ -73,6 +67,10 @@ void for_each_connection(ways::routing const& r,
 //   // auto x = r.additional_connections_[conn_idx];
 //   return std::optional{r.additional_connections_[conn_idx]};
 // }
+
+bool is_additional_connection(ways::routing const& r, way_idx_t const way_idx) {
+  return way_idx != way_idx_t::invalid() && way_idx >= r.way_component_.size();
+}
 
 ways::routing::additional_connection const& get_additional_connection(
     ways::routing const& r, way_idx_t const way_idx) {

@@ -16,6 +16,7 @@
 #include "utl/pipes.h"
 
 #include "osr/platforms.h"
+#include "osr/routing/additional_connection.h"
 #include "osr/routing/dijkstra.h"
 #include "osr/routing/for_each_parking_edge.h"
 #include "osr/routing/profiles/foot.h"
@@ -676,18 +677,16 @@ struct geojson_writer {
     ++n;
   }
 
-  void write_parking_edges(ways const& w,
-                           bitvec<parking_edge_idx_t> const& parking_edges) {
-    parking_edges.for_each_set_bit([&](parking_edge_idx_t const
-                                           parking_edge_idx) {
-      auto const& parking_edge = w_.r_->parking_edges_[parking_edge_idx];
-      auto geom =
-          vec<vec<point>>{parking_edge_connection_polyline(parking_edge)};
+  void write_additional_connections(
+      ways const& w, bitvec<connection_idx_t> const& connections) {
+    connections.for_each_set_bit([&](connection_idx_t const connection_idx) {
+      auto const& connection = w_.r_->additional_connections_[connection_idx];
+      auto geom = vec<vec<point>>{get_additional_connection_points(connection)};
 
-      for (auto const& offset :
-           std::initializer_list{parking_edge.from_, parking_edge.to_}) {
-        for (auto i = 0U; i != 2U; ++i) {
-          if (auto line = parking_edge_offset_polyline(w, offset, i == 0);
+      for (auto const& offset : {connection.from_, connection.to_}) {
+        for (auto const is_left : {true, false}) {
+          if (auto line = osr::get_additional_connection_offset_points(
+                  w, offset, is_left);
               !line.empty()) {
             geom.emplace_back(line);
           }
@@ -699,17 +698,17 @@ struct geojson_writer {
           {"properties",
            {
                {"type", "parking-edge"},
-               {"internal_id", to_idx(parking_edge_idx)},
-               {"from.left", parking_edge.from_.left_ != node_idx_t::invalid()},
-               {"from.right",
-                parking_edge.from_.right_ != node_idx_t::invalid()},
-               {"to.left", parking_edge.to_.left_ != node_idx_t::invalid()},
-               {"to.right", parking_edge.to_.right_ != node_idx_t::invalid()},
-               {"edge_dist", parking_edge.dist_},
-               {"from.left_dist", parking_edge.from_.dist_left_},
-               {"from.right_dist", parking_edge.from_.dist_right_},
-               {"to.left_dist", parking_edge.to_.dist_left_},
-               {"to.right_dist", parking_edge.to_.dist_right_},
+               {"internal_id", to_idx(connection_idx)},
+               {"from.left", connection.from_.left_ != node_idx_t::invalid()},
+               {"from.right", connection.from_.right_ != node_idx_t::invalid()},
+               {"from.left_dist", connection.from_.dist_left_},
+               {"from.right_dist", connection.from_.dist_right_},
+               {"to.left", connection.to_.left_ != node_idx_t::invalid()},
+               {"to.right", connection.to_.right_ != node_idx_t::invalid()},
+               {"edge_dist", connection.dist_},
+               {"to.left_dist", connection.to_.dist_left_},
+               {"to.right_dist", connection.to_.dist_right_},
+               // {"is_parking", connection.is_parking_},
            }},
           {"geometry", to_multi_line_string(geom)}});
     });

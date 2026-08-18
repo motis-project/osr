@@ -12,6 +12,7 @@
 #include "geo/latlng.h"
 
 #include "osr/elevation_storage.h"
+#include "osr/routing/additional_connection.h"
 #include "osr/routing/parking_matching.h"
 #include "osr/routing/path.h"
 #include "osr/routing/profile.h"
@@ -43,7 +44,7 @@ bool is_regular_way(ways::routing const&, way_idx_t const way) {
 template <Profile P>
   requires(is_parking<P>() == true)
 bool is_regular_way(ways::routing const& r, way_idx_t const way) {
-  return way != way_idx_t::invalid() && !is_parking_way(r, way);
+  return way != way_idx_t::invalid() && !is_additional_connection(r, way);
 }
 
 template <direction SearchDir, bool WithBlocked, Profile P>
@@ -200,10 +201,14 @@ inline double add_path(typename P::parameters const& params,
     segment.from_ =
         dir == direction::kBackward ? to.get_node() : from.get_node();
     segment.to_ = dir == direction::kBackward ? from.get_node() : to.get_node();
-    if constexpr (is_parking<P>()) {
-      segment.mode_ = mode::kParking;
-      segment.polyline_ =
-          parking_way_polyline(w, way, dir, segment.from_, segment.to_);
+    if (is_additional_connection(*w.r_, way)) {
+      auto const conn = get_additional_connection(*w.r_, way);
+      // TODO: MK - Test conn.is_parking
+      if constexpr (is_parking<P>()) {
+        segment.mode_ = mode::kParking;
+        segment.polyline_ = get_additional_connection_polyline(
+            w, conn, segment.from_, segment.to_);
+      }
     } else {
       segment.polyline_ = {get_node_pos(segment.from_),
                            get_node_pos(segment.to_)};

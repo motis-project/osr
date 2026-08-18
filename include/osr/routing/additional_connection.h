@@ -14,6 +14,8 @@ void for_each_connection(ways::routing const&,
                          node_idx_t,
                          std::function<void(connection_idx_t)> const&);
 
+bool is_additional_connection(ways::routing const&, way_idx_t);
+
 ways::routing::additional_connection const& get_additional_connection(
     ways::routing const&, way_idx_t);
 // std::optional<ways::routing::additional_connection const>
