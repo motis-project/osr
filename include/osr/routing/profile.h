@@ -51,6 +51,7 @@ struct endpoint_way_query {
   direction way_dir_;
   direction search_dir_;
   route_end end_;
+  bool exact_return_allowed_;
   std::optional<routing_time_t> start_time_;
 };
 
@@ -137,12 +138,16 @@ concept Profile =
              level_t const lvl,
              route_end const end,
              endpoint_role const role,
+             bool const exact_return_allowed,
              std::function<void(typename P::node const)>&& f) {
       { P::resolve_all(r, node_idx, f) } -> std::same_as<void>;
       {
-        P::resolve_endpoint(r, w, node_idx, lvl, end, role, f)
+        P::resolve_endpoint(r, w, node_idx, lvl, end, role,
+                            exact_return_allowed, f)
       } -> std::same_as<void>;
-      { P::endpoint_component_classes(end) } -> std::same_as<component_classes>;
+      {
+        P::endpoint_component_classes(end, exact_return_allowed)
+      } -> std::same_as<component_classes>;
     } &&
     requires(typename P::parameters const& params,
              typename P::node const node,

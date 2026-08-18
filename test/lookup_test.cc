@@ -49,13 +49,15 @@ TEST_F(lookup_test, unlevelled_foot_way_is_only_ground_level_fallback) {
 
   auto ground_matches = match_result{};
   lookup_->match<foot_t>(params, location{pos, level_t{0.F}}, false,
-                         direction::kForward, 25.0, nullptr, ground_matches);
+                         direction::kForward, 25.0, nullptr, false,
+                         ground_matches);
   ASSERT_EQ(1U, ground_matches.size());
   EXPECT_FALSE(ground_matches[match_idx_t{0U}].empty());
 
   auto level_one_matches = match_result{};
   lookup_->match<foot_t>(params, location{pos, level_t{1.F}}, false,
-                         direction::kForward, 25.0, nullptr, level_one_matches);
+                         direction::kForward, 25.0, nullptr, false,
+                         level_one_matches);
   ASSERT_EQ(1U, level_one_matches.size());
   EXPECT_TRUE(level_one_matches[match_idx_t{0U}].empty());
 }

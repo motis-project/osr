@@ -49,19 +49,23 @@ struct match_fixture : ::testing::Test {
 
   template <Profile P = foot<false>>
   match_view_t match(location const& query,
+                     bool const exact_return_allowed = false,
                      double const max_match_distance = 50.0) {
     out_.clear();
     l_->match<P>(typename P::parameters{}, query, true, direction::kForward,
-                 max_match_distance, nullptr, out_);
+                 max_match_distance, nullptr, exact_return_allowed, out_);
     return out_[match_idx_t{0U}];
   }
 
   // OSM ids of the matched ways.
   template <Profile P = foot<false>>
   std::vector<std::int64_t> matched_ways(
-      location const& query, double const max_match_distance = 50.0) {
-    return utl::to_vec(match<P>(query, max_match_distance).way_,
-                       [&](way_idx_t const x) { return *w_->get_osm_way(x); });
+      location const& query,
+      bool const exact_return_allowed = false,
+      double const max_match_distance = 50.0) {
+    return utl::to_vec(
+        match<P>(query, exact_return_allowed, max_match_distance).way_,
+        [&](way_idx_t const x) { return *w_->get_osm_way(x); });
   }
 
   fs::path dir_;
@@ -476,11 +480,13 @@ struct tie_tolerance_test : match_fixture {
 
 TEST_F(tie_tolerance_test, tolerance_grows_with_the_distance) {
   // 2 m from way 1: way 2 (109 m) is shadowed.
-  EXPECT_EQ((std::vector<std::int64_t>{1}),
-            matched_ways(location{{49.000020, 8.001000}, kNoLevel}, 150.0));
+  EXPECT_EQ(
+      (std::vector<std::int64_t>{1}),
+      matched_ways(location{{49.000020, 8.001000}, kNoLevel}, false, 150.0));
   // 53 m / 58 m: within 25 % of 53 m, both are kept.
-  EXPECT_EQ((std::vector<std::int64_t>{1, 2}),
-            matched_ways(location{{49.000480, 8.001000}, kNoLevel}, 150.0));
+  EXPECT_EQ(
+      (std::vector<std::int64_t>{1, 2}),
+      matched_ways(location{{49.000480, 8.001000}, kNoLevel}, false, 150.0));
 }
 
 }  // namespace
