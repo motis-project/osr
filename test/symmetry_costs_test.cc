@@ -98,4 +98,45 @@ TEST(symmetry_levels, elevator_endpoint_is_direction_independent) {
   EXPECT_EQ(fwd->duration_, bwd->duration_);
 }
 
+TEST(symmetry_modes, car_parking_transition_is_direction_independent) {
+  struct testcase {
+    std::string_view fixture_;
+    search_profile profile_;
+    location from_, to_;
+  };
+  auto const cases = std::vector<testcase>{
+      {"test/karlsruhe-kirchfeld.osm.pbf", search_profile::kCarParking,
+       location{49.0446865, 8.3896766, kNoLevel},
+       location{49.0516714, 8.387649, kNoLevel}},
+      {"test/station-border.osm.pbf", search_profile::kCarParking,
+       location{48.7234757, 2.2545168, kNoLevel},
+       location{48.7253219, 2.2613838, kNoLevel}},
+      {"test/karlsruhe-kirchfeld.osm.pbf", search_profile::kCarDropOff,
+       location{49.0395005, 8.3939066, kNoLevel},
+       location{49.0451469, 8.3936645, kNoLevel}}};
+
+  for (auto const& c : cases) {
+    auto const dir =
+        fs::temp_directory_path() / "osr-car-parking-symmetry-test";
+    auto ec = std::error_code{};
+    fs::remove_all(dir, ec);
+    fs::create_directories(dir, ec);
+    extract(false, std::string{c.fixture_}, dir, {});
+    auto w = ways{dir, cista::mmap::protection::READ};
+    auto const l = lookup{w, dir, cista::mmap::protection::READ};
+    auto const params = get_parameters(c.profile_);
+
+    auto const fwd = route(params, w, l, c.profile_, c.from_, c.to_,
+                           cost_t{100'000U}, direction::kForward, 250.0);
+    auto const bwd = route(params, w, l, c.profile_, c.to_, c.from_,
+                           cost_t{100'000U}, direction::kBackward, 250.0);
+    ASSERT_TRUE(fwd.has_value()) << c.fixture_ << " " << to_str(c.profile_);
+    ASSERT_TRUE(bwd.has_value()) << c.fixture_ << " " << to_str(c.profile_);
+    EXPECT_EQ(fwd->cost_, bwd->cost_)
+        << c.fixture_ << " " << to_str(c.profile_);
+    EXPECT_EQ(fwd->duration_, bwd->duration_)
+        << c.fixture_ << " " << to_str(c.profile_);
+  }
+}
+
 }  // namespace osr
