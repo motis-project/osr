@@ -202,6 +202,13 @@ TEST_F(sharing_components_test, bike_sharing_uses_foot_components) {
             matched_ways<bike_sharing>(query));
 }
 
+TEST_F(sharing_components_test,
+       exact_return_filters_foot_and_bike_independently) {
+  // Bike also filters: 3 again, but not the foot-only 2.
+  EXPECT_EQ((std::vector<std::int64_t>{1, 3}),
+            matched_ways<bike_sharing>(location{kQuery, kNoLevel}, true));
+}
+
 // One foot component around the query, joined by a connector ~73 m east
 // (outside the match radius):
 //   way 4  cycleway, foot=no   ~4.4 m south  penalised for foot
