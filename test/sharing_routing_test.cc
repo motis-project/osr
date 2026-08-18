@@ -65,10 +65,10 @@ TEST_F(sharing_routing_test, matching_penalty_is_in_cost_limit) {
       route_options{.matching_penalty_factor_ = 100.0};
   auto from_matches = match_result{};
   l.match<bike_sharing>(params, from, false, direction::kForward, 50.0, nullptr,
-                        from_matches);
+                        false, from_matches);
   auto to_matches = match_result{};
   l.match<bike_sharing>(params, to, true, direction::kForward, 50.0, nullptr,
-                        to_matches);
+                        false, to_matches);
   ASSERT_GE(from_matches[match_idx_t{0U}].size(), 2U);
   auto& closest = from_matches.nodes_[match_result::way_candidate_idx_t{0U}];
   closest.left_.node_ = node_idx_t::invalid();
@@ -115,10 +115,10 @@ TEST_F(sharing_routing_test, endpoint_connection_cost_is_in_search_bound) {
   auto const params = bike_sharing::parameters{};
   auto from_matches = match_result{};
   l.match<bike_sharing>(params, from, false, direction::kForward, 50.0, nullptr,
-                        from_matches);
+                        false, from_matches);
   auto to_matches = match_result{};
   l.match<bike_sharing>(params, to, true, direction::kForward, 50.0, nullptr,
-                        to_matches);
+                        false, to_matches);
   for (auto& nodes : from_matches.nodes_) {
     nodes.left_.dist_to_node_ = 5000.0F;
     nodes.right_.dist_to_node_ = 5000.0F;
