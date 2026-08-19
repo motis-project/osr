@@ -4,11 +4,12 @@
 
 #include "geo/polyline.h"
 
-#include "osr/lookup.h"
 #include "osr/types.h"
 #include "osr/ways.h"
 
 namespace osr {
+
+struct way_candidate;
 
 void for_each_connection(ways::routing const&,
                          node_idx_t,
@@ -44,5 +45,16 @@ vec<point> get_additional_connection_offset_points(
 
 ways::routing::additional_connection::offset to_offset(ways const&,
                                                        way_candidate const&);
+
+void for_each_addional_connection(
+    ways::routing const&,
+    node_idx_t,
+    direction,
+    std::function<void(ways::routing::additional_connection const&,
+                       way_idx_t,
+                       node_idx_t,
+                       direction,
+                       bool from_left,
+                       bool to_left)> const&);
 
 }  // namespace osr

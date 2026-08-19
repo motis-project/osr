@@ -8,6 +8,7 @@
 #include "utl/helpers/algorithm.h"
 
 #include "osr/elevation_storage.h"
+#include "osr/routing/additional_connection.h"
 #include "osr/routing/for_each_parking_edge.h"
 #include "osr/routing/mode.h"
 #include "osr/routing/path.h"
@@ -333,139 +334,63 @@ struct car_parking {
     }
 
     if constexpr (UseParking) {
-      if (kFwd && n.is_car_node()) {
-        if (w.has_parking_edges_.test(n.n_)) {
-          for_each_parking_edge(
-              w, n.n_, [&](parking_edge_idx_t const parking_edge_idx) {
-                auto const& parking_edge = w.parking_edges_[parking_edge_idx];
-                for (auto car_offset = 0U; car_offset < 2U; ++car_offset) {
-                  auto const [car_node, car_dist, car_dir] =
-                      car_offset == 0
-                          ? std::tuple{parking_edge.from_.left_,
-                                       parking_edge.from_.dist_left_,
-                                       SearchDir == direction::kForward
-                                           ? direction::kForward
-                                           : direction::kBackward}
-                          : std::tuple{parking_edge.from_.right_,
-                                       parking_edge.from_.dist_right_,
-                                       SearchDir == direction::kForward
-                                           ? direction::kBackward
-                                           : direction::kForward};
-                  if (car_node != n.n_) {
-                    continue;
-                  }
-                  for (auto foot_offset = 0U; foot_offset < 2U; ++foot_offset) {
-                    auto const [foot_node, foot_dist, foot_dir] =
-                        foot_offset == 0
-                            ? std::tuple{parking_edge.to_.left_,
-                                         parking_edge.to_.dist_left_,
-                                         SearchDir == direction::kForward
-                                             ? direction::kBackward
-                                             : direction::kForward}
-                            : std::tuple{parking_edge.to_.right_,
-                                         parking_edge.to_.dist_right_,
-                                         SearchDir == direction::kForward
-                                             ? direction::kForward
-                                             : direction::kBackward};
-                    if (foot_node == node_idx_t::invalid()) {
-                      continue;
-                    }
-                    auto const lvl = w.node_properties_[foot_node].from_level();
-                    distance_t const dist =
-                        car_dist + parking_edge.dist_ + foot_dist;
-                    auto const cost = clamp_add(
-                        clamp_add(
-                            car::way_cost(
-                                params.car_, w, timezones,
-                                parking_edge.from_.way_,
-                                w.way_properties_[parking_edge.from_.way_],
-                                car_dir, car_dist, start_time, current_duration,
-                                SearchDir),
-                            footp::way_cost(
-                                params.foot_, w, timezones,
-                                parking_edge.to_.way_,
-                                w.way_properties_[parking_edge.to_.way_],
-                                foot_dir, parking_edge.dist_ + foot_dist,
-                                start_time, current_duration, SearchDir)),
-                        cost_and_duration{
-                            .cost_ = kSwitchPenalty,
-                            .duration_ = duration_from_cost(kSwitchPenalty)});
-                    fn({foot_node, node_type::kFoot, lvl, SearchDir, 0U},
-                       cost.cost_, cost.duration_, dist,
-                       ways::routing::parking_edge::encode_parking_edge(
-                           w, parking_edge_idx),
-                       0, 0, elevation_storage::elevation{}, false);
-                  }
-                }
-              });
-        }
-      }
-      if (kBwd && n.is_foot_node()) {
-        if (w.has_parking_edges_.test(n.n_)) {
-          for_each_parking_edge(
-              w, n.n_, [&](parking_edge_idx_t const parking_edge_idx) {
-                auto const& parking_edge = w.parking_edges_[parking_edge_idx];
-                for (auto foot_offset = 0U; foot_offset < 2U; ++foot_offset) {
-                  auto const [foot_node, foot_dist, foot_dir] =
-                      foot_offset == 0
-                          ? std::tuple{parking_edge.to_.left_,
-                                       parking_edge.to_.dist_left_,
-                                       SearchDir == direction::kForward
-                                           ? direction::kBackward
-                                           : direction::kForward}
-                          : std::tuple{parking_edge.to_.right_,
-                                       parking_edge.to_.dist_right_,
-                                       SearchDir == direction::kForward
-                                           ? direction::kForward
-                                           : direction::kBackward};
-                  if (foot_node != n.n_) {
-                    continue;
-                  }
-                  for (auto car_offset = 0U; car_offset < 2U; ++car_offset) {
-                    auto const [car_node, car_dist, car_dir] =
-                        car_offset == 0
-                            ? std::tuple{parking_edge.from_.left_,
-                                         parking_edge.from_.dist_left_,
-                                         SearchDir == direction::kForward
-                                             ? direction::kForward
-                                             : direction::kBackward}
-                            : std::tuple{parking_edge.from_.right_,
-                                         parking_edge.from_.dist_right_,
-                                         SearchDir == direction::kForward
-                                             ? direction::kBackward
-                                             : direction::kForward};
-                    if (car_node == node_idx_t::invalid()) {
-                      continue;
-                    }
-                    auto const lvl = w.node_properties_[foot_node].from_level();
-                    distance_t const dist =
-                        car_dist + parking_edge.dist_ + foot_dist;
-                    auto const cost = clamp_add(
-                        clamp_add(
-                            car::way_cost(
-                                params.car_, w, timezones,
-                                parking_edge.from_.way_,
-                                w.way_properties_[parking_edge.from_.way_],
-                                car_dir, car_dist, start_time, current_duration,
-                                SearchDir),
-                            footp::way_cost(
-                                params.foot_, w, timezones,
-                                parking_edge.to_.way_,
-                                w.way_properties_[parking_edge.to_.way_],
-                                foot_dir, parking_edge.dist_ + foot_dist,
-                                start_time, current_duration, SearchDir)),
-                        cost_and_duration{
-                            .cost_ = kSwitchPenalty,
-                            .duration_ = duration_from_cost(kSwitchPenalty)});
-                    fn({car_node, node_type::kCar, lvl, SearchDir, 0U},
-                       cost.cost_, cost.duration_, dist,
-                       ways::routing::parking_edge::encode_parking_edge(
-                           w, parking_edge_idx),
-                       0, 0, elevation_storage::elevation{}, false);
-                  }
-                }
-              });
-        }
+      if ((kFwd && n.is_car_node()) || (kBwd && n.is_foot_node())) {
+        for_each_addional_connection(
+            w, n.n_, SearchDir,
+            [&](ways::routing::additional_connection const& connection,
+                way_idx_t const way_idx, node_idx_t const target,
+                direction const dir, bool const from_left, bool const to_left) {
+              auto const& car_offset = dir == direction::kForward
+                                           ? connection.from_
+                                           : connection.to_;
+              auto const& foot_offset = dir == direction::kForward
+                                            ? connection.to_
+                                            : connection.from_;
+              auto const from_dist = from_left ? connection.from_.dist_left_
+                                               : connection.from_.dist_right_;
+              auto const to_dist = to_left ? connection.to_.dist_left_
+                                           : connection.to_.dist_right_;
+              auto const car_dist =
+                  dir == direction::kForward ? from_dist : to_dist;
+              auto const foot_dist =
+                  dir == direction::kForward ? to_dist : from_dist;
+              auto const car_dir =
+                  (dir == direction::kForward)
+                      ? (from_left ? direction::kForward : direction::kBackward)
+                      : (to_left ? direction::kBackward : direction::kForward);
+              auto const foot_dir =
+                  (dir == direction::kForward)
+                      ? (to_left ? direction::kBackward : direction::kForward)
+                      : (from_left ? direction::kForward
+                                   : direction::kBackward);
+
+              auto const lvl = w.node_properties_[target].from_level();
+              distance_t const dist = car_dist + connection.dist_ + foot_dist;
+              auto const cost = clamp_add(
+                  clamp_add(
+                      car::way_cost(params.car_, w, timezones, car_offset.way_,
+                                    w.way_properties_[car_offset.way_], car_dir,
+                                    car_dist, start_time, current_duration,
+                                    SearchDir),
+                      footp::way_cost(params.foot_, w, timezones,
+                                      foot_offset.way_,
+                                      w.way_properties_[foot_offset.way_],
+                                      foot_dir, connection.dist_ + foot_dist,
+                                      start_time, current_duration, SearchDir)),
+                  cost_and_duration{
+                      .cost_ = kSwitchPenalty,
+                      .duration_ = duration_from_cost(kSwitchPenalty)});
+
+              if (kFwd) {
+                fn({target, node_type::kFoot, lvl, SearchDir, 0U}, cost.cost_,
+                   cost.duration_, dist, way_idx, 0, 0,
+                   elevation_storage::elevation{}, false);
+              } else {
+                fn({target, node_type::kCar, lvl, SearchDir, 0U}, cost.cost_,
+                   cost.duration_, dist, way_idx, 0, 0,
+                   elevation_storage::elevation{}, false);
+              }
+            });
       }
       // TODO
       // If forward && is_extra_node && extra_node.car_* == n

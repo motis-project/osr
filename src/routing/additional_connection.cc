@@ -5,6 +5,8 @@
 #include "utl/pipes/transform.h"
 #include "utl/to_vec.h"
 
+#include "osr/lookup.h"
+
 namespace osr {
 
 namespace {
@@ -195,6 +197,44 @@ ways::routing::additional_connection::offset to_offset(
   }
 
   return offset;
+}
+
+void for_each_addional_connection(
+    ways::routing const& r,
+    node_idx_t const node_idx,
+    direction const dir,
+    std::function<void(ways::routing::additional_connection const&,
+                       way_idx_t,
+                       node_idx_t,
+                       direction,
+                       bool from_left,
+                       bool to_left)> const& f) {
+  for_each_connection(r, node_idx, [&](connection_idx_t const connection_idx) {
+    auto const& conn = r.additional_connections_[connection_idx];
+    auto const g = [&](direction const conn_dir,
+                       ways::routing::additional_connection::offset const& from,
+                       ways::routing::additional_connection::offset const& to) {
+      for (auto const from_left : {true, false}) {
+        auto const start = from_left ? from.left_ : from.right_;
+        if (start == node_idx_t::invalid()) {
+          continue;
+        }
+        for (auto const to_left : {true, false}) {
+          auto const target = to_left ? to.left_ : to.right_;
+          if (target != node_idx_t::invalid()) {
+            f(conn, to_way_idx(r, connection_idx), target, conn_dir, from_left,
+              to_left);
+          }
+        }
+      }
+    };
+    if (dir == direction::kForward /*|| conn.reverse_allowed*/) {
+      g(direction::kForward, conn.from_, conn.to_);
+    }
+    if (dir == direction::kBackward /*|| conn.reverse_allowed*/) {
+      g(direction::kBackward, conn.to_, conn.from_);
+    }
+  });
 }
 
 };  // namespace osr
