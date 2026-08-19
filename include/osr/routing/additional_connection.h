@@ -1,7 +1,5 @@
 #pragma once
 
-#include <optional>
-
 #include "geo/polyline.h"
 
 #include "osr/types.h"
@@ -11,6 +9,13 @@ namespace osr {
 
 struct way_candidate;
 
+struct additional_connection_offset {
+  ways::routing::additional_connection::offset const& offset_;
+  node_idx_t node_;
+  std::uint16_t dist_;
+  direction dir_;
+};
+
 void for_each_connection(ways::routing const&,
                          node_idx_t,
                          std::function<void(connection_idx_t)> const&);
@@ -19,8 +24,6 @@ bool is_additional_connection(ways::routing const&, way_idx_t);
 
 ways::routing::additional_connection const& get_additional_connection(
     ways::routing const&, way_idx_t);
-// std::optional<ways::routing::additional_connection const>
-// get_additional_connection(ways::routing const&, way_idx_t);
 
 way_idx_t add_additional_connection(
     ways::routing&,
@@ -54,7 +57,7 @@ void for_each_addional_connection(
                        way_idx_t,
                        node_idx_t,
                        direction,
-                       bool from_left,
-                       bool to_left)> const&);
+                       additional_connection_offset from,
+                       additional_connection_offset to)> const&);
 
 }  // namespace osr

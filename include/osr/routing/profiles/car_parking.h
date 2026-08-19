@@ -339,44 +339,28 @@ struct car_parking {
             w, n.n_, SearchDir,
             [&](ways::routing::additional_connection const& connection,
                 way_idx_t const way_idx, node_idx_t const target,
-                direction const dir, bool const from_left, bool const to_left) {
-              auto const& car_offset = dir == direction::kForward
-                                           ? connection.from_
-                                           : connection.to_;
-              auto const& foot_offset = dir == direction::kForward
-                                            ? connection.to_
-                                            : connection.from_;
-              auto const from_dist = from_left ? connection.from_.dist_left_
-                                               : connection.from_.dist_right_;
-              auto const to_dist = to_left ? connection.to_.dist_left_
-                                           : connection.to_.dist_right_;
-              auto const car_dist =
-                  dir == direction::kForward ? from_dist : to_dist;
-              auto const foot_dist =
-                  dir == direction::kForward ? to_dist : from_dist;
-              auto const car_dir =
-                  (dir == direction::kForward)
-                      ? (from_left ? direction::kForward : direction::kBackward)
-                      : (to_left ? direction::kBackward : direction::kForward);
-              auto const foot_dir =
-                  (dir == direction::kForward)
-                      ? (to_left ? direction::kBackward : direction::kForward)
-                      : (from_left ? direction::kForward
-                                   : direction::kBackward);
+                [[maybe_unused]] direction const dir,
+                additional_connection_offset const from,
+                additional_connection_offset const to) {
+              auto const& car_offset = kFwd ? from : to;
+              auto const& foot_offset = kBwd ? from : to;
 
               auto const lvl = w.node_properties_[target].from_level();
-              distance_t const dist = car_dist + connection.dist_ + foot_dist;
+              distance_t const dist =
+                  car_offset.dist_ + connection.dist_ + foot_offset.dist_;
               auto const cost = clamp_add(
                   clamp_add(
-                      car::way_cost(params.car_, w, timezones, car_offset.way_,
-                                    w.way_properties_[car_offset.way_], car_dir,
-                                    car_dist, start_time, current_duration,
-                                    SearchDir),
-                      footp::way_cost(params.foot_, w, timezones,
-                                      foot_offset.way_,
-                                      w.way_properties_[foot_offset.way_],
-                                      foot_dir, connection.dist_ + foot_dist,
-                                      start_time, current_duration, SearchDir)),
+                      car::way_cost(params.car_, w, timezones,
+                                    car_offset.offset_.way_,
+                                    w.way_properties_[car_offset.offset_.way_],
+                                    car_offset.dir_, car_offset.dist_,
+                                    start_time, current_duration, SearchDir),
+                      footp::way_cost(
+                          params.foot_, w, timezones, foot_offset.offset_.way_,
+                          w.way_properties_[foot_offset.offset_.way_],
+                          foot_offset.dir_,
+                          connection.dist_ + foot_offset.dist_, start_time,
+                          current_duration, SearchDir)),
                   cost_and_duration{
                       .cost_ = kSwitchPenalty,
                       .duration_ = duration_from_cost(kSwitchPenalty)});
