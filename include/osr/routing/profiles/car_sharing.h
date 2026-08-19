@@ -330,26 +330,8 @@ struct car_sharing {
   }
 
   template <typename Fn>
-  static void resolve_start_node(ways::routing const& w,
-                                 way_idx_t const way,
-                                 node_idx_t const n,
-                                 level_t lvl,
-                                 direction search_dir,
-                                 Fn&& f) {
-    footp::resolve_start_node(w, way, n, lvl, search_dir,
-                              [&](footp::node const fn) {
-                                f(to_node(fn, search_dir == direction::kForward
-                                                  ? node_type::kInitialFoot
-                                                  : node_type::kTrailingFoot));
-                              });
-  }
-
-  template <typename Fn>
-  static void resolve_all(ways::routing const& w,
-                          node_idx_t const n,
-                          level_t const lvl,
-                          Fn&& f) {
-    footp::resolve_all(w, n, lvl, [&](footp::node const neighbor) {
+  static void resolve_all(ways::routing const& w, node_idx_t const n, Fn&& f) {
+    footp::resolve_all(w, n, [&](footp::node const neighbor) {
       f(to_node(neighbor, node_type::kInitialFoot));
       f(to_node(neighbor, node_type::kTrailingFoot));
       f(to_node(neighbor, node_type::kRental));
@@ -381,7 +363,7 @@ struct car_sharing {
         // way, so every way/direction state has to be offered - otherwise the
         // first driving edge is charged a turn against a fabricated way that
         // the opposite search direction never pays.
-        car::resolve_all(w, ae.to_, kNoLevel, [&](car::node const rental) {
+        car::resolve_all(w, ae.to_, [&](car::node const rental) {
           emit(to_node(rental, kNoLevel));
         });
         return;
@@ -440,14 +422,13 @@ struct car_sharing {
                 })) {
           return;
         }
-        car::resolve_all(w, n.n_, kNoLevel, [&](car::node const rental) {
+        car::resolve_all(w, n.n_, [&](car::node const rental) {
           emit(to_node(rental, kNoLevel));
         });
       } else {
-        footp::resolve_all(w, n.n_, kNoLevel,
-                           [&](footp::node const foot_state) {
-                             emit(to_node(foot_state, to_type));
-                           });
+        footp::resolve_all(w, n.n_, [&](footp::node const foot_state) {
+          emit(to_node(foot_state, to_type));
+        });
       }
     };
 

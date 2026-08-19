@@ -130,35 +130,18 @@ struct ferry {
   }
 
   template <typename Fn>
-  static void resolve_start_node(ways::routing const&,
-                                 way_idx_t const,
-                                 node_idx_t const n,
-                                 level_t,
-                                 direction,
-                                 Fn&& f) {
+  static void resolve_all(ways::routing const&, node_idx_t const n, Fn&& f) {
     f(node{n});
   }
 
-  template <typename Fn>
-  static void resolve_all(ways::routing const&,
-                          node_idx_t const n,
-                          level_t,
-                          Fn&& f) {
-    f(node{n});
-  }
-
-  template <endpoint_role Role, typename Fn>
+  template <endpoint_role, typename Fn>
   static void resolve_endpoint(ways::routing const& w,
-                               way_idx_t const way,
+                               way_idx_t,
                                node_idx_t const n,
-                               level_t const lvl,
-                               direction const search_dir,
+                               level_t,
+                               direction,
                                Fn&& f) {
-    if constexpr (Role == endpoint_role::kSource) {
-      resolve_start_node(w, way, n, lvl, search_dir, f);
-    } else {
-      resolve_all(w, n, lvl, f);
-    }
+    resolve_all(w, n, f);
   }
 
   template <direction SearchDir, bool WithBlocked, typename Fn>

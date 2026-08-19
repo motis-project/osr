@@ -18,7 +18,7 @@ bool is_resolved_foot_state(ways::routing const& w,
                             Node const n,
                             ToNode&& to_node) {
   auto found = false;
-  FootProfile::resolve_all(w, n.n_, kNoLevel,
+  FootProfile::resolve_all(w, n.n_,
                            [&](typename FootProfile::node const foot_state) {
                              found = found || to_node(foot_state) == n;
                            });

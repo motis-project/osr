@@ -129,10 +129,7 @@ concept Profile =
              level_t const lvl,
              direction const dir,
              std::function<void(typename P::node const)>&& f) {
-      {
-        P::resolve_start_node(r, w, node_idx, lvl, dir, f)
-      } -> std::same_as<void>;
-      { P::resolve_all(r, node_idx, lvl, f) } -> std::same_as<void>;
+      { P::resolve_all(r, node_idx, f) } -> std::same_as<void>;
       // for resolve_endpoint, dir describes the endpoint, not the search:
       //   dir == direction::kForward: *route* starts here
       //   dir == direction::kBackward: *route* ends here

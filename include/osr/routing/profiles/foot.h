@@ -137,7 +137,7 @@ struct foot {
   static void for_each_node_level(ways::routing const& w,
                                   node_idx_t const n,
                                   Fn&& f) {
-    resolve_all(w, n, kNoLevel, std::forward<Fn>(f));
+    resolve_all(w, n, std::forward<Fn>(f));
     if (w.node_properties_[n].is_elevator()) {
       for_each_elevator_level(w, n,
                               [&](level_t const lvl) { f(node{n, lvl}); });
@@ -145,11 +145,7 @@ struct foot {
   }
 
   template <typename Fn>
-  static void resolve_all(ways::routing const& w,
-                          node_idx_t const n,
-                          level_t const lvl,
-                          Fn&& f) {
-    auto const ways = w.node_ways_[n];
+  static void resolve_all(ways::routing const& w, node_idx_t const n, Fn&& f) {
     auto levels = std::uint64_t{0U};
     auto const emit = [&](level_t const l) {
       auto const mask = std::uint64_t{1U} << to_idx(l);
@@ -158,16 +154,11 @@ struct foot {
         f(node{n, l});
       }
     };
-    for (auto i = way_pos_t{0U}; i != ways.size(); ++i) {
+    for (auto const way : w.node_ways_[n]) {
       // TODO what's with stairs? need to resolve to from_level or to_level?
-      auto const p = w.way_properties_[w.node_ways_[n][i]];
-      if (lvl == kNoLevel) {
-        emit(p.from_level());
-        emit(p.to_level());
-      } else if ((p.from_level() == lvl || p.to_level() == lvl ||
-                  p.from_level() == kNoLevel || can_use_elevator(w, n, lvl))) {
-        emit(lvl);
-      }
+      auto const p = w.way_properties_[way];
+      emit(p.from_level());
+      emit(p.to_level());
     }
   }
 
@@ -212,22 +203,6 @@ struct foot {
         f(candidate);
       }
     });
-  }
-
-  template <typename Fn>
-  static void resolve_start_node(ways::routing const& w,
-                                 way_idx_t const way,
-                                 node_idx_t const n,
-                                 level_t const lvl,
-                                 direction,
-                                 Fn&& f) {
-    auto const p = w.way_properties_[way];
-    if (lvl == kNoLevel || p.from_level() == lvl || p.to_level() == lvl ||
-        can_use_elevator(w, n, lvl) ||
-        (lvl == level_t{0.F} && p.from_level() == kNoLevel &&
-         p.to_level() == kNoLevel)) {
-      f(node{n, p.from_level()});
-    }
   }
 
   template <direction SearchDir, bool WithBlocked, typename Fn>
@@ -301,7 +276,7 @@ struct foot {
               emit(predecessor_lvl);
             }
           };
-          resolve_all(w, target_node, kNoLevel, [&](node const predecessor) {
+          resolve_all(w, target_node, [&](node const predecessor) {
             consider(predecessor.lvl_);
           });
           if (w.node_properties_[target_node].is_elevator()) {
