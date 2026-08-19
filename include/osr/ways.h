@@ -71,27 +71,33 @@ struct shortcut {
   distance_t distance_{};
 };
 
+struct cch_edge_weight {
+  friend bool operator==(cch_edge_weight, cch_edge_weight) = default;
+
+  // One state-aware customized value for a CCH edge. If up_ is true, the value
+  // models travel from the lower-ranked node to the higher-ranked node; otherwise
+  // it models travel from the higher-ranked node to the lower-ranked node.
+  node_idx_t via_{node_idx_t::invalid()};
+  distance_t distance_{};
+  cost_t cost_{kInfeasible};
+  way_pos_t from_way_{};
+  way_pos_t to_way_{};
+  way_pos_t via_in_way_{};
+  way_pos_t via_out_way_{};
+  direction from_dir_{direction::kForward};
+  direction to_dir_{direction::kForward};
+  direction via_in_dir_{direction::kForward};
+  direction via_out_dir_{direction::kForward};
+  bool up_{true};
+};
+
 struct cch_edge {
   friend bool operator==(cch_edge, cch_edge) = default;
 
   // Customized CCH edge from the owning lower-rank cch_edge_weights_ bucket to
-  // higher-rank to_. Up values model low -> high travel, down values model
-  // high -> low travel.
+  // higher-rank to_. The edge can have multiple Car boundary-state weights.
   node_idx_t to_{};
-  node_idx_t up_via_{node_idx_t::invalid()};
-  node_idx_t down_via_{node_idx_t::invalid()};
-  distance_t up_distance_{};
-  distance_t down_distance_{};
-  cost_t up_cost_{kInfeasible};
-  cost_t down_cost_{kInfeasible};
-  way_pos_t up_from_way_{};
-  way_pos_t up_to_way_{};
-  way_pos_t down_from_way_{};
-  way_pos_t down_to_way_{};
-  direction up_from_dir_{direction::kForward};
-  direction up_to_dir_{direction::kForward};
-  direction down_from_dir_{direction::kForward};
-  direction down_to_dir_{direction::kForward};
+  vec<cch_edge_weight> weights_{};
 };
 
 struct way_properties {

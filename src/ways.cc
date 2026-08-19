@@ -351,18 +351,7 @@ void ways::add_shortcuts() {
   // Basic Customization POC
   struct customization_edge {
     node_idx_t to_{};
-    distance_t up_distance_{};
-    distance_t down_distance_{};
-    cost_t up_cost_{kInfeasible};
-    cost_t down_cost_{kInfeasible};
-    way_pos_t up_from_way_{};
-    way_pos_t up_to_way_{};
-    way_pos_t down_from_way_{};
-    way_pos_t down_to_way_{};
-    direction up_from_dir_{direction::kForward};
-    direction up_to_dir_{direction::kForward};
-    direction down_from_dir_{direction::kForward};
-    direction down_to_dir_{direction::kForward};
+    std::vector<cch_edge_weight> weights_{};
   };
 
   auto const car_params = car::parameters{};
@@ -394,44 +383,25 @@ void ways::add_shortcuts() {
     return r_->cch_edge_weights_[low].back();
   };
 
-  auto relax_up_value = [](cch_edge& e,
-                           node_idx_t const via,
-                           distance_t const distance,
-                           cost_t const cost,
-                           way_pos_t const from_way,
-                           direction const from_dir,
-                           way_pos_t const to_way,
-                           direction const to_dir) {
-    if (cost < e.up_cost_ ||
-        (cost == e.up_cost_ && distance < e.up_distance_)) {
-      e.up_via_ = via;
-      e.up_distance_ = distance;
-      e.up_cost_ = cost;
-      e.up_from_way_ = from_way;
-      e.up_from_dir_ = from_dir;
-      e.up_to_way_ = to_way;
-      e.up_to_dir_ = to_dir;
-    }
+  auto same_boundary = [](cch_edge_weight const& a,
+                          cch_edge_weight const& b) {
+    return a.up_ == b.up_ && a.from_way_ == b.from_way_ &&
+           a.from_dir_ == b.from_dir_ && a.to_way_ == b.to_way_ &&
+           a.to_dir_ == b.to_dir_;
   };
 
-  auto relax_down_value = [](cch_edge& e,
-                             node_idx_t const via,
-                             distance_t const distance,
-                             cost_t const cost,
-                             way_pos_t const from_way,
-                             direction const from_dir,
-                             way_pos_t const to_way,
-                             direction const to_dir) {
-    if (cost < e.down_cost_ ||
-        (cost == e.down_cost_ && distance < e.down_distance_)) {
-      e.down_via_ = via;
-      e.down_distance_ = distance;
-      e.down_cost_ = cost;
-      e.down_from_way_ = from_way;
-      e.down_from_dir_ = from_dir;
-      e.down_to_way_ = to_way;
-      e.down_to_dir_ = to_dir;
+  auto relax_value = [&](cch_edge& e, cch_edge_weight const candidate) {
+    for (auto& w : e.weights_) {
+      if (!same_boundary(w, candidate)) {
+        continue;
+      }
+      if (candidate.cost_ < w.cost_ ||
+          (candidate.cost_ == w.cost_ && candidate.distance_ < w.distance_)) {
+        w = candidate;
+      }
+      return;
     }
+    e.weights_.push_back(candidate);
   };
 
   auto add_car_base_edge = [&](node_idx_t const from,
@@ -460,11 +430,23 @@ void ways::add_shortcuts() {
     auto const from_way = r_->get_way_pos(from, way, from_idx);
     auto const to_way = r_->get_way_pos(to, way, to_idx);
     if (r_->node_importance_[from] < r_->node_importance_[to]) {
-      relax_up_value(e, node_idx_t::invalid(), distance, cost, from_way, way_dir,
-                     to_way, way_dir);
+      relax_value(e, cch_edge_weight{.via_ = node_idx_t::invalid(),
+                                     .distance_ = distance,
+                                     .cost_ = cost,
+                                     .from_way_ = from_way,
+                                     .to_way_ = to_way,
+                                     .from_dir_ = way_dir,
+                                     .to_dir_ = way_dir,
+                                     .up_ = true});
     } else {
-      relax_down_value(e, node_idx_t::invalid(), distance, cost, from_way,
-                       way_dir, to_way, way_dir);
+      relax_value(e, cch_edge_weight{.via_ = node_idx_t::invalid(),
+                                     .distance_ = distance,
+                                     .cost_ = cost,
+                                     .from_way_ = from_way,
+                                     .to_way_ = to_way,
+                                     .from_dir_ = way_dir,
+                                     .to_dir_ = way_dir,
+                                     .up_ = false});
     }
   };
 
@@ -493,22 +475,12 @@ void ways::add_shortcuts() {
   auto collect_upward_edges = [&](node_idx_t const from) {
     auto edges = std::vector<customization_edge>{};
     for (auto const& e : r_->cch_edge_weights_[from]) {
-      if (e.up_cost_ == kInfeasible && e.down_cost_ == kInfeasible) {
+      if (e.weights_.empty()) {
         continue;
       }
-      edges.push_back(customization_edge{.to_ = e.to_,
-                                         .up_distance_ = e.up_distance_,
-                                         .down_distance_ = e.down_distance_,
-                                         .up_cost_ = e.up_cost_,
-                                         .down_cost_ = e.down_cost_,
-                                         .up_from_way_ = e.up_from_way_,
-                                         .up_to_way_ = e.up_to_way_,
-                                         .down_from_way_ = e.down_from_way_,
-                                         .down_to_way_ = e.down_to_way_,
-                                         .up_from_dir_ = e.up_from_dir_,
-                                         .up_to_dir_ = e.up_to_dir_,
-                                         .down_from_dir_ = e.down_from_dir_,
-                                         .down_to_dir_ = e.down_to_dir_});
+      auto& edge = edges.emplace_back();
+      edge.to_ = e.to_;
+      edge.weights_.assign(begin(e.weights_), end(e.weights_));
     }
     std::sort(begin(edges), end(edges), [&](auto const& a, auto const& b) {
       return r_->node_importance_[a.to_] < r_->node_importance_[b.to_];
@@ -552,34 +524,66 @@ void ways::add_shortcuts() {
       return;
     }
 
-    if (v_edge.down_cost_ != kInfeasible && w_edge.up_cost_ != kInfeasible) {
-      auto const turn_cost =
-          get_turn_cost(u, v_edge.down_to_way_, v_edge.down_to_dir_,
-                        w_edge.up_from_way_, w_edge.up_from_dir_);
-      if (turn_cost != kInfeasible) {
-        relax_up_value(
-            *vw, u,
-            combine_distance(v_edge.down_distance_, w_edge.up_distance_),
-            clamp_cost(static_cast<std::uint64_t>(v_edge.down_cost_) +
-                       static_cast<std::uint64_t>(turn_cost) +
-                       static_cast<std::uint64_t>(w_edge.up_cost_)),
-            v_edge.down_from_way_, v_edge.down_from_dir_, w_edge.up_to_way_,
-            w_edge.up_to_dir_);
+    for (auto const& vu : v_edge.weights_) {
+      if (vu.up_) {
+        continue;
+      }
+      for (auto const& uw : w_edge.weights_) {
+        if (!uw.up_) {
+          continue;
+        }
+        auto const turn_cost = get_turn_cost(
+            u, vu.to_way_, vu.to_dir_, uw.from_way_, uw.from_dir_);
+        if (turn_cost == kInfeasible) {
+          continue;
+        }
+        relax_value(
+            *vw, cch_edge_weight{
+                     .via_ = u,
+                     .distance_ = combine_distance(vu.distance_, uw.distance_),
+                     .cost_ = clamp_cost(static_cast<std::uint64_t>(vu.cost_) +
+                                         static_cast<std::uint64_t>(turn_cost) +
+                                         static_cast<std::uint64_t>(uw.cost_)),
+                     .from_way_ = vu.from_way_,
+                     .to_way_ = uw.to_way_,
+                     .via_in_way_ = vu.to_way_,
+                     .via_out_way_ = uw.from_way_,
+                     .from_dir_ = vu.from_dir_,
+                     .to_dir_ = uw.to_dir_,
+                     .via_in_dir_ = vu.to_dir_,
+                     .via_out_dir_ = uw.from_dir_,
+                     .up_ = true});
       }
     }
-    if (w_edge.down_cost_ != kInfeasible && v_edge.up_cost_ != kInfeasible) {
-      auto const turn_cost =
-          get_turn_cost(u, w_edge.down_to_way_, w_edge.down_to_dir_,
-                        v_edge.up_from_way_, v_edge.up_from_dir_);
-      if (turn_cost != kInfeasible) {
-        relax_down_value(
-            *vw, u,
-            combine_distance(w_edge.down_distance_, v_edge.up_distance_),
-            clamp_cost(static_cast<std::uint64_t>(w_edge.down_cost_) +
-                       static_cast<std::uint64_t>(turn_cost) +
-                       static_cast<std::uint64_t>(v_edge.up_cost_)),
-            w_edge.down_from_way_, w_edge.down_from_dir_, v_edge.up_to_way_,
-            v_edge.up_to_dir_);
+    for (auto const& wu : w_edge.weights_) {
+      if (wu.up_) {
+        continue;
+      }
+      for (auto const& uv : v_edge.weights_) {
+        if (!uv.up_) {
+          continue;
+        }
+        auto const turn_cost = get_turn_cost(
+            u, wu.to_way_, wu.to_dir_, uv.from_way_, uv.from_dir_);
+        if (turn_cost == kInfeasible) {
+          continue;
+        }
+        relax_value(
+            *vw, cch_edge_weight{
+                     .via_ = u,
+                     .distance_ = combine_distance(wu.distance_, uv.distance_),
+                     .cost_ = clamp_cost(static_cast<std::uint64_t>(wu.cost_) +
+                                         static_cast<std::uint64_t>(turn_cost) +
+                                         static_cast<std::uint64_t>(uv.cost_)),
+                     .from_way_ = wu.from_way_,
+                     .to_way_ = uv.to_way_,
+                     .via_in_way_ = wu.to_way_,
+                     .via_out_way_ = uv.from_way_,
+                     .from_dir_ = wu.from_dir_,
+                     .to_dir_ = uv.to_dir_,
+                     .via_in_dir_ = wu.to_dir_,
+                     .via_out_dir_ = uv.from_dir_,
+                     .up_ = false});
       }
     }
   };
@@ -595,6 +599,15 @@ void ways::add_shortcuts() {
       }
     }
   }
+  auto cch_edge_count = std::size_t{0U};
+  auto cch_weight_count = std::size_t{0U};
+  for (auto const& edges : r_->cch_edge_weights_) {
+    cch_edge_count += edges.size();
+    for (auto const& edge : edges) {
+      cch_weight_count += edge.weights_.size();
+    }
+  }
+  fmt::println("cch edges: {}, weights: {}", cch_edge_count, cch_weight_count);
 }
 
 void ways::connect_ways() {

@@ -190,6 +190,29 @@ struct cch {
     return nullptr;
   }
 
+  static cch_edge_weight const* best_weight(cch_edge const& e,
+                                            bool const up,
+                                            node const from,
+                                            node const to) {
+    auto best = static_cast<cch_edge_weight const*>(nullptr);
+    for (auto const& w : e.weights_) {
+      if (w.up_ != up || w.cost_ == kInfeasible) {
+        continue;
+      }
+      if constexpr (requires { from.way_; from.dir_; to.way_; to.dir_; }) {
+        if (w.from_way_ != from.way_ || w.from_dir_ != from.dir_ ||
+            w.to_way_ != to.way_ || w.to_dir_ != to.dir_) {
+          continue;
+        }
+      }
+      if (best == nullptr || w.cost_ < best->cost_ ||
+          (w.cost_ == best->cost_ && w.distance_ < best->distance_)) {
+        best = &w;
+      }
+    }
+    return best;
+  }
+
   // POC customization: CCH currently stores only distance, so the query derives
   // a profile cost with the same distance-to-time rule as the foot profile. A
   // real customization would store profile-specific edge costs.
@@ -335,22 +358,20 @@ struct cch {
 
       if constexpr (uses_customized_cost_overlay()) {
         for (auto const& e : r.cch_edge_weights_[curr.get_node()]) {
-          auto edge_cost = forward ? e.up_cost_ : e.down_cost_;
-          if (edge_cost == kInfeasible) {
-            continue;
-          }
-          auto const edge_source_way = forward ? e.up_from_way_ : e.down_to_way_;
-          auto const edge_source_dir = forward ? e.up_from_dir_ : e.down_to_dir_;
-          auto const has_pred =
-              forward ? costForward_.at(curr.get_key()).pred(curr).has_value()
-                      : costBackward_.at(curr.get_key()).pred(curr).has_value();
-          if (has_pred) {
+          for (auto const& weight : e.weights_) {
+            if (weight.up_ != forward || weight.cost_ == kInfeasible) {
+              continue;
+            }
+            auto edge_cost = weight.cost_;
+            auto const edge_source_way =
+                forward ? weight.from_way_ : weight.to_way_;
+            auto const edge_source_dir =
+                forward ? weight.from_dir_ : weight.to_dir_;
             auto const is_u_turn =
-                forward
-                    ? (curr.way_ == edge_source_way &&
-                       edge_source_dir == opposite(curr.dir_))
-                    : (curr.way_ == edge_source_way &&
-                       curr.dir_ == opposite(edge_source_dir));
+                forward ? (curr.way_ == edge_source_way &&
+                           edge_source_dir == opposite(curr.dir_))
+                        : (curr.way_ == edge_source_way &&
+                           curr.dir_ == opposite(edge_source_dir));
             if (forward) {
               if (r.template is_restricted<direction::kForward, false>(
                       curr.get_node(), curr.way_, edge_source_way)) {
@@ -377,20 +398,19 @@ struct cch {
                                                      curr.dir_));
             edge_cost = clamp_cost(static_cast<std::uint64_t>(edge_cost) +
                                    static_cast<std::uint64_t>(turn_cost));
-          }
-          auto const neighbor =
-              P::create_node(e.to_, kNoLevel,
-                             forward ? e.up_to_way_ : e.down_from_way_,
-                             forward ? e.up_to_dir_ : e.down_from_dir_);
-          if constexpr (WithBlocked) {
-            if (blocked->test(e.to_)) {
-              continue;
+            auto const neighbor =
+                P::create_node(e.to_, kNoLevel,
+                               forward ? weight.to_way_ : weight.from_way_,
+                               forward ? weight.to_dir_ : weight.from_dir_);
+            if constexpr (WithBlocked) {
+              if (blocked->test(e.to_)) {
+                continue;
+              }
             }
+            relax_neighbor(neighbor, edge_cost, weight.distance_,
+                           way_idx_t::invalid(), 0U, 0U,
+                           elevation_storage::elevation{}, false);
           }
-          relax_neighbor(neighbor, edge_cost,
-                         forward ? e.up_distance_ : e.down_distance_,
-                         way_idx_t::invalid(), 0U, 0U,
-                         elevation_storage::elevation{}, false);
         }
       } else {
         if (forward) {

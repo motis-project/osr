@@ -579,6 +579,7 @@ shortcut const* find_cch_shortcut(ways::routing const& r,
 
 struct cch_edge_ref {
   cch_edge const* edge_{};
+  cch_edge_weight const* weight_{};
   bool up_{};
 };
 
@@ -592,7 +593,18 @@ cch_edge_ref find_cch_edge_ref(ways::routing const& r,
   auto const high = up ? to.get_node() : from.get_node();
   for (auto const& e : r.cch_edge_weights_[low]) {
     if (e.to_ == high) {
-      return {.edge_ = &e, .up_ = up};
+      auto const* weight = cch<P>::best_weight(e, up, from, to);
+      if (weight == nullptr) {
+        for (auto const& candidate : e.weights_) {
+          if (candidate.up_ == up &&
+              (weight == nullptr || candidate.cost_ < weight->cost_ ||
+               (candidate.cost_ == weight->cost_ &&
+                candidate.distance_ < weight->distance_))) {
+            weight = &candidate;
+          }
+        }
+      }
+      return {.edge_ = &e, .weight_ = weight, .up_ = up};
     }
   }
   return {};
@@ -624,8 +636,8 @@ cost_t get_cch_edge_cost(typename P::parameters const& params,
                          typename P::node const to) {
   if constexpr (cch<P>::uses_customized_cost_overlay()) {
     auto const e = find_cch_edge_ref<P>(r, from, to);
-    if (e.edge_ != nullptr) {
-      return e.up_ ? e.edge_->up_cost_ : e.edge_->down_cost_;
+    if (e.weight_ != nullptr) {
+      return e.weight_->cost_;
     }
   }
   if (auto const* s = find_cch_shortcut<P>(r, from, to); s != nullptr) {
@@ -674,18 +686,14 @@ double add_cch_path(typename P::parameters const& params,
                     std::uint32_t const depth) {
   if constexpr (cch<P>::uses_customized_cost_overlay()) {
     auto const e = find_cch_edge_ref<P>(*w.r_, from, to);
-    if (e.edge_ != nullptr) {
-      auto const cost = e.up_ ? e.edge_->up_cost_ : e.edge_->down_cost_;
-      auto const distance =
-          e.up_ ? e.edge_->up_distance_ : e.edge_->down_distance_;
-      auto const via =
-          e.up_ ? e.edge_->up_via_ : e.edge_->down_via_;
-      auto const from_way =
-          e.up_ ? e.edge_->up_from_way_ : e.edge_->down_from_way_;
-      auto const to_way = e.up_ ? e.edge_->up_to_way_ : e.edge_->down_to_way_;
-      auto const from_dir =
-          e.up_ ? e.edge_->up_from_dir_ : e.edge_->down_from_dir_;
-      auto const to_dir = e.up_ ? e.edge_->up_to_dir_ : e.edge_->down_to_dir_;
+    if (e.weight_ != nullptr) {
+      auto const cost = e.weight_->cost_;
+      auto const distance = e.weight_->distance_;
+      auto const via = e.weight_->via_;
+      auto const from_way = e.weight_->from_way_;
+      auto const to_way = e.weight_->to_way_;
+      auto const from_dir = e.weight_->from_dir_;
+      auto const to_dir = e.weight_->to_dir_;
       if (depth == 0U || cost == kInfeasible) {
         fmt::println(
             "cch edge depth {} node/{} -> node/{} | ranks {} -> {} | {} | "
@@ -701,23 +709,26 @@ double add_cch_path(typename P::parameters const& params,
             static_cast<unsigned>(to_way), to_str(to_dir));
       }
     } else {
-      fmt::println("cch edge depth {} node/{} -> node/{} | missing overlay edge",
+      fmt::println("cch edge depth {} node/{} -> node/{} | missing overlay weight",
                    depth, to_idx(w.node_to_osm_[from.get_node()]),
                    to_idx(w.node_to_osm_[to.get_node()]));
     }
     auto const via_node =
-        e.edge_ == nullptr
-            ? node_idx_t::invalid()
-            : (e.up_ ? e.edge_->up_via_ : e.edge_->down_via_);
+        e.weight_ == nullptr ? node_idx_t::invalid() : e.weight_->via_;
     if (via_node != node_idx_t::invalid()) {
       // Customized CCH edges can represent a path through a lower-rank via-node,
       // even when the edge is also an original graph edge.
-      auto const via = P::create_node(via_node, kNoLevel, way_pos_t{0U}, dir);
-      auto const first_cost = get_cch_edge_cost<P>(params, *w.r_, from, via);
-      auto const second_cost = get_cch_edge_cost<P>(params, *w.r_, via, to);
-      return add_cch_path<P>(params, w, from, via, first_cost, segments, dir,
+      auto const via_in =
+          P::create_node(via_node, kNoLevel, e.weight_->via_in_way_,
+                         e.weight_->via_in_dir_);
+      auto const via_out =
+          P::create_node(via_node, kNoLevel, e.weight_->via_out_way_,
+                         e.weight_->via_out_dir_);
+      auto const first_cost = get_cch_edge_cost<P>(params, *w.r_, from, via_in);
+      auto const second_cost = get_cch_edge_cost<P>(params, *w.r_, via_out, to);
+      return add_cch_path<P>(params, w, from, via_in, first_cost, segments, dir,
                              depth + 1U) +
-             add_cch_path<P>(params, w, via, to, second_cost, segments, dir,
+             add_cch_path<P>(params, w, via_out, to, second_cost, segments, dir,
                              depth + 1U);
     }
   }
@@ -1174,6 +1185,7 @@ std::optional<path> route_cch(typename P::parameters const& params,
   }
 
   auto should_continue = true;
+  auto best = std::optional<path>{};
   for (auto const [i, start] : utl::enumerate(from_match)) {
     if (!should_continue && component_seen(w, from_match, i)) {
       continue;
@@ -1220,15 +1232,20 @@ std::optional<path> route_cch(typename P::parameters const& params,
           c.run(params, w, *w.r_, max, blocked, sharing, elevations, dir) &&
           should_continue;
 
-      if (c.mu_ != kInfeasible) {
+      if (c.mu_ != kInfeasible &&
+          (!best.has_value() || c.mu_ < best->cost_)) {
         // TODO: review POC implementation
-        return reconstruct_cch<P>(params, w, l, blocked, sharing, elevations, c,
-                                  from, to, start, end, dir);
+        auto candidate = reconstruct_cch<P>(params, w, l, blocked, sharing,
+                                            elevations, c, from, to, start, end,
+                                            dir);
+        if (candidate.has_value()) {
+          best = std::move(candidate);
+        }
       }
     }
   }
 
-  return std::nullopt;
+  return best;
 }
 
 template <Profile P>
