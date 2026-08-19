@@ -280,26 +280,8 @@ struct bike_sharing {
   }
 
   template <typename Fn>
-  static void resolve_start_node(ways::routing const& w,
-                                 way_idx_t const way,
-                                 node_idx_t const n,
-                                 level_t lvl,
-                                 direction search_dir,
-                                 Fn&& f) {
-    footp::resolve_start_node(w, way, n, lvl, search_dir,
-                              [&](footp::node const fn) {
-                                f(to_node(fn, search_dir == direction::kForward
-                                                  ? node_type::kInitialFoot
-                                                  : node_type::kTrailingFoot));
-                              });
-  }
-
-  template <typename Fn>
-  static void resolve_all(ways::routing const& w,
-                          node_idx_t const n,
-                          level_t const lvl,
-                          Fn&& f) {
-    footp::resolve_all(w, n, lvl, [&](footp::node const neighbor) {
+  static void resolve_all(ways::routing const& w, node_idx_t const n, Fn&& f) {
+    footp::resolve_all(w, n, [&](footp::node const neighbor) {
       f(to_node(neighbor, node_type::kInitialFoot));
       f(to_node(neighbor, node_type::kTrailingFoot));
       f(to_node(neighbor, node_type::kBike));
@@ -370,10 +352,9 @@ struct bike_sharing {
            elevation_storage::elevation{}, false);
       };
       if constexpr (SearchDir == direction::kForward) {
-        footp::resolve_all(
-            w, n.n_, kNoLevel, [&](footp::node const foot_state) {
-              emit(to_node(foot_state, node_type::kTrailingFoot));
-            });
+        footp::resolve_all(w, n.n_, [&](footp::node const foot_state) {
+          emit(to_node(foot_state, node_type::kTrailingFoot));
+        });
       } else if (is_resolved_foot_state<footp>(
                      w, n, [&](footp::node const foot_state) {
                        return to_node(foot_state, n.type_);

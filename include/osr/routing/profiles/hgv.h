@@ -239,10 +239,7 @@ struct hgv {
   }
 
   template <typename Fn>
-  static void resolve_all(ways::routing const& w,
-                          node_idx_t const n,
-                          level_t,
-                          Fn&& f) {
+  static void resolve_all(ways::routing const& w, node_idx_t const n, Fn&& f) {
     auto const ways = w.node_ways_[n];
     for (auto i = way_pos_t{0U}; i != ways.size(); ++i) {
       f(node{n, i, direction::kForward});
@@ -260,7 +257,7 @@ struct hgv {
     if constexpr (Role == endpoint_role::kSource) {
       resolve_start_node(w, way, n, lvl, search_dir, f);
     } else {
-      resolve_all(w, n, lvl, f);
+      resolve_all(w, n, f);
     }
   }
 

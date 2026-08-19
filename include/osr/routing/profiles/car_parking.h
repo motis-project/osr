@@ -249,13 +249,10 @@ struct car_parking {
   }
 
   template <typename Fn>
-  static void resolve_all(ways::routing const& w,
-                          node_idx_t const n,
-                          level_t const lvl,
-                          Fn&& f) {
+  static void resolve_all(ways::routing const& w, node_idx_t const n, Fn&& f) {
     footp::resolve_all(
-        w, n, lvl, [&](footp::node const neighbor) { f(to_node(neighbor)); });
-    car::resolve_all(w, n, lvl,
+        w, n, [&](footp::node const neighbor) { f(to_node(neighbor)); });
+    car::resolve_all(w, n,
                      [&](car::node const neighbor) { f(to_node(neighbor)); });
   }
 
@@ -306,17 +303,16 @@ struct car_parking {
     };
     if constexpr (SearchDir == direction::kForward) {
       if (n.is_car_node()) {
-        footp::resolve_all(w, n.n_, kNoLevel,
-                           [&](footp::node const foot_state) {
-                             leave_car(to_node(foot_state));
-                           });
+        footp::resolve_all(w, n.n_, [&](footp::node const foot_state) {
+          leave_car(to_node(foot_state));
+        });
       }
     } else {
       if (n.is_foot_node() && is_resolved_foot_state<footp>(
                                   w, n, [&](footp::node const foot_state) {
                                     return to_node(foot_state);
                                   })) {
-        car::resolve_all(w, n.n_, kNoLevel,
+        car::resolve_all(w, n.n_,
                          [&](car::node const cn) { leave_car(to_node(cn)); });
       }
     }
@@ -327,21 +323,6 @@ struct car_parking {
            utl::any_of(w.node_ways_[n], [&](way_idx_t const way) {
              return w.way_properties_[way].is_parking();
            });
-  }
-
-  template <typename Fn>
-  static void resolve_start_node(ways::routing const& w,
-                                 way_idx_t const way,
-                                 node_idx_t const n,
-                                 level_t lvl,
-                                 direction search_dir,
-                                 Fn&& f) {
-    search_dir == direction::kForward
-        ? car::resolve_start_node(w, way, n, lvl, search_dir,
-                                  [&](car::node const cn) { f(to_node(cn)); })
-        : footp::resolve_start_node(
-              w, way, n, lvl, search_dir,
-              [&](footp::node const fn) { f(to_node(fn)); });
   }
 
   template <endpoint_role Role, typename Fn>
