@@ -476,9 +476,10 @@ struct lookup {
       return false;
     }
     auto found = false;
-    P::resolve_start_node(*ways_.r_, way, node_idx, query.lvl_,
-                          reverse ? opposite(search_dir) : search_dir,
-                          [&](auto const) { found = true; });
+    P::template resolve_endpoint<endpoint_role::kSource>(
+        *ways_.r_, way, node_idx, query.lvl_,
+        reverse ? opposite(search_dir) : search_dir,
+        [&](auto const) { found = true; });
     return found;
   }
 

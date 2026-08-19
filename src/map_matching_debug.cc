@@ -644,7 +644,7 @@ boost::json::object build_map_match_debug_json(
       // Register the node if not already registered
       auto const arr_idx = register_node(node_idx, false, nullptr, true);
 
-      P::resolve_all(*w.r_, node_idx, kNoLevel, [&](auto const& n) {
+      P::resolve_all(*w.r_, node_idx, [&](auto const& n) {
         auto const cost = seg.astar_.get_cost(n);
         if (cost != kInfeasible) {
           auto label = debug_node_label{};
