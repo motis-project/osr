@@ -132,7 +132,53 @@ struct cch {
     }
   }
 
-  void select_debug_meet_by_node(ways::routing const& r) {
+  cost_t debug_meeting_turn_cost(P::parameters const& params,
+                                 ways::routing const& r,
+                                 node const incoming,
+                                 node const outgoing) const {
+    if constexpr (!uses_customized_cost_overlay() ||
+                  !requires { incoming.way_; incoming.dir_; outgoing.way_;
+                               outgoing.dir_; }) {
+      return 0U;
+    } else {
+      if (incoming.get_node() != outgoing.get_node()) {
+        return kInfeasible;
+      }
+
+      auto const backward_it = costBackward_.find(outgoing.get_key());
+      if (backward_it == end(costBackward_)) {
+        return kInfeasible;
+      }
+
+      // TODO: review POC implementation. In the backward predecessor chain,
+      // pred(outgoing) is the next graph state after the meeting node in the
+      // final forward route. If there is no predecessor, the meeting node is the
+      // destination seed and there is no outgoing turn to validate.
+      if (!backward_it->second.pred(outgoing).has_value()) {
+        return 0U;
+      }
+
+      // The backward meeting state stores the outgoing way context at the shared
+      // graph node. Validate the stitch from the forward arrival context into
+      // that outgoing context before accepting this meeting pair.
+      if (r.template is_restricted<direction::kForward, false>(
+              incoming.get_node(), incoming.way_, outgoing.way_)) {
+        return kInfeasible;
+      }
+
+      auto const is_u_turn = incoming.way_ == outgoing.way_ &&
+                             outgoing.dir_ == opposite(incoming.dir_);
+      return is_u_turn ? params.uturn_penalty_
+                       : P::turn_cost(
+                             params, r.get_turn_angle(
+                                         incoming.get_node(), incoming.way_,
+                                         incoming.dir_, outgoing.way_,
+                                         outgoing.dir_));
+    }
+  }
+
+  void select_debug_meet_by_node(P::parameters const& params,
+                                 ways::routing const& r) {
     if constexpr (!kDisableMeetPointLogicForDebug ||
                   !uses_customized_cost_overlay()) {
       return;
@@ -147,34 +193,34 @@ struct cch {
           continue;
         }
 
-        auto best_f = kInfeasible;
-        auto best_b = kInfeasible;
-        auto best_f_state = node::invalid();
-        auto best_b_state = node::invalid();
-        P::resolve_all(r, node_id, kNoLevel, [&](auto const state) {
-          auto const f = forward_entry.cost(state);
-          if (f < best_f) {
-            best_f = f;
-            best_f_state = state;
+        P::resolve_all(r, node_id, kNoLevel, [&](auto const forward_state) {
+          auto const f = forward_entry.cost(forward_state);
+          if (f == kInfeasible) {
+            return;
           }
-          auto const b = backward_it->second.cost(state);
-          if (b < best_b) {
-            best_b = b;
-            best_b_state = state;
-          }
+
+          P::resolve_all(r, node_id, kNoLevel, [&](auto const backward_state) {
+            auto const b = backward_it->second.cost(backward_state);
+            if (b == kInfeasible) {
+              return;
+            }
+
+            auto const stitch_cost =
+                debug_meeting_turn_cost(params, r, forward_state, backward_state);
+            if (stitch_cost == kInfeasible) {
+              return;
+            }
+
+            auto const candidate = clamp_cost(
+                static_cast<std::uint64_t>(f) + static_cast<std::uint64_t>(b) +
+                static_cast<std::uint64_t>(stitch_cost));
+            if (candidate < best) {
+              best = candidate;
+              best_forward = forward_state;
+              best_backward = backward_state;
+            }
+          });
         });
-
-        if (best_f == kInfeasible || best_b == kInfeasible) {
-          continue;
-        }
-
-        auto const candidate = clamp_cost(static_cast<std::uint64_t>(best_f) +
-                                          static_cast<std::uint64_t>(best_b));
-        if (candidate < best) {
-          best = candidate;
-          best_forward = best_f_state;
-          best_backward = best_b_state;
-        }
       }
 
       if (best != kInfeasible) {
@@ -643,7 +689,7 @@ struct cch {
         }
       }
     }
-    select_debug_meet_by_node(r);
+    select_debug_meet_by_node(params, r);
     return !max_reached_ && mu_ == kInfeasible;
   }
 
