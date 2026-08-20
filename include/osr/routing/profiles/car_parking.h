@@ -366,11 +366,11 @@ struct car_parking {
                       .duration_ = duration_from_cost(kSwitchPenalty)});
 
               if (kFwd) {
-                fn({target, node_type::kFoot, lvl, SearchDir, 0U}, cost.cost_,
+                fn({target, node_type::kFoot, lvl, foot_offset.dir_, 0U}, cost.cost_,
                    cost.duration_, dist, way_idx, 0, 0,
                    elevation_storage::elevation{}, false);
               } else {
-                fn({target, node_type::kCar, lvl, SearchDir, 0U}, cost.cost_,
+                fn({target, node_type::kCar, lvl, car_offset.dir_, 0U}, cost.cost_,
                    cost.duration_, dist, way_idx, 0, 0,
                    elevation_storage::elevation{}, false);
               }

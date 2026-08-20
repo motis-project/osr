@@ -2,6 +2,7 @@
 
 #include <ranges>
 
+#include "osr/types.h"
 #include "utl/pipes/transform.h"
 #include "utl/to_vec.h"
 
@@ -32,6 +33,12 @@ vec<point> get_connection(vec<point> const& interior,
   return connection;
 }
 
+direction invert(direction const dir, bool const revert) {
+  return revert ? dir == direction::kForward ? direction::kBackward
+                                             : direction::kForward
+                : dir;
+}
+
 vec<point> reverse(vec<point>&& points) {
   std::reverse(begin(points), end(points));
   return points;
@@ -56,19 +63,6 @@ void for_each_connection(ways::routing const& r,
     }
   }
 }
-
-// std::optional<ways::routing::additional_connection const>
-// get_additional_connection(ways::routing const& r, way_idx_t const way_idx) {
-//   if (!is_additional_connection_idx(r, way_idx)) {
-//     return {};
-//   }
-//   auto const conn_idx = to_connection_idx(r, way_idx);
-//   utl::verify(conn_idx < r.additional_connections_.size(),
-//               "Invalid connection index: {} >= {}", conn_idx,
-//               r.additional_connections_.size());
-//   // auto x = r.additional_connections_[conn_idx];
-//   return std::optional{r.additional_connections_[conn_idx]};
-// }
 
 bool is_additional_connection(ways::routing const& r, way_idx_t const way_idx) {
   return way_idx != way_idx_t::invalid() && way_idx >= r.way_component_.size();
@@ -216,7 +210,7 @@ void for_each_addional_connection(
                        ways::routing::additional_connection::offset const& to) {
       for (auto const from_left : {true, false}) {
         auto const start = from_left ? from.left_ : from.right_;
-        if (start == node_idx_t::invalid()) {
+        if (start != node_idx) {
           continue;
         }
         for (auto const to_left : {true, false}) {
@@ -224,13 +218,17 @@ void for_each_addional_connection(
           if (target != node_idx_t::invalid()) {
             f(conn, to_way_idx(r, connection_idx), target, conn_dir,
               {.offset_ = from,
-               .node_ = from_left ? from.left_ : from.right_,
+               .node_ = start,
                .dist_ = from_left ? from.dist_left_ : from.dist_right_,
-               .dir_ = from_left ? direction::kForward : direction::kBackward},
+               .dir_ = invert(
+                   from_left ? direction::kForward : direction::kBackward,
+                   conn_dir == direction::kBackward)},
               {.offset_ = to,
-               .node_ = to_left ? to.left_ : to.right_,
+               .node_ = target,
                .dist_ = to_left ? to.dist_left_ : to.dist_right_,
-               .dir_ = to_left ? direction::kBackward : direction::kForward});
+               .dir_ =
+                   invert(to_left ? direction::kBackward : direction::kForward,
+                          conn_dir == direction::kBackward)});
           }
         }
       }
