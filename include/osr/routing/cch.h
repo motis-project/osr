@@ -51,6 +51,7 @@ struct cch {
   using settled_set = ankerl::unordered_dense::set<node, settled_hash>;
 
   static constexpr auto const kDebug = false;
+  static constexpr auto const kQueryDebugOutput = false;
   // TODO: review POC implementation. Temporary debug bypass: do not use the
   // exact-state meeting logic while inspecting CCH routes in the debug UI.
   static constexpr auto const kDisableMeetPointLogicForDebug = true;
@@ -228,17 +229,19 @@ struct cch {
         meet_ = best_forward;
         meet_forward_ = best_forward;
         meet_backward_ = best_backward;
-        if constexpr (requires { best_forward.way_; best_forward.dir_;
-                                  best_backward.way_; best_backward.dir_; }) {
-          fmt::println(
-              "cch debug meet bypass | node={} cost={} forward_state=({}, {}) "
-              "backward_state=({}, {})",
-              to_idx(best_forward.get_node()), mu_, best_forward.way_,
-              to_str(best_forward.dir_), best_backward.way_,
-              to_str(best_backward.dir_));
-        } else {
-          fmt::println("cch debug meet bypass | node={} cost={}",
-                       to_idx(best_forward.get_node()), mu_);
+        if constexpr (kQueryDebugOutput) {
+          if constexpr (requires { best_forward.way_; best_forward.dir_;
+                                    best_backward.way_; best_backward.dir_; }) {
+            fmt::println(
+                "cch debug meet bypass | node={} cost={} forward_state=({}, {}) "
+                "backward_state=({}, {})",
+                to_idx(best_forward.get_node()), mu_, best_forward.way_,
+                to_str(best_forward.dir_), best_backward.way_,
+                to_str(best_backward.dir_));
+          } else {
+            fmt::println("cch debug meet bypass | node={} cost={}",
+                         to_idx(best_forward.get_node()), mu_);
+          }
         }
       }
     }
@@ -360,7 +363,9 @@ struct cch {
       discard_stale_top<direction::kForward>(pqForward_);
       discard_stale_top<direction::kBackward>(pqBackward_);
       if (!kDisableMeetPointLogicForDebug && done()) {
-        fmt::println("cch mu: {}", mu_);
+        if constexpr (kQueryDebugOutput) {
+          fmt::println("cch mu: {}", mu_);
+        }
         break;
       }
       if (pqForward_.empty() && pqBackward_.empty()) {
@@ -418,6 +423,7 @@ struct cch {
           return;
         }
         auto const debug_meet_node =
+            kQueryDebugOutput &&
             w.node_to_osm_[neighbor.get_node()] == osm_node_idx_t{1800775440U};
         auto const dump_debug_meet_node_states = [&]() {
           if (!debug_meet_node) {
@@ -564,9 +570,11 @@ struct cch {
         for (auto const& e : r.cch_edge_weights_[curr.get_node()]) {
           for (auto const& weight : e.weights_) {
             auto const debug_node =
+                kQueryDebugOutput &&
                 w.node_to_osm_[curr.get_node()] == osm_node_idx_t{1866422978U};
-            auto const debug_edge =
-                curr.get_node() == node_idx_t{1985U} && e.to_ == node_idx_t{1537U};
+            auto const debug_edge = kQueryDebugOutput &&
+                                    curr.get_node() == node_idx_t{1985U} &&
+                                    e.to_ == node_idx_t{1537U};
             if (debug_node) {
               fmt::println(
                   "cch adjacent probe | search={} curr={} rank={} state=({}, "

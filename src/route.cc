@@ -34,6 +34,7 @@ namespace osr {
 
 constexpr auto const kMaxMatchingDistanceSquaredRatio = 9.0;
 constexpr auto const kBottomKDefinitelyConsidered = 5;
+constexpr auto const kCchRouteDebugOutput = false;
 
 template <Profile P>
 bidirectional<P>& get_bidirectional() {
@@ -698,23 +699,28 @@ double add_cch_path(typename P::parameters const& params,
       // CCH DEBUG: log every selected overlay edge, including recursively
       // unpacked base edges, so the query path is not confused with only the
       // top-level shortcut breadcrumbs shown in the debug UI.
-      fmt::println(
-          "cch selected edge | depth {} | kind {} | node/{} -> node/{} | "
-          "ranks {} -> {} | {} | cost {} | expected {} | dist {} | via "
-          "node/{} | boundary {}:{} -> {}:{}",
-          depth, via == node_idx_t::invalid() ? "base" : "shortcut",
-          to_idx(w.node_to_osm_[from.get_node()]),
-          to_idx(w.node_to_osm_[to.get_node()]),
-          w.r_->node_importance_[from.get_node()],
-          w.r_->node_importance_[to.get_node()], e.up_ ? "up" : "down", cost,
-          expected_cost, distance,
-          via == node_idx_t::invalid() ? 0U : to_idx(w.node_to_osm_[via]),
-          static_cast<unsigned>(from_way), to_str(from_dir),
-          static_cast<unsigned>(to_way), to_str(to_dir));
+      if constexpr (kCchRouteDebugOutput) {
+        fmt::println(
+            "cch selected edge | depth {} | kind {} | node/{} -> node/{} | "
+            "ranks {} -> {} | {} | cost {} | expected {} | dist {} | via "
+            "node/{} | boundary {}:{} -> {}:{}",
+            depth, via == node_idx_t::invalid() ? "base" : "shortcut",
+            to_idx(w.node_to_osm_[from.get_node()]),
+            to_idx(w.node_to_osm_[to.get_node()]),
+            w.r_->node_importance_[from.get_node()],
+            w.r_->node_importance_[to.get_node()], e.up_ ? "up" : "down", cost,
+            expected_cost, distance,
+            via == node_idx_t::invalid() ? 0U : to_idx(w.node_to_osm_[via]),
+            static_cast<unsigned>(from_way), to_str(from_dir),
+            static_cast<unsigned>(to_way), to_str(to_dir));
+      }
     } else {
-      fmt::println("cch edge depth {} node/{} -> node/{} | missing overlay weight",
-                   depth, to_idx(w.node_to_osm_[from.get_node()]),
-                   to_idx(w.node_to_osm_[to.get_node()]));
+      if constexpr (kCchRouteDebugOutput) {
+        fmt::println(
+            "cch edge depth {} node/{} -> node/{} | missing overlay weight",
+            depth, to_idx(w.node_to_osm_[from.get_node()]),
+            to_idx(w.node_to_osm_[to.get_node()]));
+      }
     }
     auto const via_node =
         e.weight_ == nullptr ? node_idx_t::invalid() : e.weight_->via_;
@@ -756,16 +762,18 @@ double add_cch_path(typename P::parameters const& params,
     // their contracted via-node until only original graph edges remain.
     // CCH DEBUG: raw shortcut fallback breadcrumb retained for comparison with
     // customized overlay reconstruction.
-    fmt::println(
-        "cch selected edge | depth {} | kind raw-shortcut-fallback | node/{} "
-        "-> node/{} | ranks {} -> {} | cost {} | expected {} | dist {} | via "
-        "node/{}",
-        depth, to_idx(w.node_to_osm_[from.get_node()]),
-        to_idx(w.node_to_osm_[to.get_node()]),
-        w.r_->node_importance_[from.get_node()],
-        w.r_->node_importance_[to.get_node()],
-        get_cch_edge_cost<P>(params, *w.r_, from, to), expected_cost,
-        s->distance_, to_idx(w.node_to_osm_[s->via_]));
+    if constexpr (kCchRouteDebugOutput) {
+      fmt::println(
+          "cch selected edge | depth {} | kind raw-shortcut-fallback | node/{} "
+          "-> node/{} | ranks {} -> {} | cost {} | expected {} | dist {} | via "
+          "node/{}",
+          depth, to_idx(w.node_to_osm_[from.get_node()]),
+          to_idx(w.node_to_osm_[to.get_node()]),
+          w.r_->node_importance_[from.get_node()],
+          w.r_->node_importance_[to.get_node()],
+          get_cch_edge_cost<P>(params, *w.r_, from, to), expected_cost,
+          s->distance_, to_idx(w.node_to_osm_[s->via_]));
+    }
     segments.push_back(path::segment{
         .polyline_ = {w.get_node_pos(from.get_node()).as_latlng(),
                       w.get_node_pos(to.get_node()).as_latlng()},

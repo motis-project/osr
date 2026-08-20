@@ -1,5 +1,6 @@
 #include "osr/backend/http_server.h"
 
+#include <chrono>
 #include <utility>
 
 #include "boost/algorithm/string.hpp"
@@ -39,6 +40,19 @@ namespace fs = std::filesystem;
 namespace json = boost::json;
 
 namespace osr::backend {
+
+constexpr auto const kRequestDebugOutput = false;
+constexpr auto const kRouteComparisonDebugOutput = false;
+
+constexpr std::string_view to_log_string(routing_algorithm const algo) {
+  switch (algo) {
+    case routing_algorithm::kDijkstra: return "dijkstra";
+    case routing_algorithm::kAStarBi: return "bidirectional";
+    case routing_algorithm::kDijkstraBi: return "dijkstra_bidir";
+    case routing_algorithm::kCCH: return "cch";
+  }
+  return "unknown";
+}
 
 template <typename Body>
 void set_cors_headers(http::response<Body>& res) {
@@ -147,21 +161,33 @@ struct http_server::impl {
                                                       foot_speed_result.value()}
             : get_parameters(profile);
 
+    auto const query_start = std::chrono::steady_clock::now();
     auto const p = route(params, w_, l_, profile, from, to, max, dir, 100,
                          nullptr, nullptr, elevations_, routing_algo);
+    auto const query_end = std::chrono::steady_clock::now();
+    auto const query_us =
+        std::chrono::duration_cast<std::chrono::microseconds>(query_end -
+                                                              query_start)
+            .count();
+    fmt::println("route_query routing={} profile={} query_ms={:.3f} found={} cost={}",
+                 to_log_string(routing_algo), to_str(profile),
+                 static_cast<double>(query_us) / 1000.0, p.has_value(),
+                 p.has_value() ? p->cost_ : kInfeasible);
 
-    auto const p1 = route(params, w_, l_, profile, from, std::vector{to}, max,
-                          dir, 100, nullptr, nullptr, elevations_);
+    if constexpr (kRouteComparisonDebugOutput) {
+      auto const p1 = route(params, w_, l_, profile, from, std::vector{to}, max,
+                            dir, 100, nullptr, nullptr, elevations_);
 
-    auto const print = [](char const* name, std::optional<path> const& p) {
-      if (p.has_value()) {
-        std::cout << name << " cost: " << p->cost_ << "\n";
-      } else {
-        std::cout << name << ": not found\n";
-      }
-    };
-    print("p", p);
-    print("p1", p1.at(0));
+      auto const print = [](char const* name, std::optional<path> const& p) {
+        if (p.has_value()) {
+          std::cout << name << " cost: " << p->cost_ << "\n";
+        } else {
+          std::cout << name << ": not found\n";
+        }
+      };
+      print("p", p);
+      print("p1", p1.at(0));
+    }
 
     if (!p.has_value()) {
       cb(json_response(req, "could not find a valid path",
@@ -348,7 +374,9 @@ struct http_server::impl {
 
   void handle_request(web_server::http_req_t const& req,
                       web_server::http_res_cb_t const& cb) {
-    std::cout << "[" << req.method_string() << "] " << req.target() << '\n';
+    if constexpr (kRequestDebugOutput) {
+      std::cout << "[" << req.method_string() << "] " << req.target() << '\n';
+    }
     switch (req.method()) {
       case http::verb::options: return cb(json_response(req, {}));
       case http::verb::post: {
