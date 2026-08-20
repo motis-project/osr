@@ -13,7 +13,9 @@
 #include "osr/extract/extract.h"
 #include "osr/location.h"
 #include "osr/lookup.h"
+#include "osr/routing/cch.h"
 #include "osr/routing/dijkstra.h"
+#include "osr/routing/dijkstra_bidir.h"
 #include "osr/routing/profile.h"
 #include "osr/routing/profiles/car.h"
 #include "osr/routing/profiles/foot.h"
@@ -56,11 +58,11 @@ TEST(simple_dijkstra, monaco) {
   auto const l = osr::lookup{w, data_dir, cista::mmap::protection::READ};
 
   // <-- pick your real-world start/end here (lat, lng) -->
-  // const start = [7.418807157337369, 43.73319419824978]
+  // const start = [7.418969078064066, 43.7330953688176]
   // const destination = [7.4261553024191755, 43.73175634804065];
   //
   auto const from =
-      location{geo::latlng{43.73319419824978, 7.418807157337369}};
+      location{geo::latlng{43.7330953688176, 7.418969078064066}};
   auto const to = location{geo::latlng{43.73175634804065, 7.4261553024191755}};
   using profile = car;
   auto const params = profile::parameters{};
@@ -73,6 +75,79 @@ TEST(simple_dijkstra, monaco) {
 
   ASSERT_FALSE(from_matches.empty()) << "no graph match near 'from'";
   ASSERT_FALSE(to_matches.empty()) << "no graph match near 'to'";
+
+  auto const dump_matches = [&](std::string_view name, match_t const& matches) {
+    fmt::println("{} matches: {}", name, matches.size());
+    for (auto const [i, m] : utl::enumerate(matches)) {
+      fmt::println("  [{}] way={} osm_way={} dist_to_way={:.2f} segment={}", i,
+                   to_idx(m.way_), to_idx(w.way_osm_idx_[m.way_]),
+                   m.dist_to_way_, m.segment_idx_);
+      auto const dump_node = [&](std::string_view side, node_candidate const& nc) {
+        if (!nc.valid()) {
+          fmt::println("    {}: invalid", side);
+          return;
+        }
+        auto const pos = w.get_node_pos(nc.node_).as_latlng();
+        fmt::println(
+            "    {}: node={} osm_node={} rank={} way_dir={} dist_to_node={:.2f} "
+            "cost={} lat={} lng={}",
+            side, to_idx(nc.node_), to_idx(w.node_to_osm_[nc.node_]),
+            w.r_->node_importance_[nc.node_], to_str(nc.way_dir_),
+            nc.dist_to_node_, nc.cost_, pos.lat_, pos.lng_);
+      };
+      dump_node("left", m.left_);
+      dump_node("right", m.right_);
+    }
+  };
+  dump_matches("start", from_matches);
+  dump_matches("end", to_matches);
+
+  auto const run_exact_node_query = [&](osm_node_idx_t const start_osm,
+                                        osm_node_idx_t const dest_osm) {
+    auto const start_node = w.get_node_idx(start_osm);
+    auto const dest_node = w.get_node_idx(dest_osm);
+
+    auto d = dijkstra<profile>{};
+    d.reset(max_cost);
+    profile::resolve_all(*w.r_, start_node, kNoLevel, [&](auto const node) {
+      d.add_start(w, {node, 0U});
+    });
+    d.run(params, w, *w.r_, max_cost, nullptr, nullptr, nullptr, dir);
+
+    auto dijkstra_cost = kInfeasible;
+    profile::resolve_all(*w.r_, dest_node, kNoLevel, [&](auto const node) {
+      dijkstra_cost = std::min(dijkstra_cost, d.get_cost(node));
+    });
+
+    auto bd = dijkstra_bidir<profile>{};
+    bd.reset(max_cost);
+    profile::resolve_all(*w.r_, start_node, kNoLevel, [&](auto const node) {
+      bd.add_start(w, {node, 0U});
+    });
+    profile::resolve_all(*w.r_, dest_node, kNoLevel, [&](auto const node) {
+      bd.add_destination(w, {node, 0U});
+    });
+    bd.run(params, w, *w.r_, max_cost, nullptr, nullptr, nullptr, dir);
+
+    auto c = cch<profile>{};
+    c.reset(max_cost);
+    profile::resolve_all(*w.r_, start_node, kNoLevel, [&](auto const node) {
+      c.add_start(w, {node, 0U});
+    });
+    profile::resolve_all(*w.r_, dest_node, kNoLevel, [&](auto const node) {
+      c.add_destination(w, {node, 0U});
+    });
+    c.run(params, w, *w.r_, max_cost, nullptr, nullptr, nullptr, dir);
+
+    fmt::println(
+        "exact node query osm {} -> {} | internal {} -> {} | dijkstra {} | "
+        "bidir {} | cch {}",
+        to_idx(start_osm), to_idx(dest_osm), to_idx(start_node),
+        to_idx(dest_node), dijkstra_cost, bd.mu_, c.mu_);
+  };
+
+  run_exact_node_query(osm_node_idx_t{25194304U}, osm_node_idx_t{7787103278U});
+  run_exact_node_query(osm_node_idx_t{25194304U}, osm_node_idx_t{2737814240U});
 
   auto const from_matches_span =
       std::span{begin(from_matches), end(from_matches)};

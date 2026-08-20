@@ -359,7 +359,32 @@ struct cch {
       if constexpr (uses_customized_cost_overlay()) {
         for (auto const& e : r.cch_edge_weights_[curr.get_node()]) {
           for (auto const& weight : e.weights_) {
+            auto const debug_node =
+                w.node_to_osm_[curr.get_node()] == osm_node_idx_t{1866422978U};
+            if (debug_node) {
+              fmt::println(
+                  "cch adjacent probe | search={} curr={} rank={} state=({}, "
+                  "{}) edge_to={} edge_rank={} weight_up={} base_cost={} "
+                  "dist={} from=({}, {}) to=({}, {}) via={} via_in=({}, {}) "
+                  "via_out=({}, {})",
+                  forward ? "forward" : "backward",
+                  to_idx(w.node_to_osm_[curr.get_node()]),
+                  r.node_importance_[curr.get_node()], curr.way_,
+                  to_str(curr.dir_), to_idx(w.node_to_osm_[e.to_]),
+                  r.node_importance_[e.to_], weight.up_, weight.cost_,
+                  weight.distance_, weight.from_way_,
+                  to_str(weight.from_dir_), weight.to_way_,
+                  to_str(weight.to_dir_),
+                  weight.via_ == node_idx_t::invalid()
+                      ? 0U
+                      : to_idx(w.node_to_osm_[weight.via_]),
+                  weight.via_in_way_, to_str(weight.via_in_dir_),
+                  weight.via_out_way_, to_str(weight.via_out_dir_));
+            }
             if (weight.up_ != forward || weight.cost_ == kInfeasible) {
+              if (debug_node) {
+                fmt::println("  -> skip: direction/infeasible");
+              }
               continue;
             }
             auto edge_cost = weight.cost_;
@@ -375,11 +400,17 @@ struct cch {
             if (forward) {
               if (r.template is_restricted<direction::kForward, false>(
                       curr.get_node(), curr.way_, edge_source_way)) {
+                if (debug_node) {
+                  fmt::println("  -> skip: restricted");
+                }
                 continue;
               }
             } else {
               if (r.template is_restricted<direction::kForward, false>(
                       curr.get_node(), edge_source_way, curr.way_)) {
+                if (debug_node) {
+                  fmt::println("  -> skip: restricted");
+                }
                 continue;
               }
             }
@@ -404,8 +435,16 @@ struct cch {
                                forward ? weight.to_dir_ : weight.from_dir_);
             if constexpr (WithBlocked) {
               if (blocked->test(e.to_)) {
+                if (debug_node) {
+                  fmt::println("  -> skip: blocked");
+                }
                 continue;
               }
+            }
+            if (debug_node) {
+              fmt::println("  -> relax neighbor={} state=({}, {}) total_edge_cost={}",
+                           to_idx(w.node_to_osm_[neighbor.get_node()]),
+                           neighbor.way_, to_str(neighbor.dir_), edge_cost);
             }
             relax_neighbor(neighbor, edge_cost, weight.distance_,
                            way_idx_t::invalid(), 0U, 0U,

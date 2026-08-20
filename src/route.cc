@@ -1185,7 +1185,6 @@ std::optional<path> route_cch(typename P::parameters const& params,
   }
 
   auto should_continue = true;
-  auto best = std::optional<path>{};
   for (auto const [i, start] : utl::enumerate(from_match)) {
     if (!should_continue && component_seen(w, from_match, i)) {
       continue;
@@ -1232,20 +1231,15 @@ std::optional<path> route_cch(typename P::parameters const& params,
           c.run(params, w, *w.r_, max, blocked, sharing, elevations, dir) &&
           should_continue;
 
-      if (c.mu_ != kInfeasible &&
-          (!best.has_value() || c.mu_ < best->cost_)) {
+      if (c.mu_ != kInfeasible) {
         // TODO: review POC implementation
-        auto candidate = reconstruct_cch<P>(params, w, l, blocked, sharing,
-                                            elevations, c, from, to, start, end,
-                                            dir);
-        if (candidate.has_value()) {
-          best = std::move(candidate);
-        }
+        return reconstruct_cch<P>(params, w, l, blocked, sharing, elevations, c,
+                                  from, to, start, end, dir);
       }
     }
   }
 
-  return best;
+  return std::nullopt;
 }
 
 template <Profile P>
