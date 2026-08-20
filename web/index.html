@@ -28,7 +28,7 @@
             width: 100%;
         }
 
-        #graph-toggle {
+        .debug-toggle {
             position: relative;
             top: 5px;
             left: 5px;
@@ -73,7 +73,7 @@
             background: #8fff7b;
         }
 
-        #graph-toggle:hover, .level:hover {
+        .debug-toggle:hover, .level:hover {
             background: #EEE;
         }
 
@@ -123,7 +123,9 @@
     </style>
 </head>
 <body>
-<a id="graph-toggle" href="#" onclick="toggleGraph()">G</a>
+<a id="graph-toggle" class="debug-toggle" href="#" onclick="toggleGraph()">G</a>
+<a id="cch-used-toggle" class="debug-toggle active" href="#" onclick="toggleCchUsedShortcuts()">QS</a>
+<a id="cch-adjacent-clear" class="debug-toggle" href="#" onclick="clearCchAdjacent()">CX</a>
 <div id="levels"></div>
 <select id="profile" onchange="selectProfile(event)">
     <option value="foot">foot</option>
@@ -290,6 +292,21 @@
         return await response.json();
     };
 
+    const getCchAdjacent = async (internalId) => {
+        const response = await fetch(`${window.origin}/api/cch-adjacent`, {
+            method: 'POST',
+            mode: 'cors',
+            headers: {
+                'Access-Control-Allow-Origin': '*',
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                internal_id: internalId
+            })
+        });
+        return await response.json();
+    };
+
     const getPlatforms = async (bounds) => {
         const response = await fetch(`${window.origin}/api/platforms`, {
             method: 'POST',
@@ -354,6 +371,13 @@
             type: 'geojson',
             data: await getRoute()
         });
+        map.addSource('cch-adjacent', {
+            type: 'geojson',
+            data: {
+                type: 'FeatureCollection',
+                features: []
+            }
+        });
         map.addLayer({
             'id': 'path-outline',
             'type': 'line',
@@ -363,9 +387,13 @@
                 'line-cap': 'round',
             },
             'filter': [
-                'any',
-                ['!has', 'level'],
-                ['==', 'level', currentLevel]
+                'all',
+                ['!has', 'cch_debug_type'],
+                [
+                    'any',
+                    ['!has', 'level'],
+                    ['==', 'level', currentLevel]
+                ]
             ],
             'paint': {
                 'line-color': '#1966a4',
@@ -382,14 +410,62 @@
                 'line-cap': 'round',
             },
             'filter': [
-                'any',
-                ['!has', 'level'],
-                ['==', 'level', currentLevel]
+                'all',
+                ['!has', 'cch_debug_type'],
+                [
+                    'any',
+                    ['!has', 'level'],
+                    ['==', 'level', currentLevel]
+                ]
             ],
             'paint': {
                 'line-color': '#42a5f5',
                 'line-width': 5,
                 'line-opacity': 0.8
+            }
+        });
+        map.addLayer({
+            'id': 'path-cch-shortcut',
+            'type': 'line',
+            'source': 'path',
+            'layout': {
+                'line-join': 'round',
+                'line-cap': 'round',
+            },
+            'filter': [
+                'all',
+                ['==', 'cch_debug_type', 'shortcut'],
+                [
+                    'any',
+                    ['!has', 'level'],
+                    ['==', 'level', currentLevel]
+                ]
+            ],
+            'paint': {
+                'line-color': '#ff7a00',
+                'line-width': 3,
+                'line-opacity': cchUsedShortcutsActive ? 0.9 : 0,
+                'line-dasharray': [1.5, 1]
+            }
+        });
+        map.addLayer({
+            'id': 'cch-adjacent-edge',
+            'type': 'line',
+            'source': 'cch-adjacent',
+            'layout': {
+                'line-join': 'round',
+                'line-cap': 'round',
+            },
+            'paint': {
+                'line-color': [
+                    'match',
+                    ['get', 'kind'],
+                    'shortcut', '#ff2f87',
+                    'mixed', '#8d43ff',
+                    '#00b86b'
+                ],
+                'line-width': 4,
+                'line-opacity': 0.85
             }
         });
     }
@@ -415,6 +491,7 @@
                 graphToggle.classList.remove('active');
                 map.removeLayer('graph-geometry');
                 map.removeLayer('graph-edge');
+                map.removeLayer('graph-node-rank');
                 map.removeLayer('graph-node');
                 map.removeSource('graph');
             } catch (e) {
@@ -495,6 +572,26 @@
                 }
             });
             map.addLayer({
+                'id': 'graph-node-rank',
+                'type': 'symbol',
+                'source': 'graph',
+                'filter': [
+                    'all',
+                    ['==', '$type', 'Point']
+                ],
+                'layout': {
+                    'text-field': ['to-string', ['get', 'rank']],
+                    'text-size': 11,
+                    'text-offset': [0, 1.1],
+                    'text-anchor': 'top'
+                },
+                'paint': {
+                    'text-color': '#111',
+                    'text-halo-color': '#fff',
+                    'text-halo-width': 1.5
+                }
+            });
+            map.addLayer({
                 'id': 'platform-node',
                 'type': 'circle',
                 'source': 'platform',
@@ -533,10 +630,28 @@
     }
 
     const graphToggle = document.getElementById("graph-toggle");
+    const cchUsedToggle = document.getElementById("cch-used-toggle");
     let graphActive = false;
+    let cchUsedShortcutsActive = true;
     window.toggleGraph = async () => {
         graphActive = !graphActive;
         await updateGraph();
+    }
+    window.toggleCchUsedShortcuts = () => {
+        cchUsedShortcutsActive = !cchUsedShortcutsActive;
+        cchUsedToggle.classList.toggle('active', cchUsedShortcutsActive);
+        if (map.getLayer('path-cch-shortcut')) {
+            map.setPaintProperty('path-cch-shortcut', 'line-opacity',
+                cchUsedShortcutsActive ? 0.9 : 0);
+        }
+    }
+    window.clearCchAdjacent = () => {
+        if (map.getSource('cch-adjacent')) {
+            map.getSource('cch-adjacent').setData({
+                type: 'FeatureCollection',
+                features: []
+            });
+        }
     }
 
     window.selectProfile = async (e) => {
@@ -578,8 +693,14 @@
         updateLevels();
     });
 
-    ['graph-node', 'graph-edge', 'graph-geometry'].forEach((layer) => {
+    ['graph-node', 'graph-node-rank', 'graph-edge', 'graph-geometry', 'path-cch-shortcut', 'cch-adjacent-edge'].forEach((layer) => {
         map.on('click', layer, (e) => {
+            if ((layer === 'graph-node' || layer === 'graph-node-rank') &&
+                e.features[0].properties.internal_id !== undefined) {
+                getCchAdjacent(e.features[0].properties.internal_id).then((data) => {
+                    map.getSource('cch-adjacent').setData(data);
+                });
+            }
             new maplibregl.Popup()
                 .setLngLat(e.lngLat)
                 .setDOMContent(toTable(e.features[0].properties))

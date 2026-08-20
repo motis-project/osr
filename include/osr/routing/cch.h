@@ -51,6 +51,9 @@ struct cch {
   using settled_set = ankerl::unordered_dense::set<node, settled_hash>;
 
   static constexpr auto const kDebug = false;
+  // TODO: review POC implementation. Temporary debug bypass: do not use the
+  // exact-state meeting logic while inspecting CCH routes in the debug UI.
+  static constexpr auto const kDisableMeetPointLogicForDebug = true;
 
   struct get_bucket {
     cost_t operator()(label const& l) { return l.cost(); }
@@ -67,6 +70,8 @@ struct cch {
     settledBackward_.clear();
     mu_ = kInfeasible;
     meet_ = node::invalid();
+    meet_forward_ = node::invalid();
+    meet_backward_ = node::invalid();
     max_reached_ = false;
   }
 
@@ -112,12 +117,83 @@ struct cch {
   }
 
   void update_mu(node const n, cost_t const f, cost_t const b) {
+    if constexpr (kDisableMeetPointLogicForDebug) {
+      return;
+    }
     if (f != kInfeasible && b != kInfeasible) {
       auto const candidate = clamp_cost(static_cast<std::uint64_t>(f) +
                                         static_cast<std::uint64_t>(b));
       if (candidate < mu_) {
         mu_ = candidate;
         meet_ = n;
+        meet_forward_ = n;
+        meet_backward_ = n;
+      }
+    }
+  }
+
+  void select_debug_meet_by_node(ways::routing const& r) {
+    if constexpr (!kDisableMeetPointLogicForDebug ||
+                  !uses_customized_cost_overlay()) {
+      return;
+    } else {
+      auto best = kInfeasible;
+      auto best_forward = node::invalid();
+      auto best_backward = node::invalid();
+
+      for (auto const& [node_id, forward_entry] : costForward_) {
+        auto const backward_it = costBackward_.find(node_id);
+        if (backward_it == end(costBackward_)) {
+          continue;
+        }
+
+        auto best_f = kInfeasible;
+        auto best_b = kInfeasible;
+        auto best_f_state = node::invalid();
+        auto best_b_state = node::invalid();
+        P::resolve_all(r, node_id, kNoLevel, [&](auto const state) {
+          auto const f = forward_entry.cost(state);
+          if (f < best_f) {
+            best_f = f;
+            best_f_state = state;
+          }
+          auto const b = backward_it->second.cost(state);
+          if (b < best_b) {
+            best_b = b;
+            best_b_state = state;
+          }
+        });
+
+        if (best_f == kInfeasible || best_b == kInfeasible) {
+          continue;
+        }
+
+        auto const candidate = clamp_cost(static_cast<std::uint64_t>(best_f) +
+                                          static_cast<std::uint64_t>(best_b));
+        if (candidate < best) {
+          best = candidate;
+          best_forward = best_f_state;
+          best_backward = best_b_state;
+        }
+      }
+
+      if (best != kInfeasible) {
+        mu_ = best;
+        meet_ = best_forward;
+        meet_forward_ = best_forward;
+        meet_backward_ = best_backward;
+        if constexpr (requires { best_forward.way_; best_forward.dir_;
+                                  best_backward.way_; best_backward.dir_; }) {
+          fmt::println(
+              "cch debug meet bypass | node={} cost={} forward_state=({}, {}) "
+              "backward_state=({}, {})",
+              to_idx(best_forward.get_node()), mu_, best_forward.way_,
+              to_str(best_forward.dir_), best_backward.way_,
+              to_str(best_backward.dir_));
+        } else {
+          fmt::println("cch debug meet bypass | node={} cost={}",
+                       to_idx(best_forward.get_node()), mu_);
+        }
       }
     }
   }
@@ -237,7 +313,7 @@ struct cch {
     while (!pqForward_.empty() || !pqBackward_.empty()) {
       discard_stale_top<direction::kForward>(pqForward_);
       discard_stale_top<direction::kBackward>(pqBackward_);
-      if (done()) {
+      if (!kDisableMeetPointLogicForDebug && done()) {
         fmt::println("cch mu: {}", mu_);
         break;
       }
@@ -295,6 +371,28 @@ struct cch {
           max_reached_ = true;
           return;
         }
+        auto const debug_meet_node =
+            w.node_to_osm_[neighbor.get_node()] == osm_node_idx_t{1800775440U};
+        auto const dump_debug_meet_node_states = [&]() {
+          if (!debug_meet_node) {
+            return;
+          }
+          fmt::println("  cch meet probe states at node/{}",
+                       to_idx(w.node_to_osm_[neighbor.get_node()]));
+          P::resolve_all(r, neighbor.get_node(), kNoLevel, [&](auto const state) {
+            auto const f = get_cost<direction::kForward>(state);
+            auto const b = get_cost<direction::kBackward>(state);
+            if (f == kInfeasible && b == kInfeasible) {
+              return;
+            }
+            if constexpr (requires { state.way_; state.dir_; }) {
+              fmt::println("    state=({}, {}) forward={} backward={}",
+                           state.way_, to_str(state.dir_), f, b);
+            } else {
+              fmt::println("    state forward={} backward={}", f, b);
+            }
+          });
+        };
         if (forward) {
           auto const total_cost = static_cast<cost_t>(total);
           auto const improved =
@@ -302,6 +400,36 @@ struct cch {
                                                       curr);
           update_mu(neighbor, get_cost<direction::kForward>(neighbor),
                     get_cost<direction::kBackward>(neighbor));
+          if (debug_meet_node) {
+            if constexpr (requires { curr.way_; curr.dir_; neighbor.way_;
+                                      neighbor.dir_; }) {
+              fmt::println(
+                  "cch meet probe | search=forward curr={} rank={} state=({}, "
+                  "{}) neighbor={} rank={} state=({}, {}) edge_cost={} "
+                  "candidate_total={} improved={} exact_forward={} "
+                  "exact_backward={} mu={}",
+                  to_idx(w.node_to_osm_[curr.get_node()]),
+                  r.node_importance_[curr.get_node()], curr.way_,
+                  to_str(curr.dir_),
+                  to_idx(w.node_to_osm_[neighbor.get_node()]),
+                  r.node_importance_[neighbor.get_node()], neighbor.way_,
+                  to_str(neighbor.dir_), cost, total_cost, improved,
+                  get_cost<direction::kForward>(neighbor),
+                  get_cost<direction::kBackward>(neighbor), mu_);
+            } else {
+              fmt::println(
+                  "cch meet probe | search=forward curr={} rank={} "
+                  "neighbor={} rank={} edge_cost={} candidate_total={} "
+                  "improved={} exact_forward={} exact_backward={} mu={}",
+                  to_idx(w.node_to_osm_[curr.get_node()]),
+                  r.node_importance_[curr.get_node()],
+                  to_idx(w.node_to_osm_[neighbor.get_node()]),
+                  r.node_importance_[neighbor.get_node()], cost, total_cost,
+                  improved, get_cost<direction::kForward>(neighbor),
+                  get_cost<direction::kBackward>(neighbor), mu_);
+            }
+            dump_debug_meet_node_states();
+          }
           if (improved) {
             auto next = label{neighbor, static_cast<cost_t>(total)};
             next.track(l, r, way, neighbor.get_node(), track);
@@ -322,6 +450,36 @@ struct cch {
                                                        curr);
           update_mu(neighbor, get_cost<direction::kForward>(neighbor),
                     get_cost<direction::kBackward>(neighbor));
+          if (debug_meet_node) {
+            if constexpr (requires { curr.way_; curr.dir_; neighbor.way_;
+                                      neighbor.dir_; }) {
+              fmt::println(
+                  "cch meet probe | search=backward curr={} rank={} state=({}, "
+                  "{}) neighbor={} rank={} state=({}, {}) edge_cost={} "
+                  "candidate_total={} improved={} exact_forward={} "
+                  "exact_backward={} mu={}",
+                  to_idx(w.node_to_osm_[curr.get_node()]),
+                  r.node_importance_[curr.get_node()], curr.way_,
+                  to_str(curr.dir_),
+                  to_idx(w.node_to_osm_[neighbor.get_node()]),
+                  r.node_importance_[neighbor.get_node()], neighbor.way_,
+                  to_str(neighbor.dir_), cost, total_cost, improved,
+                  get_cost<direction::kForward>(neighbor),
+                  get_cost<direction::kBackward>(neighbor), mu_);
+            } else {
+              fmt::println(
+                  "cch meet probe | search=backward curr={} rank={} "
+                  "neighbor={} rank={} edge_cost={} candidate_total={} "
+                  "improved={} exact_forward={} exact_backward={} mu={}",
+                  to_idx(w.node_to_osm_[curr.get_node()]),
+                  r.node_importance_[curr.get_node()],
+                  to_idx(w.node_to_osm_[neighbor.get_node()]),
+                  r.node_importance_[neighbor.get_node()], cost, total_cost,
+                  improved, get_cost<direction::kForward>(neighbor),
+                  get_cost<direction::kBackward>(neighbor), mu_);
+            }
+            dump_debug_meet_node_states();
+          }
           if (improved) {
             auto next = label{neighbor, static_cast<cost_t>(total)};
             next.track(l, r, way, neighbor.get_node(), track);
@@ -361,6 +519,8 @@ struct cch {
           for (auto const& weight : e.weights_) {
             auto const debug_node =
                 w.node_to_osm_[curr.get_node()] == osm_node_idx_t{1866422978U};
+            auto const debug_edge =
+                curr.get_node() == node_idx_t{1985U} && e.to_ == node_idx_t{1537U};
             if (debug_node) {
               fmt::println(
                   "cch adjacent probe | search={} curr={} rank={} state=({}, "
@@ -381,8 +541,27 @@ struct cch {
                   weight.via_in_way_, to_str(weight.via_in_dir_),
                   weight.via_out_way_, to_str(weight.via_out_dir_));
             }
+            if (debug_edge) {
+              fmt::println(
+                  "cch edge probe | search={} curr={} rank={} cost_so_far={} "
+                  "state=({}, {}) edge_to={} edge_rank={} weight_up={} "
+                  "base_cost={} dist={} from=({}, {}) to=({}, {}) via={} "
+                  "via_in=({}, {}) via_out=({}, {})",
+                  forward ? "forward" : "backward",
+                  to_idx(w.node_to_osm_[curr.get_node()]),
+                  r.node_importance_[curr.get_node()], l.cost(), curr.way_,
+                  to_str(curr.dir_), to_idx(w.node_to_osm_[e.to_]),
+                  r.node_importance_[e.to_], weight.up_, weight.cost_,
+                  weight.distance_, weight.from_way_, to_str(weight.from_dir_),
+                  weight.to_way_, to_str(weight.to_dir_),
+                  weight.via_ == node_idx_t::invalid()
+                      ? 0U
+                      : to_idx(w.node_to_osm_[weight.via_]),
+                  weight.via_in_way_, to_str(weight.via_in_dir_),
+                  weight.via_out_way_, to_str(weight.via_out_dir_));
+            }
             if (weight.up_ != forward || weight.cost_ == kInfeasible) {
-              if (debug_node) {
+              if (debug_node || debug_edge) {
                 fmt::println("  -> skip: direction/infeasible");
               }
               continue;
@@ -400,7 +579,7 @@ struct cch {
             if (forward) {
               if (r.template is_restricted<direction::kForward, false>(
                       curr.get_node(), curr.way_, edge_source_way)) {
-                if (debug_node) {
+                if (debug_node || debug_edge) {
                   fmt::println("  -> skip: restricted");
                 }
                 continue;
@@ -408,7 +587,7 @@ struct cch {
             } else {
               if (r.template is_restricted<direction::kForward, false>(
                       curr.get_node(), edge_source_way, curr.way_)) {
-                if (debug_node) {
+                if (debug_node || debug_edge) {
                   fmt::println("  -> skip: restricted");
                 }
                 continue;
@@ -435,13 +614,13 @@ struct cch {
                                forward ? weight.to_dir_ : weight.from_dir_);
             if constexpr (WithBlocked) {
               if (blocked->test(e.to_)) {
-                if (debug_node) {
+                if (debug_node || debug_edge) {
                   fmt::println("  -> skip: blocked");
                 }
                 continue;
               }
             }
-            if (debug_node) {
+            if (debug_node || debug_edge) {
               fmt::println("  -> relax neighbor={} state=({}, {}) total_edge_cost={}",
                            to_idx(w.node_to_osm_[neighbor.get_node()]),
                            neighbor.way_, to_str(neighbor.dir_), edge_cost);
@@ -464,6 +643,7 @@ struct cch {
         }
       }
     }
+    select_debug_meet_by_node(r);
     return !max_reached_ && mu_ == kInfeasible;
   }
 
@@ -501,6 +681,8 @@ struct cch {
   settled_set settledBackward_;
   cost_t mu_{kInfeasible};
   node meet_{node::invalid()};
+  node meet_forward_{node::invalid()};
+  node meet_backward_{node::invalid()};
 
   // for early termination
   std::vector<node> destinations_;

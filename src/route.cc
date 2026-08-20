@@ -442,13 +442,14 @@ std::optional<path> reconstruct_cch(
   (void)sharing;
   (void)elevations;
 
-  if (c.meet_.get_node() == node_idx_t::invalid()) {
+  if (c.meet_forward_.get_node() == node_idx_t::invalid() ||
+      c.meet_backward_.get_node() == node_idx_t::invalid()) {
     return std::nullopt;
   }
 
   // Walk from the meeting node back to the selected start candidate through the
   // predecessor chain produced by the forward search.
-  auto forward_n = c.meet_;
+  auto forward_n = c.meet_forward_;
   auto forward_segments = std::vector<path::segment>{};
   auto forward_dist = 0.0;
   while (true) {
@@ -487,7 +488,7 @@ std::optional<path> reconstruct_cch(
 
   // Walk from the meeting node back to the selected destination candidate
   // through the predecessor chain produced by the backward search.
-  auto backward_n = c.meet_;
+  auto backward_n = c.meet_backward_;
   auto backward_segments = std::vector<path::segment>{};
   auto backward_dist = 0.0;
   while (true) {
@@ -694,20 +695,22 @@ double add_cch_path(typename P::parameters const& params,
       auto const to_way = e.weight_->to_way_;
       auto const from_dir = e.weight_->from_dir_;
       auto const to_dir = e.weight_->to_dir_;
-      if (depth == 0U || cost == kInfeasible) {
-        fmt::println(
-            "cch edge depth {} node/{} -> node/{} | ranks {} -> {} | {} | "
-            "cost {} | expected {} | dist {} | via node/{} | boundary {}:{} "
-            "-> {}:{}",
-            depth, to_idx(w.node_to_osm_[from.get_node()]),
-            to_idx(w.node_to_osm_[to.get_node()]),
-            w.r_->node_importance_[from.get_node()],
-            w.r_->node_importance_[to.get_node()], e.up_ ? "up" : "down", cost,
-            expected_cost, distance,
-            via == node_idx_t::invalid() ? 0U : to_idx(w.node_to_osm_[via]),
-            static_cast<unsigned>(from_way), to_str(from_dir),
-            static_cast<unsigned>(to_way), to_str(to_dir));
-      }
+      // CCH DEBUG: log every selected overlay edge, including recursively
+      // unpacked base edges, so the query path is not confused with only the
+      // top-level shortcut breadcrumbs shown in the debug UI.
+      fmt::println(
+          "cch selected edge | depth {} | kind {} | node/{} -> node/{} | "
+          "ranks {} -> {} | {} | cost {} | expected {} | dist {} | via "
+          "node/{} | boundary {}:{} -> {}:{}",
+          depth, via == node_idx_t::invalid() ? "base" : "shortcut",
+          to_idx(w.node_to_osm_[from.get_node()]),
+          to_idx(w.node_to_osm_[to.get_node()]),
+          w.r_->node_importance_[from.get_node()],
+          w.r_->node_importance_[to.get_node()], e.up_ ? "up" : "down", cost,
+          expected_cost, distance,
+          via == node_idx_t::invalid() ? 0U : to_idx(w.node_to_osm_[via]),
+          static_cast<unsigned>(from_way), to_str(from_dir),
+          static_cast<unsigned>(to_way), to_str(to_dir));
     } else {
       fmt::println("cch edge depth {} node/{} -> node/{} | missing overlay weight",
                    depth, to_idx(w.node_to_osm_[from.get_node()]),
@@ -716,6 +719,22 @@ double add_cch_path(typename P::parameters const& params,
     auto const via_node =
         e.weight_ == nullptr ? node_idx_t::invalid() : e.weight_->via_;
     if (via_node != node_idx_t::invalid()) {
+      // CCH DEBUG: keep a visible breadcrumb for each selected shortcut before
+      // it is recursively unpacked into original graph edges.
+      segments.push_back(path::segment{
+          .polyline_ = {w.get_node_pos(from.get_node()).as_latlng(),
+                        w.get_node_pos(to.get_node()).as_latlng()},
+          .from_level_ = level_t{0.F},
+          .to_level_ = level_t{0.F},
+          .from_ = from.get_node(),
+          .to_ = to.get_node(),
+          .way_ = way_idx_t::invalid(),
+          .cost_ = expected_cost,
+          .dist_ = e.weight_->distance_,
+          .mode_ = to.get_mode(),
+          .cch_debug_shortcut_ = true,
+          .cch_debug_depth_ = depth,
+          .cch_debug_via_ = via_node});
       // Customized CCH edges can represent a path through a lower-rank via-node,
       // even when the edge is also an original graph edge.
       auto const via_in =
@@ -735,6 +754,32 @@ double add_cch_path(typename P::parameters const& params,
   if (auto const* s = find_cch_shortcut<P>(*w.r_, from, to); s != nullptr) {
     // CCH predecessor edges can be shortcuts. Recursively unpack them through
     // their contracted via-node until only original graph edges remain.
+    // CCH DEBUG: raw shortcut fallback breadcrumb retained for comparison with
+    // customized overlay reconstruction.
+    fmt::println(
+        "cch selected edge | depth {} | kind raw-shortcut-fallback | node/{} "
+        "-> node/{} | ranks {} -> {} | cost {} | expected {} | dist {} | via "
+        "node/{}",
+        depth, to_idx(w.node_to_osm_[from.get_node()]),
+        to_idx(w.node_to_osm_[to.get_node()]),
+        w.r_->node_importance_[from.get_node()],
+        w.r_->node_importance_[to.get_node()],
+        get_cch_edge_cost<P>(params, *w.r_, from, to), expected_cost,
+        s->distance_, to_idx(w.node_to_osm_[s->via_]));
+    segments.push_back(path::segment{
+        .polyline_ = {w.get_node_pos(from.get_node()).as_latlng(),
+                      w.get_node_pos(to.get_node()).as_latlng()},
+        .from_level_ = level_t{0.F},
+        .to_level_ = level_t{0.F},
+        .from_ = from.get_node(),
+        .to_ = to.get_node(),
+        .way_ = way_idx_t::invalid(),
+        .cost_ = expected_cost,
+        .dist_ = s->distance_,
+        .mode_ = to.get_mode(),
+        .cch_debug_shortcut_ = true,
+        .cch_debug_depth_ = depth,
+        .cch_debug_via_ = s->via_});
     auto const via = P::create_node(s->via_, kNoLevel, way_pos_t{0U}, dir);
     auto const first_cost = get_cch_edge_cost<P>(params, *w.r_, from, via);
     auto const second_cost = get_cch_edge_cost<P>(params, *w.r_, via, to);
