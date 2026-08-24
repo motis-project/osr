@@ -663,18 +663,92 @@ double add_direct_cch_path(ways const& w,
               to_idx(w.node_to_osm_[from.get_node()]),
               to_idx(w.node_to_osm_[to.get_node()]));
 
-  segments.push_back(path::segment{
-      .polyline_ = {w.get_node_pos(from.get_node()).as_latlng(),
-                    w.get_node_pos(to.get_node()).as_latlng()},
-      .from_level_ = level_t{0.F},
-      .to_level_ = level_t{0.F},
-      .from_ = from.get_node(),
-      .to_ = to.get_node(),
-      .way_ = way_idx_t::invalid(),
-      .cost_ = expected_cost,
-      .dist_ = *dist,
-      .mode_ = to.get_mode()});
-  return *dist;
+  auto conn = std::optional<connecting_way>{};
+  auto const& r = *w.r_;
+  auto const from_ways = r.node_ways_[from.get_node()];
+  auto const from_indices = r.node_in_way_idx_[from.get_node()];
+  auto const consider_way = [&](way_pos_t const from_way_pos) {
+    auto const way = from_ways[from_way_pos];
+    auto const from_idx = from_indices[from_way_pos];
+    auto const nodes = r.way_nodes_[way];
+    auto try_connect = [&](std::uint16_t const to_idx) {
+      if (nodes[to_idx] != to.get_node()) {
+        return;
+      }
+      auto const lower_idx = std::min(from_idx, to_idx);
+      auto const is_loop =
+          r.is_loop(way) &&
+          static_cast<unsigned>(std::abs(static_cast<int>(from_idx) -
+                                         static_cast<int>(to_idx))) ==
+              nodes.size() - 2U;
+      conn = connecting_way{way, from_idx, to_idx, is_loop,
+                            r.get_way_node_distance(way, lower_idx),
+                            elevation_storage::elevation{}};
+    };
+    if (from_idx != 0U) {
+      try_connect(static_cast<std::uint16_t>(from_idx - 1U));
+    }
+    if (from_idx + 1U < nodes.size()) {
+      try_connect(static_cast<std::uint16_t>(from_idx + 1U));
+    }
+  };
+
+  if constexpr (requires { from.way_; }) {
+    if (from.way_ < from_ways.size()) {
+      consider_way(from.way_);
+    }
+  }
+  for (auto i = way_pos_t{0U}; !conn.has_value() && i != from_ways.size(); ++i) {
+    consider_way(i);
+  }
+
+  utl::verify(conn.has_value(), "no direct CCH way node/{} -> node/{}",
+              to_idx(w.node_to_osm_[from.get_node()]),
+              to_idx(w.node_to_osm_[to.get_node()]));
+
+  auto const& [way, from_idx, to_idx, is_loop, distance, elevation] = *conn;
+  auto& segment = segments.emplace_back();
+  segment.way_ = way;
+  segment.dist_ = distance;
+  segment.cost_ = expected_cost;
+  segment.elevation_ = elevation;
+  segment.mode_ = to.get_mode();
+
+  auto const is_reverse = (from_idx > to_idx) ^ is_loop;
+  if (is_reverse) {
+    segment.from_level_ = r.way_properties_[way].to_level();
+    segment.to_level_ = r.way_properties_[way].from_level();
+  } else {
+    segment.from_level_ = r.way_properties_[way].from_level();
+    segment.to_level_ = r.way_properties_[way].to_level();
+  }
+  segment.from_ = r.way_nodes_[way][from_idx];
+  segment.to_ = r.way_nodes_[way][to_idx];
+
+  auto j = 0U;
+  auto active = false;
+  for (auto const [osm_idx, coord] :
+       infinite(reverse(utl::zip(w.way_osm_nodes_[way], w.way_polylines_[way]),
+                        is_reverse),
+                is_loop)) {
+    utl::verify(j++ != 2 * w.way_polylines_[way].size() + 1U, "infinite loop");
+    if (!active && w.node_to_osm_[segment.from_] == osm_idx) {
+      active = true;
+    }
+    if (active) {
+      if (w.node_to_osm_[segment.from_] == osm_idx) {
+        // Again "from" node, then it's shorter to start from here.
+        segment.polyline_.clear();
+      }
+
+      segment.polyline_.emplace_back(coord);
+      if (w.node_to_osm_[segment.to_] == osm_idx) {
+        break;
+      }
+    }
+  }
+
+  return distance;
 }
 
 template <Profile P>
