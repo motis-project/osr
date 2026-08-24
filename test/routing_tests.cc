@@ -1,4 +1,5 @@
 #include <filesystem>
+#include <optional>
 
 #include "gtest/gtest.h"
 #include "osr/geojson.h"
@@ -17,7 +18,8 @@ std::string extract_and_route(
     osr::location const& to,
     osr::profile_parameters const& params =
         osr::foot<false, osr::elevator_tracking>::parameters{},
-    osr::search_profile const profile = osr::search_profile::kFoot) {
+    osr::search_profile const profile = osr::search_profile::kFoot,
+    osr::routing_algorithm const algorithm = osr::routing_algorithm::kDijkstra) {
   auto const dir = fs::temp_directory_path() / path;
   auto ec = std::error_code{};
   fs::remove_all(dir, ec);
@@ -30,10 +32,56 @@ std::string extract_and_route(
 
   auto const p = osr::route(params, w, l, profile, from, {to}, 900,
                             osr::direction::kForward, 250.0, nullptr, nullptr,
-                            nullptr, osr::routing_algorithm::kDijkstra);
+                            nullptr, algorithm);
   utl::verify(p.has_value(), "{}: from={} to={} -> no route", path,
               fmt::streamed(from), fmt::streamed(to));
   return osr::to_featurecollection(w, *p, false);
+}
+
+struct route_summary {
+  osr::cost_t cost_{};
+  double dist_{};
+};
+
+std::optional<route_summary> extract_and_route_summary(
+    std::string_view path,
+    osr::location const& from,
+    osr::location const& to,
+    osr::profile_parameters const& params,
+    osr::search_profile const profile,
+    osr::routing_algorithm const algorithm) {
+  auto const dir = fs::temp_directory_path() / path;
+  auto ec = std::error_code{};
+  fs::remove_all(dir, ec);
+  fs::create_directories(dir, ec);
+
+  osr::extract(false, path, dir, {});
+
+  auto w = osr::ways{dir, cista::mmap::protection::READ};
+  auto l = osr::lookup{w, dir, cista::mmap::protection::READ};
+
+  auto const p = osr::route(params, w, l, profile, from, {to}, 900,
+                            osr::direction::kForward, 250.0, nullptr, nullptr,
+                            nullptr, algorithm);
+  if (!p.has_value()) {
+    return std::nullopt;
+  }
+  return route_summary{.cost_ = p->cost_, .dist_ = p->dist_};
+}
+
+void expect_car_cch_matches_dijkstra(std::string_view path,
+                                     osr::location const& from,
+                                     osr::location const& to) {
+  auto const dijkstra = extract_and_route_summary(
+      path, from, to, osr::car::parameters{}, osr::search_profile::kCar,
+      osr::routing_algorithm::kDijkstra);
+  auto const cch = extract_and_route_summary(
+      path, from, to, osr::car::parameters{}, osr::search_profile::kCar,
+      osr::routing_algorithm::kCCH);
+  ASSERT_TRUE(dijkstra.has_value());
+  ASSERT_TRUE(cch.has_value());
+  EXPECT_EQ(dijkstra->cost_, cch->cost_);
+  EXPECT_NEAR(dijkstra->dist_, cch->dist_, 1.0);
 }
 
 TEST(routing, foot_island) {
@@ -200,4 +248,33 @@ TEST(routing, bus_platform) {
   EXPECT_EQ(
       R"({"type":"FeatureCollection","metadata":{},"features":[{"type":"Feature","properties":{"level":0E0,"osm_way_id":0,"cost":0,"distance":1},"geometry":{"type":"LineString","coordinates":[[8.647215893993957E0,4.987558480274741E1],[8.6472223E0,4.98755857E1]]}},{"type":"Feature","properties":{"level":0E0,"osm_way_id":1201551411,"cost":0,"distance":6},"geometry":{"type":"LineString","coordinates":[[8.6472223E0,4.98755857E1],[8.6473042E0,4.98755972E1]]}},{"type":"Feature","properties":{"level":0E0,"osm_way_id":1201551411,"cost":1,"distance":11},"geometry":{"type":"LineString","coordinates":[[8.6473042E0,4.98755972E1],[8.6473987E0,4.98756104E1],[8.6474599E0,4.98756205E1]]}},{"type":"Feature","properties":{"level":0E0,"osm_way_id":1201551411,"cost":0,"distance":8},"geometry":{"type":"LineString","coordinates":[[8.6474599E0,4.98756205E1],[8.647511E0,4.98756289E1],[8.6475641E0,4.98756376E1]]}},{"type":"Feature","properties":{"level":0E0,"osm_way_id":1201551411,"cost":1,"distance":17},"geometry":{"type":"LineString","coordinates":[[8.6475641E0,4.98756376E1],[8.6477018E0,4.98756603E1],[8.6477364E0,4.98756669E1],[8.6477912E0,4.98756773E1]]}},{"type":"Feature","properties":{"level":0E0,"osm_way_id":1201551413,"cost":1,"distance":15},"geometry":{"type":"LineString","coordinates":[[8.6477912E0,4.98756773E1],[8.6479897E0,4.98757129E1]]}},{"type":"Feature","properties":{"level":0E0,"osm_way_id":1201551413,"cost":1,"distance":15},"geometry":{"type":"LineString","coordinates":[[8.6479897E0,4.98757129E1],[8.6480341E0,4.9875721E1],[8.64819E0,4.98757429E1]]}},{"type":"Feature","properties":{"level":0E0,"osm_way_id":1201551413,"cost":1,"distance":12},"geometry":{"type":"LineString","coordinates":[[8.64819E0,4.98757429E1],[8.6483493E0,4.98757643E1]]}},{"type":"Feature","properties":{"level":0E0,"osm_way_id":1201551413,"cost":0,"distance":5},"geometry":{"type":"LineString","coordinates":[[8.6483493E0,4.98757643E1],[8.6484161E0,4.9875773E1]]}},{"type":"Feature","properties":{"level":0E0,"osm_way_id":1201551412,"cost":1,"distance":14},"geometry":{"type":"LineString","coordinates":[[8.6484161E0,4.9875773E1],[8.648613E0,4.9875798E1]]}},{"type":"Feature","properties":{"level":0E0,"osm_way_id":1201551412,"cost":1,"distance":20},"geometry":{"type":"LineString","coordinates":[[8.648613E0,4.9875798E1],[8.6488875E0,4.9875833E1]]}},{"type":"Feature","properties":{"level":0E0,"osm_way_id":1201551412,"cost":0,"distance":4},"geometry":{"type":"LineString","coordinates":[[8.6488875E0,4.9875833E1],[8.648948E0,4.98758407E1]]}},{"type":"Feature","properties":{"level":0E0,"osm_way_id":1201551412,"cost":1,"distance":8},"geometry":{"type":"LineString","coordinates":[[8.648948E0,4.98758407E1],[8.6490562E0,4.98758544E1]]}},{"type":"Feature","properties":{"level":0E0,"osm_way_id":1201551422,"cost":3,"distance":41},"geometry":{"type":"LineString","coordinates":[[8.6490562E0,4.98758544E1],[8.6495122E0,4.98759191E1],[8.6496122E0,4.9875934E1]]}},{"type":"Feature","properties":{"level":0E0,"osm_way_id":1201551422,"cost":1,"distance":10},"geometry":{"type":"LineString","coordinates":[[8.6496122E0,4.9875934E1],[8.6497483E0,4.9875948E1]]}},{"type":"Feature","properties":{"level":0E0,"osm_way_id":1201551417,"cost":1,"distance":9},"geometry":{"type":"LineString","coordinates":[[8.6497483E0,4.9875948E1],[8.6498691E0,4.9875976E1]]}},{"type":"Feature","properties":{"level":0E0,"osm_way_id":1201551417,"cost":1,"distance":17},"geometry":{"type":"LineString","coordinates":[[8.6498691E0,4.9875976E1],[8.6500904E0,4.98760396E1]]}},{"type":"Feature","properties":{"level":0E0,"osm_way_id":1201551418,"cost":1,"distance":9},"geometry":{"type":"LineString","coordinates":[[8.6500904E0,4.98760396E1],[8.6502086E0,4.98760764E1]]}},{"type":"Feature","properties":{"level":0E0,"osm_way_id":1201551418,"cost":1,"distance":11},"geometry":{"type":"LineString","coordinates":[[8.6502086E0,4.98760764E1],[8.6502881E0,4.9876129E1],[8.6503107E0,4.98761538E1]]}},{"type":"Feature","properties":{"level":0E0,"osm_way_id":0,"cost":0,"distance":0},"geometry":{"type":"LineString","coordinates":[[8.6503107E0,4.98761538E1],[8.650311050022971E0,4.98761541839459E1]]}}]})", extract_and_route(
                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 "test/darmstadt-bismarckstr.osm.pbf", from, to, osr::bus::parameters{}, osr::search_profile::kBus));
+}
+
+TEST(routing_cch, car_private_gate_no_route) {
+  auto const from = osr::location{49.113532, 8.438036, osr::kNoLevel};
+  auto const to = osr::location{49.1020397, 8.4332380, osr::kNoLevel};
+  EXPECT_ANY_THROW(extract_and_route(
+      "test/karlsruhe-kit-nord.osm.pbf", from, to, osr::car::parameters{},
+      osr::search_profile::kCar, osr::routing_algorithm::kCCH));
+}
+
+TEST(routing_cch, a17_access_yes_barrier) {
+  auto const from = osr::location{51.0088092631, 13.72634365409, osr::kNoLevel};
+  auto const to = osr::location{51.01311341142, 13.717227005180, osr::kNoLevel};
+  expect_car_cch_matches_dijkstra("test/a17-barrier-access-yes.osm.pbf", from,
+                                  to);
+}
+
+TEST(routing_cch, switzerland_motorway_shortcut) {
+  auto const from = osr::location{47.303057180, 9.561929282963, osr::kNoLevel};
+  auto const to = osr::location{47.31075422405, 9.575005944968, osr::kNoLevel};
+  expect_car_cch_matches_dijkstra("test/switzerland-motorway-shortcut.osm.pbf",
+                                  from, to);
+}
+
+TEST(routing_cch, ballwil_shortcut) {
+  auto const from =
+      osr::location{47.15570087672, 8.315615519882, osr::kNoLevel};
+  auto const to = osr::location{47.15347392750, 8.316863681682, osr::kNoLevel};
+  expect_car_cch_matches_dijkstra("test/ballwill-shortcut.osm.pbf", from, to);
 }
