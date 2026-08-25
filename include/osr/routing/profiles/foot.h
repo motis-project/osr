@@ -5,6 +5,7 @@
 #include "utl/for_each_bit_set.h"
 
 #include "osr/elevation_storage.h"
+#include "osr/routing/entry_storage_arena.h"
 #include "osr/routing/mode.h"
 #include "osr/routing/path.h"
 #include "osr/routing/tracking.h"
@@ -78,11 +79,7 @@ struct foot {
     node_idx_t n_;
     cost_t cost_;
     level_t lvl_;
-#ifdef _MSC_VER
-    [[no_unique_address]] [[msvc::no_unique_address]] Tracking tracking_;
-#else
-    [[no_unique_address]] Tracking tracking_;
-#endif
+    OSR_NO_UNIQUE_ADDRESS Tracking tracking_;
   };
 
   struct entry {
@@ -101,7 +98,9 @@ struct foot {
                           node,
                           cost_t const c,
                           node const pred,
-                          duration_t const) noexcept {
+                          duration_t const,
+                          ways::routing const&,
+                          entry_storage_arena&) noexcept {
       if (c < cost_) {
         tracking_ = l.tracking_;
         cost_ = c;
@@ -117,11 +116,7 @@ struct foot {
     node_idx_t pred_{node_idx_t::invalid()};
     cost_t cost_{kInfeasible};
     level_t pred_lvl_;
-#ifdef _MSC_VER
-    [[no_unique_address]] [[msvc::no_unique_address]] Tracking tracking_;
-#else
-    [[no_unique_address]] Tracking tracking_;
-#endif
+    OSR_NO_UNIQUE_ADDRESS Tracking tracking_;
   };
 
   struct hash {

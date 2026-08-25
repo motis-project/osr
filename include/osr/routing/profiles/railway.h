@@ -1,14 +1,12 @@
 #pragma once
 
 #include <chrono>
-#include <bitset>
 #include <optional>
 
 #include "boost/json/object.hpp"
 
-#include "utl/helpers/algorithm.h"
-
 #include "osr/elevation_storage.h"
+#include "osr/routing/entry_storage.h"
 #include "osr/routing/mode.h"
 #include "osr/routing/path.h"
 #include "osr/routing/profiles/common.h"
@@ -18,6 +16,13 @@
 namespace osr {
 
 struct sharing_data;
+
+struct railway_slot {
+  node_idx_t pred_{node_idx_t::invalid()};
+  cost_t cost_{kInfeasible};
+  way_pos_t pred_way_{0U};
+  bool pred_dir_{false};
+};
 
 struct railway {
   static constexpr auto const kName = "railway";
@@ -105,57 +110,53 @@ struct railway {
   };
 
   struct entry {
-    static constexpr auto const kMaxWays = way_pos_t{16U};
-    static constexpr auto const kN = kMaxWays * 2U /* FWD+BWD */;
+    using slot_t = railway_slot;
 
-    entry() {
-      utl::fill(cost_, kInfeasible);
-      utl::fill(pred_, node_idx_t::invalid());
-      utl::fill(pred_way_, way_pos_t{0});
-    }
+    using storage_t = entry_storage<slot_t, 0U>;
+    static constexpr auto const kN = storage_t::kN /* FWD+BWD */;
 
-    constexpr std::optional<node> pred(node const n) const noexcept {
-      auto const idx = get_index(n);
-      return pred_[idx] == node_idx_t::invalid()
+    std::optional<node> pred(node const n) const noexcept {
+      auto const s = s_[get_index(n)];
+      return s.pred_ == node_idx_t::invalid()
                  ? std::nullopt
-                 : std::optional{node{pred_[idx], pred_way_[idx],
-                                      to_dir(pred_dir_[idx])}};
+                 : std::optional{
+                       node{s.pred_, s.pred_way_, to_dir(s.pred_dir_)}};
     }
 
-    constexpr cost_t cost(node const n) const noexcept {
-      return cost_[get_index(n)];
-    }
+    cost_t cost(node const n) const noexcept { return s_[get_index(n)].cost_; }
 
     constexpr duration_t duration(node const n) const noexcept {
       return duration_from_cost(cost(n));
     }
 
-    constexpr bool update(label const&,
-                          node const n,
-                          cost_t const c,
-                          node const pred,
-                          duration_t const) noexcept {
-      auto const idx = get_index(n);
-      if (c < cost_[idx]) {
-        cost_[idx] = c;
-        pred_[idx] = pred.n_;
-        pred_way_[idx] = pred.way_;
-        pred_dir_[idx] = to_bool(pred.dir_);
-        return true;
+    bool update(label const&,
+                node const n,
+                cost_t const c,
+                node const pred,
+                duration_t const,
+                ways::routing const& w,
+                entry_storage_arena& a) {
+      auto& s = s_.slot(get_index(n), w, n.n_, a);
+      if (c >= s.cost_) {
+        return false;
       }
-      return false;
+      s.cost_ = c;
+      s.pred_ = pred.n_;
+      s.pred_way_ = pred.way_;
+      s.pred_dir_ = to_bool(pred.dir_);
+      return true;
     }
 
     void write(node, path&) const {}
 
     static constexpr node get_node(node_idx_t const n,
                                    std::size_t const index) {
-      return node{n, static_cast<way_pos_t>(index % kMaxWays),
-                  to_dir((index / kMaxWays) != 0U)};
+      return node{n, static_cast<way_pos_t>(index / 2U),
+                  to_dir((index % 2U) != 0U)};
     }
 
     static constexpr std::size_t get_index(node const n) {
-      return (n.dir_ == direction::kForward ? 0U : 1U) * kMaxWays + n.way_;
+      return storage_t::index(n.way_, n.dir_);
     }
 
     static constexpr direction to_dir(bool const b) {
@@ -166,10 +167,7 @@ struct railway {
       return d == direction::kForward ? false : true;
     }
 
-    std::array<node_idx_t, kN> pred_;
-    std::array<way_pos_t, kN> pred_way_;
-    std::bitset<kN> pred_dir_;
-    std::array<cost_t, kN> cost_;
+    storage_t s_;
   };
 
   struct hash {

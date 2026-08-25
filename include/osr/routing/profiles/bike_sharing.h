@@ -12,6 +12,7 @@
 
 #include "osr/elevation_storage.h"
 #include "osr/routing/additional_edge.h"
+#include "osr/routing/entry_storage_arena.h"
 #include "osr/routing/mode.h"
 #include "osr/routing/path.h"
 #include "osr/routing/profiles/bike.h"
@@ -232,7 +233,9 @@ struct bike_sharing {
                           node const n,
                           cost_t const c,
                           node const pred,
-                          duration_t const) noexcept {
+                          duration_t const,
+                          ways::routing const&,
+                          entry_storage_arena&) noexcept {
       auto const idx = get_index(n);
       if (c < cost_[idx]) {
         cost_[idx] = c;

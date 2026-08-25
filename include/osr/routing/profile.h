@@ -11,6 +11,7 @@
 #include <utility>
 
 #include "osr/elevation_storage.h"
+#include "osr/routing/entry_storage_arena.h"
 #include "osr/routing/mode.h"
 #include "osr/routing/path.h"
 #include "osr/routing/sharing_data.h"
@@ -67,8 +68,12 @@ concept IsEntry =
                   Label const& label,
                   cost_t const cost,
                   duration_t const duration,
+                  ways::routing const& w,
+                  entry_storage_arena& arena,
                   path& p) {
-      { entry.update(label, node, cost, node, duration) } -> std::same_as<bool>;
+      {
+        entry.update(label, node, cost, node, duration, w, arena)
+      } -> std::same_as<bool>;
     };
 
 template <typename Hash, typename NodeKey>
