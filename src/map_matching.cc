@@ -362,6 +362,7 @@ matched_route map_match(
       return min_start_cost;
     };
 
+    verify_additional_edge_count(seg.additional_edges_);
     seg.sharing_ = std::make_unique<sharing_data>(sharing_data{
         .additional_node_offset_ = additional_node_offset,
         .additional_node_coordinates_ = additional_node_coordinates,

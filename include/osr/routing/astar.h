@@ -13,6 +13,7 @@
 #include "osr/elevation_storage.h"
 #include "osr/routing/additional_edge.h"
 #include "osr/routing/dial.h"
+#include "osr/routing/entry_storage_arena.h"
 #include "osr/routing/profile.h"
 #include "osr/types.h"
 #include "osr/ways.h"
@@ -45,6 +46,7 @@ struct astar {
     pq_.clear();
     pq_.n_buckets(max + 1U);
     cost_.clear();
+    arena_.reset();
     max_reached_ = false;
     destinations_.clear();
     remaining_destinations_ = 0U;
@@ -75,7 +77,8 @@ struct astar {
                 "astar: add_destination must be called before add_start");
     auto const heur = heuristic(params, w, sharing, l.get_node().get_node());
     if (cost_[l.get_node().get_key()].update(l, l.get_node(), l.cost(),
-                                             node::invalid(), duration)) {
+                                             node::invalid(), duration, *w.r_,
+                                             arena_)) {
       auto const cost_with_heur = l.cost() + heur;
       if constexpr (kDebug) {
         std::cout << "START ";
@@ -209,7 +212,7 @@ struct astar {
               next.track(l, r, way, neighbor.get_node(), track);
               if (!cost_[neighbor.get_key()].update(
                       next, neighbor, static_cast<cost_t>(total), curr_node,
-                      total_duration)) {
+                      total_duration, r, arena_)) {
                 return false;
               }
               pq_.push(std::move(next));
@@ -301,6 +304,7 @@ struct astar {
 
   dial<label, get_bucket> pq_{get_bucket{}};
   ankerl::unordered_dense::map<key, entry, hash> cost_;
+  entry_storage_arena arena_;
   bool max_reached_{};
 
   std::vector<node> destinations_;

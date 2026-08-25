@@ -3,6 +3,12 @@
 #include "osr/routing/path.h"
 #include "osr/ways.h"
 
+#ifdef _MSC_VER
+#define OSR_NO_UNIQUE_ADDRESS [[no_unique_address]] [[msvc::no_unique_address]]
+#else
+#define OSR_NO_UNIQUE_ADDRESS [[no_unique_address]]
+#endif
+
 namespace osr {
 
 struct elevator_tracking {

@@ -11,6 +11,7 @@
 #include "osr/location.h"
 #include "osr/routing/additional_edge.h"
 #include "osr/routing/dial.h"
+#include "osr/routing/entry_storage_arena.h"
 #include "osr/routing/profile.h"
 #include "osr/routing/sharing_data.h"
 #include "osr/types.h"
@@ -55,6 +56,7 @@ struct bidirectional {
     pq2_.n_buckets(max + 1U);
     cost1_.clear();
     cost2_.clear();
+    arena_.reset();
     clear_mp();
     start_loc_ = start_loc;
     end_loc_ = end_loc;
@@ -86,7 +88,8 @@ struct bidirectional {
     auto const heur = heuristic(params, w, l.n_, dir, sharing);
     if (l.cost() + heur < d.n_buckets() - 1U &&
         cost_map[l.get_node().get_key()].update(l, l.get_node(), l.cost(),
-                                                node::invalid(), duration)) {
+                                                node::invalid(), duration,
+                                                *w.r_, arena_)) {
       auto const total = static_cast<cost_t>(l.cost() + heur);
       d.push(label{l.get_node(), total});
     }
@@ -244,9 +247,9 @@ struct bidirectional {
             }
             auto next = label{neighbor, static_cast<cost_t>(heur)};
             next.track(l, r, way, neighbor.get_node(), track);
-            if (!costs[neighbor.get_key()].update(next, neighbor,
-                                                  static_cast<cost_t>(total),
-                                                  curr, total_duration)) {
+            if (!costs[neighbor.get_key()].update(
+                    next, neighbor, static_cast<cost_t>(total), curr,
+                    total_duration, r, arena_)) {
               return false;
             }
             pq.push(std::move(next));
@@ -431,6 +434,7 @@ struct bidirectional {
   cost_t best_cost_;
   ankerl::unordered_dense::map<key, entry, hash> cost1_;
   ankerl::unordered_dense::map<key, entry, hash> cost2_;
+  entry_storage_arena arena_;
   cost_t radius_;
   double distance_lon_degrees_;
   bool search_bounds_valid_{};
