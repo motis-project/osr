@@ -11,19 +11,21 @@
 #include "osr/routing/profiles/car.h"
 #include "osr/routing/profiles/foot.h"
 #include "osr/ways.h"
+#include "utl/helpers/algorithm.h"
 
 namespace osr {
+
+struct sharing_data;
 
 struct car_parking_slot {
   node_idx_t pred_{node_idx_t::invalid()};
   cost_t cost_{kInfeasible};
   level_t pred_lvl_{kNoLevel};
-  way_pos_t pred_way_{0U};
-  bool pred_dir_{false};
-  bool pred_type_{false};
+  std::uint8_t pred_way_ : 5 {0U};
+  std::uint8_t pred_dir_ : 1 {0U};
+  std::uint8_t pred_type_ : 1 {0U};
+  duration_t duration_{kMaxDuration};
 };
-
-struct sharing_data;
 
 template <bool IsWheelchair, bool UseParking = true>
 struct car_parking {
@@ -161,22 +163,23 @@ struct car_parking {
 
     cost_t cost(node const n) const noexcept { return s_[get_index(n)].cost_; }
 
-    constexpr duration_t duration(node const n) const noexcept {
-      return duration_from_cost(cost(n));
+    duration_t duration(node const n) const noexcept {
+      return s_[get_index(n)].duration_;
     }
 
     bool update(label const,
                 node const n,
                 cost_t const c,
                 node const pred,
-                duration_t const,
+                duration_t const duration,
                 ways::routing const& w,
                 entry_storage_arena& a) {
       auto& s = s_.slot(get_index(n), w, n.n_, a);
-      if (c >= s.cost_) {
+      if (!is_better_than(c, duration, s.cost_, s.duration_)) {
         return false;
       }
       s.cost_ = c;
+      s.duration_ = duration;
       s.pred_ = pred.n_;
       s.pred_lvl_ = pred.lvl_;
       s.pred_type_ = to_bool(pred.type_);

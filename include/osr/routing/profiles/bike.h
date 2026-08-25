@@ -97,6 +97,7 @@ struct bike {
 
   struct entry {
     entry() {
+      utl::fill(duration_, kMaxDuration);
       utl::fill(cost_, kInfeasible);
       utl::fill(pred_, node_idx_t::invalid());
     }
@@ -113,19 +114,21 @@ struct bike {
     }
 
     constexpr duration_t duration(node const n) const noexcept {
-      return duration_from_cost(cost(n));
+      auto const idx = get_index(n);
+      return duration_[idx];
     }
 
     constexpr bool update(label const&,
                           node const n,
                           cost_t const c,
                           node const pred,
-                          duration_t const,
+                          duration_t const duration,
                           ways::routing const&,
                           entry_storage_arena&) noexcept {
       auto const idx = get_index(n);
-      if (c < cost_[idx]) {
+      if (is_better_than(c, duration, cost_[idx], duration_[idx])) {
         cost_[idx] = c;
+        duration_[idx] = duration;
         pred_[idx] = pred.n_;
         pred_dir_[idx] = pred.dir_;
         return true;
@@ -147,6 +150,7 @@ struct bike {
     std::array<node_idx_t, 2U> pred_;
     std::array<direction, 2U> pred_dir_;
     std::array<cost_t, 2U> cost_;
+    std::array<duration_t, 2U> duration_;
   };
 
   static node create_node(node_idx_t const n,

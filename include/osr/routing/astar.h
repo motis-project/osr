@@ -11,7 +11,10 @@
 #include "utl/to_vec.h"
 #include "utl/verify.h"
 
+#include "geo/constants.h"
+
 #include "osr/elevation_storage.h"
+#include "osr/location.h"
 #include "osr/routing/additional_edge.h"
 #include "osr/routing/dial.h"
 #include "osr/routing/entry_storage_arena.h"
@@ -51,6 +54,7 @@ struct astar {
     arena_.reset();
     max_reached_ = false;
     destinations_.clear();
+    settled_.clear();
     remaining_destinations_ = 0U;
     early_termination_max_cost_ = kInfeasible;
     terminated_early_max_cost_ = false;
@@ -100,6 +104,8 @@ struct astar {
     auto const* sharing = params_.sharing();
     auto it = std::lower_bound(begin(destinations_), end(destinations_), n);
     if (it == end(destinations_) || *it != n) {
+      settled_.insert(begin(settled_) + std::distance(begin(destinations_), it),
+                      false);
       destinations_.insert(it, n);
       ++remaining_destinations_;
 
@@ -120,6 +126,25 @@ struct astar {
         dest_radius_ = std::max(dest_radius_, geo::distance(dest_centroid_, p));
       }
     }
+  }
+
+  bool settle_destination(node const n) {
+    auto const it =
+        std::lower_bound(begin(destinations_), end(destinations_), n);
+    if (it == end(destinations_) || *it != n) {
+      return false;
+    }
+    auto const idx =
+        static_cast<std::size_t>(std::distance(begin(destinations_), it));
+    if (settled_[idx]) {
+      // equal-cost labels with shorter durations can re-enter the queue, so the
+      // same destination can be popped more than once and must only be counted
+      // once
+      return false;
+    }
+    settled_[idx] = true;
+    --remaining_destinations_;
+    return true;
   }
 
   cost_t get_cost(node const n) const {
@@ -150,9 +175,7 @@ struct astar {
       }
 
       if constexpr (EarlyTermination) {
-        if (std::find(begin(destinations_), end(destinations_), curr_node) !=
-            end(destinations_)) {
-          --remaining_destinations_;
+        if (settle_destination(curr_node)) {
           early_termination_max_cost_ = std::min(
               early_termination_max_cost_,
               static_cast<cost_t>(std::min(
@@ -280,6 +303,7 @@ struct astar {
   bool max_reached_{};
 
   std::vector<node> destinations_;
+  std::vector<bool> settled_;
   std::size_t remaining_destinations_{0U};
   cost_t early_termination_max_cost_{kInfeasible};
   bool terminated_early_max_cost_{false};

@@ -168,7 +168,7 @@ struct hgv {
                 entry_storage_arena& a) {
       n_ = n.n_;
       auto& s = s_.slot(get_index(n), w, n.n_, a);
-      if (!(c < s.cost_ || (c == s.cost_ && duration < s.duration_))) {
+      if (!is_better_than(c, duration, s.cost_, s.duration_)) {
         return false;
       }
       s.cost_ = c;
