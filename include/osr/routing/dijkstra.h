@@ -46,6 +46,7 @@ struct dijkstra {
     max_reached_ = false;
     if constexpr (EarlyTermination) {
       destinations_.clear();
+      settled_.clear();
       remaining_destinations_ = 0U;
       early_termination_max_cost_ = kInfeasible;
       terminated_early_max_cost_ = false;
@@ -75,10 +76,31 @@ struct dijkstra {
     if constexpr (EarlyTermination) {
       auto it = std::lower_bound(begin(destinations_), end(destinations_), n);
       if (it == end(destinations_) || *it != n) {
+        settled_.insert(
+            begin(settled_) + std::distance(begin(destinations_), it), false);
         destinations_.insert(it, n);
         ++remaining_destinations_;
       }
     }
+  }
+
+  bool settle_destination(node const n) {
+    auto const it =
+        std::lower_bound(begin(destinations_), end(destinations_), n);
+    if (it == end(destinations_) || *it != n) {
+      return false;
+    }
+    auto const idx =
+        static_cast<std::size_t>(std::distance(begin(destinations_), it));
+    if (settled_[idx]) {
+      // equal-cost labels with shorter durations can re-enter the queue, so the
+      // same destination can be popped more than once and must only be counted
+      // once
+      return false;
+    }
+    settled_[idx] = true;
+    --remaining_destinations_;
+    return true;
   }
 
   cost_t get_cost(node const n) const {
@@ -105,9 +127,7 @@ struct dijkstra {
       }
 
       if constexpr (EarlyTermination) {
-        if (std::find(begin(destinations_), end(destinations_), l.get_node()) !=
-            end(destinations_)) {
-          --remaining_destinations_;
+        if (settle_destination(l.get_node())) {
           auto const curr_cost = get_cost(l.get_node());
           early_termination_max_cost_ = std::min(
               early_termination_max_cost_,
@@ -196,6 +216,7 @@ struct dijkstra {
 
   // for early termination
   std::vector<node> destinations_;
+  std::vector<bool> settled_;
   std::size_t remaining_destinations_{0U};
   cost_t early_termination_max_cost_{kInfeasible};
   bool terminated_early_max_cost_{false};

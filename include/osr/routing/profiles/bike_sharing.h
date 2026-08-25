@@ -206,6 +206,7 @@ struct bike_sharing {
         static_cast<std::underlying_type_t<node_type>>(node_type::kInvalid);
 
     entry() {
+      utl::fill(duration_, kMaxDuration);
       utl::fill(pred_, node_idx_t::invalid());
       utl::fill(cost_, kInfeasible);
       utl::fill(pred_lvl_, kNoLevel);
@@ -226,19 +227,21 @@ struct bike_sharing {
     }
 
     constexpr duration_t duration(node const n) const noexcept {
-      return duration_from_cost(cost(n));
+      auto const idx = get_index(n);
+      return duration_[idx];
     }
 
     constexpr bool update(label const,
                           node const n,
                           cost_t const c,
                           node const pred,
-                          duration_t const,
+                          duration_t const duration,
                           ways::routing const&,
                           entry_storage_arena&) noexcept {
       auto const idx = get_index(n);
-      if (c < cost_[idx]) {
+      if (is_better_than(c, duration, cost_[idx], duration_[idx])) {
         cost_[idx] = c;
+        duration_[idx] = duration;
         pred_[idx] = pred.n_;
         pred_lvl_[idx] = pred.lvl_;
         pred_type_[idx] = pred.type_;
@@ -257,6 +260,7 @@ struct bike_sharing {
     std::array<cost_t, kN> cost_{};
     std::array<level_t, kN> pred_lvl_{};
     std::array<node_type, kN> pred_type_{};
+    std::array<duration_t, kN> duration_;
   };
 
   static footp::node to_foot(node const n) {

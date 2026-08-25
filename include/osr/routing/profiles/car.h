@@ -22,6 +22,7 @@ struct car_slot {
   cost_t cost_{kInfeasible};
   way_pos_t pred_way_{0U};
   bool pred_dir_{false};
+  duration_t duration_{kMaxDuration};
 };
 
 template <bool IsBus>
@@ -125,22 +126,23 @@ struct generic_car {
 
     cost_t cost(node const n) const noexcept { return s_[get_index(n)].cost_; }
 
-    constexpr duration_t duration(node const n) const noexcept {
-      return duration_from_cost(cost(n));
+    duration_t duration(node const n) const noexcept {
+      return s_[get_index(n)].duration_;
     }
 
     bool update(label const&,
                 node const n,
                 cost_t const c,
                 node const pred,
-                duration_t const,
+                duration_t const duration,
                 ways::routing const& w,
                 entry_storage_arena& a) {
       auto& s = s_.slot(get_index(n), w, n.n_, a);
-      if (c >= s.cost_) {
+      if (!is_better_than(c, duration, s.cost_, s.duration_)) {
         return false;
       }
       s.cost_ = c;
+      s.duration_ = duration;
       s.pred_ = pred.n_;
       s.pred_way_ = pred.way_;
       s.pred_dir_ = to_bool(pred.dir_);
@@ -338,11 +340,13 @@ struct generic_car {
   static constexpr cost_and_duration node_cost(parameters const& params,
                                                node_properties const& n) {
     if constexpr (IsBus) {
-      return n.is_bus_accessible() ? cost_and_duration_from_cost(0U)
-                                   : (n.is_bus_accessible_with_penalty()
-                                          ? cost_and_duration_from_cost(
-                                                params.private_gate_penalty_)
-                                          : infeasible_cost_and_duration());
+      return n.is_bus_accessible()
+                 ? cost_and_duration_from_cost(0U)
+                 : (n.is_bus_accessible_with_penalty()
+                        ? cost_and_duration{.cost_ =
+                                                params.private_gate_penalty_,
+                                            .duration_ = duration_t{0}}
+                        : infeasible_cost_and_duration());
     } else {
       return n.is_car_accessible() ? cost_and_duration_from_cost(0U)
                                    : infeasible_cost_and_duration();

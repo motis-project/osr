@@ -90,20 +90,19 @@ struct foot {
     }
     constexpr cost_t cost(node) const noexcept { return cost_; }
 
-    constexpr duration_t duration(node const n) const noexcept {
-      return duration_from_cost(cost(n));
-    }
+    constexpr duration_t duration(node) const noexcept { return duration_; }
 
     constexpr bool update(label const& l,
                           node,
                           cost_t const c,
                           node const pred,
-                          duration_t const,
+                          duration_t const duration,
                           ways::routing const&,
                           entry_storage_arena&) noexcept {
-      if (c < cost_) {
+      if (is_better_than(c, duration, cost_, duration_)) {
         tracking_ = l.tracking_;
         cost_ = c;
+        duration_ = duration;
         pred_ = pred.n_;
         pred_lvl_ = pred.lvl_;
         return true;
@@ -115,6 +114,7 @@ struct foot {
 
     node_idx_t pred_{node_idx_t::invalid()};
     cost_t cost_{kInfeasible};
+    duration_t duration_{kMaxDuration};
     level_t pred_lvl_;
     OSR_NO_UNIQUE_ADDRESS Tracking tracking_;
   };

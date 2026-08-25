@@ -85,19 +85,18 @@ struct ferry {
 
     constexpr cost_t cost(node const) const noexcept { return cost_; }
 
-    constexpr duration_t duration(node const n) const noexcept {
-      return duration_from_cost(cost(n));
-    }
+    constexpr duration_t duration(node) const noexcept { return duration_; }
 
     constexpr bool update(label const&,
                           node const,
                           cost_t const c,
                           node const pred,
-                          duration_t const,
+                          duration_t const duration,
                           ways::routing const&,
                           entry_storage_arena&) noexcept {
-      if (c < cost_) {
+      if (is_better_than(c, duration, cost_, duration_)) {
         cost_ = c;
+        duration_ = duration;
         pred_ = pred.n_;
         return true;
       }
@@ -108,6 +107,7 @@ struct ferry {
 
     node_idx_t pred_{node_idx_t::invalid()};
     cost_t cost_{kInfeasible};
+    duration_t duration_{kMaxDuration};
   };
 
   struct hash {
