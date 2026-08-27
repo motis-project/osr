@@ -593,7 +593,7 @@ cch_edge_ref find_cch_edge_ref(ways::routing const& r,
                   r.node_importance_[to.get_node()];
   auto const low = up ? from.get_node() : to.get_node();
   auto const high = up ? to.get_node() : from.get_node();
-  for (auto const& e : r.cch_edge_weights_[low]) {
+  for (auto const& e : cch<P>::customized_edges(r)[low]) {
     if (e.to_ == high) {
       auto const* weight = cch<P>::best_weight(e, up, from, to);
       if (weight == nullptr) {

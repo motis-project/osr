@@ -162,7 +162,7 @@ struct cch {
       // The backward meeting state stores the outgoing way context at the shared
       // graph node. Validate the stitch from the forward arrival context into
       // that outgoing context before accepting this meeting pair.
-      if (r.template is_restricted<direction::kForward, false>(
+      if (r.template is_restricted<direction::kForward, is_bus_profile()>(
               incoming.get_node(), incoming.way_, outgoing.way_)) {
         return kInfeasible;
       }
@@ -304,10 +304,26 @@ struct cch {
     }
   }
 
+  static constexpr bool is_bus_profile() {
+    if constexpr (requires { P::kIsBus; }) {
+      return P::kIsBus;
+    } else {
+      return false;
+    }
+  }
+
+  static auto const& customized_edges(ways::routing const& r) {
+    if constexpr (is_bus_profile()) {
+      return r.cch_bus_edge_weights_;
+    } else {
+      return r.cch_car_edge_weights_;
+    }
+  }
+
   static cch_edge const* customized_edge(ways::routing const& r,
                                          node_idx_t const from,
                                          node_idx_t const to) {
-    for (auto const& e : r.cch_edge_weights_[from]) {
+    for (auto const& e : customized_edges(r)[from]) {
       if (e.to_ == to) {
         return &e;
       }
@@ -567,7 +583,7 @@ struct cch {
       };
 
       if constexpr (uses_customized_cost_overlay()) {
-        for (auto const& e : r.cch_edge_weights_[curr.get_node()]) {
+        for (auto const& e : customized_edges(r)[curr.get_node()]) {
           for (auto const& weight : e.weights_) {
             auto const debug_node =
                 kQueryDebugOutput &&
@@ -631,7 +647,8 @@ struct cch {
                         : (curr.way_ == edge_source_way &&
                            curr.dir_ == opposite(edge_source_dir));
             if (forward) {
-              if (r.template is_restricted<direction::kForward, false>(
+              if (r.template is_restricted<direction::kForward,
+                                           is_bus_profile()>(
                       curr.get_node(), curr.way_, edge_source_way)) {
                 if (debug_node || debug_edge) {
                   fmt::println("  -> skip: restricted");
@@ -639,7 +656,8 @@ struct cch {
                 continue;
               }
             } else {
-              if (r.template is_restricted<direction::kForward, false>(
+              if (r.template is_restricted<direction::kForward,
+                                           is_bus_profile()>(
                       curr.get_node(), edge_source_way, curr.way_)) {
                 if (debug_node || debug_edge) {
                   fmt::println("  -> skip: restricted");

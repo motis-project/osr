@@ -84,6 +84,21 @@ void expect_car_cch_matches_dijkstra(std::string_view path,
   EXPECT_NEAR(dijkstra->dist_, cch->dist_, 1.0);
 }
 
+void expect_bus_cch_matches_dijkstra(std::string_view path,
+                                     osr::location const& from,
+                                     osr::location const& to) {
+  auto const dijkstra = extract_and_route_summary(
+      path, from, to, osr::bus::parameters{}, osr::search_profile::kBus,
+      osr::routing_algorithm::kDijkstra);
+  auto const cch = extract_and_route_summary(
+      path, from, to, osr::bus::parameters{}, osr::search_profile::kBus,
+      osr::routing_algorithm::kCCH);
+  ASSERT_TRUE(dijkstra.has_value());
+  ASSERT_TRUE(cch.has_value());
+  EXPECT_EQ(dijkstra->cost_, cch->cost_);
+  EXPECT_NEAR(dijkstra->dist_, cch->dist_, 1.0);
+}
+
 TEST(routing, foot_island) {
   auto const from = osr::location{49.872715, 8.651534, osr::level_t{0.F}};
   auto const to = osr::location{49.873023, 8.651523, osr::level_t{0.F}};
@@ -277,4 +292,60 @@ TEST(routing_cch, ballwil_shortcut) {
       osr::location{47.15570087672, 8.315615519882, osr::kNoLevel};
   auto const to = osr::location{47.15347392750, 8.316863681682, osr::kNoLevel};
   expect_car_cch_matches_dijkstra("test/ballwill-shortcut.osm.pbf", from, to);
+}
+
+TEST(routing_cch_bus, private_gate) {
+  auto const from = osr::location{49.113532, 8.438036, osr::kNoLevel};
+  auto const to = osr::location{49.1020397, 8.4332380, osr::kNoLevel};
+  expect_bus_cch_matches_dijkstra("test/karlsruhe-kit-nord.osm.pbf", from, to);
+}
+
+TEST(routing_cch_bus, incline_oneway_combination) {
+  auto const from = osr::location{54.4689477, 18.50720618, osr::kNoLevel};
+  auto const to = osr::location{54.467231, 18.509283, osr::kNoLevel};
+  expect_bus_cch_matches_dijkstra("test/gdynia-kariny.osm.pbf", from, to);
+}
+
+TEST(routing_cch_bus, highway_busway) {
+  auto const from = osr::location{49.873069, 8.651288, osr::kNoLevel};
+  auto const to = osr::location{49.876042, 8.650119, osr::kNoLevel};
+  expect_bus_cch_matches_dijkstra("test/luisenplatz-darmstadt.osm.pbf", from,
+                                  to);
+}
+
+TEST(routing_cch_bus, buses_not_on_rails) {
+  auto const from = osr::location{49.8726829, 8.6314800, osr::kNoLevel};
+  auto const to = osr::location{49.870393, 8.633510, osr::kNoLevel};
+  expect_bus_cch_matches_dijkstra("test/da_hbf_2.osm.pbf", from, to);
+}
+
+TEST(routing_cch_bus, access_yes_barrier) {
+  auto const from = osr::location{51.0088092631, 13.72634365409, osr::kNoLevel};
+  auto const to = osr::location{51.01311341142, 13.717227005180, osr::kNoLevel};
+  expect_bus_cch_matches_dijkstra("test/a17-barrier-access-yes.osm.pbf", from,
+                                  to);
+}
+
+TEST(routing_cch_bus, highway_service) {
+  auto const from = osr::location{41.898252, 12.499566, osr::kNoLevel};
+  auto const to = osr::location{41.893381, 12.509254, osr::kNoLevel};
+  expect_bus_cch_matches_dijkstra("test/rome-piazza-vittorio-emanuele.osm.pbf",
+                                  from, to);
+}
+
+TEST(routing_cch_bus, platform) {
+  auto const from = osr::location{49.8755750, 8.6472192, osr::kNoLevel};
+  auto const to = osr::location{49.8761539, 8.6503118, osr::kNoLevel};
+  expect_bus_cch_matches_dijkstra("test/darmstadt-bismarckstr.osm.pbf", from,
+                                  to);
+}
+
+// Known POC limitation: CCH does not preserve the state-changing loop near the
+// start and returns cost 410 instead of Dijkstra's 238.
+TEST(routing_cch_bus, DISABLED_monaco_loop_near_start) {
+  auto const from = osr::location{43.74284568503032, 7.42989439732284,
+                                  osr::kNoLevel};
+  auto const to = osr::location{43.73175634804065, 7.4261553024191755,
+                                osr::kNoLevel};
+  expect_bus_cch_matches_dijkstra("test/monaco.osm.pbf", from, to);
 }

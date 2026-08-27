@@ -241,6 +241,10 @@ struct http_server::impl {
   void handle_cch_adjacent(web_server::http_req_t const& req,
                            web_server::http_res_cb_t const& cb) {
     auto const query = boost::json::parse(req.body()).as_object();
+    auto const profile = get_search_profile_from_request(query);
+    auto const& edge_weights =
+        profile == search_profile::kBus ? w_.r_->cch_bus_edge_weights_
+                                        : w_.r_->cch_car_edge_weights_;
     auto const node = query.contains("internal_id")
                           ? node_idx_t{static_cast<node_idx_t::value_t>(
                                 query.at("internal_id").as_int64())}
@@ -309,14 +313,14 @@ struct http_server::impl {
            to_line_string(w_.get_node_pos(from), w_.get_node_pos(to))}});
     };
 
-    for (auto const& edge : w_.r_->cch_edge_weights_[node]) {
+    for (auto const& edge : edge_weights[node]) {
       add_feature(node, edge.to_, edge, true);
     }
     for (auto low = node_idx_t{0U}; low != w_.n_nodes(); ++low) {
       if (low == node) {
         continue;
       }
-      for (auto const& edge : w_.r_->cch_edge_weights_[low]) {
+      for (auto const& edge : edge_weights[low]) {
         if (edge.to_ == node) {
           add_feature(low, node, edge, false);
         }

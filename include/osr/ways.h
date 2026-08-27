@@ -94,8 +94,8 @@ struct cch_edge_weight {
 struct cch_edge {
   friend bool operator==(cch_edge, cch_edge) = default;
 
-  // Customized CCH edge from the owning lower-rank cch_edge_weights_ bucket to
-  // higher-rank to_. The edge can have multiple Car boundary-state weights.
+  // Customized CCH edge from its owning lower-rank profile bucket to the
+  // higher-rank to_. The edge can have multiple boundary-state weights.
   node_idx_t to_{};
   vec<cch_edge_weight> weights_{};
 };
@@ -407,8 +407,9 @@ struct ways {
     vecvec<node_idx_t, turn_bearing> node_turn_bearings_;
     // Shortcut adjacency, bucketed by source node.
     vecvec<node_idx_t, shortcut> shortcuts_;
-    // Customized CCH edge weights, bucketed by source node.
-    vecvec<node_idx_t, cch_edge> cch_edge_weights_;
+    // Profile-specific customized CCH edge weights, bucketed by source node.
+    vecvec<node_idx_t, cch_edge> cch_car_edge_weights_;
+    vecvec<node_idx_t, cch_edge> cch_bus_edge_weights_;
 
     bitvec<node_idx_t> node_is_restricted_;
     vecvec<node_idx_t, restriction> node_restrictions_;

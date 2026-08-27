@@ -297,11 +297,10 @@ void ways::add_shortcuts() {
     return false;
   };
 
-  // Change this profile list to <car, bus> to construct one shared topology
-  // from the union of both road profiles.
+  // Construct one shared topology from the union of both road profiles.
   auto for_each_selected_topology_neighbor = [&](node_idx_t const from,
                                                  auto&& fn) {
-    return for_each_topology_neighbor.template operator()<car>(
+    return for_each_topology_neighbor.template operator()<car, bus>(
         from, std::forward<decltype(fn)>(fn));
   };
 
@@ -675,9 +674,8 @@ void ways::add_shortcuts() {
                  cch_edge_count, cch_weight_count);
   };
 
-  // The current serialized overlay remains Car-only. Bus support can invoke
-  // customize<true> with a second profile-specific weight container.
-  customize.template operator()<false>(r_->cch_edge_weights_);
+  customize.template operator()<false>(r_->cch_car_edge_weights_);
+  customize.template operator()<true>(r_->cch_bus_edge_weights_);
 }
 
 void ways::connect_ways() {

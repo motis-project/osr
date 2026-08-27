@@ -134,6 +134,7 @@
     <option value="bike_elevation_low">bike (low elevation)</option>
     <option value="bike_elevation_high">bike (high elevation)</option>
     <option value="car" selected>car</option>
+    <option value="bus">bus</option>
 </select>
 <select id="direction" onchange="selectDirection(event)">
     <option value="forward" selected>forward</option>
@@ -154,7 +155,7 @@
 <script type="module">
     import {style} from "./style.js";
 
-    const start = [7.418969078064066, 43.7330953688176]
+    const start = [7.42989439732284, 43.74284568503032]
     const destination = [7.4261553024191755, 43.73175634804065];
     const query = {
         start, destination,
@@ -301,7 +302,8 @@
                 'Content-Type': 'application/json'
             },
             body: JSON.stringify({
-                internal_id: internalId
+                internal_id: internalId,
+                profile: query.profile
             })
         });
         return await response.json();
