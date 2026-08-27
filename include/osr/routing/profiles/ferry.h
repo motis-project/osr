@@ -297,6 +297,16 @@ struct ferry {
     return {};
   }
 
+  static constexpr cost_and_duration endpoint_node_cost(
+      parameters const& params, node const, node_properties const& n) {
+    return node_cost(params, n);
+  }
+
+  static bool endpoint_way_feasible(parameters const& params,
+                                    endpoint_way_query const& q) {
+    return q.template feasible<typename parameters::profile_t>(params);
+  }
+
   static constexpr cost_and_duration node_cost(parameters const&,
                                                node_properties const&) {
     return cost_and_duration_from_cost(0U);

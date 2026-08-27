@@ -26,6 +26,24 @@ enum class endpoint_role : std::uint8_t {
   kTarget,  // where the *search* ends (fwd search: route end, bwd: start)
 };
 
+struct endpoint_way_query {
+  template <typename M>
+  bool feasible(typename M::parameters const& params) const {
+    return M::way_cost(params, w_, timezones_, way_, props_, way_dir_, 0U,
+                       start_time_, duration_t{0}, search_dir_)
+        .feasible();
+  }
+
+  ways::routing const& w_;
+  timezone_cache_t const& timezones_;
+  way_idx_t way_;
+  way_properties props_;
+  direction way_dir_;
+  direction search_dir_;
+  direction resolve_dir_;
+  std::optional<routing_time_t> start_time_;
+};
+
 template <typename P>
 struct bidirectional_meet_policy {
   static constexpr auto const kEnumerateStates = false;
@@ -174,6 +192,12 @@ concept Profile =
                                     start_time, current_duration)
       } -> std::same_as<cost_and_duration>;
       { P::node_cost(params, n_props) } -> std::same_as<cost_and_duration>;
+      {
+        P::endpoint_node_cost(params, node, n_props)
+      } -> std::same_as<cost_and_duration>;
+      {
+        P::endpoint_way_feasible(params, std::declval<endpoint_way_query>())
+      } -> std::same_as<bool>;
       { P::lower_bound_heuristic(params, dist) } -> std::same_as<double>;
       { P::upper_bound_heuristic(params, dist) } -> std::same_as<double>;
       { P::get_reverse(node) } -> std::same_as<typename P::node>;

@@ -645,6 +645,16 @@ struct car_sharing {
     return {};
   }
 
+  static constexpr cost_and_duration endpoint_node_cost(
+      parameters const& params, node const, node_properties const& n) {
+    return node_cost(params, n);
+  }
+
+  static bool endpoint_way_feasible(parameters const& params,
+                                    endpoint_way_query const& q) {
+    return q.template feasible<typename parameters::profile_t>(params);
+  }
+
   static constexpr double lower_bound_heuristic(parameters const& params,
                                                 double const dist) {
     return car::lower_bound_heuristic(params.car_, dist);
