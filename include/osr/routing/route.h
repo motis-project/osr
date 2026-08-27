@@ -149,9 +149,7 @@ std::optional<path> route(profile_parameters const&,
                           routing_algorithm = routing_algorithm::kDijkstra,
                           std::optional<routing_time_t> = std::nullopt);
 
-path with_height_profile(ways const&,
-                         path&,
-                         elevation_storage const*,
+path with_height_profile(path&,
                          preprocessing::elevation::provider const&,
                          unsigned n_samples);
 

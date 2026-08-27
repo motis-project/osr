@@ -1116,14 +1116,23 @@ std::optional<path> route(profile_parameters const& params,
   throw utl::fail("not implemented");
 }
 
-path with_height_profile(ways const& w,
-                         path& p,
-                         elevation_storage const* elevation,
+path with_height_profile(path& p,
                          preprocessing::elevation::provider const& provider,
                          unsigned n_samples) {
 
   auto profile = std::vector<preprocessing::elevation::elevation_meters_t>{};
   profile.resize(n_samples);
+
+  auto seg_it = p.segments_.begin();
+  auto poly_it = seg_it->polyline_.begin();
+  auto const next = [&]() {
+    if (++poly_it == std::end(seg_it->polyline_)) {
+      ++seg_it;
+      poly_it = (++seg_it)->polyline_.begin();
+    }
+
+    return *poly_it;
+  };
 
   auto const adjust_lng = [&](double x) { return x; };
   auto const squared_distance = [&](geo::latlng a, geo::latlng b) {
@@ -1132,32 +1141,35 @@ path with_height_profile(ways const& w,
   };
 
   auto const sample_dist = std::pow(p.dist_ / n_samples, 2);
-  for (auto const& seg : p.segments_) {
-    auto const& poly = seg.polyline_;
-    auto dist = 0.0;
-    auto prev = std::size_t{0};
-    auto curr = std::size_t{1};
-    while (curr != poly.size()) {
-      dist += squared_distance(poly[prev], poly[curr]);
 
-      if (dist >= sample_dist) {
-        auto const normed_diff =
-            (dist - sample_dist) /
-            std::abs(squared_distance(poly[prev], poly[curr]));
-        auto const lat_diff = poly[prev].lat_ - poly[curr].lat_;
-        auto const lng_diff = adjust_lng(poly[prev].lng_ - poly[curr].lng_);
-        auto sample_point =
-            geo::latlng{poly[curr].lat_ + lat_diff * normed_diff,
-                        poly[curr].lng_ + lng_diff * normed_diff};
-        profile.push_back(provider.get(sample_point));
+  auto from = *poly_it;
+  profile.push_back(provider.get({from.lat(), from.lng()}));
+  --n_samples;
+  auto to = next();
 
-        dist = 0.0;
-      }
+  auto dist = 0.0;
+  while (n_samples > 1 && seg_it != std::end(p.segments_)) {
+    dist += squared_distance(from, to);
 
-      prev += 1;
-      curr += 1;
+    if (dist >= sample_dist) {
+      --n_samples;
+      auto const normed_diff =
+          (dist - sample_dist) / std::abs(squared_distance(from, to));
+      auto const lat_diff = from.lat() - to.lat();
+      auto const lng_diff = adjust_lng(from.lng() - to.lng());
+      auto sample_point = geo::latlng{to.lat() + lat_diff * normed_diff,
+                                      to.lng() + lng_diff * normed_diff};
+      profile.push_back(provider.get(sample_point));
+
+      dist = 0.0;
     }
+
+    from = to;
+    to = next();
   }
+
+  to = p.segments_.back().polyline_.back();
+  profile.push_back(provider.get({to.lat(), to.lng()}));
 }
 
 }  // namespace osr
