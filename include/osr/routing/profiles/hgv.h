@@ -512,6 +512,15 @@ struct hgv {
     return cost;
   }
 
+  static constexpr cost_and_duration endpoint_node_cost(
+      parameters const& params, node const, node_properties const& n) {
+    return node_cost(params, n);
+  }
+
+  static bool endpoint_way_feasible(parameters const& params,
+                                    endpoint_way_query const& q) {
+    return q.feasible<hgv>(params);
+  }
   static double lower_bound_heuristic(parameters const& params,
                                       double const dist) {
     return (3.6 / static_cast<double>(params.top_speed_km_h_)) * dist;
