@@ -426,6 +426,19 @@ struct car_parking {
     return footp::node_cost(params.foot_, n);
   }
 
+  static constexpr cost_and_duration endpoint_node_cost(
+      parameters const& params, node const n, node_properties const props) {
+    return n.is_car_node() ? car::node_cost(params.car_, props)
+                           : footp::node_cost(params.foot_, props);
+  }
+
+  static bool endpoint_way_feasible(parameters const& params,
+                                    endpoint_way_query const& q) {
+    return q.resolve_dir_ == direction::kForward
+               ? q.feasible<car>(params.car_)
+               : q.feasible<footp>(params.foot_);
+  }
+
   static constexpr double lower_bound_heuristic(parameters const& params,
                                                 double const dist) {
     return car::lower_bound_heuristic(params.car_, dist);
