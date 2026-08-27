@@ -8,6 +8,7 @@
 #include "osr/elevation_storage.h"
 #include "osr/location.h"
 #include "osr/lookup.h"
+#include "osr/preprocessing/elevation/provider.h"
 #include "osr/routing/algorithms.h"
 #include "osr/routing/mode.h"
 #include "osr/routing/parameters.h"
@@ -147,5 +148,11 @@ std::optional<path> route(profile_parameters const&,
                           elevation_storage const* = nullptr,
                           routing_algorithm = routing_algorithm::kDijkstra,
                           std::optional<routing_time_t> = std::nullopt);
+
+path with_height_profile(ways const&,
+                         path&,
+                         elevation_storage const*,
+                         preprocessing::elevation::provider const&,
+                         unsigned n_samples);
 
 }  // namespace osr

@@ -7,9 +7,14 @@
 
 #include "boost/thread/tss.hpp"
 
+#include "geo/latlng.h"
+#include "geo/polyline.h"
+#include "osr/preprocessing/elevation/provider.h"
+#include "osr/preprocessing/elevation/shared.h"
 #include "utl/concat.h"
 #include "utl/enumerate.h"
 #include "utl/helpers/algorithm.h"
+#include "utl/pipes/make_range.h"
 #include "utl/to_vec.h"
 #include "utl/verify.h"
 
@@ -1109,6 +1114,50 @@ std::optional<path> route(profile_parameters const& params,
                                  elevations);
   }
   throw utl::fail("not implemented");
+}
+
+path with_height_profile(ways const& w,
+                         path& p,
+                         elevation_storage const* elevation,
+                         preprocessing::elevation::provider const& provider,
+                         unsigned n_samples) {
+
+  auto profile = std::vector<preprocessing::elevation::elevation_meters_t>{};
+  profile.resize(n_samples);
+
+  auto const adjust_lng = [&](double x) { return x; };
+  auto const squared_distance = [&](geo::latlng a, geo::latlng b) {
+    return std::pow(b.lat() - a.lat(), 2) +
+           std::pow(adjust_lng(b.lng() - a.lng()), 2);
+  };
+
+  auto const sample_dist = std::pow(p.dist_ / n_samples, 2);
+  for (auto const& seg : p.segments_) {
+    auto const& poly = seg.polyline_;
+    auto dist = 0.0;
+    auto prev = std::size_t{0};
+    auto curr = std::size_t{1};
+    while (curr != poly.size()) {
+      dist += squared_distance(poly[prev], poly[curr]);
+
+      if (dist >= sample_dist) {
+        auto const normed_diff =
+            (dist - sample_dist) /
+            std::abs(squared_distance(poly[prev], poly[curr]));
+        auto const lat_diff = poly[prev].lat_ - poly[curr].lat_;
+        auto const lng_diff = adjust_lng(poly[prev].lng_ - poly[curr].lng_);
+        auto sample_point =
+            geo::latlng{poly[curr].lat_ + lat_diff * normed_diff,
+                        poly[curr].lng_ + lng_diff * normed_diff};
+        profile.push_back(provider.get(sample_point));
+
+        dist = 0.0;
+      }
+
+      prev += 1;
+      curr += 1;
+    }
+  }
 }
 
 }  // namespace osr
