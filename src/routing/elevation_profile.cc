@@ -6,7 +6,10 @@ namespace osr {
 height_profile::height_profile(
     path& p,
     preprocessing::elevation::provider const& provider,
-    unsigned n_samples) {
+    double resolution) {
+  resolution_ = std::max(
+      {resolution, provider.max_resolution().x_, provider.max_resolution().y_});
+  auto n_samples = p.dist_ / resolution_;
 
   auto seg_it = p.segments_.begin();
   auto poly_it = seg_it->polyline_.begin();
@@ -25,18 +28,31 @@ height_profile::height_profile(
            std::pow(adjust_lng(b.lng() - a.lng()), 2);
   };
 
-  auto const sample_dist = std::pow(p.dist_ / n_samples, 2);
-
-  auto const add = [&](geo::latlng const& coord) {
-    points_.push_back(coord);
-    elevation_.push_back(provider.get(coord));
-  };
-
   points_.resize(n_samples + 1);
   elevation_.resize(n_samples + 1);
 
   auto from = *poly_it;
-  add({from.lat(), from.lng()});
+  auto const baseline = provider.get(from);
+
+  auto const add = [&](geo::latlng const& coord) {
+    points_.push_back(coord);
+    auto const z = provider.get(coord);
+    elevation_.push_back(z);
+
+    if (z == value_t::invalid()) {
+      return;
+    }
+
+    if (z < baseline) {
+      down_ += z.v_;
+    } else {
+      up_ += z.v_;
+    }
+    min_ = std::min(z, min_);
+    max_ = std::max(z, max_);
+  };
+
+  add(from);
   --n_samples;
   auto to = next();
 
@@ -44,17 +60,15 @@ height_profile::height_profile(
   while (n_samples > 0) {
     acc += squared_distance(from, to);
 
-    if (acc >= sample_dist) {
-      --n_samples;
-      auto const normed_diff =
-          (acc - sample_dist) / std::abs(squared_distance(from, to));
+    while (acc >= resolution_) {
+      acc -= resolution_;
+      auto const normed_diff = acc / std::abs(squared_distance(from, to));
       auto const lat_diff = from.lat() - to.lat();
       auto const lng_diff = adjust_lng(from.lng() - to.lng());
       auto sample_point = geo::latlng{to.lat() + lat_diff * normed_diff,
                                       to.lng() + lng_diff * normed_diff};
       add(sample_point);
-
-      acc = 0.0;
+      --n_samples;
     }
 
     from = to;
