@@ -151,7 +151,7 @@ void connect_parking_ways(
     auto node = node_idx_t::invalid();
     auto min_dist = 0.0;
     auto lvl = kNoLevel;
-    auto segment = 0U;
+    auto idx = 0U;
     for (auto const [i, node_idx] : utl::enumerate(w.r_->way_nodes_[way_idx])) {
       for (auto const connecting_way : w.r_->node_ways_[node_idx]) {
         auto const props = w.r_->way_properties_[connecting_way];
@@ -163,7 +163,7 @@ void connect_parking_ways(
             node = node_idx;
             min_dist = dist;
             lvl = props.from_level();
-            segment = static_cast<unsigned>(i);
+            idx = static_cast<unsigned>(i);
             break;
           }
         }
@@ -173,20 +173,36 @@ void connect_parking_ways(
                 "Connected way must have at least one connected node");
     auto const cost = static_cast<cost_t>(std::rint(
         min_dist * foot<false>::parameters{}.speed_meters_per_second_));
-    return std::optional{way_candidate{
-        .dist_to_way_ = min_dist,
-        .way_ = way_idx,
-        .left_ =
-            {.lvl_ = lvl,
-             // TODO: MK - Will variable be used? Or can we use kForward only?
-             .way_dir_ = is_from ? direction::kBackward : direction::kForward,
-             .node_ = node,
-             .dist_to_node_ = min_dist,
-             .cost_ = cost,
-             .path_ = {}},
-        .right_ = {},
-        .closest_point_on_way_ = w.r_->node_positions_[node].as_latlng(),
-        .segment_idx_ = segment}};
+    // TODO: MK - Will direction be used? Or can we use kForward only?
+    return std::optional{
+        idx == 0
+            ? way_candidate{.dist_to_way_ = min_dist,
+                            .way_ = way_idx,
+                            .left_ = {.lvl_ = lvl,
+                                      .way_dir_ = is_from ? direction::kBackward
+                                                          : direction::kForward,
+                                      .node_ = node,
+                                      .dist_to_node_ = min_dist,
+                                      .cost_ = cost,
+                                      .path_ = {}},
+                            .right_ = {},
+                            .closest_point_on_way_ =
+                                w.r_->node_positions_[node].as_latlng(),
+                            .segment_idx_ = 0U}
+            : way_candidate{
+                  .dist_to_way_ = min_dist,
+                  .way_ = way_idx,
+                  .left_ = {},
+                  .right_ = {.lvl_ = lvl,
+                             .way_dir_ = is_from ? direction::kForward
+                                                 : direction::kBackward,
+                             .node_ = node,
+                             .dist_to_node_ = min_dist,
+                             .cost_ = cost,
+                             .path_ = {}},
+                  .closest_point_on_way_ =
+                      w.r_->node_positions_[node].as_latlng(),
+                  .segment_idx_ = idx - 1U}};
   };
 
   auto const make_connection =
