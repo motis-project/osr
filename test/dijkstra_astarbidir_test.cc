@@ -73,27 +73,31 @@ void run(ways const& w,
     auto const to_node = from_to.second;
     auto const to_loc = location{w.get_node_pos(to_node)};
 
+    // Keeps only the candidates that touch `n`. Candidates cannot be erased
+    // in place, so the survivors are appended to a fresh match.
     auto const node_pinned_matches =
         [&](location const& loc, node_idx_t const n, bool const reverse) {
-          auto matches = l.match<car>(car::parameters{}, loc, reverse, dir,
-                                      kMaxMatchDistance, nullptr);
-          std::erase_if(matches, [&](auto const& wc) {
-            return wc.left_.node_ != n && wc.right_.node_ != n;
-          });
-          if (matches.size() > 1) {
-            // matches.resize(1);
+          auto all = match_result{};
+          l.match<car>(car::parameters{}, loc, reverse, dir, kMaxMatchDistance,
+                       nullptr, all);
+          auto const m = all[match_idx_t{0U}];
+          auto pinned = match_result{};
+          pinned.start(m.lvl_);
+          for (auto j = std::size_t{0U}; j != m.size(); ++j) {
+            if (m.nodes_[j].left_.node_ == n || m.nodes_[j].right_.node_ == n) {
+              pinned.add(m.dist_to_way_[j], m.way_[j], m.nodes_[j]);
+            }
           }
-          return matches;
+          pinned.finish();
+          return pinned;
         };
     auto const from_matches = node_pinned_matches(from_loc, from_node, false);
     auto const to_matches = node_pinned_matches(to_loc, to_node, true);
-    if (from_matches.empty() || to_matches.empty()) {
+    auto const from_matches_span = from_matches[match_idx_t{0U}];
+    auto const to_matches_span = to_matches[match_idx_t{0U}];
+    if (from_matches_span.empty() || to_matches_span.empty()) {
       ++n_empty_matches;
     }
-
-    auto const from_matches_span =
-        std::span{begin(from_matches), end(from_matches)};
-    auto const to_matches_span = std::span{begin(to_matches), end(to_matches)};
 
     auto const reference_start = std::chrono::steady_clock::now();
     auto const reference = [&]() {

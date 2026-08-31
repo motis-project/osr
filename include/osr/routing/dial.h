@@ -24,6 +24,7 @@ struct dial {
 
     buckets_[dist].emplace_back(std::forward<El>(el));
     current_bucket_ = std::min(current_bucket_, dist);
+    max_bucket_ = std::max(max_bucket_, dist);
     ++size_;
   }
 
@@ -44,9 +45,12 @@ struct dial {
   void clear() {
     current_bucket_ = 0U;
     size_ = 0U;
-    for (auto& b : buckets_) {
-      b.clear();
+    auto const end =
+        std::min(static_cast<std::size_t>(max_bucket_) + 1U, buckets_.size());
+    for (auto i = std::size_t{0U}; i != end; ++i) {
+      buckets_[i].clear();
     }
+    max_bucket_ = 0U;
   }
 
   void n_buckets(dist_t const n) { buckets_.resize(n); }
@@ -65,6 +69,7 @@ public:
 
   GetBucketFn get_bucket_;
   dist_t current_bucket_{};
+  dist_t max_bucket_{};
   std::size_t size_{};
   std::vector<std::vector<T>> buckets_;
 };

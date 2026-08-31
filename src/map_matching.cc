@@ -147,27 +147,22 @@ point_data<P> match_input_point(ways const& w,
                                    direction::kBackward, 0U, std::nullopt,
                                    duration_t{0}, direction::kForward)
                            .cost_ == kInfeasible};
-        auto const wc = way_candidate{.dist_to_way_ = mw.dist_to_way_,
-                                      .way_ = way,
-                                      .closest_point_on_way_ = best,
-                                      .segment_idx_ = mw.segment_idx_};
-
-        mw.fwd_out_ =
-            l.find_next_node<P>(params, wc, loc, direction::kForward, loc.lvl_,
-                                false, direction::kForward, blocked,
-                                approx_distance_lng_degrees, best, segment_idx);
-        mw.fwd_in_ =
-            l.find_next_node<P>(params, wc, loc, direction::kBackward, loc.lvl_,
-                                true, direction::kForward, blocked,
-                                approx_distance_lng_degrees, best, segment_idx);
-        mw.bwd_out_ =
-            l.find_next_node<P>(params, wc, loc, direction::kBackward, loc.lvl_,
-                                false, direction::kForward, blocked,
-                                approx_distance_lng_degrees, best, segment_idx);
-        mw.bwd_in_ =
-            l.find_next_node<P>(params, wc, loc, direction::kForward, loc.lvl_,
-                                false, direction::kBackward, blocked,
-                                approx_distance_lng_degrees, best, segment_idx);
+        mw.fwd_out_ = l.find_next_node<P>(
+            params, way, mw.dist_to_way_, loc, direction::kForward, loc.lvl_,
+            false, direction::kForward, blocked, approx_distance_lng_degrees,
+            best, segment_idx, std::nullopt, &mw.fwd_out_path_);
+        mw.fwd_in_ = l.find_next_node<P>(
+            params, way, mw.dist_to_way_, loc, direction::kBackward, loc.lvl_,
+            true, direction::kForward, blocked, approx_distance_lng_degrees,
+            best, segment_idx, std::nullopt, &mw.fwd_in_path_);
+        mw.bwd_out_ = l.find_next_node<P>(
+            params, way, mw.dist_to_way_, loc, direction::kBackward, loc.lvl_,
+            false, direction::kForward, blocked, approx_distance_lng_degrees,
+            best, segment_idx, std::nullopt, &mw.bwd_out_path_);
+        mw.bwd_in_ = l.find_next_node<P>(
+            params, way, mw.dist_to_way_, loc, direction::kForward, loc.lvl_,
+            false, direction::kBackward, blocked, approx_distance_lng_degrees,
+            best, segment_idx, std::nullopt, &mw.bwd_in_path_);
         if (!mw.fwd_out_.valid() && !mw.fwd_in_.valid() &&
             !mw.bwd_out_.valid() && !mw.bwd_in_.valid()) {
           return;
@@ -270,12 +265,12 @@ matched_route map_match(
         seg_idx != 0U ? &segments[seg_idx - 1U] : nullptr;
 
     auto add_additional_edge = [&](matched_way<P> const& mw,
-                                   node_candidate const& nc, bool reverse,
-                                   bool outgoing) {
+                                   candidate_node const& nc,
+                                   std::vector<geo::latlng> const& path,
+                                   bool reverse, bool outgoing) {
       if (nc.valid()) {
         auto const from_node = outgoing ? mw.additional_node_idx_ : nc.node_;
         auto const to_node = outgoing ? nc.node_ : mw.additional_node_idx_;
-        auto const& path = nc.path_;
         seg.additional_edges_[from_node].push_back(additional_edge{
             .to_ = to_node,
             .distance_ =
@@ -287,12 +282,12 @@ matched_route map_match(
     };
 
     for (auto const& mw : from_pd.matched_ways_) {
-      add_additional_edge(mw, mw.fwd_out_, false, true);
-      add_additional_edge(mw, mw.bwd_out_, true, true);
+      add_additional_edge(mw, mw.fwd_out_, mw.fwd_out_path_, false, true);
+      add_additional_edge(mw, mw.bwd_out_, mw.bwd_out_path_, true, true);
     }
     for (auto const& mw : to_pd.matched_ways_) {
-      add_additional_edge(mw, mw.fwd_in_, false, false);
-      add_additional_edge(mw, mw.bwd_in_, true, false);
+      add_additional_edge(mw, mw.fwd_in_, mw.fwd_in_path_, false, false);
+      add_additional_edge(mw, mw.bwd_in_, mw.bwd_in_path_, true, false);
     }
     for (auto const& from_mw : from_pd.matched_ways_) {
       for (auto const& to_mw : to_pd.matched_ways_) {
