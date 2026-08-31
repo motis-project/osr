@@ -145,7 +145,7 @@ void connect_parking_ways(
 
   auto const get_connected_way =
       [&](way_idx_t const way_idx, geo::latlng const& center,
-          double const approx_distance_lng_degrees,
+          double const approx_distance_lng_degrees, bool const is_from,
           std::function<bool(way_properties const&)> const& pred)
       -> std::optional<way_candidate> {
     auto node = node_idx_t::invalid();
@@ -176,12 +176,14 @@ void connect_parking_ways(
     return std::optional{way_candidate{
         .dist_to_way_ = min_dist,
         .way_ = way_idx,
-        .left_ = {.lvl_ = lvl,
-                  .way_dir_ = direction::kForward,
-                  .node_ = node,
-                  .dist_to_node_ = min_dist,
-                  .cost_ = cost,
-                  .path_ = {}},
+        .left_ =
+            {.lvl_ = lvl,
+             // TODO: MK - Will variable be used? Or can we use kForward only?
+             .way_dir_ = is_from ? direction::kBackward : direction::kForward,
+             .node_ = node,
+             .dist_to_node_ = min_dist,
+             .cost_ = cost,
+             .path_ = {}},
         .right_ = {},
         .closest_point_on_way_ = w.r_->node_positions_[node].as_latlng(),
         .segment_idx_ = segment}};
@@ -239,13 +241,13 @@ void connect_parking_ways(
     auto const foot_offset =
         (is_same_component && is_foot_connected)
             ? get_connected_way(way_idx, center, approx_distance_lng_degrees,
-                                is_foot_accessible)
+                                false, is_foot_accessible)
             : find_closest<foot<false>>(w, l, loc, direction::kForward,
                                         matching_component, foot_score);
     auto const car_offset =
         (is_same_component && is_car_connected)
             ? get_connected_way(way_idx, center, approx_distance_lng_degrees,
-                                is_car_accessible)
+                                true, is_car_accessible)
             : find_closest<car>(w, l, loc, direction::kBackward,
                                 matching_component, car_score);
     if (!foot_offset.has_value() || !car_offset.has_value()) {

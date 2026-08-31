@@ -366,19 +366,17 @@ struct car_parking {
                       .duration_ = duration_from_cost(kSwitchPenalty)});
 
               if (kFwd) {
-                fn({target, node_type::kFoot, lvl, foot_offset.dir_, 0U}, cost.cost_,
-                   cost.duration_, dist, way_idx, 0, 0,
+                // Reminder: direction hardly used for foot.h => All kForward
+                fn({target, node_type::kFoot, lvl, direction::kForward, 0U},
+                   cost.cost_, cost.duration_, dist, way_idx, 0, 0,
                    elevation_storage::elevation{}, false);
               } else {
-                fn({target, node_type::kCar, lvl, car_offset.dir_, 0U}, cost.cost_,
-                   cost.duration_, dist, way_idx, 0, 0,
+                fn({target, node_type::kCar, lvl, car_offset.dir_, 0U},
+                   cost.cost_, cost.duration_, dist, way_idx, 0, 0,
                    elevation_storage::elevation{}, false);
               }
             });
       }
-      // TODO
-      // If forward && is_extra_node && extra_node.car_* == n
-      // => Add edge n -> extra -> foot_* (<= 2 paths)
     }
   }
 
