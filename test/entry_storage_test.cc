@@ -51,11 +51,11 @@ TEST(entry_storage, promotion_preserves_inline_and_extra_slots) {
   for (auto i = std::size_t{0U}; i != storage_t::kInlineN; ++i) {
     s.slot(i, w, kNode, arena).value_ = static_cast<std::uint32_t>(100U + i);
   }
-  ASSERT_EQ(nullptr, s.overflow_);
+  ASSERT_FALSE(s.is_overflow());
 
   auto const promoting = storage_t::index(2U, direction::kForward);
   s.slot(promoting, w, kNode, arena).value_ = 200U;
-  ASSERT_NE(nullptr, s.overflow_);
+  ASSERT_TRUE(s.is_overflow());
 
   for (auto i = std::size_t{0U}; i != storage_t::kInlineN; ++i) {
     EXPECT_EQ(100U + i, s[i].value_);
