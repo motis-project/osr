@@ -316,11 +316,14 @@ way_properties get_way_properties(
 
 std::pair<node_properties, level_bits_t> get_node_properties(tags const& t) {
   auto const [from, to, is_multi] = get_levels(t);
+  auto const ignore_bike_access =
+      t.highway_ == "crossing"sv && t.barrier_.empty();
   auto p = node_properties{};
   std::memset(&p, 0, sizeof(node_properties));
   p.from_level_ = to_idx(from);
   p.is_foot_accessible_ = is_accessible<foot_profile>(t, osm_obj_type::kNode);
-  p.is_bike_accessible_ = is_accessible<bike_profile>(t, osm_obj_type::kNode);
+  p.is_bike_accessible_ =
+      ignore_bike_access || is_accessible<bike_profile>(t, osm_obj_type::kNode);
   p.is_car_accessible_ = is_accessible<car_profile>(t, osm_obj_type::kNode);
   p.is_bus_accessible_ = is_accessible<bus_profile>(t, osm_obj_type::kNode);
   p.is_elevator_ = t.is_elevator_;
