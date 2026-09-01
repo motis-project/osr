@@ -5,6 +5,8 @@
 
 #include <algorithm>
 #include <array>
+#include <memory>
+#include <type_traits>
 
 #include "osr/routing/entry_storage_arena.h"
 #include "osr/types.h"
@@ -34,6 +36,24 @@ struct entry_storage {
 
   static_assert(kInlineWays <= kMaxWays);
 
+  struct inline_storage {
+    bool is_overflow_{false};
+    std::array<Slot, kInlineN> slots_{};
+  };
+
+  struct overflow_storage {
+    bool is_overflow_{true};
+    Slot* slots_{nullptr};
+  };
+
+  union storage {
+    inline_storage inline_{};
+    overflow_storage overflow_;
+  };
+
+  static_assert(std::is_standard_layout_v<storage>);
+  static_assert(std::is_trivially_copyable_v<storage>);
+
   static constexpr std::size_t index(std::size_t const way,
                                      direction const dir) noexcept {
     return kExtra + 2U * way + (dir == direction::kForward ? 0U : 1U);
@@ -50,35 +70,38 @@ struct entry_storage {
   }
 
   Slot operator[](std::size_t const i) const noexcept {
-    if (overflow_ != nullptr) [[unlikely]] {
-      return overflow_[i];
+    if (is_overflow()) [[unlikely]] {
+      return storage_.overflow_.slots_[i];
     }
-    return i < kInlineN ? inline_[i] : Slot{};
+    return i < kInlineN ? storage_.inline_.slots_[i] : Slot{};
   }
 
   Slot& slot(std::size_t const i,
              ways::routing const& w,
              node_idx_t const n,
              entry_storage_arena& a) {
-    if (overflow_ == nullptr) [[likely]] {
+    if (!is_overflow()) [[likely]] {
       if (i < kInlineN) [[likely]] {
-        return inline_[i];
+        return storage_.inline_.slots_[i];
       }
       promote(slot_count(w, n), a);
       assert(i < slot_count(w, n));
     }
-    return overflow_[i];
+    return storage_.overflow_.slots_[i];
   }
+
+  bool is_overflow() const noexcept { return storage_.inline_.is_overflow_; }
 
   void promote(std::size_t const n_slots, entry_storage_arena& a) {
+    assert(!is_overflow());
     assert(n_slots >= kInlineN && n_slots <= kN);
     auto* const o = a.template create_array<Slot>(n_slots);
-    std::copy(begin(inline_), end(inline_), o);
-    overflow_ = o;
+    std::copy(begin(storage_.inline_.slots_), end(storage_.inline_.slots_), o);
+    std::destroy_at(&storage_.inline_);
+    std::construct_at(&storage_.overflow_, overflow_storage{true, o});
   }
 
-  std::array<Slot, kInlineN> inline_{};
-  Slot* overflow_{nullptr};
+  storage storage_;
 };
 
 }  // namespace osr
