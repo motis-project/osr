@@ -13,11 +13,15 @@
 namespace osr {
 
 inline void verify_additional_edge_count(
-    hash_map<node_idx_t, std::vector<additional_edge>> const& edges) {
+    hash_map<node_idx_t, std::vector<additional_edge>> const& edges,
+    node_idx_t::value_t const additional_node_offset) {
   for (auto const& [node, node_edges] : edges) {
+    if (to_idx(node) < additional_node_offset) {
+      continue;
+    }
     utl::verify(node_edges.size() <= kMaxWaysPerNode,
-                "node {} has {} additional edges, maximum is {}", node,
-                node_edges.size(), kMaxWaysPerNode);
+                "additional node {} has {} additional edges, maximum is {}",
+                node, node_edges.size(), kMaxWaysPerNode);
   }
 }
 
