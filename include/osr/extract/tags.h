@@ -501,7 +501,12 @@ struct foot_profile {
 };
 
 struct bike_profile {
-  static override access_override(tags const& t, osm_obj_type) {
+  static override access_override(tags const& t, osm_obj_type const type) {
+    if (type == osm_obj_type::kNode && t.highway_ == "crossing" &&
+        t.barrier_.empty()) {
+      return override::kWhitelist;
+    }
+
     if (t.is_route_ || t.is_ferry_route_) {
       return override::kBlacklist;
     }
