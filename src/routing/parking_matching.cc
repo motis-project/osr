@@ -74,29 +74,75 @@ std::tuple<geo::latlng, double, component_idx_t> analyze_surroundings(
 }
 
 template <Profile P>
-std::optional<way_candidate> find_closest(
-    ways const& w,
+// std::optional<std::pair<point, match_view_t>> find_closest(
+// std::optional<match_view_t> find_closest(
+    std::optional<way_candidate> find_closest(
+    [[maybe_unused]] ways const& w,
     lookup const& l,
     location const& loc,
     direction const dir,
-    component_idx_t const matching_component,
+    [[maybe_unused]] component_idx_t const matching_component,
     std::function<double(way_candidate const&)> const& score) {
+    // std::function<double(match_result::view)> const& score) {
   auto const params = typename P::parameters{};
 
-  auto way_candidates = l.match<P>(params, loc, false, dir, 250.0, nullptr,
-                                   std::nullopt, std::nullopt);
-  utl::erase_if(way_candidates, [&](way_candidate const& wc) {
-    return w.r_->way_component_[wc.way_] != matching_component;
-  });
-  if (way_candidates.size() == 0) {
-    return std::nullopt;
+  // auto best = std::optional<std::pair<point, match_view_t>>{};
+  // auto best = std::optional<match_view_t>{};
+  auto best = std::optional<way_candidate>{};
+  auto matches = match_result{};
+  // auto way_candidates = 
+		l.match<P>(params, loc, false, dir, 250.0, nullptr,
+                                   matches, std::nullopt);
+  auto best_score = std::numeric_limits<double>::min();
+  // for (auto i = match_idx_t{0U}; i < match_idx_t{matches.size()}; ++i) {
+  //   auto const match = matches[i];
+  //   for (auto const way : match.way_) {
+  //     if (w.r_->way_component_[way] == matching_component) {
+  //       auto const s = score(match);
+  //       if (s > best_score) {
+  //         // best = {match};
+  //         best_score = s;
+  //       }
+  //     }
+  //   }
+  for (auto i = match_idx_t{0U}; i < match_idx_t{matches.size()}; ++i) {
+    auto const match = matches[i];
+		for (auto j = 0U; j < match.size(); ++j) {
+			auto const wc = way_candidate{
+				.dist_to_way_ = match.dist_to_way_[j],
+				.way_ = match.way_[j],
+				.closest_point_on_way_ = geo::latlng{},
+			};
+        auto const s = score(wc);
+        if (s > best_score) {
+          // best = {match};
+	best = wc;
+          best_score = s;
+        }
+		}
+    // auto const way = match.way_;
+    // if (w.r_->way_component_[way] == matching_component) {
+    //   auto const s = score(match);
+    //   if (s > best_score) {
+    //     best_score = s;
+    //   }
+    // }
   }
-  auto const best = utl::max_element(
-      way_candidates, [&](way_candidate const& a, way_candidate const& b) {
-        return score(a) < score(b);
-      });
-
-  return std::optional{*best};
+  return best;
+  // // return best_score;
+  //
+  // utl::erase_if(way_candidates, [&](way_candidate const& wc) {
+  //   return w.r_->way_component_[wc.way_] != matching_component;
+  // });
+  // if (way_candidates.size() == 0) {
+  //   return std::nullopt;
+  // }
+  // auto const best = utl::max_element(
+  //     way_candidates, [&](way_candidate const& a, way_candidate const& b) {
+  //       return score(a) < score(b);
+  //     });
+  //
+  // return std::optional{*best};
 }
 
 }  // namespace
@@ -184,7 +230,7 @@ void connect_parking_ways(
                                       .node_ = node,
                                       .dist_to_node_ = min_dist,
                                       .cost_ = cost,
-                                      .path_ = {}},
+                                      },
                             .right_ = {},
                             .closest_point_on_way_ =
                                 w.r_->node_positions_[node].as_latlng(),
@@ -199,7 +245,7 @@ void connect_parking_ways(
                              .node_ = node,
                              .dist_to_node_ = min_dist,
                              .cost_ = cost,
-                             .path_ = {}},
+                             },
                   .closest_point_on_way_ =
                       w.r_->node_positions_[node].as_latlng(),
                   .segment_idx_ = idx - 1U}};

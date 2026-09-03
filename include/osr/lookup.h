@@ -569,4 +569,14 @@ private:
   ways const& ways_;
 };
 
+// TODO For refactoring
+struct way_candidate {
+  double dist_to_way_;
+  way_idx_t way_{way_idx_t::invalid()};
+  candidate_node left_{}, right_{};
+  geo::latlng closest_point_on_way_;
+  unsigned segment_idx_{0U};
+};
+
+
 }  // namespace osr
