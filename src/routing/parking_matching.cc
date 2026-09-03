@@ -82,8 +82,7 @@ template <Profile P>
     location const& loc,
     direction const dir,
     [[maybe_unused]] component_idx_t const matching_component,
-    std::function<double(way_candidate const&)> const& score) {
-    // std::function<double(match_result::view)> const& score) {
+    std::function<double(double, way_idx_t)> const& score) {
   auto const params = typename P::parameters{};
 
   // auto best = std::optional<std::pair<point, match_view_t>>{};
@@ -94,17 +93,7 @@ template <Profile P>
 		l.match<P>(params, loc, false, dir, 250.0, nullptr,
                                    matches, std::nullopt);
   auto best_score = std::numeric_limits<double>::min();
-  // for (auto i = match_idx_t{0U}; i < match_idx_t{matches.size()}; ++i) {
-  //   auto const match = matches[i];
-  //   for (auto const way : match.way_) {
-  //     if (w.r_->way_component_[way] == matching_component) {
-  //       auto const s = score(match);
-  //       if (s > best_score) {
-  //         // best = {match};
-  //         best_score = s;
-  //       }
-  //     }
-  //   }
+
   for (auto i = match_idx_t{0U}; i < match_idx_t{matches.size()}; ++i) {
     auto const match = matches[i];
 		for (auto j = 0U; j < match.size(); ++j) {
@@ -113,7 +102,7 @@ template <Profile P>
 				.way_ = match.way_[j],
 				.closest_point_on_way_ = geo::latlng{},
 			};
-        auto const s = score(wc);
+        auto const s = score(match.dist_to_way_[j], match.way_[j]);
         if (s > best_score) {
           // best = {match};
 	best = wc;
@@ -182,11 +171,11 @@ void connect_parking_ways(
     return -((1 + ((is_preferred ? 0.0 : 4.0) / (dist_to_way + 1.0))) *
              (dist_to_way + 2.5));
   };
-  auto const car_score = [&](way_candidate const& wc) -> double {
-    return score(wc.dist_to_way_, way_extra[wc.way_].is_parking_aisle());
+  auto const car_score = [&](double const dist_to_way, way_idx_t const way_idx) -> double {
+    return score(dist_to_way, way_extra[way_idx].is_parking_aisle());
   };
-  auto const foot_score = [&](way_candidate const& wc) -> double {
-    return score(wc.dist_to_way_, way_extra[wc.way_].is_preferred_footpath());
+  auto const foot_score = [&](double const dist_to_way, way_idx_t const way_idx) -> double {
+    return score(dist_to_way, way_extra[way_idx].is_preferred_footpath());
   };
 
   auto const get_connected_way =
