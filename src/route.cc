@@ -32,6 +32,11 @@ namespace osr {
 
 constexpr auto const kMinCostSettled = cost_t{900};
 
+void verify_matching_penalty_factor(double const factor) {
+  utl::verify(std::isfinite(factor) && factor >= 0.0,
+              "matching penalty factor must be finite and nonnegative");
+}
+
 routing_algorithm to_algorithm(std::string_view s) {
   switch (cista::hash(s)) {
     case cista::hash("dijkstra"): return routing_algorithm::kDijkstra;
@@ -72,7 +77,9 @@ cost_t matching_penalty(double const distance,
                         double const factor) {
   auto const additional_distance = std::max(0.0, distance - closest_distance);
   auto const penalty = std::round(distance + additional_distance * factor);
-  return static_cast<cost_t>(penalty);
+  return penalty >= static_cast<double>(kInfeasible)
+             ? kInfeasible
+             : static_cast<cost_t>(penalty);
 }
 
 template <typename Fn>
@@ -565,6 +572,7 @@ std::optional<path> route_dijkstra(
     sharing_data const* sharing,
     elevation_storage const* elevations,
     route_options const& options) {
+  verify_matching_penalty_factor(options.matching_penalty_factor_);
   if (auto const direct = try_direct(from, to, dir);
       direct.has_value() && direct->cost_ < max) {
     return direct;
@@ -726,6 +734,7 @@ std::vector<std::optional<path>> route(
     std::function<bool(path const&)> const& do_reconstruct,
     route_options const& options,
     one_to_many_state_impl<P>* const state = nullptr) {
+  verify_matching_penalty_factor(options.matching_penalty_factor_);
   auto result = std::vector<std::optional<path>>{};
   result.resize(to_match.size());
 
@@ -798,6 +807,7 @@ std::optional<path> route_bidirectional(profile_parameters const& params,
                                         sharing_data const* sharing,
                                         elevation_storage const* elevations,
                                         route_options const& options) {
+  verify_matching_penalty_factor(options.matching_penalty_factor_);
   return with_profile(profile, [&]<Profile P>(P&&) -> std::optional<path> {
     auto const& pp = std::get<typename P::parameters>(params);
     auto from_m = match_result{};
@@ -834,6 +844,7 @@ std::vector<std::optional<path>> route(
     std::function<bool(path const&)> const& do_reconstruct,
     std::optional<routing_time_t> const start_time,
     route_options const& options) {
+  verify_matching_penalty_factor(options.matching_penalty_factor_);
   return with_profile(
       profile, [&]<Profile P>(P&&) -> std::vector<std::optional<path>> {
         auto const& pp = std::get<typename P::parameters>(params);
@@ -871,6 +882,7 @@ std::optional<path> route_dijkstra(
     elevation_storage const* elevations,
     std::optional<routing_time_t> const start_time,
     route_options const& options) {
+  verify_matching_penalty_factor(options.matching_penalty_factor_);
   return with_profile(profile, [&]<Profile P>(P&&) -> std::optional<path> {
     auto const& pp = std::get<typename P::parameters>(params);
     auto from_m = match_result{};
@@ -906,6 +918,7 @@ std::optional<path> route_astar(profile_parameters const& params,
                                 elevation_storage const* elevations,
                                 std::optional<routing_time_t> const start_time,
                                 route_options const& options) {
+  verify_matching_penalty_factor(options.matching_penalty_factor_);
   return with_profile(profile, [&]<Profile P>(P&&) -> std::optional<path> {
     auto const& pp = std::get<typename P::parameters>(params);
     auto from_m = match_result{};
@@ -945,6 +958,7 @@ std::unique_ptr<one_to_many_state> route_one_to_many(
     std::function<bool(path const&)> const& do_reconstruct,
     std::optional<routing_time_t> const start_time,
     route_options const& options) {
+  verify_matching_penalty_factor(options.matching_penalty_factor_);
   return with_profile(
       profile, [&]<Profile P>(P&&) -> std::unique_ptr<one_to_many_state> {
         auto s = std::make_unique<one_to_many_state_impl<P>>(to);
@@ -976,6 +990,7 @@ std::optional<path> route(profile_parameters const& params,
                           routing_algorithm algo,
                           std::optional<routing_time_t> const start_time,
                           route_options const& options) {
+  verify_matching_penalty_factor(options.matching_penalty_factor_);
   if (from_match.empty() || to_match.empty()) {
     return std::nullopt;
   }
@@ -1029,6 +1044,7 @@ std::optional<path> route(profile_parameters const& params,
                           routing_algorithm algo,
                           std::optional<routing_time_t> const start_time,
                           route_options const& options) {
+  verify_matching_penalty_factor(options.matching_penalty_factor_);
   if (requires_dijkstra(profile)) {
     algo = routing_algorithm::kDijkstra;
   }
