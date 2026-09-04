@@ -102,5 +102,45 @@ TEST_F(endpoint_routing, meeting_turn_is_in_segment_totals) {
   }
 }
 
+TEST_F(endpoint_routing, geometry_follows_physical_travel) {
+  auto const params = get_parameters(search_profile::kFoot);
+  for (auto const& [from, to] :
+       {std::pair{location{49., 8.0005}, location{49.0005, 8.001}},
+        std::pair{location{49.0999, 8.}, location{49.1001, 8.02}},
+        std::pair{location{49.1, 8.01}, location{49.1, 8.01001}}}) {
+    for (auto const dir : {direction::kForward, direction::kBackward}) {
+      auto const bwd = dir == direction::kBackward;
+      for (auto const algo :
+           {routing_algorithm::kDijkstra, routing_algorithm::kAStarBi}) {
+        auto const p = route(params, *w_, *l_, search_profile::kFoot,
+                             bwd ? to : from, bwd ? from : to, 100'000U, dir,
+                             2.0, nullptr, nullptr, nullptr, algo);
+        ASSERT_TRUE(p.has_value());
+        ASSERT_FALSE(p->segments_.empty());
+        EXPECT_LT(
+            geo::distance(from.pos_, p->segments_.front().polyline_.front()),
+            0.01);
+        EXPECT_LT(geo::distance(to.pos_, p->segments_.back().polyline_.back()),
+                  0.01);
+        for (auto i = std::size_t{1U}; i < p->segments_.size(); ++i) {
+          auto const& prev = p->segments_[i - 1U];
+          auto const& next = p->segments_[i];
+          EXPECT_EQ(prev.to_, next.from_);
+          EXPECT_LT(
+              geo::distance(prev.polyline_.back(), next.polyline_.front()),
+              0.01);
+        }
+        auto const many = route(params, *w_, *l_, search_profile::kFoot, to,
+                                std::vector<location>{from}, 100'000U,
+                                direction::kBackward, 2.0, nullptr, nullptr,
+                                nullptr, [](path const&) { return true; });
+        ASSERT_TRUE(many.front().has_value());
+        EXPECT_EQ(p->cost_, many.front()->cost_);
+        EXPECT_EQ(p->duration_, many.front()->duration_);
+      }
+    }
+  }
+}
+
 }  // namespace
 }  // namespace osr

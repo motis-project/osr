@@ -194,7 +194,8 @@ path reconstruct_bi(typename P::parameters const& params,
 
   forward_segments.push_back(make_endpoint_segment(
       l, from, start.endpoint_, start.connection_, forward_n.get_node(),
-      forward_n.get_mode(), endpoint_role::kSource, false, dir));
+      forward_n.get_mode(), endpoint_role::kSource, dir == direction::kBackward,
+      dir));
 
   auto backward_segments = std::vector<path::segment>{};
   auto backward_n = b.meet_point_2_;
@@ -224,7 +225,7 @@ path reconstruct_bi(typename P::parameters const& params,
   backward_segments.push_back(make_endpoint_segment(
       l, to, destination.endpoint_, destination.connection_,
       backward_n.get_node(), backward_n.get_mode(), endpoint_role::kTarget,
-      true, dir));
+      dir == direction::kForward, dir));
 
   // Neither search half includes the turn joining the two meeting states,
   // so we add it to the segment leaving the meeting node in travel direction.
@@ -239,6 +240,7 @@ path reconstruct_bi(typename P::parameters const& params,
     std::reverse(forward_segments.begin(), forward_segments.end());
   } else {
     std::reverse(backward_segments.begin(), backward_segments.end());
+    forward_segments.swap(backward_segments);
   }
   forward_segments.insert(forward_segments.end(), backward_segments.begin(),
                           backward_segments.end());
@@ -455,8 +457,12 @@ std::optional<destination_candidate<P>> best_candidate(
   return best;
 }
 
-std::optional<path> try_direct(osr::location const& from,
-                               osr::location const& to) {
+std::optional<path> try_direct(osr::location from,
+                               osr::location to,
+                               direction const dir) {
+  if (dir == direction::kBackward) {
+    std::swap(from, to);
+  }
   auto const dist = geo::distance(from.pos_, to.pos_);
   if (dist < 8.0) {
     return std::optional{path{
@@ -493,7 +499,7 @@ std::optional<path> route_bidirectional(typename P::parameters const& params,
                                         sharing_data const* sharing,
                                         elevation_storage const* elevations,
                                         double const penalty_factor) {
-  if (auto const direct = try_direct(from, to);
+  if (auto const direct = try_direct(from, to, dir);
       direct.has_value() && direct->cost_ < max) {
     return direct;
   }
@@ -559,7 +565,7 @@ std::optional<path> route_dijkstra(
     sharing_data const* sharing,
     elevation_storage const* elevations,
     route_options const& options) {
-  if (auto const direct = try_direct(from, to);
+  if (auto const direct = try_direct(from, to, dir);
       direct.has_value() && direct->cost_ < max) {
     return direct;
   }
@@ -613,7 +619,7 @@ std::optional<path> route_astar(typename P::parameters const& params,
                                 sharing_data const* sharing,
                                 elevation_storage const* elevations,
                                 double const penalty_factor) {
-  if (auto const direct = try_direct(from, to);
+  if (auto const direct = try_direct(from, to, dir);
       direct.has_value() && direct->cost_ < max) {
     return direct;
   }
@@ -749,7 +755,7 @@ std::vector<std::optional<path>> route(
   for (auto i = std::size_t{0U}; i != result.size(); ++i) {
     auto const matches =
         to_match[match_idx_t{static_cast<match_idx_t::value_t>(i)}];
-    auto const direct = try_direct(from, to[i]);
+    auto const direct = try_direct(from, to[i], dir);
     if (direct.has_value() && direct->cost_ < max) {
       result[i] = direct;
       continue;
