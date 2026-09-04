@@ -1,4 +1,5 @@
 #include <filesystem>
+#include <numeric>
 
 #include "gtest/gtest.h"
 
@@ -76,6 +77,28 @@ TEST_F(endpoint_routing, unaffordable_direct_does_not_hide_graph_route) {
         EXPECT_LT(a->cost_, max);
       }
     }
+  }
+}
+
+TEST_F(endpoint_routing, meeting_turn_is_in_segment_totals) {
+  for (auto const dir : {direction::kForward, direction::kBackward}) {
+    auto const from = location{49., 8.0005};
+    auto const to = location{49.0005, 8.001};
+    auto const bwd = dir == direction::kBackward;
+    auto const p =
+        route(get_parameters(search_profile::kBus), *w_, *l_,
+              search_profile::kBus, bwd ? to : from, bwd ? from : to, 3600U,
+              dir, 2.0, nullptr, nullptr, nullptr, routing_algorithm::kAStarBi);
+    ASSERT_TRUE(p.has_value());
+    EXPECT_EQ(p->cost_, 35U);
+    EXPECT_EQ(
+        p->cost_,
+        std::accumulate(begin(p->segments_), end(p->segments_), cost_t{0U},
+                        [](auto sum, auto const& s) { return sum + s.cost_; }));
+    EXPECT_EQ(p->duration_,
+              std::accumulate(
+                  begin(p->segments_), end(p->segments_), duration_t{0U},
+                  [](auto sum, auto const& s) { return sum + s.duration_; }));
   }
 }
 
