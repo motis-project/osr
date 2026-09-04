@@ -7,6 +7,7 @@
 #include "osr/extract/extract.h"
 #include "osr/lookup.h"
 #include "osr/routing/bidirectional.h"
+#include "osr/routing/dijkstra.h"
 #include "osr/routing/profiles/car.h"
 #include "osr/routing/profiles/foot.h"
 #include "osr/routing/profiles/railway.h"
@@ -90,11 +91,21 @@ TEST_F(endpoint_routing, meeting_turn_is_in_segment_totals) {
     auto const from = location{49., 8.0005};
     auto const to = location{49.0005, 8.001};
     auto const bwd = dir == direction::kBackward;
+    // TODO: the bidirectional search falls back to Dijkstra when it finds
+    // nothing, and there is no way to observe which of the two produced the
+    // result, so this can only check that both agree.
     auto const p =
         route(get_parameters(search_profile::kBus), *w_, *l_,
               search_profile::kBus, bwd ? to : from, bwd ? from : to, 3600U,
               dir, 2.0, nullptr, nullptr, nullptr, routing_algorithm::kAStarBi);
     ASSERT_TRUE(p.has_value());
+    auto const dijkstra_path = route(
+        get_parameters(search_profile::kBus), *w_, *l_, search_profile::kBus,
+        bwd ? to : from, bwd ? from : to, 3600U, dir, 2.0, nullptr, nullptr,
+        nullptr, routing_algorithm::kDijkstra);
+    ASSERT_TRUE(dijkstra_path.has_value());
+    EXPECT_EQ(p->cost_, dijkstra_path->cost_);
+    EXPECT_EQ(p->duration_, dijkstra_path->duration_);
     EXPECT_EQ(p->cost_, 35U);
     EXPECT_EQ(
         p->cost_,
@@ -113,33 +124,43 @@ TEST_F(endpoint_routing, geometry_follows_physical_travel) {
        {std::pair{location{49., 8.0005}, location{49.0005, 8.001}},
         std::pair{location{49.0999, 8.}, location{49.1001, 8.02}},
         std::pair{location{49.1, 8.01}, location{49.1, 8.01001}}}) {
+    auto const check_geometry = [&](path const& p) {
+      ASSERT_FALSE(p.segments_.empty());
+      EXPECT_LT(geo::distance(from.pos_, p.segments_.front().polyline_.front()),
+                0.01);
+      EXPECT_LT(geo::distance(to.pos_, p.segments_.back().polyline_.back()),
+                0.01);
+      for (auto i = std::size_t{1U}; i < p.segments_.size(); ++i) {
+        auto const& prev = p.segments_[i - 1U];
+        auto const& next = p.segments_[i];
+        EXPECT_EQ(prev.to_, next.from_);
+        EXPECT_LT(geo::distance(prev.polyline_.back(), next.polyline_.front()),
+                  0.01);
+      }
+      EXPECT_EQ(p.cost_,
+                std::accumulate(
+                    begin(p.segments_), end(p.segments_), cost_t{0U},
+                    [](auto sum, auto const& s) { return sum + s.cost_; }));
+      EXPECT_EQ(p.duration_,
+                std::accumulate(
+                    begin(p.segments_), end(p.segments_), duration_t{0U},
+                    [](auto sum, auto const& s) { return sum + s.duration_; }));
+    };
     for (auto const dir : {direction::kForward, direction::kBackward}) {
       auto const bwd = dir == direction::kBackward;
+      auto const many =
+          route(params, *w_, *l_, search_profile::kFoot, bwd ? to : from,
+                std::vector<location>{bwd ? from : to}, 100'000U, dir, 2.0,
+                nullptr, nullptr, nullptr, [](path const&) { return true; });
+      ASSERT_TRUE(many.front().has_value());
+      check_geometry(*many.front());
       for (auto const algo :
            {routing_algorithm::kDijkstra, routing_algorithm::kAStarBi}) {
         auto const p = route(params, *w_, *l_, search_profile::kFoot,
                              bwd ? to : from, bwd ? from : to, 100'000U, dir,
                              2.0, nullptr, nullptr, nullptr, algo);
         ASSERT_TRUE(p.has_value());
-        ASSERT_FALSE(p->segments_.empty());
-        EXPECT_LT(
-            geo::distance(from.pos_, p->segments_.front().polyline_.front()),
-            0.01);
-        EXPECT_LT(geo::distance(to.pos_, p->segments_.back().polyline_.back()),
-                  0.01);
-        for (auto i = std::size_t{1U}; i < p->segments_.size(); ++i) {
-          auto const& prev = p->segments_[i - 1U];
-          auto const& next = p->segments_[i];
-          EXPECT_EQ(prev.to_, next.from_);
-          EXPECT_LT(
-              geo::distance(prev.polyline_.back(), next.polyline_.front()),
-              0.01);
-        }
-        auto const many = route(params, *w_, *l_, search_profile::kFoot, to,
-                                std::vector<location>{from}, 100'000U,
-                                direction::kBackward, 2.0, nullptr, nullptr,
-                                nullptr, [](path const&) { return true; });
-        ASSERT_TRUE(many.front().has_value());
+        check_geometry(*p);
         EXPECT_EQ(p->cost_, many.front()->cost_);
         EXPECT_EQ(p->duration_, many.front()->duration_);
       }
@@ -148,19 +169,29 @@ TEST_F(endpoint_routing, geometry_follows_physical_travel) {
 }
 
 TEST_F(endpoint_routing, bidirectional_meets_at_additional_node) {
-  auto const check = [&]<typename P>() {
+  auto const check = [&]<typename P>(cost_t const uturn_penalty) {
     auto const params = typename P::parameters{};
     auto const n = node_idx_t{w_->n_nodes()};
     auto const coordinates = std::vector<geo::latlng>{{49., 8.001}};
     auto const edges = hash_map<node_idx_t, std::vector<additional_edge>>{
         {n,
          {{.to_ = n, .underlying_way_ = way_idx_t{0U}},
-          {.to_ = n, .underlying_way_ = way_idx_t{1U}}}}};
+          {.to_ = n, .underlying_way_ = way_idx_t{1U}},
+          {.to_ = n, .underlying_way_ = way_idx_t{0U}}}}};
     auto const sharing =
         sharing_data{.additional_node_offset_ = w_->n_nodes(),
                      .additional_node_coordinates_ = coordinates,
                      .additional_edges_ = edges};
     for (auto const dir : {direction::kForward, direction::kBackward}) {
+      for (auto const way : {way_pos_t{0U}, way_pos_t{1U}, way_pos_t{2U}}) {
+        auto const turn = P::bidirectional_meet_cost(
+            params, *w_->r_, {n, 0U, direction::kForward}, {n, way, dir},
+            &sharing);
+        EXPECT_EQ(turn.cost_, way != 1U && dir == direction::kBackward
+                                  ? uturn_penalty
+                                  : 0U);
+        EXPECT_EQ(turn.duration_, duration_t{0U});
+      }
       auto b = bidirectional<P>{};
       auto const pos = location{coordinates.front()};
       b.reset({.profile_ = params,
@@ -181,9 +212,9 @@ TEST_F(endpoint_routing, bidirectional_meets_at_additional_node) {
       EXPECT_EQ(b.meet_point_2_.get_node(), n);
     }
   };
-  check.template operator()<car>();
-  check.template operator()<bus>();
-  check.template operator()<railway>();
+  check.template operator()<car>(car::parameters{}.uturn_penalty_);
+  check.template operator()<bus>(bus::parameters{}.uturn_penalty_);
+  check.template operator()<railway>(railway::kUturnPenalty);
 }
 
 TEST_F(endpoint_routing, rejects_invalid_matching_penalty_factors) {
