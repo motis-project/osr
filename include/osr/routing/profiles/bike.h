@@ -148,14 +148,6 @@ struct bike {
       return node{n, index == 0U ? direction::kForward : direction::kBackward};
     }
 
-    template <typename Fn>
-    static void for_each_state(ways::routing const&,
-                               node_idx_t const n,
-                               Fn&& fn) {
-      fn(node{n, direction::kForward});
-      fn(node{n, direction::kBackward});
-    }
-
     void write(node, path&) const {}
 
     std::array<node_idx_t, 2U> pred_;
@@ -188,7 +180,11 @@ struct bike {
   }
 
   static constexpr cost_and_duration bidirectional_meet_cost(
-      parameters const&, ways::routing const&, node const, node const) {
+      parameters const&,
+      ways::routing const&,
+      node const,
+      node const,
+      sharing_data const* = nullptr) {
     return {};
   }
 
@@ -393,8 +389,8 @@ template <bike_costing Costing,
           unsigned int ElevationUpCost,
           unsigned int ElevationExponentThousandth>
 struct bidirectional_meet_policy<
-    bike<Costing, ElevationUpCost, ElevationExponentThousandth>>
-    : profile_bidirectional_meet_policy<
-          bike<Costing, ElevationUpCost, ElevationExponentThousandth>> {};
+    bike<Costing, ElevationUpCost, ElevationExponentThousandth>> {
+  static constexpr auto const kEnumerateStates = true;
+};
 
 }  // namespace osr

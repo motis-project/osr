@@ -5,6 +5,9 @@
 
 #include "osr/extract/extract.h"
 #include "osr/lookup.h"
+#include "osr/routing/bidirectional.h"
+#include "osr/routing/profiles/car.h"
+#include "osr/routing/profiles/railway.h"
 #include "osr/routing/route.h"
 #include "osr/ways.h"
 
@@ -140,6 +143,45 @@ TEST_F(endpoint_routing, geometry_follows_physical_travel) {
       }
     }
   }
+}
+
+TEST_F(endpoint_routing, bidirectional_meets_at_additional_node) {
+  auto const check = [&]<typename P>() {
+    auto const params = typename P::parameters{};
+    auto const n = node_idx_t{w_->n_nodes()};
+    auto const coordinates = std::vector<geo::latlng>{{49., 8.001}};
+    auto const edges = hash_map<node_idx_t, std::vector<additional_edge>>{
+        {n,
+         {{.to_ = n, .underlying_way_ = way_idx_t{0U}},
+          {.to_ = n, .underlying_way_ = way_idx_t{1U}}}}};
+    auto const sharing =
+        sharing_data{.additional_node_offset_ = w_->n_nodes(),
+                     .additional_node_coordinates_ = coordinates,
+                     .additional_edges_ = edges};
+    for (auto const dir : {direction::kForward, direction::kBackward}) {
+      auto b = bidirectional<P>{};
+      auto const pos = location{coordinates.front()};
+      b.reset({.profile_ = params,
+               .w_ = w_.get(),
+               .max_ = 3600U,
+               .dir_ = dir,
+               .sharing_ = &sharing,
+               .start_loc_ = pos,
+               .end_loc_ = pos});
+      b.add_start(typename P::label{{n, 0U, direction::kForward}, 7U},
+                  duration_t{3U});
+      b.add_end(typename P::label{{n, 1U, direction::kForward}, 11U},
+                duration_t{5U});
+      b.run();
+      EXPECT_EQ(b.best_cost_, 18U);
+      EXPECT_EQ(b.best_duration_, duration_t{8U});
+      EXPECT_EQ(b.meet_point_1_.get_node(), n);
+      EXPECT_EQ(b.meet_point_2_.get_node(), n);
+    }
+  };
+  check.template operator()<car>();
+  check.template operator()<bus>();
+  check.template operator()<railway>();
 }
 
 }  // namespace
