@@ -484,8 +484,9 @@ std::optional<path> route_bidirectional(typename P::parameters const& params,
                                         sharing_data const* sharing,
                                         elevation_storage const* elevations,
                                         double const penalty_factor) {
-  if (auto const direct = try_direct(from, to); direct.has_value()) {
-    return direct->cost_ < max ? direct : std::nullopt;
+  if (auto const direct = try_direct(from, to);
+      direct.has_value() && direct->cost_ < max) {
+    return direct;
   }
 
   auto const search_max = std::max(kMinCostSettled, max);
@@ -549,8 +550,9 @@ std::optional<path> route_dijkstra(
     sharing_data const* sharing,
     elevation_storage const* elevations,
     route_options const& options) {
-  if (auto const direct = try_direct(from, to); direct.has_value()) {
-    return direct->cost_ < max ? direct : std::nullopt;
+  if (auto const direct = try_direct(from, to);
+      direct.has_value() && direct->cost_ < max) {
+    return direct;
   }
 
   auto const search_max = std::max(kMinCostSettled, max);
@@ -602,8 +604,9 @@ std::optional<path> route_astar(typename P::parameters const& params,
                                 sharing_data const* sharing,
                                 elevation_storage const* elevations,
                                 double const penalty_factor) {
-  if (auto const direct = try_direct(from, to); direct.has_value()) {
-    return direct->cost_ < max ? direct : std::nullopt;
+  if (auto const direct = try_direct(from, to);
+      direct.has_value() && direct->cost_ < max) {
+    return direct;
   }
 
   auto const search_max = std::max(kMinCostSettled, max);
@@ -733,9 +736,6 @@ std::vector<std::optional<path>> route(
       [&](auto&& label, duration_t const duration) {
         d.add_start(std::forward<decltype(label)>(label), duration);
       });
-  if (d.pq_.empty()) {
-    return result;
-  }
   d.run();
   for (auto i = std::size_t{0U}; i != result.size(); ++i) {
     auto const matches =
