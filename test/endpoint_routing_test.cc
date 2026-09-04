@@ -244,5 +244,34 @@ TEST_F(endpoint_routing, matching_penalty_saturates_before_integer_conversion) {
   }
 }
 
+TEST_F(endpoint_routing, explicit_bidirectional_uses_supported_profile_policy) {
+  auto const from = location{49., 8.0005};
+  auto const to = location{49.0005, 8.001};
+  auto const coordinates = std::vector<geo::latlng>{};
+  auto const edges = hash_map<node_idx_t, std::vector<additional_edge>>{};
+  auto const sharing = sharing_data{.additional_node_offset_ = w_->n_nodes(),
+                                    .additional_node_coordinates_ = coordinates,
+                                    .additional_edges_ = edges};
+  for (auto const profile :
+       {search_profile::kCarDropOff, search_profile::kCarDropOffWheelchair,
+        search_profile::kCarParking, search_profile::kCarParkingWheelchair,
+        search_profile::kBikeSharing, search_profile::kCarSharing,
+        search_profile::kHgv}) {
+    auto const params = get_parameters(profile);
+    for (auto const dir : {direction::kForward, direction::kBackward}) {
+      SCOPED_TRACE(to_str(profile));
+      auto const d = route_dijkstra(params, *w_, *l_, profile, from, to, 3600U,
+                                    dir, 2.0, nullptr, &sharing);
+      auto const b = route_bidirectional(params, *w_, *l_, profile, from, to,
+                                         3600U, dir, 2.0, nullptr, &sharing);
+      ASSERT_EQ(d.has_value(), b.has_value());
+      if (d.has_value()) {
+        EXPECT_EQ(d->cost_, b->cost_);
+        EXPECT_EQ(d->duration_, b->duration_);
+      }
+    }
+  }
+}
+
 }  // namespace
 }  // namespace osr
