@@ -155,17 +155,6 @@ struct railway {
 
     void write(node, path&) const {}
 
-    template <typename Fn>
-    static void for_each_state(ways::routing const& w,
-                               node_idx_t const n,
-                               Fn&& fn) {
-      auto const n_ways = static_cast<way_pos_t>(w.node_ways_[n].size());
-      for (auto i = way_pos_t{0U}; i != n_ways; ++i) {
-        fn(node{n, i, direction::kForward});
-        fn(node{n, i, direction::kBackward});
-      }
-    }
-
     static constexpr node get_node(node_idx_t const n,
                                    std::size_t const index) {
       return node{n, static_cast<way_pos_t>(index / 2U),
@@ -220,8 +209,9 @@ struct railway {
 
   template <typename Fn>
   static void resolve_all(ways::routing const& w, node_idx_t const n, Fn&& f) {
-    auto const ways = w.node_ways_[n];
-    for (auto i = way_pos_t{0U}; i != ways.size(); ++i) {
+    auto const n_ways = to_idx(n) < w.node_ways_.size() ? w.node_ways_[n].size()
+                                                        : kMaxWaysPerNode;
+    for (auto i = way_pos_t{0U}; i != n_ways; ++i) {
       f(node{n, i, direction::kForward});
       f(node{n, i, direction::kBackward});
     }
@@ -269,7 +259,14 @@ struct railway {
       parameters const& params,
       ways::routing const& w,
       node const fwd,
-      node const bwd) {
+      node const bwd,
+      sharing_data const* additional = nullptr) {
+    if (additional != nullptr && additional->is_additional_node(fwd.n_)) {
+      auto const uturn =
+          fwd.get_way(w, additional) == bwd.get_way(w, additional) &&
+          fwd.dir_ != bwd.dir_;
+      return {.cost_ = uturn ? kUturnPenalty : 0U};
+    }
     return get_transition_cost<railway>(params, w, get_reverse(bwd), fwd.way_,
                                         opposite(fwd.dir_), kUturnPenalty);
   }
@@ -417,7 +414,8 @@ struct railway {
 };
 
 template <>
-struct bidirectional_meet_policy<railway>
-    : profile_bidirectional_meet_policy<railway> {};
+struct bidirectional_meet_policy<railway> {
+  static constexpr auto const kEnumerateStates = true;
+};
 
 }  // namespace osr
