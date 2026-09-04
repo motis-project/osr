@@ -274,8 +274,7 @@ int main(int argc, char const* argv[]) {
                       << std::chrono::duration_cast<std::chrono::milliseconds>(
                              end_time - middle_time)
                       << std::endl;*/
-            auto const b_res =
-                b.get_cost_to_mp(b.meet_point_1_, b.meet_point_2_);
+            auto const b_res = b.best_cost_;
             if (!utl::any_of(ends, [&](auto&& e) {
                   auto const it = d.cost_.find(e.get_node().get_key());
                   auto const d_res = d.get_cost(e.get_node());
