@@ -155,17 +155,6 @@ struct generic_car {
 
     void write(node, path&) const {}
 
-    template <typename Fn>
-    static void for_each_state(ways::routing const& w,
-                               node_idx_t const n,
-                               Fn&& fn) {
-      auto const n_ways = static_cast<way_pos_t>(w.node_ways_[n].size());
-      for (auto i = way_pos_t{0U}; i != n_ways; ++i) {
-        fn(node{n, i, direction::kForward});
-        fn(node{n, i, direction::kBackward});
-      }
-    }
-
     static constexpr node get_node(node_idx_t const n,
                                    std::size_t const index) {
       return node{n, static_cast<way_pos_t>(index / 2U),
@@ -220,8 +209,9 @@ struct generic_car {
 
   template <typename Fn>
   static void resolve_all(ways::routing const& w, node_idx_t const n, Fn&& f) {
-    auto const ways = w.node_ways_[n];
-    for (auto i = way_pos_t{0U}; i != ways.size(); ++i) {
+    auto const n_ways = to_idx(n) < w.node_ways_.size() ? w.node_ways_[n].size()
+                                                        : kMaxWaysPerNode;
+    for (auto i = way_pos_t{0U}; i != n_ways; ++i) {
       f(node{n, i, direction::kForward});
       f(node{n, i, direction::kBackward});
     }
@@ -275,7 +265,14 @@ struct generic_car {
       parameters const& params,
       ways::routing const& w,
       node const fwd,
-      node const bwd) {
+      node const bwd,
+      sharing_data const* additional = nullptr) {
+    if (additional != nullptr && additional->is_additional_node(fwd.n_)) {
+      auto const uturn =
+          fwd.get_way(w, additional) == bwd.get_way(w, additional) &&
+          fwd.dir_ != bwd.dir_;
+      return {.cost_ = uturn ? params.uturn_penalty_ : 0U};
+    }
     if (w.template is_restricted<IsBus>(fwd.n_, fwd.way_, bwd.way_,
                                         direction::kForward)) {
       return infeasible_cost_and_duration();
@@ -474,7 +471,8 @@ using car = generic_car<false>;
 using bus = generic_car<true>;
 
 template <bool IsBus>
-struct bidirectional_meet_policy<generic_car<IsBus>>
-    : profile_bidirectional_meet_policy<generic_car<IsBus>> {};
+struct bidirectional_meet_policy<generic_car<IsBus>> {
+  static constexpr auto const kEnumerateStates = true;
+};
 
 }  // namespace osr

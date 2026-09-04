@@ -285,8 +285,7 @@ struct bidirectional {
       auto const opposite_candidate = opposite_cost_map->find(curr.get_key());
       if (opposite_candidate != end(*opposite_cost_map)) {
         if constexpr (bidirectional_meet_policy<P>::kEnumerateStates) {
-          using meet_policy = bidirectional_meet_policy<P>;
-          meet_policy::for_each_state(r, curr.get_key(), [&](node const other) {
+          P::resolve_all(r, curr.get_node(), [&](node const other) {
             auto const other_cost = opposite_candidate->second.cost(other);
             if (other_cost == kInfeasible) {
               return;
@@ -296,9 +295,9 @@ struct bidirectional {
             // not on which of the two queues it belongs to.
             constexpr auto const kCurrArrives =
                 SearchDir == direction::kForward;
-            auto const transition = meet_policy::transition_cost(
+            auto const transition = P::bidirectional_meet_cost(
                 params, r, kCurrArrives ? curr : other,
-                kCurrArrives ? other : curr);
+                kCurrArrives ? other : curr, sharing);
             if (!transition.feasible()) {
               return;
             }
