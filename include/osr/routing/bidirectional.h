@@ -306,59 +306,10 @@ struct bidirectional {
           });
         } else {
           auto const other_cost = opposite_candidate->second.cost(curr);
-          if (other_cost != kInfeasible) {
-            evaluate_meetpoint(curr_cost, other_cost, curr, curr);
-            return;
-          }
-          auto const pred_it = costs.find(curr.get_key());
-          if (pred_it == end(costs)) {
-            return;
-          }
-          auto const pred = pred_it->second.pred(curr);
-          if (!pred.has_value()) {
-            return;
-          }
-          P::template adjacent<opposite(SearchDir), WithBlocked>(
-              params, r, w.timezones_, curr, curr_duration, std::nullopt,
-              blocked, sharing, elevations,
-              [&](node const neighbor, std::uint32_t const, duration_t const,
-                  distance_t, way_idx_t const, std::uint16_t, std::uint16_t,
-                  elevation_storage::elevation const, bool const) {
-                if (neighbor.get_key() != pred->get_key()) {
-                  return;
-                }
-                auto const opposite_it =
-                    opposite_cost_map->find(neighbor.get_key());
-                if (opposite_it == end(*opposite_cost_map)) {
-                  return;
-                }
-                auto const opposite_curr = opposite_it->second.pred(neighbor);
-                if (!opposite_curr.has_value() ||
-                    opposite_curr->get_key() != curr.get_key()) {
-                  return;
-                }
-                auto const opposite_curr_cost =
-                    opposite_candidate->second.cost(*opposite_curr);
-                auto const pred_cost = get_cost<PathDir>(*pred);
-                auto const opposite_pred_cost =
-                    opposite_it->second.cost(neighbor);
-                auto const evaluate_meetpoint_with_potential_u_turn_cost =
-                    [&](cost_t const cost_1, cost_t const cost_2,
-                        node const meet_1, node const meet_2) {
-                      evaluate_meetpoint(cost_1, cost_2,
-                                         is_fwd ? meet_1 : meet_2,
-                                         is_fwd ? meet_2 : meet_1);
-                    };
-                if (static_cast<std::uint64_t>(pred_cost) + opposite_pred_cost >
-                    static_cast<std::uint64_t>(curr_cost) +
-                        opposite_curr_cost) {
-                  evaluate_meetpoint_with_potential_u_turn_cost(
-                      pred_cost, opposite_pred_cost, *pred, neighbor);
-                } else {
-                  evaluate_meetpoint_with_potential_u_turn_cost(
-                      curr_cost, opposite_curr_cost, curr, *opposite_curr);
-                }
-              });
+          utl::verify(
+              other_cost != kInfeasible,
+              "bidirectional profile must enumerate distinct meet states");
+          evaluate_meetpoint(curr_cost, other_cost, curr, curr);
         }
       }
     };
