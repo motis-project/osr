@@ -1,4 +1,10 @@
 #include "osr/routing/elevation_profile.h"
+#include <algorithm>
+#include <iterator>
+#include <vector>
+
+#include "utl/helpers/algorithm.h"
+
 #include "geo/latlng.h"
 
 namespace osr {
@@ -76,6 +82,26 @@ height_profile::height_profile(
   }
 
   to = p.segments_.back().polyline_.back();
+}
+
+height_profile::value_t height_profile::median() {
+  if (elevation_.empty()) {
+    return value_t::invalid();
+  }
+
+  if (elevation_.size() == 1) {
+    return elevation_[0];
+  }
+
+  auto sorted = std::vector<value_t>{elevation_};
+  auto const n = sorted.size() / 2;
+  utl::nth_element(sorted, n);
+
+  if (n % 2 == 0) {
+    return (sorted[n] + sorted[n - 1]) / 2;
+  }
+
+  return sorted[n];
 }
 
 }  // namespace osr

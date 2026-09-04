@@ -18,11 +18,7 @@ struct height_profile {
                  preprocessing::elevation::provider const&,
                  double resolution);
 
-  value_t median() { return 0; }
-  value_t min() { return 0; }
-  value_t max() { return 0; }
-  value_t up_elevation() { return 0; }
-  value_t down_elevation() { return 0; }
+  value_t median();
 
   std::vector<loc_t> points_{};
   std::vector<value_t> elevation_{};
