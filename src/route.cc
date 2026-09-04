@@ -77,7 +77,7 @@ cost_t matching_penalty(double const distance,
                         double const factor) {
   auto const additional_distance = std::max(0.0, distance - closest_distance);
   auto const penalty = std::round(distance + additional_distance * factor);
-  return penalty >= static_cast<double>(kInfeasible)
+  return !(penalty < static_cast<double>(kInfeasible))
              ? kInfeasible
              : static_cast<cost_t>(penalty);
 }
