@@ -48,6 +48,7 @@ struct bidirectional {
     meet_point_2_ = meet_point_2_.invalid();
     best_cost_ = kInfeasible;
     best_duration_ = kMaxDuration;
+    best_transition_ = {};
   }
 
   void reset(params_t const& p) {
@@ -161,15 +162,6 @@ struct bidirectional {
            (dir == direction::kForward ? 1 : -1);
   }
 
-  cost_t get_cost_to_mp(node const n1, node const n2) const {
-    auto const f_cost = get_cost<direction::kForward>(n1);
-    auto const b_cost = get_cost<direction::kBackward>(n2);
-    if (f_cost == kInfeasible || b_cost == kInfeasible) {
-      return kInfeasible;
-    }
-    return clamp_cost(static_cast<std::uint64_t>(f_cost) + b_cost);
-  }
-
   duration_t get_duration_to_mp(node const n1, node const n2) const {
     auto const f = cost1_.find(n1.get_key());
     auto const b = cost2_.find(n2.get_key());
@@ -278,6 +270,7 @@ struct bidirectional {
             meet_point_2_ = meetpoint2;
             best_cost_ = clamp_cost(tentative);
             best_duration_ = tentative_duration;
+            best_transition_ = transition;
 
             if constexpr (kDebug) {
               std::cout << " with cost " << best_cost_ << " -> ACCEPTED\n";
@@ -437,6 +430,7 @@ struct bidirectional {
   node meet_point_2_;
   cost_t best_cost_;
   duration_t best_duration_;
+  cost_and_duration best_transition_;
   ankerl::unordered_dense::map<key, entry, hash> cost1_;
   ankerl::unordered_dense::map<key, entry, hash> cost2_;
   entry_storage_arena arena_;

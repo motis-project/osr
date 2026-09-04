@@ -226,6 +226,15 @@ path reconstruct_bi(typename P::parameters const& params,
       backward_n.get_node(), backward_n.get_mode(), endpoint_role::kTarget,
       true, dir));
 
+  // Neither search half includes the turn joining the two meeting states,
+  // so we add it to the segment leaving the meeting node in travel direction.
+  auto& outgoing = dir == direction::kForward ? backward_segments.front()
+                                              : forward_segments.front();
+  outgoing.cost_ = clamp_cost(static_cast<std::uint64_t>(outgoing.cost_) +
+                              b.best_transition_.cost_);
+  outgoing.duration_ =
+      clamp_add_duration(outgoing.duration_, b.best_transition_.duration_);
+
   if (dir == direction::kForward) {
     std::reverse(forward_segments.begin(), forward_segments.end());
   } else {
