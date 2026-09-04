@@ -1,4 +1,5 @@
 #include <filesystem>
+#include <limits>
 #include <numeric>
 
 #include "gtest/gtest.h"
@@ -7,6 +8,7 @@
 #include "osr/lookup.h"
 #include "osr/routing/bidirectional.h"
 #include "osr/routing/profiles/car.h"
+#include "osr/routing/profiles/foot.h"
 #include "osr/routing/profiles/railway.h"
 #include "osr/routing/route.h"
 #include "osr/ways.h"
@@ -182,6 +184,64 @@ TEST_F(endpoint_routing, bidirectional_meets_at_additional_node) {
   check.template operator()<car>();
   check.template operator()<bus>();
   check.template operator()<railway>();
+}
+
+TEST_F(endpoint_routing, rejects_invalid_matching_penalty_factors) {
+  auto const params = get_parameters(search_profile::kFoot);
+  auto const from = location{49., 8.00099};
+  auto const to = location{49.00001, 8.001};
+  for (auto const factor : {-1.0, std::numeric_limits<double>::quiet_NaN(),
+                            std::numeric_limits<double>::infinity()}) {
+    auto const options = route_options{.matching_penalty_factor_ = factor};
+    for (auto const algo :
+         {routing_algorithm::kDijkstra, routing_algorithm::kAStarBi}) {
+      EXPECT_THROW(route(params, *w_, *l_, search_profile::kFoot, from, to,
+                         3600U, direction::kForward, 2.0, nullptr, nullptr,
+                         nullptr, algo, std::nullopt, options),
+                   std::exception);
+    }
+    EXPECT_THROW(route_astar(params, *w_, *l_, search_profile::kFoot, from, to,
+                             3600U, direction::kForward, 2.0, nullptr, nullptr,
+                             nullptr, std::nullopt, options),
+                 std::exception);
+    EXPECT_THROW(route(
+                     params, *w_, *l_, search_profile::kFoot, from,
+                     std::vector<location>{to}, 3600U, direction::kForward, 2.0,
+                     nullptr, nullptr, nullptr,
+                     [](path const&) { return false; }, std::nullopt, options),
+                 std::exception);
+  }
+}
+
+TEST_F(endpoint_routing, matching_penalty_saturates_before_integer_conversion) {
+  using foot_t = foot<false, elevator_tracking>;
+  auto const params = foot_t::parameters{};
+  auto const from = location{49., 8.0005};
+  auto const to = location{49.0005, 8.001};
+  auto from_matches = match_result{};
+  auto to_matches = match_result{};
+  l_->match<foot_t>(params, from, false, direction::kForward, 2.0, nullptr,
+                    from_matches);
+  l_->match<foot_t>(params, to, true, direction::kForward, 2.0, nullptr,
+                    to_matches);
+  auto const fm = from_matches[match_idx_t{0U}];
+  ASSERT_FALSE(fm.empty());
+  auto penalized = match_result{};
+  penalized.start(fm.lvl_);
+  penalized.add(0.0F, fm.way_.front(), {});  // Unusable nearest candidate.
+  for (auto i = std::size_t{0U}; i != fm.size(); ++i) {
+    penalized.add(10.0F, fm.way_[i], fm.nodes_[i]);
+  }
+  penalized.finish();
+  for (auto const factor : {0.0, 1.0e10, std::numeric_limits<double>::max()}) {
+    auto const p =
+        route(params, *w_, *l_, search_profile::kFoot, from, to,
+              penalized[match_idx_t{0U}], to_matches[match_idx_t{0U}], 3600U,
+              direction::kForward, nullptr, nullptr, nullptr,
+              routing_algorithm::kDijkstra, std::nullopt,
+              route_options{.matching_penalty_factor_ = factor});
+    EXPECT_EQ(p.has_value(), factor == 0.0);
+  }
 }
 
 }  // namespace
