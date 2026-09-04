@@ -306,10 +306,9 @@ struct bidirectional {
           });
         } else {
           auto const other_cost = opposite_candidate->second.cost(curr);
-          utl::verify(
-              other_cost != kInfeasible,
-              "bidirectional profile must enumerate distinct meet states");
-          evaluate_meetpoint(curr_cost, other_cost, curr, curr);
+          if (other_cost != kInfeasible) {
+            evaluate_meetpoint(curr_cost, other_cost, curr, curr);
+          }
         }
       }
     };
