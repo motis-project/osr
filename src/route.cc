@@ -161,6 +161,21 @@ path::segment make_endpoint_segment(lookup const& l,
           .mode_ = mode};
 }
 
+template <Profile P, typename CostMap>
+endpoint_root<P> const& get_endpoint_root(
+    CostMap const& costs,
+    std::span<endpoint_root<P> const> const roots,
+    typename P::node const node) {
+  auto const& entry = costs.at(node.get_key());
+  auto const cd = cost_and_duration{.cost_ = entry.cost(node),
+                                    .duration_ = entry.duration(node)};
+  auto const root = std::find_if(begin(roots), end(roots), [&](auto const& r) {
+    return r.node_ == node && r.connection_ == cd;
+  });
+  utl::verify(root != end(roots), "no exact endpoint root for settled state");
+  return *root;
+}
+
 template <Profile P>
 path reconstruct_bi(typename P::parameters const& params,
                     ways const& w,
@@ -171,8 +186,8 @@ path reconstruct_bi(typename P::parameters const& params,
                     bidirectional<P> const& b,
                     location const& from,
                     location const& to,
-                    endpoint_root<P> const& start,
-                    endpoint_root<P> const& destination,
+                    std::span<endpoint_root<P> const> const starts,
+                    std::span<endpoint_root<P> const> const destinations,
                     cost_t const cost,
                     duration_t const duration,
                     direction const dir) {
@@ -199,6 +214,7 @@ path reconstruct_bi(typename P::parameters const& params,
     forward_n = *pred;
   }
 
+  auto const& start = get_endpoint_root<P>(b.cost1_, starts, forward_n);
   forward_segments.push_back(make_endpoint_segment(
       l, from, start.endpoint_, start.connection_, forward_n.get_node(),
       forward_n.get_mode(), endpoint_role::kSource, dir == direction::kBackward,
@@ -229,6 +245,8 @@ path reconstruct_bi(typename P::parameters const& params,
     backward_n = *pred;
   }
 
+  auto const& destination =
+      get_endpoint_root<P>(b.cost2_, destinations, backward_n);
   backward_segments.push_back(make_endpoint_segment(
       l, to, destination.endpoint_, destination.connection_,
       backward_n.get_node(), backward_n.get_mode(), endpoint_role::kTarget,
@@ -279,7 +297,7 @@ path reconstruct(typename P::parameters const& params,
                  Search const& search,
                  location const& from,
                  location const& to,
-                 endpoint_root<P> const& start,
+                 std::span<endpoint_root<P> const> const starts,
                  endpoint_candidate const& destination,
                  cost_and_duration const destination_connection,
                  typename P::node const dest_node,
@@ -311,6 +329,7 @@ path reconstruct(typename P::parameters const& params,
     n = *pred;
   }
 
+  auto const& start = get_endpoint_root<P>(search.cost_, starts, n);
   segments.push_back(make_endpoint_segment(
       l, from, start.endpoint_, start.connection_, n.get_node(), n.get_mode(),
       endpoint_role::kSource, dir == direction::kBackward, dir));
@@ -329,37 +348,6 @@ path reconstruct(typename P::parameters const& params,
                 .segments_ = segments};
   search.cost_.at(dest_node.get_key()).write(dest_node, p);
   return p;
-}
-
-template <Profile P, typename CostMap>
-endpoint_root<P> const& get_endpoint_root(
-    CostMap const& costs,
-    std::span<endpoint_root<P> const> const roots,
-    typename P::node node) {
-  while (true) {
-    auto const pred = costs.at(node.get_key()).pred(node);
-    if (!pred.has_value()) {
-      break;
-    }
-    node = *pred;
-  }
-  auto const& entry = costs.at(node.get_key());
-  auto const cost = entry.cost(node);
-  auto const duration = entry.duration(node);
-  auto same_cost = static_cast<endpoint_root<P> const*>(nullptr);
-  for (auto const& root : roots) {
-    if (root.node_ != node || root.connection_.cost_ != cost) {
-      continue;
-    }
-    if (root.connection_.duration_ == duration) {
-      return root;
-    }
-    if (same_cost == nullptr) {
-      same_cost = &root;
-    }
-  }
-  utl::verify(same_cost != nullptr, "no endpoint root for settled state");
-  return *same_cost;
 }
 
 // Turns every match candidate into the search roots it can be entered from,
@@ -544,15 +532,13 @@ std::optional<path> route_bidirectional(typename P::parameters const& params,
   if (b.meet_point_1_.get_node() == node_idx_t::invalid()) {
     return std::nullopt;
   }
-  auto const& start = get_endpoint_root<P>(b.cost1_, starts, b.meet_point_1_);
-  auto const& destination =
-      get_endpoint_root<P>(b.cost2_, destinations, b.meet_point_2_);
   auto const cost = b.best_cost_;
   if (cost >= max) {
     return std::nullopt;
   }
-  return reconstruct_bi(params, w, l, blocked, sharing, elevations, b, from, to,
-                        start, destination, cost, b.best_duration_, dir);
+  return reconstruct_bi<P>(params, w, l, blocked, sharing, elevations, b, from,
+                           to, starts, destinations, cost, b.best_duration_,
+                           dir);
 }
 
 template <Profile P>
@@ -605,9 +591,8 @@ std::optional<path> route_dijkstra(
   if (!candidate.has_value()) {
     return std::nullopt;
   }
-  auto const& start = get_endpoint_root<P>(d.cost_, starts, candidate->node_);
   return reconstruct<P>(params, w, l, blocked, sharing, elevations, d, from, to,
-                        start, candidate->endpoint_, candidate->connection_,
+                        starts, candidate->endpoint_, candidate->connection_,
                         candidate->node_, candidate->total_, dir, start_time);
 }
 
@@ -668,9 +653,8 @@ std::optional<path> route_astar(typename P::parameters const& params,
   if (!candidate.has_value()) {
     return std::nullopt;
   }
-  auto const& start = get_endpoint_root<P>(a.cost_, starts, candidate->node_);
   return reconstruct<P>(params, w, l, blocked, sharing, elevations, a, from, to,
-                        start, candidate->endpoint_, candidate->connection_,
+                        starts, candidate->endpoint_, candidate->connection_,
                         candidate->node_, candidate->total_, dir, start_time);
 }
 
@@ -697,11 +681,10 @@ struct one_to_many_state_impl final : public one_to_many_state {
     }
     auto const& c = *candidates_[k];
     auto const& sp = d_.params_;
-    auto const& start = get_endpoint_root<P>(d_.cost_, starts_, c.node_);
     return osr::reconstruct<P>(sp.profile_, w, l, sp.blocked_, sharing,
-                               sp.elevations_, d_, sp.start_loc_, to_[k], start,
-                               c.endpoint_, c.connection_, c.node_, c.total_,
-                               sp.dir_, sp.start_time_);
+                               sp.elevations_, d_, sp.start_loc_, to_[k],
+                               starts_, c.endpoint_, c.connection_, c.node_,
+                               c.total_, sp.dir_, sp.start_time_);
   }
 
   // The search owns everything it ran with (profile parameters, blocked,
@@ -782,10 +765,8 @@ std::vector<std::optional<path>> route(
                   .duration_ = candidate->total_.duration_};
     d.cost_.at(candidate->node_.get_key()).write(candidate->node_, p);
     if (do_reconstruct(p)) {
-      auto const& start =
-          get_endpoint_root<P>(d.cost_, starts, candidate->node_);
       p = reconstruct<P>(params, w, l, blocked, sharing, elevations, d, from,
-                         to[i], start, candidate->endpoint_,
+                         to[i], starts, candidate->endpoint_,
                          candidate->connection_, candidate->node_,
                          candidate->total_, dir, start_time);
     }
