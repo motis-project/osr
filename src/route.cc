@@ -788,25 +788,9 @@ std::optional<path> route_bidirectional(profile_parameters const& params,
                                         sharing_data const* sharing,
                                         elevation_storage const* elevations,
                                         route_options const& options) {
-  verify_matching_penalty_factor(options.matching_penalty_factor_);
-  return with_profile(profile, [&]<Profile P>(P&&) -> std::optional<path> {
-    auto const& pp = std::get<typename P::parameters>(params);
-    auto from_m = match_result{};
-    l.match<P>(pp, from, false, dir, max_match_distance, blocked, from_m);
-    auto to_m = match_result{};
-    l.match<P>(pp, to, true, dir, max_match_distance, blocked, to_m);
-    auto const from_match = from_m[match_idx_t{0U}];
-    auto const to_match = to_m[match_idx_t{0U}];
-
-    if (from_match.empty() || to_match.empty()) {
-      return std::nullopt;
-    }
-
-    auto b = bidirectional<P>{};
-    return route_bidirectional(pp, w, l, b, from, to, from_match, to_match, max,
-                               dir, blocked, sharing, elevations,
-                               options.matching_penalty_factor_);
-  });
+  return route(params, w, l, profile, from, to, max, dir, max_match_distance,
+               blocked, sharing, elevations, routing_algorithm::kAStarBi,
+               std::nullopt, options);
 }
 
 std::vector<std::optional<path>> route(
@@ -863,26 +847,9 @@ std::optional<path> route_dijkstra(
     elevation_storage const* elevations,
     std::optional<routing_time_t> const start_time,
     route_options const& options) {
-  verify_matching_penalty_factor(options.matching_penalty_factor_);
-  return with_profile(profile, [&]<Profile P>(P&&) -> std::optional<path> {
-    auto const& pp = std::get<typename P::parameters>(params);
-    auto from_m = match_result{};
-    l.match<P>(pp, from, false, dir, max_match_distance, blocked, from_m,
-               start_time);
-    auto to_m = match_result{};
-    l.match<P>(pp, to, true, dir, max_match_distance, blocked, to_m,
-               start_time);
-    auto const from_match = from_m[match_idx_t{0U}];
-    auto const to_match = to_m[match_idx_t{0U}];
-
-    if (from_match.empty() || to_match.empty()) {
-      return std::nullopt;
-    }
-
-    auto d = dijkstra<P>{};
-    return route_dijkstra(pp, w, l, d, from, to, from_match, to_match, max, dir,
-                          start_time, blocked, sharing, elevations, options);
-  });
+  return route(params, w, l, profile, from, to, max, dir, max_match_distance,
+               blocked, sharing, elevations, routing_algorithm::kDijkstra,
+               start_time, options);
 }
 
 std::optional<path> route_astar(profile_parameters const& params,
@@ -1026,20 +993,18 @@ std::optional<path> route(profile_parameters const& params,
                           std::optional<routing_time_t> const start_time,
                           route_options const& options) {
   verify_matching_penalty_factor(options.matching_penalty_factor_);
-  if (requires_dijkstra(profile)) {
-    algo = routing_algorithm::kDijkstra;
-  }
-  switch (algo) {
-    case routing_algorithm::kDijkstra:
-      return route_dijkstra(params, w, l, profile, from, to, max, dir,
-                            max_match_distance, blocked, sharing, elevations,
-                            start_time, options);
-    case routing_algorithm::kAStarBi:
-      return route_bidirectional(params, w, l, profile, from, to, max, dir,
-                                 max_match_distance, blocked, sharing,
-                                 elevations, options);
-  }
-  throw utl::fail("not implemented");
+  return with_profile(profile, [&]<Profile P>(P&&) {
+    auto const& pp = std::get<typename P::parameters>(params);
+    auto from_matches = match_result{};
+    auto to_matches = match_result{};
+    l.match<P>(pp, from, false, dir, max_match_distance, blocked, from_matches,
+               start_time);
+    l.match<P>(pp, to, true, dir, max_match_distance, blocked, to_matches,
+               start_time);
+    return route(params, w, l, profile, from, to, from_matches[match_idx_t{0U}],
+                 to_matches[match_idx_t{0U}], max, dir, blocked, sharing,
+                 elevations, algo, start_time, options);
+  });
 }
 
 }  // namespace osr
