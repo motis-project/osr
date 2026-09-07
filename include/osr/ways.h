@@ -533,7 +533,6 @@ struct ways {
       struct offset {
         CISTA_COMPARABLE()
 
-        point connecting_point_;
         way_idx_t way_;
         unsigned segment_;
         node_idx_t left_;

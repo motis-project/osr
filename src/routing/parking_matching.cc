@@ -76,7 +76,7 @@ std::tuple<geo::latlng, double, component_idx_t> analyze_surroundings(
 template <Profile P>
 // std::optional<std::pair<point, match_view_t>> find_closest(
 // std::optional<match_view_t> find_closest(
-    std::optional<way_candidate> find_closest(
+std::optional<way_candidate> find_closest(
     [[maybe_unused]] ways const& w,
     lookup const& l,
     location const& loc,
@@ -89,26 +89,25 @@ template <Profile P>
   // auto best = std::optional<match_view_t>{};
   auto best = std::optional<way_candidate>{};
   auto matches = match_result{};
-  // auto way_candidates = 
-		l.match<P>(params, loc, false, dir, 250.0, nullptr,
-                                   matches, std::nullopt);
+  // auto way_candidates =
+  l.match<P>(params, loc, false, dir, 250.0, nullptr, matches, std::nullopt);
   auto best_score = std::numeric_limits<double>::min();
 
   for (auto i = match_idx_t{0U}; i < match_idx_t{matches.size()}; ++i) {
     auto const match = matches[i];
-		for (auto j = 0U; j < match.size(); ++j) {
-			auto const wc = way_candidate{
-				.dist_to_way_ = match.dist_to_way_[j],
-				.way_ = match.way_[j],
-				.closest_point_on_way_ = geo::latlng{},
-			};
-        auto const s = score(match.dist_to_way_[j], match.way_[j]);
-        if (s > best_score) {
-          // best = {match};
-	best = wc;
-          best_score = s;
-        }
-		}
+    for (auto j = 0U; j < match.size(); ++j) {
+      auto const wc = way_candidate{
+          .dist_to_way_ = match.dist_to_way_[j],
+          .way_ = match.way_[j],
+          .closest_point_on_way_ = geo::latlng{},
+      };
+      auto const s = score(match.dist_to_way_[j], match.way_[j]);
+      if (s > best_score) {
+        // best = {match};
+        best = wc;
+        best_score = s;
+      }
+    }
     // auto const way = match.way_;
     // if (w.r_->way_component_[way] == matching_component) {
     //   auto const s = score(match);
@@ -171,10 +170,12 @@ void connect_parking_ways(
     return -((1 + ((is_preferred ? 0.0 : 4.0) / (dist_to_way + 1.0))) *
              (dist_to_way + 2.5));
   };
-  auto const car_score = [&](double const dist_to_way, way_idx_t const way_idx) -> double {
+  auto const car_score = [&](double const dist_to_way,
+                             way_idx_t const way_idx) -> double {
     return score(dist_to_way, way_extra[way_idx].is_parking_aisle());
   };
-  auto const foot_score = [&](double const dist_to_way, way_idx_t const way_idx) -> double {
+  auto const foot_score = [&](double const dist_to_way,
+                              way_idx_t const way_idx) -> double {
     return score(dist_to_way, way_extra[way_idx].is_preferred_footpath());
   };
 
@@ -213,31 +214,34 @@ void connect_parking_ways(
         idx == 0
             ? way_candidate{.dist_to_way_ = min_dist,
                             .way_ = way_idx,
-                            .left_ = {.lvl_ = lvl,
-                                      .way_dir_ = is_from ? direction::kBackward
-                                                          : direction::kForward,
-                                      .node_ = node,
-                                      .dist_to_node_ = min_dist,
-                                      .cost_ = cost,
-                                      },
+                            .left_ =
+                                {
+                                    .lvl_ = lvl,
+                                    .way_dir_ = is_from ? direction::kBackward
+                                                        : direction::kForward,
+                                    .node_ = node,
+                                    .dist_to_node_ = min_dist,
+                                    .cost_ = cost,
+                                },
                             .right_ = {},
                             .closest_point_on_way_ =
                                 w.r_->node_positions_[node].as_latlng(),
                             .segment_idx_ = 0U}
-            : way_candidate{
-                  .dist_to_way_ = min_dist,
-                  .way_ = way_idx,
-                  .left_ = {},
-                  .right_ = {.lvl_ = lvl,
-                             .way_dir_ = is_from ? direction::kForward
-                                                 : direction::kBackward,
-                             .node_ = node,
-                             .dist_to_node_ = min_dist,
-                             .cost_ = cost,
-                             },
-                  .closest_point_on_way_ =
-                      w.r_->node_positions_[node].as_latlng(),
-                  .segment_idx_ = idx - 1U}};
+            : way_candidate{.dist_to_way_ = min_dist,
+                            .way_ = way_idx,
+                            .left_ = {},
+                            .right_ =
+                                {
+                                    .lvl_ = lvl,
+                                    .way_dir_ = is_from ? direction::kForward
+                                                        : direction::kBackward,
+                                    .node_ = node,
+                                    .dist_to_node_ = min_dist,
+                                    .cost_ = cost,
+                                },
+                            .closest_point_on_way_ =
+                                w.r_->node_positions_[node].as_latlng(),
+                            .segment_idx_ = idx - 1U}};
   };
 
   auto const make_connection =
@@ -328,9 +332,9 @@ void connect_parking_ways(
     auto conn =
         make_connection(center, approx_distance_lng_degrees, *car_offset,
                         car_entrance, foot_entrance, *foot_offset);
-    add_additional_connection(*w.r_, to_offset(w, *car_offset),
-                              to_offset(w, *foot_offset), std::move(conn),
-                              true);
+    add_additional_connection(*w.r_, to_offset(w, *car_offset, conn.front()),
+                              to_offset(w, *foot_offset, conn.back()),
+                              std::move(conn), true);
   }
   utl::sort(w.r_->additional_node_connections_);
 }

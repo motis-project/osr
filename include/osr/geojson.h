@@ -683,10 +683,12 @@ struct geojson_writer {
       auto const& connection = w_.r_->additional_connections_[connection_idx];
       auto geom = vec<vec<point>>{get_additional_connection_points(connection)};
 
-      for (auto const& offset : {connection.from_, connection.to_}) {
+      for (auto const [offset, start_point] :
+           {std::pair{connection.from_, connection.connection_.front()},
+            std::pair{connection.to_, connection.connection_.back()}}) {
         for (auto const is_left : {true, false}) {
           if (auto line = osr::get_additional_connection_offset_points(
-                  w, offset, is_left);
+                  w, offset, start_point, is_left);
               !line.empty()) {
             geom.emplace_back(line);
           }

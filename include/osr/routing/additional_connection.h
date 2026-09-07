@@ -44,10 +44,12 @@ vec<point> get_additional_connection_points(
 vec<point> get_additional_connection_offset_points(
     ways const&,
     ways::routing::additional_connection::offset const&,
+    point const&,
     bool is_left);
 
 ways::routing::additional_connection::offset to_offset(ways const&,
-                                                       way_candidate const&);
+                                                       way_candidate const&,
+                                                       point const&);
 
 void for_each_addional_connection(
     ways::routing const&,

@@ -21,17 +21,6 @@ connection_idx_t to_connection_idx(ways::routing const& r,
 way_idx_t to_way_idx(ways::routing const& r, connection_idx_t const conn_idx) {
   return way_idx_t{to_idx(conn_idx) + r.way_component_.size()};
 }
-vec<point> get_connection(vec<point> const& interior,
-                          point const& from,
-                          point const& to) {
-  auto connection = vec<point>{from};
-  connection.reserve(interior.size() + 2);
-  for (auto const& p : interior) {
-    connection.emplace_back(p);
-  }
-  connection.emplace_back(to);
-  return connection;
-}
 
 direction invert(direction const dir, bool const revert) {
   return revert ? dir == direction::kForward ? direction::kBackward
@@ -101,10 +90,9 @@ way_idx_t add_additional_connection(
       add_node(node_idx);
     }
   }
-  r.additional_connections_.emplace_back(
-      std::move(connection), std::move(from), std::move(to),
-      geo::length(to_polyline(get_connection(connection, from.connecting_point_,
-                                             to.connecting_point_))));
+  r.additional_connections_.emplace_back(std::move(connection), std::move(from),
+                                         std::move(to),
+                                         geo::length(to_polyline(connection)));
   return to_way_idx(r, conn_idx);
 }
 
@@ -121,26 +109,25 @@ geo::polyline get_additional_connection_polyline(
     }
   };
   append_to_polyline(reverse(get_additional_connection_offset_points(
-      w, conn.from_, conn.from_.left_ == from)));
+      w, conn.from_, conn.connection_.front(), conn.from_.left_ == from)));
   append_to_polyline(get_additional_connection_points(conn));
   append_to_polyline(get_additional_connection_offset_points(
-      w, conn.to_, conn.to_.left_ == to));
+      w, conn.to_, conn.connection_.back(), conn.to_.left_ == to));
 
   return polyline;
 }
 
 vec<point> get_additional_connection_points(
     ways::routing::additional_connection const& connection) {
-  return get_connection(connection.connection_,
-                        connection.from_.connecting_point_,
-                        connection.to_.connecting_point_);
+  return connection.connection_;
 }
 
 vec<point> get_additional_connection_offset_points(
     ways const& w,
     ways::routing::additional_connection::offset const& offset,
+    point const& start_point,
     bool const is_left) {
-  auto line = vec{offset.connecting_point_};
+  auto line = vec{start_point};
 
   auto const way_idx = offset.way_;
   auto const target_node = is_left ? offset.left_ : offset.right_;
@@ -171,23 +158,23 @@ vec<point> get_additional_connection_offset_points(
 }
 
 ways::routing::additional_connection::offset to_offset(
-    ways const& w, way_candidate const& wc) {
-  auto offset = ways::routing::additional_connection::offset{
-      .connecting_point_ = point::from_latlng(wc.closest_point_on_way_),
-      .way_ = wc.way_,
-      .segment_ = wc.segment_idx_,
-      .left_ = wc.left_.node_,
-      .right_ = wc.right_.node_,
-      .dist_left_ = 0U,
-      .dist_right_ = 0U};
+    ways const& w, way_candidate const& wc, point const& start_point) {
+  auto offset =
+      ways::routing::additional_connection::offset{.way_ = wc.way_,
+                                                   .segment_ = wc.segment_idx_,
+                                                   .left_ = wc.left_.node_,
+                                                   .right_ = wc.right_.node_,
+                                                   .dist_left_ = 0U,
+                                                   .dist_right_ = 0U};
 
   if (wc.left_.node_ != node_idx_t::invalid()) {
-    offset.dist_left_ = geo::length(
-        to_polyline(get_additional_connection_offset_points(w, offset, true)));
+    offset.dist_left_ = geo::length(to_polyline(
+        get_additional_connection_offset_points(w, offset, start_point, true)));
   }
   if (wc.right_.node_ != node_idx_t::invalid()) {
-    offset.dist_right_ = geo::length(
-        to_polyline(get_additional_connection_offset_points(w, offset, false)));
+    offset.dist_right_ =
+        geo::length(to_polyline(get_additional_connection_offset_points(
+            w, offset, start_point, false)));
   }
 
   return offset;
