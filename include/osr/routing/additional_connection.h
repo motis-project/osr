@@ -34,25 +34,21 @@ way_idx_t add_additional_connection(
     bool const is_parking);
 
 geo::polyline get_additional_connection_polyline(
-    ways const&,
     lookup const&,
     ways::routing::additional_connection const&,
     node_idx_t from,
     node_idx_t to);
 
-vec<point> get_additional_connection_points(
+geo::polyline get_additional_connection_points(
     ways::routing::additional_connection const&);
 
-vec<point> get_additional_connection_offset_points(
-    ways const&,
+geo::polyline get_additional_connection_offset_points(
     lookup const&,
     ways::routing::additional_connection::offset const&,
     point const&,
     bool is_left);
 
-ways::routing::additional_connection::offset to_offset(ways const&,
-                                                       way_candidate const&,
-                                                       point const&);
+ways::routing::additional_connection::offset to_offset(way_candidate const&);
 
 void for_each_addional_connection(
     ways::routing const&,

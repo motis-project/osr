@@ -73,14 +73,15 @@ std::tuple<geo::latlng, double, component_idx_t> analyze_surroundings(
           get_largest_component_idx(bbox)};
 }
 
+// TODO: MK - Use car_parking + ::footp
 template <Profile P>
 std::optional<way_candidate> find_closest(
-    [[maybe_unused]] ways const& w,
+    ways const& w,
     lookup const& l,
     location const& loc,
     direction const dir,
-    [[maybe_unused]] component_idx_t const matching_component,
-	[[maybe_unused]] way_idx_t const debug_way_idx,
+    component_idx_t const matching_component,
+    [[maybe_unused]] way_idx_t const debug_way_idx,
     std::function<double(double, way_idx_t)> const& score) {
   auto const params = typename P::parameters{};
 
@@ -100,7 +101,7 @@ std::optional<way_candidate> find_closest(
           .dist_to_way_ = match.dist_to_way_[j],
           .way_ = way_idx,
           .left_ = match.left(j),
-          .right_= match.right(j),
+          .right_ = match.right(j),
           .closest_point_on_way_ = loc.pos_,
       };
       auto const s = score(match.dist_to_way_[j], match.way_[j]);
@@ -294,7 +295,8 @@ void connect_parking_ways(
             ? get_connected_way(way_idx, center, approx_distance_lng_degrees,
                                 false, is_foot_accessible)
             : find_closest<foot<false>>(w, l, loc, direction::kForward,
-                                        matching_component, way_idx, foot_score);
+                                        matching_component, way_idx,
+                                        foot_score);
     auto const car_offset =
         (is_same_component && is_car_connected)
             ? get_connected_way(way_idx, center, approx_distance_lng_degrees,
@@ -329,9 +331,8 @@ void connect_parking_ways(
     auto conn =
         make_connection(center, approx_distance_lng_degrees, *car_offset,
                         car_entrance, foot_entrance, *foot_offset);
-    add_additional_connection(*w.r_, to_offset(w, *car_offset, conn.front()),
-                              to_offset(w, *foot_offset, conn.back()),
-                              std::move(conn), true);
+    add_additional_connection(*w.r_, to_offset(*car_offset),
+                              to_offset(*foot_offset), std::move(conn), true);
   }
   utl::sort(w.r_->additional_node_connections_);
 }

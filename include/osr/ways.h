@@ -534,7 +534,6 @@ struct ways {
         CISTA_COMPARABLE()
 
         way_idx_t way_;
-        unsigned segment_;
         node_idx_t left_;
         node_idx_t right_;
         std::uint16_t dist_left_;  // Distance on segment to left node

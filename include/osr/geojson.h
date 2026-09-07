@@ -678,19 +678,20 @@ struct geojson_writer {
   }
 
   void write_additional_connections(
-      ways const& w,
+      [[maybe_unused]] ways const& w,
       lookup const& l,
       bitvec<connection_idx_t> const& connections) {
     connections.for_each_set_bit([&](connection_idx_t const connection_idx) {
       auto const& connection = w_.r_->additional_connections_[connection_idx];
-      auto geom = vec<vec<point>>{get_additional_connection_points(connection)};
+      auto geom =
+          vec<geo::polyline>{get_additional_connection_points(connection)};
 
       for (auto const [offset, start_point] :
            {std::pair{connection.from_, connection.connection_.front()},
             std::pair{connection.to_, connection.connection_.back()}}) {
         for (auto const is_left : {true, false}) {
           if (auto line = osr::get_additional_connection_offset_points(
-                  w, l, offset, start_point, is_left);
+                  l, offset, start_point, is_left);
               !line.empty()) {
             geom.emplace_back(line);
           }

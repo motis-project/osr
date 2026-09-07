@@ -30,9 +30,9 @@ direction invert(direction const dir, bool const revert) {
                 : dir;
 }
 
-vec<point> reverse(vec<point>&& points) {
-  std::reverse(begin(points), end(points));
-  return points;
+geo::polyline reverse(geo::polyline&& line) {
+  std::reverse(begin(line), end(line));
+  return line;
 }
 
 geo::polyline to_polyline(vec<point> const& points) {
@@ -99,36 +99,33 @@ way_idx_t add_additional_connection(
 }
 
 geo::polyline get_additional_connection_polyline(
-    ways const& w,
     lookup const& l,
     ways::routing::additional_connection const& conn,
     node_idx_t from,
     node_idx_t to) {
   auto polyline = geo::polyline{};
-  auto const append_to_polyline = [&](vec<point> const& points) {
-    polyline.reserve(polyline.size() + points.size());
-    for (auto const& p : points) {
-      polyline.emplace_back(p.as_latlng());
+  auto const append_to_polyline = [&](geo::polyline const& line) {
+    polyline.reserve(polyline.size() + line.size());
+    for (auto const& p : line) {
+      polyline.push_back(p);
     }
   };
   append_to_polyline(reverse(get_additional_connection_offset_points(
-      w, l, conn.from_, conn.connection_.front(), conn.from_.left_ == from)));
+      l, conn.from_, conn.connection_.front(), conn.from_.left_ == from)));
   append_to_polyline(get_additional_connection_points(conn));
   append_to_polyline(get_additional_connection_offset_points(
-      w, l, conn.to_, conn.connection_.back(), conn.to_.left_ == to));
+      l, conn.to_, conn.connection_.back(), conn.to_.left_ == to));
 
   return polyline;
 }
 
-vec<point> get_additional_connection_points(
+geo::polyline get_additional_connection_points(
     ways::routing::additional_connection const& connection) {
-  return connection.connection_;
+  return to_polyline(connection.connection_);
 }
 
-vec<point> get_additional_connection_offset_points(
-// geo::polyline get_additional_connection_offset_points(
-    [[maybe_unused]] ways const& w,
-    [[maybe_unused]] lookup const& l,
+geo::polyline get_additional_connection_offset_points(
+    lookup const& l,
     ways::routing::additional_connection::offset const& offset,
     point const& start_point,
     bool const is_left) {
@@ -136,22 +133,15 @@ vec<point> get_additional_connection_offset_points(
   if (n == node_idx_t::invalid()) {
     return {};
   }
-  auto const path = l.get_node_candidate_path(
+  return l.get_node_candidate_path(
       offset.way_, n, is_left ? direction::kBackward : direction::kForward,
       true, location{start_point.as_latlng(), kNoLevel});
-  auto line = vec<point>{};
-  line.reserve(static_cast<unsigned>(path.size()));
-  for (auto const& p : path) {
-    line.push_back(point::from_latlng(p));
-  }
-  return line;
 }
 
 ways::routing::additional_connection::offset to_offset(
-    [[maybe_unused]] ways const& w, way_candidate const& wc, [[maybe_unused]] point const& start_point) {
+    way_candidate const& wc) {
   auto offset =
       ways::routing::additional_connection::offset{.way_ = wc.way_,
-                                                   .segment_ = wc.segment_idx_,
                                                    .left_ = wc.left_.node_,
                                                    .right_ = wc.right_.node_,
                                                    .dist_left_ = 0U,
