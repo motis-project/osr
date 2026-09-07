@@ -24,12 +24,6 @@ way_idx_t to_way_idx(ways::routing const& r, connection_idx_t const conn_idx) {
   return way_idx_t{to_idx(conn_idx) + r.way_component_.size()};
 }
 
-direction invert(direction const dir, bool const revert) {
-  return revert ? dir == direction::kForward ? direction::kBackward
-                                             : direction::kForward
-                : dir;
-}
-
 geo::polyline reverse(geo::polyline&& line) {
   std::reverse(begin(line), end(line));
   return line;
@@ -184,15 +178,11 @@ void for_each_addional_connection(
               {.offset_ = from,
                .node_ = start,
                .dist_ = from_left ? from.dist_left_ : from.dist_right_,
-               .dir_ = invert(
-                   from_left ? direction::kForward : direction::kBackward,
-                   conn_dir == direction::kBackward)},
+               .dir_ = flip(direction::kForward, opposite(conn_dir))},
               {.offset_ = to,
                .node_ = target,
                .dist_ = to_left ? to.dist_left_ : to.dist_right_,
-               .dir_ =
-                   invert(to_left ? direction::kBackward : direction::kForward,
-                          conn_dir == direction::kBackward)});
+               .dir_ = flip(direction::kBackward, opposite(conn_dir))});
           }
         }
       }
