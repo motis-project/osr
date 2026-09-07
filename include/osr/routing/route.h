@@ -8,6 +8,7 @@
 #include "osr/elevation_storage.h"
 #include "osr/location.h"
 #include "osr/lookup.h"
+#include "osr/preprocessing/elevation/provider.h"
 #include "osr/routing/algorithms.h"
 #include "osr/routing/mode.h"
 #include "osr/routing/parameters.h"

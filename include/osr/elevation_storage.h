@@ -21,6 +21,7 @@ struct elevation_storage {
     elevation swapped() const;
     elevation_monotonic_t up_{0U};
     elevation_monotonic_t down_{0U};
+    elevation_absolute_t absolute_{elevation_absolute_t::invalid()};
   };
   struct encoding {
     using coding = std::uint8_t;

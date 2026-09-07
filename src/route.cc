@@ -7,9 +7,14 @@
 
 #include "boost/thread/tss.hpp"
 
+#include "geo/latlng.h"
+#include "geo/polyline.h"
+#include "osr/preprocessing/elevation/provider.h"
+#include "osr/preprocessing/elevation/shared.h"
 #include "utl/concat.h"
 #include "utl/enumerate.h"
 #include "utl/helpers/algorithm.h"
+#include "utl/pipes/make_range.h"
 #include "utl/to_vec.h"
 #include "utl/verify.h"
 
