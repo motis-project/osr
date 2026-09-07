@@ -3,27 +3,22 @@
 #include <limits>
 #include <vector>
 
-#include "geo/latlng.h"
-#include "osr/preprocessing/elevation/provider.h"
-#include "osr/preprocessing/elevation/shared.h"
+#include "osr/point.h"
 #include "osr/routing/path.h"
+#include "osr/types.h"
 
 namespace osr {
 
 struct height_profile {
-  using value_t = osr::preprocessing::elevation::elevation_meters_t;
-  using loc_t = geo::latlng;
+  height_profile(ways const&, path const&, unsigned steps);
 
-  height_profile(path&,
-                 preprocessing::elevation::provider const&,
-                 double resolution);
+  elevation_absolute_t median() const;
 
-  value_t median();
-
-  std::vector<loc_t> points_{};
-  std::vector<value_t> elevation_{};
-  value_t up_{0}, down_{0}, min_{std::numeric_limits<value_t>::max()},
-      max_{std::numeric_limits<value_t>::min()};
+  std::vector<point> points_{};
+  std::vector<elevation_difference_t> elevation_{};
+  elevation_absolute_t baseline_;
+  elevation_absolute_t min_{std::numeric_limits<elevation_absolute_t>::max()},
+      max_{std::numeric_limits<elevation_absolute_t>::min()};
   double resolution_;
 };
 

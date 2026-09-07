@@ -7,6 +7,7 @@
 #include <ranges>
 #include <string>
 
+#include "osr/types.h"
 #include "utl/enumerate.h"
 #include "utl/pairwise.h"
 #include "utl/parallel_for.h"
@@ -132,6 +133,8 @@ elevation_storage::elevation get_way_elevation(ev::provider const& provider,
       elevation.down_ +=
           static_cast<cista::base_t<elevation_monotonic_t>>(to_idx(a - b));
     }
+    elevation.absolute_ =
+        static_cast<elevation_absolute_t>(to_idx((a + b) / 2));
   }
   return elevation;
 }

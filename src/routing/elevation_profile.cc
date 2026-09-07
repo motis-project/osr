@@ -1,107 +1,96 @@
 #include "osr/routing/elevation_profile.h"
+#include <cista/strong.h>
 #include <algorithm>
-#include <iterator>
 #include <vector>
 
-#include "utl/helpers/algorithm.h"
-
-#include "geo/latlng.h"
+#include "osr/elevation_storage.h"
+#include "osr/types.h"
+#include "osr/ways.h"
 
 namespace osr {
 
-height_profile::height_profile(
-    path& p,
-    preprocessing::elevation::provider const& provider,
-    double resolution) {
-  resolution_ = std::max(
-      {resolution, provider.max_resolution().x_, provider.max_resolution().y_});
-  auto n_samples = p.dist_ / resolution_;
-
-  auto seg_it = p.segments_.begin();
-  auto poly_it = seg_it->polyline_.begin();
-  auto const next = [&]() {
-    if (++poly_it == std::end(seg_it->polyline_)) {
-      ++seg_it;
-      poly_it = (++seg_it)->polyline_.begin();
+height_profile::height_profile(ways const& w, path const& p, unsigned steps) {
+  auto const adjust_lng = [](double const x) {
+    if (x < -180.) {
+      return x + 360.;
+    } else if (x <= 180.) {
+      return x;
+    } else {
+      return x - 360.;
     }
-
-    return *poly_it;
   };
 
-  auto const adjust_lng = [&](double x) { return x; };
-  auto const squared_distance = [&](geo::latlng a, geo::latlng b) {
-    return std::pow(b.lat() - a.lat(), 2) +
-           std::pow(adjust_lng(b.lng() - a.lng()), 2);
-  };
-
-  points_.resize(n_samples + 1);
-  elevation_.resize(n_samples + 1);
-
-  auto from = *poly_it;
-  auto const baseline = provider.get(from);
-
-  auto const add = [&](geo::latlng const& coord) {
-    points_.push_back(coord);
-    auto const z = provider.get(coord);
+  auto const add = [&](point const& a, point const& b,
+                       elevation_difference_t z) {
+    auto const lat = a.lat() + (b.lat() - a.lat()) * 0.5;
+    auto const lng = adjust_lng(a.lng() + (b.lng() - a.lng()) * 0.5);
+    points_.emplace_back(lat, lng);
     elevation_.push_back(z);
 
-    if (z == value_t::invalid()) {
-      return;
-    }
-
-    if (z < baseline) {
-      down_ += z.v_;
-    } else {
-      up_ += z.v_;
-    }
-    min_ = std::min(z, min_);
-    max_ = std::max(z, max_);
+    min_ = std::min(static_cast<elevation_absolute_t>(to_idx(z)) + baseline_,
+                    min_);
+    max_ = std::max(static_cast<elevation_absolute_t>(to_idx(z)) + baseline_,
+                    max_);
   };
 
-  add(from);
-  --n_samples;
-  auto to = next();
+  steps = std::min(steps, static_cast<unsigned>(p.segments_.size()));
+  auto const step_size = p.dist_ / steps;
 
-  auto acc = 0.0;
-  while (n_samples > 0) {
-    acc += squared_distance(from, to);
+  points_.resize(steps);
+  elevation_.resize(steps);
+  baseline_ = p.segments_.front().elevation_.absolute_;
+  points_.push_back(w.get_node_pos(p.segments_.front().from_));
+  elevation_.emplace_back(0);
 
-    while (acc >= resolution_) {
-      acc -= resolution_;
-      auto const normed_diff = acc / std::abs(squared_distance(from, to));
-      auto const lat_diff = from.lat() - to.lat();
-      auto const lng_diff = adjust_lng(from.lng() - to.lng());
-      auto sample_point = geo::latlng{to.lat() + lat_diff * normed_diff,
-                                      to.lng() + lng_diff * normed_diff};
-      add(sample_point);
-      --n_samples;
+  auto dist_acc = distance_t{0};
+  auto z_acc = elevation_difference_t{0};
+  auto from = w.get_node_pos(p.segments_.front().from_);
+  add(from, w.get_node_pos(p.segments_.front().to_), z_acc);
+  for (auto seg = begin(p.segments_); seg != end(p.segments_); seg++) {
+    dist_acc += seg->dist_;
+    z_acc += static_cast<cista::base_t<elevation_difference_t>>(
+                 to_idx(seg->elevation_.up_)) -
+             static_cast<cista::base_t<elevation_difference_t>>(
+                 to_idx(seg->elevation_.down_));
+
+    if (dist_acc < step_size && seg != prev(end(p.segments_))) {
+      seg++;
+      continue;
     }
 
+    auto const to = w.get_node_pos(seg->to_);
+    add(from, to, z_acc);
     from = to;
-    to = next();
+    dist_acc = 0;
+    z_acc = elevation_difference_t{0};
   }
-
-  to = p.segments_.back().polyline_.back();
 }
 
-height_profile::value_t height_profile::median() {
+elevation_absolute_t height_profile::median() const {
   if (elevation_.empty()) {
-    return value_t::invalid();
+    return elevation_absolute_t::invalid();
   }
 
   if (elevation_.size() == 1) {
-    return elevation_[0];
+    return static_cast<elevation_absolute_t>(to_idx(elevation_[0])) + baseline_;
   }
 
-  auto sorted = std::vector<value_t>{elevation_};
+  auto sorted = std::vector<elevation_difference_t>{elevation_};
   auto const n = sorted.size() / 2;
-  utl::nth_element(sorted, n);
+  std::nth_element(
+      begin(sorted),
+      next(
+          begin(sorted),
+          static_cast<std::vector<elevation_difference_t>::difference_type>(n)),
+      end(sorted));
 
   if (n % 2 == 0) {
-    return (sorted[n] + sorted[n - 1]) / 2;
+    return static_cast<elevation_absolute_t>(
+               to_idx((sorted[n] + sorted[n - 1]) / 2)) +
+           baseline_;
   }
 
-  return sorted[n];
+  return static_cast<elevation_absolute_t>(to_idx(sorted[n])) + baseline_;
 }
 
 }  // namespace osr

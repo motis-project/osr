@@ -169,6 +169,10 @@ using multi_level_elevator_idx_t =
 using distance_t = std::uint32_t;
 using elevation_monotonic_t =
     cista::strong<std::uint16_t, struct elevation_monotonic_>;
+using elevation_difference_t =
+    cista::strong<std::int16_t, struct elevation_difference_>;
+using elevation_absolute_t =
+    cista::strong<std::int32_t, struct elevation_absolute_>;
 
 using way_pos_t = std::uint8_t;
 
