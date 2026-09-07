@@ -74,8 +74,6 @@ std::tuple<geo::latlng, double, component_idx_t> analyze_surroundings(
 }
 
 template <Profile P>
-// std::optional<std::pair<point, match_view_t>> find_closest(
-// std::optional<match_view_t> find_closest(
 std::optional<way_candidate> find_closest(
     [[maybe_unused]] ways const& w,
     lookup const& l,
@@ -85,21 +83,24 @@ std::optional<way_candidate> find_closest(
     std::function<double(double, way_idx_t)> const& score) {
   auto const params = typename P::parameters{};
 
-  // auto best = std::optional<std::pair<point, match_view_t>>{};
-  // auto best = std::optional<match_view_t>{};
   auto best = std::optional<way_candidate>{};
   auto matches = match_result{};
-  // auto way_candidates =
   l.match<P>(params, loc, false, dir, 250.0, nullptr, matches, std::nullopt);
-  auto best_score = std::numeric_limits<double>::min();
+  auto best_score = std::numeric_limits<double>::lowest();
 
   for (auto i = match_idx_t{0U}; i < match_idx_t{matches.size()}; ++i) {
     auto const match = matches[i];
     for (auto j = 0U; j < match.size(); ++j) {
+      auto const way_idx = match.way_[j];
+      if (w.r_->way_component_[way_idx] != matching_component) {
+        continue;
+      }
       auto const wc = way_candidate{
           .dist_to_way_ = match.dist_to_way_[j],
-          .way_ = match.way_[j],
-          .closest_point_on_way_ = geo::latlng{},
+          .way_ = way_idx,
+          .left_ = match.left(j),
+          .right_= match.right(j),
+          .closest_point_on_way_ = loc.pos_,
       };
       auto const s = score(match.dist_to_way_[j], match.way_[j]);
       if (s > best_score) {
@@ -108,29 +109,8 @@ std::optional<way_candidate> find_closest(
         best_score = s;
       }
     }
-    // auto const way = match.way_;
-    // if (w.r_->way_component_[way] == matching_component) {
-    //   auto const s = score(match);
-    //   if (s > best_score) {
-    //     best_score = s;
-    //   }
-    // }
   }
   return best;
-  // // return best_score;
-  //
-  // utl::erase_if(way_candidates, [&](way_candidate const& wc) {
-  //   return w.r_->way_component_[wc.way_] != matching_component;
-  // });
-  // if (way_candidates.size() == 0) {
-  //   return std::nullopt;
-  // }
-  // auto const best = utl::max_element(
-  //     way_candidates, [&](way_candidate const& a, way_candidate const& b) {
-  //       return score(a) < score(b);
-  //     });
-  //
-  // return std::optional{*best};
 }
 
 }  // namespace
