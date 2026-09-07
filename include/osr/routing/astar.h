@@ -94,9 +94,9 @@ struct astar {
         }
         return;
       }
-      auto const l_with_heur =
-          label{l.get_node(), static_cast<cost_t>(cost_with_heur)};
-      pq_.push(l_with_heur);
+      auto l_with_heur = l;
+      l_with_heur.cost_ = static_cast<cost_t>(cost_with_heur);
+      pq_.push(std::move(l_with_heur));
     }
   }
 
