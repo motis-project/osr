@@ -12,7 +12,6 @@
 
 #include "osr/location.h"
 #include "osr/lookup.h"
-#include "osr/routing/for_each_parking_edge.h"
 #include "osr/routing/profile.h"
 #include "osr/routing/profiles/car.h"
 #include "osr/routing/profiles/car_parking.h"

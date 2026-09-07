@@ -18,7 +18,6 @@
 #include "osr/platforms.h"
 #include "osr/routing/additional_connection.h"
 #include "osr/routing/dijkstra.h"
-#include "osr/routing/for_each_parking_edge.h"
 #include "osr/routing/profiles/foot.h"
 #include "osr/types.h"
 #include "osr/ways.h"
