@@ -84,7 +84,7 @@ struct bidirectional {
     drain_key_2_ = kInfeasible;
   }
 
-  void add(label const l,
+  void add(label l,
            direction const dir,
            cost_map& cost_map,
            dial<label, get_bucket>& d,
@@ -97,8 +97,8 @@ struct bidirectional {
         cost_map[l.get_node().get_key()].update(
             l, l.get_node(), {.cost_ = l.cost(), .duration_ = duration},
             node::invalid(), *w.r_, arena_)) {
-      auto const total = static_cast<cost_t>(l.cost() + heur);
-      d.push(label{l.get_node(), total});
+      l.cost_ = static_cast<cost_t>(l.cost() + heur);
+      d.push(std::move(l));
     }
   }
 
@@ -347,12 +347,8 @@ struct bidirectional {
       if (static_cast<std::uint64_t>(top_f) + top_r >
           static_cast<std::uint64_t>(best_cost_) +
               static_cast<std::uint64_t>(radius_)) {
-        // The criterion above only settles the cost. A meet point is only
-        // re-evaluated when one of its two states is popped, so an equal cost
-        // label with a shorter duration that is still sitting in the bucket
-        // each queue stopped in would never get to improve the tie break.
-        // Drain both of those buckets first (equal cost improvements are
-        // pushed back into the same bucket).
+        // Re-evaluate equal-cost meeting states with shorter durations before
+        // stopping: their labels may still be in either queue's current bucket.
         if (!draining_) {
           draining_ = true;
           drain_key_1_ = pq1_.empty() ? kInfeasible : next_key(pq1_);
@@ -427,8 +423,6 @@ struct bidirectional {
   bool search_bounds_valid_{};
   bool max_reached_1_;
   bool max_reached_2_;
-  // Set once the cost stopping criterion is met. The search then only
-  // drains the bucket each queue stopped in, to settle the duration tie break.
   bool draining_{false};
   cost_t drain_key_1_{kInfeasible};
   cost_t drain_key_2_{kInfeasible};

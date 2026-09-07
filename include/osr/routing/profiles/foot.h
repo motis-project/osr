@@ -2,6 +2,8 @@
 
 #include <optional>
 
+#include "utl/for_each_bit_set.h"
+
 #include "osr/elevation_storage.h"
 #include "osr/routing/entry_storage_arena.h"
 #include "osr/routing/mode.h"
@@ -9,7 +11,6 @@
 #include "osr/routing/profile.h"
 #include "osr/routing/tracking.h"
 #include "osr/ways.h"
-#include "utl/for_each_bit_set.h"
 
 namespace osr {
 
@@ -162,12 +163,12 @@ struct foot {
     }
   }
 
-  template <endpoint_role Role, typename Fn>
+  template <endpoint_role, typename Fn>
   static void resolve_endpoint(ways::routing const& w,
                                way_idx_t const way,
                                node_idx_t const n,
                                level_t const lvl,
-                               direction const search_dir,
+                               direction const endpoint_dir,
                                Fn&& f) {
     auto const p = w.way_properties_[way];
     auto const level_compatible =
@@ -185,8 +186,7 @@ struct foot {
       }
       return p.from_level();
     }();
-    auto const endpoint_to_node = search_dir == direction::kForward;
-    if (endpoint_to_node) {
+    if (endpoint_dir == direction::kForward) {
       f(node{n, node_side_level});
       return;
     }
@@ -268,20 +268,23 @@ struct foot {
               return;
             }
             levels |= mask;
-            if (can_use_elevator(w, n.n_, predecessor_lvl, n.lvl_)) {
-              emit(predecessor_lvl);
+            if (can_use_elevator(w, n.n_, predecessor_lvl)) {
+              auto reaches_current = false;
+              for_each_elevator_level(w, n.n_, [&](level_t const lvl) {
+                reaches_current = reaches_current || lvl == n.lvl_;
+              });
+              if (reaches_current) {
+                emit(predecessor_lvl);
+              }
             } else if (auto const reached = get_target_level(
                            w, target_node, predecessor_lvl, way);
                        reached.has_value() && node{n.n_, *reached} == n) {
               emit(predecessor_lvl);
             }
           };
-          resolve_all(w, target_node, [&](node const predecessor) {
+          for_each_node_level(w, target_node, [&](node const predecessor) {
             consider(predecessor.lvl_);
           });
-          if (w.node_properties_[target_node].is_elevator()) {
-            for_each_elevator_level(w, target_node, consider);
-          }
         }
       };
 
