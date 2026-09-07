@@ -207,7 +207,7 @@ TEST_F(endpoint_routing, bidirectional_meets_at_additional_node) {
                 duration_t{5U});
       b.run();
       EXPECT_EQ(b.best_cost_, 18U);
-      EXPECT_EQ(b.best_duration_, duration_t{8U});
+      EXPECT_EQ(b.best_duration(), duration_t{8U});
       EXPECT_EQ(b.meet_point_1_.get_node(), n);
       EXPECT_EQ(b.meet_point_2_.get_node(), n);
     }
