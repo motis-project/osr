@@ -258,12 +258,14 @@ void connect_parking_ways(
     };
 
     auto conn = vec<point>{};
+    conn.push_back(point::from_latlng(car_offset.closest_point_on_way_));
     if (is_closer(car_offset.closest_point_on_way_, car_entrance.best_)) {
-      conn.emplace_back(point::from_latlng(car_entrance.best_));
+      conn.push_back(point::from_latlng(car_entrance.best_));
     }
     if (is_closer(foot_offset.closest_point_on_way_, foot_entrance.best_)) {
-      conn.emplace_back(point::from_latlng(foot_entrance.best_));
+      conn.push_back(point::from_latlng(foot_entrance.best_));
     }
+    conn.push_back(point::from_latlng(foot_offset.closest_point_on_way_));
 
     return conn;
   };
