@@ -518,12 +518,12 @@ struct bike_sharing {
                                way_idx_t const way,
                                node_idx_t const n,
                                level_t const lvl,
-                               direction const search_dir,
+                               direction const endpoint_dir,
                                Fn&& f) {
     footp::template resolve_endpoint<Role>(
-        w, way, n, lvl, search_dir, [&](footp::node const resolved) {
+        w, way, n, lvl, endpoint_dir, [&](footp::node const resolved) {
           if constexpr (Role == endpoint_role::kSource) {
-            f(to_node(resolved, search_dir == direction::kForward
+            f(to_node(resolved, endpoint_dir == direction::kForward
                                     ? node_type::kInitialFoot
                                     : node_type::kTrailingFoot));
           } else {
