@@ -422,7 +422,9 @@ double add_cch_path(typename P::parameters const& params,
                     cost_t expected_cost,
                     std::vector<path::segment>& segments,
                     direction dir,
-                    std::uint32_t depth = 0U);
+                    std::uint32_t depth = 0U,
+                    bool turn_at_source = false,
+                    bool turn_at_target = false);
 
 template <Profile P>
 // TODO: review POC implementation
@@ -461,7 +463,8 @@ std::optional<path> reconstruct_cch(
           static_cast<cost_t>(e.cost(forward_n) -
                               c.template get_cost<direction::kForward>(*pred));
       forward_dist += add_cch_path<P>(params, w, *pred, forward_n,
-                                      expected_cost, forward_segments, dir);
+                                      expected_cost, forward_segments, dir, 0U,
+                                      true, false);
     } else {
       break;
     }
@@ -500,7 +503,8 @@ std::optional<path> reconstruct_cch(
           static_cast<cost_t>(e.cost(backward_n) -
                               c.template get_cost<direction::kBackward>(*pred));
       backward_dist += add_cch_path<P>(params, w, backward_n, *pred,
-                                       expected_cost, backward_segments, dir);
+                                       expected_cost, backward_segments, dir, 0U,
+                                       false, true);
     } else {
       break;
     }
@@ -586,28 +590,116 @@ struct cch_edge_ref {
 };
 
 template <Profile P>
+cost_t get_cch_turn_cost(typename P::parameters const& params,
+                         ways::routing const& r,
+                         typename P::node const incoming,
+                         way_pos_t const outgoing_way,
+                         direction const outgoing_dir) {
+  if (r.template is_restricted<direction::kForward,
+                               cch<P>::is_bus_profile()>(
+          incoming.get_node(), incoming.way_, outgoing_way)) {
+    return kInfeasible;
+  }
+  auto const is_u_turn = incoming.way_ == outgoing_way &&
+                         outgoing_dir == opposite(incoming.dir_);
+  return is_u_turn
+             ? params.uturn_penalty_
+             : P::turn_cost(params,
+                            r.get_turn_angle(incoming.get_node(), incoming.way_,
+                                             incoming.dir_, outgoing_way,
+                                             outgoing_dir));
+}
+
+template <Profile P>
 cch_edge_ref find_cch_edge_ref(ways::routing const& r,
                                typename P::node const from,
                                typename P::node const to) {
-  auto const up = r.node_importance_[from.get_node()] <
-                  r.node_importance_[to.get_node()];
+  auto const self = from.get_node() == to.get_node();
+  auto const up = self ||
+                  r.node_importance_[from.get_node()] <
+                      r.node_importance_[to.get_node()];
   auto const low = up ? from.get_node() : to.get_node();
   auto const high = up ? to.get_node() : from.get_node();
   for (auto const& e : cch<P>::customized_edges(r)[low]) {
     if (e.to_ == high) {
-      auto const* weight = cch<P>::best_weight(e, up, from, to);
-      if (weight == nullptr) {
-        for (auto const& candidate : e.weights_) {
-          if (candidate.up_ == up &&
-              (weight == nullptr || candidate.cost_ < weight->cost_ ||
-               (candidate.cost_ == weight->cost_ &&
-                candidate.distance_ < weight->distance_))) {
-            weight = &candidate;
-          }
+      auto const* weight = static_cast<cch_edge_weight const*>(nullptr);
+      for (auto const& candidate : e.weights_) {
+        if ((!self && candidate.up_ != up) || candidate.from_way_ != from.way_ ||
+            candidate.from_dir_ != from.dir_ ||
+            candidate.to_way_ != to.way_ || candidate.to_dir_ != to.dir_) {
+          continue;
+        }
+        if (weight == nullptr || candidate.cost_ < weight->cost_ ||
+            (candidate.cost_ == weight->cost_ &&
+             candidate.distance_ < weight->distance_)) {
+          weight = &candidate;
         }
       }
-      return {.edge_ = &e, .weight_ = weight, .up_ = up};
+      return {.edge_ = &e,
+              .weight_ = weight,
+              .up_ = weight == nullptr ? up : weight->up_};
     }
+  }
+  return {};
+}
+
+template <Profile P>
+cch_edge_ref find_cch_transition_ref(typename P::parameters const& params,
+                                     ways::routing const& r,
+                                     typename P::node const from,
+                                     typename P::node const to,
+                                     cost_t const expected_cost,
+                                     bool const turn_at_source,
+                                     bool const turn_at_target) {
+  auto const self = from.get_node() == to.get_node();
+  auto const up = self ||
+                  r.node_importance_[from.get_node()] <
+                      r.node_importance_[to.get_node()];
+  auto const low = up ? from.get_node() : to.get_node();
+  auto const high = up ? to.get_node() : from.get_node();
+  for (auto const& e : cch<P>::customized_edges(r)[low]) {
+    if (e.to_ != high) {
+      continue;
+    }
+    for (auto const& candidate : e.weights_) {
+      if ((!self && candidate.up_ != up) ||
+          (self && turn_at_source && !candidate.up_) ||
+          (self && turn_at_target && candidate.up_)) {
+        continue;
+      }
+
+      auto total = candidate.cost_;
+      if (turn_at_source) {
+        if (candidate.to_way_ != to.way_ ||
+            candidate.to_dir_ != to.dir_) {
+          continue;
+        }
+        auto const turn = get_cch_turn_cost<P>(
+            params, r, from, candidate.from_way_, candidate.from_dir_);
+        if (turn == kInfeasible) {
+          continue;
+        }
+        total = clamp_cost(static_cast<std::uint64_t>(total) + turn);
+      } else if (turn_at_target) {
+        if (candidate.from_way_ != from.way_ ||
+            candidate.from_dir_ != from.dir_) {
+          continue;
+        }
+        auto const incoming = P::create_node(
+            to.get_node(), kNoLevel, candidate.to_way_, candidate.to_dir_);
+        auto const turn = get_cch_turn_cost<P>(params, r, incoming, to.way_,
+                                               to.dir_);
+        if (turn == kInfeasible) {
+          continue;
+        }
+        total = clamp_cost(static_cast<std::uint64_t>(total) + turn);
+      }
+
+      if (total == expected_cost) {
+        return {.edge_ = &e, .weight_ = &candidate, .up_ = candidate.up_};
+      }
+    }
+    return {.edge_ = &e, .weight_ = nullptr, .up_ = up};
   }
   return {};
 }
@@ -759,9 +851,16 @@ double add_cch_path(typename P::parameters const& params,
                     cost_t const expected_cost,
                     std::vector<path::segment>& segments,
                     direction const dir,
-                    std::uint32_t const depth) {
+                    std::uint32_t const depth,
+                    bool const turn_at_source,
+                    bool const turn_at_target) {
   if constexpr (cch<P>::uses_customized_cost_overlay()) {
-    auto const e = find_cch_edge_ref<P>(*w.r_, from, to);
+    auto const e = turn_at_source || turn_at_target
+                       ? find_cch_transition_ref<P>(params, *w.r_, from, to,
+                                                    expected_cost,
+                                                    turn_at_source,
+                                                    turn_at_target)
+                       : find_cch_edge_ref<P>(*w.r_, from, to);
     if (e.weight_ != nullptr) {
       auto const cost = e.weight_->cost_;
       auto const distance = e.weight_->distance_;
@@ -770,6 +869,10 @@ double add_cch_path(typename P::parameters const& params,
       auto const to_way = e.weight_->to_way_;
       auto const from_dir = e.weight_->from_dir_;
       auto const to_dir = e.weight_->to_dir_;
+      auto const edge_from = P::create_node(from.get_node(), kNoLevel, from_way,
+                                            from_dir);
+      auto const edge_to =
+          P::create_node(to.get_node(), kNoLevel, to_way, to_dir);
       // CCH DEBUG: log every selected overlay edge, including recursively
       // unpacked base edges, so the query path is not confused with only the
       // top-level shortcut breadcrumbs shown in the debug UI.
@@ -788,6 +891,43 @@ double add_cch_path(typename P::parameters const& params,
             static_cast<unsigned>(from_way), to_str(from_dir),
             static_cast<unsigned>(to_way), to_str(to_dir));
       }
+      auto const via_node = e.weight_->via_;
+      if (via_node != node_idx_t::invalid()) {
+        // CCH DEBUG: keep a visible breadcrumb for each selected shortcut before
+        // it is recursively unpacked into original graph edges.
+        segments.push_back(path::segment{
+            .polyline_ = {w.get_node_pos(from.get_node()).as_latlng(),
+                          w.get_node_pos(to.get_node()).as_latlng()},
+            .from_level_ = level_t{0.F},
+            .to_level_ = level_t{0.F},
+            .from_ = from.get_node(),
+            .to_ = to.get_node(),
+            .way_ = way_idx_t::invalid(),
+            .cost_ = expected_cost,
+            .dist_ = e.weight_->distance_,
+            .mode_ = to.get_mode(),
+            .cch_debug_shortcut_ = true,
+            .cch_debug_depth_ = depth,
+            .cch_debug_via_ = via_node});
+        // Customized CCH edges can represent a path through a lower-rank via-node,
+        // even when the edge is also an original graph edge.
+        auto const via_in =
+            P::create_node(via_node, kNoLevel, e.weight_->via_in_way_,
+                           e.weight_->via_in_dir_);
+        auto const via_out =
+            P::create_node(via_node, kNoLevel, e.weight_->via_out_way_,
+                           e.weight_->via_out_dir_);
+        auto const first_cost =
+            get_cch_edge_cost<P>(params, *w.r_, edge_from, via_in);
+        auto const second_cost =
+            get_cch_edge_cost<P>(params, *w.r_, via_out, edge_to);
+        return add_cch_path<P>(params, w, edge_from, via_in, first_cost, segments,
+                               dir, depth + 1U) +
+               add_cch_path<P>(params, w, via_out, edge_to, second_cost, segments,
+                               dir, depth + 1U);
+      }
+      return add_direct_cch_path<P>(w, edge_from, edge_to, e.weight_->cost_,
+                                    segments);
     } else {
       if constexpr (kCchRouteDebugOutput) {
         fmt::println(
@@ -795,40 +935,6 @@ double add_cch_path(typename P::parameters const& params,
             depth, to_idx(w.node_to_osm_[from.get_node()]),
             to_idx(w.node_to_osm_[to.get_node()]));
       }
-    }
-    auto const via_node =
-        e.weight_ == nullptr ? node_idx_t::invalid() : e.weight_->via_;
-    if (via_node != node_idx_t::invalid()) {
-      // CCH DEBUG: keep a visible breadcrumb for each selected shortcut before
-      // it is recursively unpacked into original graph edges.
-      segments.push_back(path::segment{
-          .polyline_ = {w.get_node_pos(from.get_node()).as_latlng(),
-                        w.get_node_pos(to.get_node()).as_latlng()},
-          .from_level_ = level_t{0.F},
-          .to_level_ = level_t{0.F},
-          .from_ = from.get_node(),
-          .to_ = to.get_node(),
-          .way_ = way_idx_t::invalid(),
-          .cost_ = expected_cost,
-          .dist_ = e.weight_->distance_,
-          .mode_ = to.get_mode(),
-          .cch_debug_shortcut_ = true,
-          .cch_debug_depth_ = depth,
-          .cch_debug_via_ = via_node});
-      // Customized CCH edges can represent a path through a lower-rank via-node,
-      // even when the edge is also an original graph edge.
-      auto const via_in =
-          P::create_node(via_node, kNoLevel, e.weight_->via_in_way_,
-                         e.weight_->via_in_dir_);
-      auto const via_out =
-          P::create_node(via_node, kNoLevel, e.weight_->via_out_way_,
-                         e.weight_->via_out_dir_);
-      auto const first_cost = get_cch_edge_cost<P>(params, *w.r_, from, via_in);
-      auto const second_cost = get_cch_edge_cost<P>(params, *w.r_, via_out, to);
-      return add_cch_path<P>(params, w, from, via_in, first_cost, segments, dir,
-                             depth + 1U) +
-             add_cch_path<P>(params, w, via_out, to, second_cost, segments, dir,
-                             depth + 1U);
     }
   }
   if (auto const* s = find_cch_shortcut<P>(*w.r_, from, to); s != nullptr) {

@@ -427,9 +427,11 @@ struct cch {
           neighbor.print(std::cout, w);
         }
 
-        // CCH queries only relax upward edges. The profile still decides which
-        // original graph edges are usable; CCH filters the accepted neighbors.
-        if (!is_upward(r, curr, neighbor)) {
+        // Compact CCH queries relax upward edges and state-changing self-loops.
+        auto const is_state_loop =
+            uses_customized_cost_overlay() &&
+            curr.get_node() == neighbor.get_node() && curr != neighbor;
+        if (!is_upward(r, curr, neighbor) && !is_state_loop) {
           return;
         }
 

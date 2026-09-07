@@ -340,12 +340,20 @@ TEST(routing_cch_bus, platform) {
                                   to);
 }
 
-// Known POC limitation: CCH does not preserve the state-changing loop near the
-// start and returns cost 410 instead of Dijkstra's 238.
-TEST(routing_cch_bus, DISABLED_monaco_loop_near_start) {
+// Regression: compact CCH contraction must preserve a path which leaves and
+// returns to the same physical node with a different turn state.
+TEST(routing_cch_bus, monaco_loop_near_start) {
   auto const from = osr::location{43.74284568503032, 7.42989439732284,
                                   osr::kNoLevel};
   auto const to = osr::location{43.73175634804065, 7.4261553024191755,
                                 osr::kNoLevel};
   expect_bus_cch_matches_dijkstra("test/monaco.osm.pbf", from, to);
+}
+
+TEST(routing_cch, monaco_loop_near_start) {
+  auto const from = osr::location{43.74284568503032, 7.42989439732284,
+                                  osr::kNoLevel};
+  auto const to = osr::location{43.73175634804065, 7.4261553024191755,
+                                osr::kNoLevel};
+  expect_car_cch_matches_dijkstra("test/monaco.osm.pbf", from, to);
 }

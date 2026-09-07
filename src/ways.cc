@@ -456,10 +456,12 @@ void ways::add_shortcuts() {
         if (candidate.cost_ < w.cost_ ||
             (candidate.cost_ == w.cost_ && candidate.distance_ < w.distance_)) {
           w = candidate;
+          return true;
         }
-        return;
+        return false;
       }
       e.weights_.push_back(candidate);
+      return true;
     };
 
     auto add_base_edge = [&](node_idx_t const from,
@@ -535,9 +537,13 @@ void ways::add_shortcuts() {
       }
     }
 
-    auto collect_upward_edges = [&](node_idx_t const from) {
+    auto collect_upward_edges = [&](node_idx_t const from,
+                                    bool const include_self = false) {
       auto edges = std::vector<customization_edge>{};
       for (auto const& e : cch_edge_weights[from]) {
+        if (!include_self && e.to_ == from) {
+          continue;
+        }
         if (e.weights_.empty()) {
           continue;
         }
@@ -583,9 +589,16 @@ void ways::add_shortcuts() {
                               customization_edge const& v_edge,
                               customization_edge const& w_edge) {
       auto* vw = find_cch_edge(v_edge.to_, w_edge.to_);
-      if (vw == nullptr) {
-        return;
+      if (vw == nullptr && v_edge.to_ == w_edge.to_) {
+        // Compact turn-aware contraction can create paths which leave and
+        // return to the same physical vertex with a different boundary state.
+        vw = &ensure_cch_edge(v_edge.to_, w_edge.to_);
       }
+      if (vw == nullptr) {
+        return false;
+      }
+
+      auto changed = false;
 
       for (auto const& vu : v_edge.weights_) {
         if (vu.up_) {
@@ -600,7 +613,7 @@ void ways::add_shortcuts() {
           if (turn_cost == kInfeasible) {
             continue;
           }
-          relax_value(
+          changed |= relax_value(
               *vw, cch_edge_weight{
                        .via_ = u,
                        .distance_ = combine_distance(vu.distance_, uw.distance_),
@@ -631,7 +644,7 @@ void ways::add_shortcuts() {
           if (turn_cost == kInfeasible) {
             continue;
           }
-          relax_value(
+          changed |= relax_value(
               *vw, cch_edge_weight{
                        .via_ = u,
                        .distance_ = combine_distance(wu.distance_, uv.distance_),
@@ -649,15 +662,38 @@ void ways::add_shortcuts() {
                        .up_ = false});
         }
       }
+      return changed;
     };
 
     for (auto rank = std::uint32_t{0U}; rank != n_nodes(); ++rank) {
       auto const x = rank_to_node[rank];
       utl::verify(x != node_idx_t::invalid(), "missing CCH rank: {}", rank);
 
+      // First propagate paths through self-loops at x into all incident edges.
+      // Repeating to a fixed point covers sequences of state-changing loops.
+      while (true) {
+        auto const self_edges = collect_upward_edges(x, true);
+        auto const self = std::find_if(
+            begin(self_edges), end(self_edges),
+            [&](customization_edge const& e) { return e.to_ == x; });
+        if (self == end(self_edges)) {
+          break;
+        }
+
+        auto changed = false;
+        for (auto const& edge : collect_upward_edges(x)) {
+          changed |= customize_edge(x, *self, edge);
+        }
+        if (!changed) {
+          break;
+        }
+      }
+
       auto const upward_edges = collect_upward_edges(x);
       for (auto v = std::size_t{0U}; v < upward_edges.size(); ++v) {
-        for (auto w = v + 1U; w < upward_edges.size(); ++w) {
+        // Pairing an edge with itself creates the compact-model self-loop at
+        // its higher-ranked endpoint.
+        for (auto w = v; w < upward_edges.size(); ++w) {
           customize_edge(x, upward_edges[v], upward_edges[w]);
         }
       }
