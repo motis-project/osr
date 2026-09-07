@@ -80,6 +80,7 @@ std::optional<way_candidate> find_closest(
     location const& loc,
     direction const dir,
     [[maybe_unused]] component_idx_t const matching_component,
+	[[maybe_unused]] way_idx_t const debug_way_idx,
     std::function<double(double, way_idx_t)> const& score) {
   auto const params = typename P::parameters{};
 
@@ -104,12 +105,25 @@ std::optional<way_candidate> find_closest(
       };
       auto const s = score(match.dist_to_way_[j], match.way_[j]);
       if (s > best_score) {
-        // best = {match};
         best = wc;
         best_score = s;
       }
     }
   }
+  if (best.has_value()) {
+    auto const path = l.get_node_candidate_path(
+        best->way_,
+        best->left_.valid() ? best->left_.node_ : best->right_.node_,
+        best->left_.valid() ? best->left_.way_dir_ : best->right_.way_dir_,
+        false, loc);
+    if (debug_way_idx == 1643) {
+      fmt::println("path: {}   loc: {}", path, loc.pos_);
+    }
+    utl::verify(!path.empty(), "Path should not be empty. way: {} query: {}",
+                best->way_, loc.pos_);
+    best->closest_point_on_way_ = path.front();
+  }
+                        if (debug_way_idx == 1643) { fmt::println("BEST: left: {}  right: {}  closest: {}  way: {}  dist: {}", best->left_.node_, best->right_.node_, best->closest_point_on_way_, best->way_, best->dist_to_way_); }
   return best;
 }
 
@@ -280,13 +294,14 @@ void connect_parking_ways(
             ? get_connected_way(way_idx, center, approx_distance_lng_degrees,
                                 false, is_foot_accessible)
             : find_closest<foot<false>>(w, l, loc, direction::kForward,
-                                        matching_component, foot_score);
+                                        matching_component, way_idx, foot_score);
     auto const car_offset =
         (is_same_component && is_car_connected)
             ? get_connected_way(way_idx, center, approx_distance_lng_degrees,
                                 true, is_car_accessible)
             : find_closest<car>(w, l, loc, direction::kBackward,
-                                matching_component, car_score);
+                                matching_component, way_idx, car_score);
+		fmt::println("FOOT TEST: {}  CAR TEST: {}",foot_offset.has_value(), car_offset.has_value());
     if (!foot_offset.has_value() || !car_offset.has_value()) {
       fmt::println(
           "WARNING: No usable way candidate found for way {}"
