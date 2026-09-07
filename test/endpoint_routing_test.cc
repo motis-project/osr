@@ -31,6 +31,15 @@ struct endpoint_routing : testing::Test {
   <node id="5" lat="49.1" lon="8.02"/>
   <node id="6" lat="49.099" lon="8"/>
   <node id="7" lat="49.101" lon="8.02"/>
+  <node id="8" lat="49.2" lon="8"/>
+  <node id="9" lat="49.2" lon="8.001"/>
+  <node id="10" lat="49.2" lon="8.002"><tag k="highway" v="elevator"/><tag k="level" v="0;1"/></node>
+  <node id="11" lat="49.2" lon="8.003"/>
+  <node id="12" lat="49.2" lon="8.004"/>
+  <way id="8"><nd ref="8"/><nd ref="9"/><tag k="highway" v="footway"/></way>
+  <way id="9"><nd ref="9"/><nd ref="10"/><tag k="highway" v="footway"/></way>
+  <way id="10"><nd ref="10"/><nd ref="11"/><tag k="highway" v="footway"/></way>
+  <way id="11"><nd ref="11"/><nd ref="12"/><tag k="highway" v="footway"/></way>
   <way id="1"><nd ref="1"/><nd ref="2"/><tag k="highway" v="residential"/></way>
   <way id="2"><nd ref="2"/><nd ref="3"/><tag k="highway" v="residential"/></way>
   <way id="3"><nd ref="4"/><nd ref="5"/><tag k="highway" v="footway"/></way>
@@ -47,6 +56,78 @@ struct endpoint_routing : testing::Test {
   std::unique_ptr<ways> w_;
   std::unique_ptr<lookup> l_;
 };
+
+TEST_F(endpoint_routing, backward_elevator_edges_have_forward_counterparts) {
+  using foot_t = foot<false, elevator_tracking>;
+  auto const n = w_->find_node_idx(osm_node_idx_t{10U});
+  ASSERT_TRUE(n.has_value());
+  auto const params = foot_t::parameters{};
+  for (auto const lvl : {kNoLevel, level_t{0.F}, level_t{1.F}}) {
+    auto const current = foot_t::node{*n, lvl};
+    foot_t::adjacent<direction::kBackward, false>(
+        params, *w_->r_, w_->timezones_, current, duration_t{0U}, std::nullopt,
+        nullptr, nullptr, nullptr,
+        [&](foot_t::node const predecessor, cost_t const cost,
+            duration_t const duration, distance_t, way_idx_t const way,
+            auto...) {
+          auto found = false;
+          foot_t::adjacent<direction::kForward, false>(
+              params, *w_->r_, w_->timezones_, predecessor, duration_t{0U},
+              std::nullopt, nullptr, nullptr, nullptr,
+              [&](foot_t::node const next, cost_t const forward_cost,
+                  duration_t const forward_duration, distance_t,
+                  way_idx_t const forward_way, auto...) {
+                found = found ||
+                        (next == current && way == forward_way &&
+                         cost == forward_cost && duration == forward_duration);
+              });
+          EXPECT_TRUE(found) << "level=" << static_cast<unsigned>(to_idx(lvl));
+        });
+  }
+}
+
+TEST_F(endpoint_routing, elevator_tracking_includes_both_halves_and_roots) {
+  auto const params = get_parameters(search_profile::kFoot);
+  for (auto const& [from, to] :
+       {std::pair{location{49.2, 8.0005}, location{49.2, 8.0035}},
+        std::pair{location{49.2, 8.0015}, location{49.2, 8.0035}},
+        std::pair{location{49.2, 8.0005}, location{49.2, 8.0025}}}) {
+    for (auto const dir : {direction::kForward, direction::kBackward}) {
+      auto const bwd = dir == direction::kBackward;
+      for (auto const algo :
+           {routing_algorithm::kDijkstra, routing_algorithm::kAStarBi}) {
+        auto const p = route(params, *w_, *l_, search_profile::kFoot,
+                             bwd ? to : from, bwd ? from : to, 3600U, dir, 2.0,
+                             nullptr, nullptr, nullptr, algo);
+        ASSERT_TRUE(p.has_value());
+        EXPECT_TRUE(p->uses_elevator_);
+      }
+      auto const p =
+          route_astar(params, *w_, *l_, search_profile::kFoot, bwd ? to : from,
+                      bwd ? from : to, 3600U, dir, 2.0);
+      ASSERT_TRUE(p.has_value());
+      EXPECT_TRUE(p->uses_elevator_);
+    }
+  }
+}
+
+TEST_F(endpoint_routing,
+       bidirectional_falls_back_when_endpoint_bound_is_too_large) {
+  auto const params = get_parameters(search_profile::kWheelchair);
+  auto const from = location{49.195, 8.00099};
+  auto const to = location{49.205, 8.00099};
+  for (auto const dir : {direction::kForward, direction::kBackward}) {
+    auto const d = route_dijkstra(params, *w_, *l_, search_profile::kWheelchair,
+                                  from, to, 1200U, dir, 600.0);
+    ASSERT_TRUE(d.has_value());
+    auto const b =
+        route_bidirectional(params, *w_, *l_, search_profile::kWheelchair, from,
+                            to, 1200U, dir, 600.0);
+    ASSERT_TRUE(b.has_value());
+    EXPECT_EQ(b->cost_, d->cost_);
+    EXPECT_EQ(b->duration_, d->duration_);
+  }
+}
 
 TEST_F(endpoint_routing, direct_without_affordable_graph_root) {
   auto const params = get_parameters(search_profile::kFoot);

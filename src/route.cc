@@ -283,7 +283,10 @@ path reconstruct_bi(typename P::parameters const& params,
                 .elevation_ = path_elevation,
                 .segments_ = forward_segments};
 
-  b.cost2_.at(backward_n.get_key()).write(backward_n, p);
+  b.cost1_.at(b.meet_point_1_.get_key()).write(b.meet_point_1_, p);
+  auto const uses_elevator = p.uses_elevator_;
+  b.cost2_.at(b.meet_point_2_.get_key()).write(b.meet_point_2_, p);
+  p.uses_elevator_ = p.uses_elevator_ || uses_elevator;
   return p;
 }
 
@@ -304,7 +307,6 @@ path reconstruct(typename P::parameters const& params,
                  cost_and_duration const total,
                  direction const dir,
                  std::optional<routing_time_t> const start_time) {
-
   auto n = dest_node;
   auto segments = std::vector<path::segment>{make_endpoint_segment(
       l, to, destination, destination_connection, n.get_node(),
@@ -963,13 +965,11 @@ std::optional<path> route(profile_parameters const& params,
         auto result = route_bidirectional(
             pp, w, l, b, from, to, from_match, to_match, max, dir, blocked,
             sharing, elevations, options.matching_penalty_factor_);
-        if constexpr (bidirectional_meet_policy<P>::kEnumerateStates) {
-          if (!result.has_value()) {
-            auto d = dijkstra<P>{};
-            return route_dijkstra(pp, w, l, d, from, to, from_match, to_match,
-                                  max, dir, start_time, blocked, sharing,
-                                  elevations, options);
-          }
+        if (!result.has_value()) {
+          auto d = dijkstra<P>{};
+          return route_dijkstra(pp, w, l, d, from, to, from_match, to_match,
+                                max, dir, start_time, blocked, sharing,
+                                elevations, options);
         }
         return result;
       });
