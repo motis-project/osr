@@ -5,11 +5,13 @@
 #include "boost/json.hpp"
 
 #include "osr/elevation_storage.h"
+#include "osr/routing/additional_connection.h"
 #include "osr/routing/entry_storage.h"
 #include "osr/routing/mode.h"
 #include "osr/routing/path.h"
 #include "osr/routing/profiles/car.h"
 #include "osr/routing/profiles/foot.h"
+#include "osr/types.h"
 #include "osr/ways.h"
 
 namespace osr {
@@ -114,6 +116,7 @@ struct car_parking {
     direction dir_;
     way_pos_t way_;
   };
+  static_assert(sizeof(std::declval<node>()) == 8);
 
   struct label {
     label(node const n, cost_t const c)
@@ -320,6 +323,51 @@ struct car_parking {
                clamp_add_duration(duration, switch_duration), dist, way, from,
                to, elevation, false);
           });
+    }
+
+    if constexpr (UseParking) {
+      if ((kFwd && n.is_car_node()) || (kBwd && n.is_foot_node())) {
+        for_each_addional_connection(
+            w, n.n_, SearchDir,
+            [&](ways::routing::additional_connection const& connection,
+                way_idx_t const way_idx, node_idx_t const target,
+                additional_connection_offset const& from,
+                additional_connection_offset const& to) {
+              auto const& car_offset = kFwd ? from : to;
+              auto const& foot_offset = kBwd ? from : to;
+
+              auto const lvl = w.node_properties_[target].from_level();
+              distance_t const dist =
+                  car_offset.dist_ + connection.dist_ + foot_offset.dist_;
+              auto const cost = clamp_add(
+                  clamp_add(
+                      car::way_cost(params.car_, w, timezones,
+                                    car_offset.offset_.way_,
+                                    w.way_properties_[car_offset.offset_.way_],
+                                    car_offset.dir_, car_offset.dist_,
+                                    start_time, current_duration, SearchDir),
+                      footp::way_cost(
+                          params.foot_, w, timezones, foot_offset.offset_.way_,
+                          w.way_properties_[foot_offset.offset_.way_],
+                          foot_offset.dir_,
+                          connection.dist_ + foot_offset.dist_, start_time,
+                          current_duration, SearchDir)),
+                  cost_and_duration{
+                      .cost_ = kSwitchPenalty,
+                      .duration_ = duration_from_cost(kSwitchPenalty)});
+
+              if (kFwd) {
+                // Reminder: direction hardly used for foot.h => All kForward
+                fn({target, node_type::kFoot, lvl, direction::kForward, 0U},
+                   cost.cost_, cost.duration_, dist, way_idx, 0, 0,
+                   elevation_storage::elevation{}, false);
+              } else {
+                fn({target, node_type::kCar, lvl, car_offset.dir_, 0U},
+                   cost.cost_, cost.duration_, dist, way_idx, 0, 0,
+                   elevation_storage::elevation{}, false);
+              }
+            });
+      }
     }
   }
 

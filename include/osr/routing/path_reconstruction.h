@@ -12,8 +12,11 @@
 #include "geo/latlng.h"
 
 #include "osr/elevation_storage.h"
+#include "osr/routing/additional_connection.h"
+#include "osr/routing/parking_matching.h"
 #include "osr/routing/path.h"
 #include "osr/routing/profile.h"
+#include "osr/routing/profiles/car_parking.h"  // TODO Debug only
 #include "osr/routing/sharing_data.h"
 #include "osr/types.h"
 #include "osr/util/infinite.h"
@@ -32,6 +35,17 @@ struct connecting_way {
   distance_t distance_{};
   elevation_storage::elevation elevation_{};
 };
+
+template <Profile P>
+bool is_regular_way(ways::routing const&, way_idx_t const way) {
+  return way != way_idx_t::invalid();
+}
+
+template <Profile P>
+  requires(is_parking<P>() == true)
+bool is_regular_way(ways::routing const& r, way_idx_t const way) {
+  return way != way_idx_t::invalid() && !is_additional_connection(r, way);
+}
 
 template <direction SearchDir, bool WithBlocked, Profile P>
 inline connecting_way find_connecting_way(
@@ -55,7 +69,8 @@ inline connecting_way find_connecting_way(
           std::uint16_t const a_idx, std::uint16_t const b_idx,
           elevation_storage::elevation const elevation, bool) {
         if (target == to && cost == expected_cost) {
-          auto const is_loop = way != way_idx_t::invalid() && r.is_loop(way) &&
+          auto const is_loop = is_regular_way<P>(*w.r_, way) &&
+                               r.is_loop(way) &&
                                static_cast<unsigned>(std::abs(a_idx - b_idx)) ==
                                    r.way_nodes_[way].size() - 2U;
           conn = {way, a_idx, b_idx, is_loop, dist, elevation};
@@ -108,6 +123,7 @@ inline connecting_way find_connecting_way(
 template <Profile P>
 inline double add_path(typename P::parameters const& params,
                        ways const& w,
+                       lookup const& l,
                        ways::routing const& r,
                        bitvec<node_idx_t> const* blocked,
                        sharing_data const* sharing,
@@ -134,7 +150,7 @@ inline double add_path(typename P::parameters const& params,
   segment.elevation_ = elevation;
   segment.mode_ = to.get_mode();
 
-  if (way != way_idx_t::invalid()) {
+  if (is_regular_way<P>(*w.r_, way)) {
     auto const start_idx = dir == direction::kBackward ? to_idx : from_idx;
     auto const end_idx = dir == direction::kBackward ? from_idx : to_idx;
     auto const is_reverse = (start_idx > end_idx) ^ is_loop;
@@ -186,8 +202,18 @@ inline double add_path(typename P::parameters const& params,
     segment.from_ =
         dir == direction::kBackward ? to.get_node() : from.get_node();
     segment.to_ = dir == direction::kBackward ? from.get_node() : to.get_node();
-    segment.polyline_ = {get_node_pos(segment.from_),
-                         get_node_pos(segment.to_)};
+    if (is_additional_connection(*w.r_, way)) {
+      auto const conn = get_additional_connection(*w.r_, way);
+      // TODO: MK - Test conn.is_parking
+      if constexpr (is_parking<P>()) {
+        segment.mode_ = mode::kParking;
+        segment.polyline_ = get_additional_connection_polyline(
+            l, conn, segment.from_, segment.to_);
+      }
+    } else {
+      segment.polyline_ = {get_node_pos(segment.from_),
+                           get_node_pos(segment.to_)};
+    }
   }
 
   return distance;
@@ -196,6 +222,7 @@ inline double add_path(typename P::parameters const& params,
 template <Profile P>
 inline double add_path(typename P::parameters const& params,
                        ways const& w,
+                       lookup const& l,
                        ways::routing const& r,
                        bitvec<node_idx_t> const* blocked,
                        sharing_data const* sharing,
@@ -205,7 +232,7 @@ inline double add_path(typename P::parameters const& params,
                        cost_t const expected_cost,
                        std::vector<path::segment>& path,
                        direction const dir) {
-  return add_path<P>(params, w, r, blocked, sharing, elevations, from, to,
+  return add_path<P>(params, w, l, r, blocked, sharing, elevations, from, to,
                      duration_from_cost(expected_cost), std::nullopt,
                      expected_cost, duration_from_cost(expected_cost), path,
                      dir);

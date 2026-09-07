@@ -712,7 +712,7 @@ matched_route map_match(
                 .dist_ = edge_dist,
                 .mode_ = n->get_mode()});
           } else {
-            add_path<P>(params, w, *w.r_, blocked, seg.sharing_.get(),
+            add_path<P>(params, w, l, *w.r_, blocked, seg.sharing_.get(),
                         elevations, *pred, *n, expected_cost,
                         result.path_.segments_, direction::kForward);
           }

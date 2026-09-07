@@ -1,5 +1,6 @@
 #include <algorithm>
 #include <array>
+#include <initializer_list>
 #include <optional>
 #include <sstream>
 #include <string>
@@ -15,8 +16,10 @@
 #include "utl/pipes.h"
 
 #include "osr/platforms.h"
+#include "osr/routing/additional_connection.h"
 #include "osr/routing/dijkstra.h"
 #include "osr/routing/profiles/foot.h"
+#include "osr/types.h"
 #include "osr/ways.h"
 
 namespace osr {
@@ -41,6 +44,19 @@ boost::json::value to_line_string(std::initializer_list<T>&& line) {
   return to_line_string(line);
 }
 
+template <typename Collection>
+boost::json::value to_multi_line_string(Collection const& multi_line) {
+  auto x = boost::json::array{};
+  for (auto const& line : multi_line) {
+    auto y = boost::json::array{};
+    for (auto const& p : line) {
+      y.emplace_back(to_array(p));
+    }
+    x.emplace_back(std::move(y));
+  }
+  return {{"type", "MultiLineString"}, {"coordinates", std::move(x)}};
+}
+
 inline boost::json::object to_featurecollection_value(
     ways const& w,
     std::optional<osr::path> const& p,
@@ -62,7 +78,8 @@ inline boost::json::object to_featurecollection_value(
                                      ? 0U
                                      : to_idx(w.way_osm_idx_[s.way_])},
                   {"cost", s.cost_},
-                  {"distance", s.dist_}},
+                  {"distance", s.dist_},
+                  {"mode", to_str(s.mode_)}},
              },
              {"geometry", to_line_string(s.polyline_)}};
        }) | utl::emplace_back_to<boost::json::array>()}};
@@ -657,6 +674,47 @@ struct geojson_writer {
 
     nodes_.insert(begin(nodes), end(nodes));
     ++n;
+  }
+
+  void write_additional_connections(
+      lookup const& l, bitvec<connection_idx_t> const& connections) {
+    connections.for_each_set_bit([&](connection_idx_t const connection_idx) {
+      auto const& connection = w_.r_->additional_connections_[connection_idx];
+      auto geom =
+          vec<geo::polyline>{get_additional_connection_points(connection)};
+
+      for (auto const [offset, start_point] :
+           {std::pair{connection.from_, connection.connection_.front()},
+            std::pair{connection.to_, connection.connection_.back()}}) {
+        for (auto const is_left : {true, false}) {
+          if (auto line = osr::get_additional_connection_offset_points(
+                  l, offset, start_point, is_left);
+              !line.empty()) {
+            geom.emplace_back(line);
+          }
+        }
+      }
+
+      features_.emplace_back(boost::json::value{
+          {"type", "Feature"},
+          {"properties",
+           {
+               {"type", "parking-edge"},
+               {"internal_id", to_idx(connection_idx)},
+               {"connection.dist", connection.dist_},
+               {"from.left", connection.from_.left_ != node_idx_t::invalid()},
+               {"from.right", connection.from_.right_ != node_idx_t::invalid()},
+               {"from.left_dist", connection.from_.dist_left_},
+               {"from.right_dist", connection.from_.dist_right_},
+               {"to.left", connection.to_.left_ != node_idx_t::invalid()},
+               {"to.right", connection.to_.right_ != node_idx_t::invalid()},
+               {"to.left_dist", connection.to_.dist_left_},
+               {"to.right_dist", connection.to_.dist_right_},
+               // {"is_parking", connection.is_parking_},
+           }},
+          {"geometry", to_multi_line_string(geom)}});
+    });
+    //
   }
 
   template <typename Dijkstra>
