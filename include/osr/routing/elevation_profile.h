@@ -9,8 +9,8 @@
 
 namespace osr {
 
-struct height_profile {
-  height_profile(ways const&, path const&, unsigned steps);
+struct elevation_profile {
+  elevation_profile(ways const&, path const&, unsigned steps);
 
   elevation_absolute_t median() const;
 

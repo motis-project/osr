@@ -9,7 +9,18 @@
 
 namespace osr {
 
-height_profile::height_profile(ways const& w, path const& p, unsigned steps) {
+elevation_profile::elevation_profile(ways const& w,
+                                     path const& p,
+                                     unsigned steps) {
+  if (p.segments_.empty()) {
+    return;
+  }
+
+  baseline_ = p.segments_.front().elevation_.absolute_;
+  if (baseline_ == elevation_absolute_t::invalid()) {
+    return;
+  }
+
   auto const adjust_lng = [](double const x) {
     if (x < -180.) {
       return x + 360.;
@@ -38,7 +49,6 @@ height_profile::height_profile(ways const& w, path const& p, unsigned steps) {
 
   points_.resize(steps);
   elevation_.resize(steps);
-  baseline_ = p.segments_.front().elevation_.absolute_;
   points_.push_back(w.get_node_pos(p.segments_.front().from_));
   elevation_.emplace_back(0);
 
@@ -54,7 +64,6 @@ height_profile::height_profile(ways const& w, path const& p, unsigned steps) {
                  to_idx(seg->elevation_.down_));
 
     if (dist_acc < step_size && seg != prev(end(p.segments_))) {
-      seg++;
       continue;
     }
 
@@ -66,7 +75,7 @@ height_profile::height_profile(ways const& w, path const& p, unsigned steps) {
   }
 }
 
-elevation_absolute_t height_profile::median() const {
+elevation_absolute_t elevation_profile::median() const {
   if (elevation_.empty()) {
     return elevation_absolute_t::invalid();
   }
