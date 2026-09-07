@@ -49,6 +49,7 @@ struct dijkstra {
       settled_.clear();
       remaining_destinations_ = 0U;
       early_termination_max_cost_ = kInfeasible;
+      all_settled_key_ = kInfeasible;
       terminated_early_max_cost_ = false;
     }
   }
@@ -127,23 +128,33 @@ struct dijkstra {
       }
 
       if constexpr (EarlyTermination) {
-        if (settle_destination(l.get_node())) {
-          auto const curr_cost = get_cost(l.get_node());
-          early_termination_max_cost_ = std::min(
-              early_termination_max_cost_,
-              static_cast<cost_t>(std::min(
-                  {static_cast<std::uint64_t>(curr_cost) * 2 +
-                       static_cast<std::uint64_t>(
-                           P::upper_bound_heuristic(params, 1500U)),
-                   static_cast<std::uint64_t>(
-                       curr_cost + P::upper_bound_heuristic(params, 10000U)),
-                   static_cast<std::uint64_t>(kInfeasible - 1U)})));
-          if (remaining_destinations_ == 0U) {
+        // Settling a destination fixes its cost, but not yet its duration:
+        // The queue can still contain equal-cost entries with shorter
+        // durations, and these could reach a destination using 0-cost edges.
+        // Therefore, we can only terminate once the current queue bucket is
+        // empty.
+        if (all_settled_key_ == kInfeasible) {
+          if (settle_destination(l.get_node())) {
+            auto const curr_cost = get_cost(l.get_node());
+            early_termination_max_cost_ = std::min(
+                early_termination_max_cost_,
+                static_cast<cost_t>(std::min(
+                    {static_cast<std::uint64_t>(curr_cost) * 2 +
+                         static_cast<std::uint64_t>(
+                             P::upper_bound_heuristic(params, 1500U)),
+                     static_cast<std::uint64_t>(
+                         curr_cost + P::upper_bound_heuristic(params, 10000U)),
+                     static_cast<std::uint64_t>(kInfeasible - 1U)})));
+            if (remaining_destinations_ == 0U) {
+              all_settled_key_ = l.cost();
+            }
+          }
+          if (all_settled_key_ == kInfeasible &&
+              l.cost() > early_termination_max_cost_) {
+            terminated_early_max_cost_ = true;
             break;
           }
-        }
-        if (l.cost() > early_termination_max_cost_) {
-          terminated_early_max_cost_ = true;
+        } else if (l.cost() > all_settled_key_) {
           break;
         }
       }
@@ -219,6 +230,7 @@ struct dijkstra {
   std::vector<bool> settled_;
   std::size_t remaining_destinations_{0U};
   cost_t early_termination_max_cost_{kInfeasible};
+  cost_t all_settled_key_{kInfeasible};
   bool terminated_early_max_cost_{false};
 };
 
