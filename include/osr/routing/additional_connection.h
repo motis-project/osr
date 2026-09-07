@@ -7,6 +7,7 @@
 
 namespace osr {
 
+struct lookup;
 struct way_candidate;
 
 struct additional_connection_offset {
@@ -34,6 +35,7 @@ way_idx_t add_additional_connection(
 
 geo::polyline get_additional_connection_polyline(
     ways const&,
+    lookup const&,
     ways::routing::additional_connection const&,
     node_idx_t from,
     node_idx_t to);
@@ -43,6 +45,7 @@ vec<point> get_additional_connection_points(
 
 vec<point> get_additional_connection_offset_points(
     ways const&,
+    lookup const&,
     ways::routing::additional_connection::offset const&,
     point const&,
     bool is_left);

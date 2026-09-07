@@ -2,6 +2,8 @@
 
 #include <ranges>
 
+#include "osr/location.h"
+#include "osr/point.h"
 #include "osr/types.h"
 #include "utl/pipes/transform.h"
 #include "utl/to_vec.h"
@@ -98,6 +100,7 @@ way_idx_t add_additional_connection(
 
 geo::polyline get_additional_connection_polyline(
     ways const& w,
+    lookup const& l,
     ways::routing::additional_connection const& conn,
     node_idx_t from,
     node_idx_t to) {
@@ -109,10 +112,10 @@ geo::polyline get_additional_connection_polyline(
     }
   };
   append_to_polyline(reverse(get_additional_connection_offset_points(
-      w, conn.from_, conn.connection_.front(), conn.from_.left_ == from)));
+      w, l, conn.from_, conn.connection_.front(), conn.from_.left_ == from)));
   append_to_polyline(get_additional_connection_points(conn));
   append_to_polyline(get_additional_connection_offset_points(
-      w, conn.to_, conn.connection_.back(), conn.to_.left_ == to));
+      w, l, conn.to_, conn.connection_.back(), conn.to_.left_ == to));
 
   return polyline;
 }
@@ -123,42 +126,29 @@ vec<point> get_additional_connection_points(
 }
 
 vec<point> get_additional_connection_offset_points(
-    ways const& w,
+// geo::polyline get_additional_connection_offset_points(
+    [[maybe_unused]] ways const& w,
+    [[maybe_unused]] lookup const& l,
     ways::routing::additional_connection::offset const& offset,
     point const& start_point,
     bool const is_left) {
-  auto line = vec{start_point};
-
-  auto const way_idx = offset.way_;
-  auto const target_node = is_left ? offset.left_ : offset.right_;
-  if (target_node == node_idx_t::invalid()) {
+  auto const& n = is_left ? offset.left_ : offset.right_;
+  if (n == node_idx_t::invalid()) {
     return {};
   }
-  auto const stop_node = w.node_to_osm_[target_node];
-  auto const add_point = [&](unsigned const i) {
-    line.push_back(w.way_polylines_[way_idx][i]);
-  };
-
-  auto i = is_left ? offset.segment_ : offset.segment_ + 1;
-  if (is_left) {
-    for (; i != 0U && w.way_osm_nodes_[way_idx][i] != stop_node; --i) {
-      add_point(i);
-    }
-    add_point(i);
-  } else {
-    for (; i < w.way_osm_nodes_[way_idx].size(); ++i) {
-      add_point(i);
-      if (w.way_osm_nodes_[way_idx][i] == stop_node) {
-        break;
-      }
-    }
+  auto const path = l.get_node_candidate_path(
+      offset.way_, n, is_left ? direction::kBackward : direction::kForward,
+      true, location{start_point.as_latlng(), kNoLevel});
+  auto line = vec<point>{};
+  line.reserve(static_cast<unsigned>(path.size()));
+  for (auto const& p : path) {
+    line.push_back(point::from_latlng(p));
   }
-
   return line;
 }
 
 ways::routing::additional_connection::offset to_offset(
-    ways const& w, way_candidate const& wc, point const& start_point) {
+    [[maybe_unused]] ways const& w, way_candidate const& wc, [[maybe_unused]] point const& start_point) {
   auto offset =
       ways::routing::additional_connection::offset{.way_ = wc.way_,
                                                    .segment_ = wc.segment_idx_,
@@ -168,13 +158,10 @@ ways::routing::additional_connection::offset to_offset(
                                                    .dist_right_ = 0U};
 
   if (wc.left_.node_ != node_idx_t::invalid()) {
-    offset.dist_left_ = geo::length(to_polyline(
-        get_additional_connection_offset_points(w, offset, start_point, true)));
+    offset.dist_left_ = wc.left_.dist_to_node_;
   }
   if (wc.right_.node_ != node_idx_t::invalid()) {
-    offset.dist_right_ =
-        geo::length(to_polyline(get_additional_connection_offset_points(
-            w, offset, start_point, false)));
+    offset.dist_right_ = wc.right_.dist_to_node_;
   }
 
   return offset;

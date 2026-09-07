@@ -123,6 +123,7 @@ inline connecting_way find_connecting_way(
 template <Profile P>
 inline double add_path(typename P::parameters const& params,
                        ways const& w,
+                       lookup const& l,
                        ways::routing const& r,
                        bitvec<node_idx_t> const* blocked,
                        sharing_data const* sharing,
@@ -207,7 +208,7 @@ inline double add_path(typename P::parameters const& params,
       if constexpr (is_parking<P>()) {
         segment.mode_ = mode::kParking;
         segment.polyline_ = get_additional_connection_polyline(
-            w, conn, segment.from_, segment.to_);
+            w, l, conn, segment.from_, segment.to_);
       }
     } else {
       segment.polyline_ = {get_node_pos(segment.from_),
@@ -221,6 +222,7 @@ inline double add_path(typename P::parameters const& params,
 template <Profile P>
 inline double add_path(typename P::parameters const& params,
                        ways const& w,
+                       lookup const& l,
                        ways::routing const& r,
                        bitvec<node_idx_t> const* blocked,
                        sharing_data const* sharing,
@@ -230,7 +232,7 @@ inline double add_path(typename P::parameters const& params,
                        cost_t const expected_cost,
                        std::vector<path::segment>& path,
                        direction const dir) {
-  return add_path<P>(params, w, r, blocked, sharing, elevations, from, to,
+  return add_path<P>(params, w, l, r, blocked, sharing, elevations, from, to,
                      duration_from_cost(expected_cost), std::nullopt,
                      expected_cost, duration_from_cost(expected_cost), path,
                      dir);
