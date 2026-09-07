@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cassert>
+
 #include <array>
 #include <optional>
 #include <string_view>
@@ -8,15 +9,15 @@
 
 #include "boost/json.hpp"
 
-#include "utl/helpers/algorithm.h"
-
 #include "osr/elevation_storage.h"
 #include "osr/routing/additional_edge.h"
+#include "osr/routing/entry_storage.h"
 #include "osr/routing/mode.h"
 #include "osr/routing/path.h"
 #include "osr/routing/profiles/car.h"
 #include "osr/routing/profiles/foot.h"
 #include "osr/routing/sharing_data.h"
+#include "osr/routing/tracking.h"
 #include "osr/ways.h"
 
 namespace osr {
@@ -228,55 +229,59 @@ struct car_sharing {
 #endif
   };
 
+  struct slot {
+    node_idx_t pred_{node_idx_t::invalid()};
+    cost_t cost_{kInfeasible};
+    level_t pred_lvl_{kNoLevel};
+    node_type pred_type_{node_type::kInvalid};
+    way_pos_t pred_way_{0U};
+    bool pred_dir_{false};
+    OSR_NO_UNIQUE_ADDRESS Tracking tracking_{};
+  };
+
   struct entry {
-    static constexpr auto const kMaxWays = way_pos_t{16U};
-    static constexpr auto const kN =
-        kMaxWays * 2U + 2 /* FWD+BWD + initial foot + trailing foot */;
+    using slot_t = slot;
 
-    entry() {
-      utl::fill(pred_, node_idx_t::invalid());
-      utl::fill(cost_, kInfeasible);
-      utl::fill(pred_lvl_, kNoLevel);
-      utl::fill(pred_way_, way_pos_t{0});
-      utl::fill(pred_type_, node_type::kInvalid);
-    }
+    using storage_t =
+        entry_storage<slot_t, 2U>;  // 2 extra: initial + trailing foot
+    static constexpr auto const kN = storage_t::kN;
 
-    constexpr std::optional<node> pred(node const n) const noexcept {
-      auto const idx = get_index(n);
-      return pred_[idx] == node_idx_t::invalid()
+    std::optional<node> pred(node const n) const noexcept {
+      auto const s = s_[get_index(n)];
+      return s.pred_ == node_idx_t::invalid()
                  ? std::nullopt
-                 : std::optional{node{.n_ = pred_[idx],
-                                      .type_ = pred_type_[idx],
-                                      .lvl_ = pred_lvl_[idx],
-                                      .dir_ = to_dir(pred_dir_[idx]),
-                                      .way_ = pred_way_[idx]}};
+                 : std::optional{node{.n_ = s.pred_,
+                                      .type_ = s.pred_type_,
+                                      .lvl_ = s.pred_lvl_,
+                                      .dir_ = to_dir(s.pred_dir_),
+                                      .way_ = s.pred_way_}};
     }
 
-    constexpr cost_t cost(node const n) const noexcept {
-      return cost_[get_index(n)];
-    }
+    cost_t cost(node const n) const noexcept { return s_[get_index(n)].cost_; }
 
     constexpr duration_t duration(node const n) const noexcept {
       return duration_from_cost(cost(n));
     }
 
-    constexpr bool update(label const& l,
-                          node const n,
-                          cost_t const c,
-                          node const pred,
-                          duration_t const) noexcept {
-      auto const idx = get_index(n);
-      if (c < cost_[idx]) {
-        cost_[idx] = c;
-        pred_[idx] = pred.n_;
-        pred_lvl_[idx] = pred.lvl_;
-        pred_way_[idx] = pred.way_;
-        pred_dir_[idx] = to_bool(pred.dir_);
-        pred_type_[idx] = pred.type_;
-        tracking_[idx] = l.tracking_;
-        return true;
+    bool update(label const& l,
+                node const n,
+                cost_t const c,
+                node const pred,
+                duration_t const,
+                ways::routing const& w,
+                entry_storage_arena& a) {
+      auto& s = s_.slot(get_index(n), w, n.n_, a);
+      if (c >= s.cost_) {
+        return false;
       }
-      return false;
+      s.cost_ = c;
+      s.pred_ = pred.n_;
+      s.pred_lvl_ = pred.lvl_;
+      s.pred_way_ = pred.way_;
+      s.pred_dir_ = to_bool(pred.dir_);
+      s.pred_type_ = pred.type_;
+      s.tracking_ = l.tracking_;
+      return true;
     }
 
     static constexpr std::size_t get_index(node const n) {
@@ -284,7 +289,7 @@ struct car_sharing {
         case node_type::kInitialFoot: return 0U;
         case node_type::kTrailingFoot: return 1U;
         default:  // node_type::kRental
-          return 2U + (n.dir_ == direction::kForward ? 0U : kMaxWays) + n.way_;
+          return storage_t::index(n.way_, n.dir_);
       }
     }
 
@@ -297,21 +302,10 @@ struct car_sharing {
     }
 
     void write(node const n, path& p) const {
-      tracking_[get_index(n)].write(p);
+      s_[get_index(n)].tracking_.write(p);
     }
 
-    std::array<node_idx_t, kN> pred_{};
-    std::array<cost_t, kN> cost_{};
-    std::array<level_t, kN> pred_lvl_{};
-    std::array<way_pos_t, kN> pred_way_{};
-    std::bitset<kN> pred_dir_{};
-    std::array<node_type, kN> pred_type_{};
-#ifdef _MSC_VER
-    [[no_unique_address]] [[msvc::no_unique_address]] std::array<Tracking, kN>
-        tracking_;
-#else
-    [[no_unique_address]] std::array<Tracking, kN> tracking_;
-#endif
+    storage_t s_;
   };
 
   static footp::node to_foot(node const n) {

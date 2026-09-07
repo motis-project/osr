@@ -312,6 +312,9 @@ void ways::connect_ways() {
     // Reserve node_ways_ / node_in_way_idx_ for each node.
     for (auto n = std::size_t{0U}; n != n_nodes; ++n) {
       auto const size = count[n].exchange(0U, std::memory_order_relaxed);
+      utl::verify(size <= kMaxWaysPerNode,
+                  "node {} (osm={}) has {} ways, maximum is {}", n,
+                  node_to_osm_[node_idx_t{n}], size, kMaxWaysPerNode);
       r_->node_ways_.add_back_sized(size);
       r_->node_in_way_idx_.add_back_sized(size);
     }

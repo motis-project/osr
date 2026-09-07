@@ -9,6 +9,7 @@
 #include "utl/helpers/algorithm.h"
 
 #include "osr/elevation_storage.h"
+#include "osr/routing/entry_storage_arena.h"
 #include "osr/routing/mode.h"
 #include "osr/routing/path.h"
 #include "osr/routing/profiles/common.h"
@@ -92,7 +93,9 @@ struct ferry {
                           node const,
                           cost_t const c,
                           node const pred,
-                          duration_t const) noexcept {
+                          duration_t const,
+                          ways::routing const&,
+                          entry_storage_arena&) noexcept {
       if (c < cost_) {
         cost_ = c;
         pred_ = pred.n_;

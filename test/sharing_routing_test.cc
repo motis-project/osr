@@ -68,6 +68,7 @@ struct test_sharing_data {
   }
 
   sharing_data view(ways const& w) const {
+    verify_additional_edge_count(additional_edges_);
     return {.start_allowed_ = &start_allowed_,
             .end_allowed_ = &end_allowed_,
             .through_allowed_ = &through_allowed_,
