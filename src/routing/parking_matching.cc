@@ -202,8 +202,6 @@ void connect_parking_ways(
     }
     utl::verify(node != node_idx_t::invalid(),
                 "Connected way must have at least one connected node");
-    auto const cost = static_cast<cost_t>(std::rint(
-        min_dist * foot<false>::parameters{}.speed_meters_per_second_));
     // TODO: MK - Will direction be used? Or can we use kForward only?
     return std::optional{
         idx == 0
@@ -215,8 +213,8 @@ void connect_parking_ways(
                                     .way_dir_ = is_from ? direction::kBackward
                                                         : direction::kForward,
                                     .node_ = node,
-                                    .dist_to_node_ = min_dist,
-                                    .cost_ = cost,
+                                    .dist_to_node_ = 0U,
+                                    .cost_ = 0U,
                                 },
                             .right_ = {},
                             .closest_point_on_way_ =
@@ -231,8 +229,8 @@ void connect_parking_ways(
                                     .way_dir_ = is_from ? direction::kForward
                                                         : direction::kBackward,
                                     .node_ = node,
-                                    .dist_to_node_ = min_dist,
-                                    .cost_ = cost,
+                                    .dist_to_node_ = 0U,
+                                    .cost_ = 0U,
                                 },
                             .closest_point_on_way_ =
                                 w.r_->node_positions_[node].as_latlng(),

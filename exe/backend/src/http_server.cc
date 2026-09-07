@@ -216,7 +216,7 @@ struct http_server::impl {
       gj.write_way(w);
       mark_connections(w);
     });
-    gj.write_additional_connections(w_, l_, connections);
+    gj.write_additional_connections(l_, connections);
 
     with_profile(profile,
                  [&]<Profile P>(P&&) { send_graph_response<P>(req, cb, gj); });

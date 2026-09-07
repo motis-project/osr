@@ -678,9 +678,7 @@ struct geojson_writer {
   }
 
   void write_additional_connections(
-      [[maybe_unused]] ways const& w,
-      lookup const& l,
-      bitvec<connection_idx_t> const& connections) {
+      lookup const& l, bitvec<connection_idx_t> const& connections) {
     connections.for_each_set_bit([&](connection_idx_t const connection_idx) {
       auto const& connection = w_.r_->additional_connections_[connection_idx];
       auto geom =
@@ -704,13 +702,13 @@ struct geojson_writer {
            {
                {"type", "parking-edge"},
                {"internal_id", to_idx(connection_idx)},
+               {"connection.dist", connection.dist_},
                {"from.left", connection.from_.left_ != node_idx_t::invalid()},
                {"from.right", connection.from_.right_ != node_idx_t::invalid()},
                {"from.left_dist", connection.from_.dist_left_},
                {"from.right_dist", connection.from_.dist_right_},
                {"to.left", connection.to_.left_ != node_idx_t::invalid()},
                {"to.right", connection.to_.right_ != node_idx_t::invalid()},
-               {"edge_dist", connection.dist_},
                {"to.left_dist", connection.to_.dist_left_},
                {"to.right_dist", connection.to_.dist_right_},
                // {"is_parking", connection.is_parking_},
