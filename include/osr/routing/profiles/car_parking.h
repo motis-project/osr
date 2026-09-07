@@ -330,15 +330,15 @@ struct car_parking {
                                way_idx_t const way,
                                node_idx_t const n,
                                level_t const lvl,
-                               direction const search_dir,
+                               direction const endpoint_dir,
                                Fn&& f) {
-    if (search_dir == direction::kForward) {
+    if (endpoint_dir == direction::kForward) {
       car::template resolve_endpoint<Role>(
-          w, way, n, lvl, search_dir,
+          w, way, n, lvl, endpoint_dir,
           [&](car::node const cn) { f(to_node(cn)); });
     } else {
       footp::template resolve_endpoint<Role>(
-          w, way, n, lvl, search_dir,
+          w, way, n, lvl, endpoint_dir,
           [&](typename footp::node const fn) { f(to_node(fn)); });
     }
   }

@@ -223,22 +223,6 @@ struct hgv {
   }
 
   template <typename Fn>
-  static void resolve_start_node(ways::routing const& w,
-                                 way_idx_t const way,
-                                 node_idx_t const n,
-                                 level_t,
-                                 direction,
-                                 Fn&& f) {
-    auto const ways = w.node_ways_[n];
-    for (auto i = way_pos_t{0U}; i != ways.size(); ++i) {
-      if (ways[i] == way) {
-        f(node{n, i, direction::kForward});
-        f(node{n, i, direction::kBackward});
-      }
-    }
-  }
-
-  template <typename Fn>
   static void resolve_all(ways::routing const& w, node_idx_t const n, Fn&& f) {
     auto const ways = w.node_ways_[n];
     for (auto i = way_pos_t{0U}; i != ways.size(); ++i) {
@@ -251,11 +235,15 @@ struct hgv {
   static void resolve_endpoint(ways::routing const& w,
                                way_idx_t const way,
                                node_idx_t const n,
-                               level_t const lvl,
-                               direction const search_dir,
+                               level_t,
+                               direction,
                                Fn&& f) {
     if constexpr (Role == endpoint_role::kSource) {
-      resolve_start_node(w, way, n, lvl, search_dir, f);
+      resolve_all(w, n, [&](node const candidate) {
+        if (w.node_ways_[n][candidate.way_] == way) {
+          f(candidate);
+        }
+      });
     } else {
       resolve_all(w, n, f);
     }
