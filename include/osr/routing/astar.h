@@ -57,6 +57,7 @@ struct astar {
     settled_.clear();
     remaining_destinations_ = 0U;
     early_termination_max_cost_ = kInfeasible;
+    all_settled_key_ = kInfeasible;
     terminated_early_max_cost_ = false;
     auto const& from = params_.start_loc_;
     auto const& to = params_.end_loc_;
@@ -175,22 +176,32 @@ struct astar {
       }
 
       if constexpr (EarlyTermination) {
-        if (settle_destination(curr_node)) {
-          early_termination_max_cost_ = std::min(
-              early_termination_max_cost_,
-              static_cast<cost_t>(std::min(
-                  {static_cast<std::uint64_t>(curr_cost) * 2 +
-                       static_cast<std::uint64_t>(P::upper_bound_heuristic(
-                           params, std::min(beeline_distance_, 1000.0))),
-                   static_cast<std::uint64_t>(
-                       curr_cost + P::upper_bound_heuristic(params, 10000U)),
-                   static_cast<std::uint64_t>(kInfeasible - 1U)})));
-          if (remaining_destinations_ == 0U) {
+        // Same duration tie break as in dijkstra, but the queue is keyed on
+        // l.cost() = curr_cost + curr_heur, so we can only terminate once
+        // that bucket is empty.
+        // Unlike in dijkstra, 0-cost edges aren't needed here: an edge the
+        // heuristic is exact on also puts both of its nodes in one bucket.
+        if (all_settled_key_ == kInfeasible) {
+          if (settle_destination(curr_node)) {
+            early_termination_max_cost_ = std::min(
+                early_termination_max_cost_,
+                static_cast<cost_t>(std::min(
+                    {static_cast<std::uint64_t>(curr_cost) * 2 +
+                         static_cast<std::uint64_t>(P::upper_bound_heuristic(
+                             params, std::min(beeline_distance_, 1000.0))),
+                     static_cast<std::uint64_t>(
+                         curr_cost + P::upper_bound_heuristic(params, 10000U)),
+                     static_cast<std::uint64_t>(kInfeasible - 1U)})));
+            if (remaining_destinations_ == 0U) {
+              all_settled_key_ = l.cost();
+            }
+          }
+          if (all_settled_key_ == kInfeasible &&
+              curr_cost > early_termination_max_cost_) {
+            terminated_early_max_cost_ = true;
             break;
           }
-        }
-        if (curr_cost > early_termination_max_cost_) {
-          terminated_early_max_cost_ = true;
+        } else if (l.cost() > all_settled_key_) {
           break;
         }
       }
@@ -306,6 +317,7 @@ struct astar {
   std::vector<bool> settled_;
   std::size_t remaining_destinations_{0U};
   cost_t early_termination_max_cost_{kInfeasible};
+  cost_t all_settled_key_{kInfeasible};
   bool terminated_early_max_cost_{false};
   geo::latlng dest_centroid_{};
   double dest_radius_{};
