@@ -537,7 +537,7 @@ std::optional<path> route_bidirectional(typename P::parameters const& params,
     return std::nullopt;
   }
   return reconstruct_bi<P>(params, w, l, blocked, sharing, elevations, b, from,
-                           to, starts, destinations, cost, b.best_duration_,
+                           to, starts, destinations, cost, b.best_duration(),
                            dir);
 }
 
