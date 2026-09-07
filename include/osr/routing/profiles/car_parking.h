@@ -331,9 +331,8 @@ struct car_parking {
             w, n.n_, SearchDir,
             [&](ways::routing::additional_connection const& connection,
                 way_idx_t const way_idx, node_idx_t const target,
-                [[maybe_unused]] direction const dir,
-                additional_connection_offset const from,
-                additional_connection_offset const to) {
+                additional_connection_offset const& from,
+                additional_connection_offset const& to) {
               auto const& car_offset = kFwd ? from : to;
               auto const& foot_offset = kBwd ? from : to;
 

@@ -158,13 +158,11 @@ void for_each_addional_connection(
     std::function<void(ways::routing::additional_connection const&,
                        way_idx_t,
                        node_idx_t,
-                       direction,
                        additional_connection_offset const& from,
                        additional_connection_offset const& to)> const& f) {
   for_each_connection(r, node_idx, [&](connection_idx_t const connection_idx) {
     auto const& conn = r.additional_connections_[connection_idx];
-    auto const g = [&](direction const conn_dir,
-                       ways::routing::additional_connection::offset const& from,
+    auto const g = [&](ways::routing::additional_connection::offset const& from,
                        ways::routing::additional_connection::offset const& to) {
       for (auto const from_left : {true, false}) {
         auto const start = from_left ? from.left_ : from.right_;
@@ -174,24 +172,24 @@ void for_each_addional_connection(
         for (auto const to_left : {true, false}) {
           auto const target = to_left ? to.left_ : to.right_;
           if (target != node_idx_t::invalid()) {
-            f(conn, to_way_idx(r, connection_idx), target, conn_dir,
+            f(conn, to_way_idx(r, connection_idx), target,
               {.offset_ = from,
                .node_ = start,
                .dist_ = from_left ? from.dist_left_ : from.dist_right_,
-               .dir_ = flip(direction::kForward, opposite(conn_dir))},
+               .dir_ = flip(direction::kForward, opposite(dir))},
               {.offset_ = to,
                .node_ = target,
                .dist_ = to_left ? to.dist_left_ : to.dist_right_,
-               .dir_ = flip(direction::kBackward, opposite(conn_dir))});
+               .dir_ = flip(direction::kBackward, opposite(dir))});
           }
         }
       }
     };
     if (dir == direction::kForward /*|| conn.reverse_allowed*/) {
-      g(direction::kForward, conn.from_, conn.to_);
+      g(conn.from_, conn.to_);
     }
     if (dir == direction::kBackward /*|| conn.reverse_allowed*/) {
-      g(direction::kBackward, conn.to_, conn.from_);
+      g(conn.to_, conn.from_);
     }
   });
 }

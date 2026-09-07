@@ -57,7 +57,6 @@ void for_each_addional_connection(
     std::function<void(ways::routing::additional_connection const&,
                        way_idx_t,
                        node_idx_t,
-                       direction,
                        additional_connection_offset const& from,
                        additional_connection_offset const& to)> const&);
 
