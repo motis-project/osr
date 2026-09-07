@@ -58,7 +58,7 @@ void for_each_addional_connection(
                        way_idx_t,
                        node_idx_t,
                        direction,
-                       additional_connection_offset from,
-                       additional_connection_offset to)> const&);
+                       additional_connection_offset const& from,
+                       additional_connection_offset const& to)> const&);
 
 }  // namespace osr

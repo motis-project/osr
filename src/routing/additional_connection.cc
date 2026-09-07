@@ -159,8 +159,8 @@ void for_each_addional_connection(
                        way_idx_t,
                        node_idx_t,
                        direction,
-                       additional_connection_offset from,
-                       additional_connection_offset to)> const& f) {
+                       additional_connection_offset const& from,
+                       additional_connection_offset const& to)> const& f) {
   for_each_connection(r, node_idx, [&](connection_idx_t const connection_idx) {
     auto const& conn = r.additional_connections_[connection_idx];
     auto const g = [&](direction const conn_dir,
