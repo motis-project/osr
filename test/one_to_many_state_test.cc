@@ -45,9 +45,10 @@ cost_t segment_cost_sum(path const& p) {
   return sum;
 }
 
-// The segments have to form one chain from start to destination.
+// The segments have to form one chain from start to destination. A direct
+// path (`try_direct`, from ~ to) is a single segment and trivially one chain.
 void expect_contiguous(path const& p) {
-  ASSERT_GE(p.segments_.size(), 2U);
+  ASSERT_FALSE(p.segments_.empty());
   for (auto i = 1U; i < p.segments_.size(); ++i) {
     if (p.segments_[i - 1U].to_ != node_idx_t::invalid() &&
         p.segments_[i].from_ != node_idx_t::invalid()) {
