@@ -51,21 +51,25 @@ routing_algorithm to_algorithm(std::string_view s) {
   throw utl::fail("unknown routing algorithm: {}", s);
 }
 
+bool is_start_candidate(auto const& n,
+                        node_idx_t const root,
+                        cost_t const expected_cost) {
+  // Matching node alone is not enough:
+  // on a loop way, left and right are the same node but with different costs
+  return n.node_ == root && n.cost_ == expected_cost;
+}
+
 candidate_node const& start_candidate(node_idx_t const root,
                                       cost_t const expected_cost,
                                       candidate_node const& left,
                                       candidate_node const& right) {
-  // Matching node alone is not enough:
-  // on a loop way, left and right are the same node but with different costs
-  auto const l_root = left.node_ == root;
-  auto const r_root = right.node_ == root;
-  if (l_root && left.cost_ == expected_cost) {
+  if (is_start_candidate(left, root, expected_cost)) {
     return left;
-  } else if (r_root && right.cost_ == expected_cost) {
+  } else if (is_start_candidate(right, root, expected_cost)) {
     return right;
   } else {
     assert(false);  // should not happen
-    return l_root ? left : right;
+    return left.node_ == root ? left : right;
   }
 }
 
@@ -812,9 +816,10 @@ struct one_to_many_state_impl final : public one_to_many_state {
     }
 
     // Find start candidate.
+    auto const root_cost = d_.get_cost(root);
     auto const it = utl::find_if(from_match.nodes_, [&](auto const& n) {
-      return n.left_.node_ == root.get_node() ||
-             n.right_.node_ == root.get_node();
+      return is_start_candidate(n.left_, root.get_node(), root_cost) ||
+             is_start_candidate(n.right_, root.get_node(), root_cost);
     });
     assert(it != end(from_match.nodes_));
     if (it == end(from_match.nodes_)) {
