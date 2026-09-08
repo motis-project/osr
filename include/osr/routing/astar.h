@@ -5,6 +5,7 @@
 
 #include <algorithm>
 #include <limits>
+#include <optional>
 #include <vector>
 
 #include "utl/to_vec.h"
@@ -15,6 +16,7 @@
 #include "osr/routing/dial.h"
 #include "osr/routing/entry_storage_arena.h"
 #include "osr/routing/profile.h"
+#include "osr/routing/search_params.h"
 #include "osr/types.h"
 #include "osr/ways.h"
 
@@ -30,6 +32,7 @@ struct astar {
   using node = typename P::node;
   using entry = typename P::entry;
   using hash = typename P::hash;
+  using params_t = search_params<typename P::parameters>;
 
   static constexpr auto const kDebug = false;
 
@@ -40,11 +43,10 @@ struct astar {
     cost_t operator()(label const& l) { return l.cost(); }
   };
 
-  void reset(cost_t const max,
-             location const& start_loc,
-             location const& end_loc) {
+  void reset(params_t const& p) {
+    params_ = p;
     pq_.clear();
-    pq_.n_buckets(max + 1U);
+    pq_.n_buckets(params_.max_ + 1U);
     cost_.clear();
     arena_.reset();
     max_reached_ = false;
@@ -52,30 +54,24 @@ struct astar {
     remaining_destinations_ = 0U;
     early_termination_max_cost_ = kInfeasible;
     terminated_early_max_cost_ = false;
+    auto const& from = params_.start_loc_;
+    auto const& to = params_.end_loc_;
     distance_lon_degrees_ = geo::approx_distance_lng_degrees(
-        std::abs(start_loc.pos_.lat()) > std::abs(end_loc.pos_.lat())
-            ? start_loc.pos_
-            : end_loc.pos_);
-    beeline_distance_ = geo::distance(start_loc.pos_, end_loc.pos_);
+        std::abs(from.pos_.lat()) > std::abs(to.pos_.lat()) ? from.pos_
+                                                            : to.pos_);
+    beeline_distance_ = geo::distance(from.pos_, to.pos_);
   }
 
   void reset_pq() { pq_.buckets_ = {}; }
 
-  void add_start(P::parameters const& params,
-                 ways const& w,
-                 sharing_data const* sharing,
-                 label const l) {
-    add_start(params, w, sharing, l, duration_from_cost(l.cost()));
-  }
+  void add_start(label const l) { add_start(l, duration_from_cost(l.cost())); }
 
-  void add_start(P::parameters const& params,
-                 ways const& w,
-                 sharing_data const* sharing,
-                 label const l,
-                 duration_t const duration) {
+  void add_start(label const l, duration_t const duration) {
     utl::verify(!destinations_.empty(),
                 "astar: add_destination must be called before add_start");
-    auto const heur = heuristic(params, w, sharing, l.get_node().get_node());
+    auto const& w = params_.w();
+    auto const heur = heuristic(params_.profile_, w, params_.sharing(),
+                                l.get_node().get_node());
     if (cost_[l.get_node().get_key()].update(l, l.get_node(), l.cost(),
                                              node::invalid(), duration, *w.r_,
                                              arena_)) {
@@ -99,10 +95,9 @@ struct astar {
     }
   }
 
-  void add_destination(P::parameters const&,
-                       ways const& w,
-                       sharing_data const* sharing,
-                       node const n) {
+  void add_destination(node const n) {
+    auto const& w = params_.w();
+    auto const* sharing = params_.sharing();
     auto it = std::lower_bound(begin(destinations_), end(destinations_), n);
     if (it == end(destinations_) || *it != n) {
       destinations_.insert(it, n);
@@ -133,14 +128,16 @@ struct astar {
   }
 
   template <direction SearchDir, bool WithBlocked>
-  bool run(P::parameters const& params,
-           ways const& w,
-           ways::routing const& r,
-           cost_t const max,
-           std::optional<routing_time_t> const start_time,
-           bitvec<node_idx_t> const* blocked,
-           sharing_data const* sharing,
-           elevation_storage const* elevations) {
+  bool run() {
+    auto const& params = params_.profile_;
+    auto const& w = params_.w();
+    auto const& r = params_.r();
+    auto const max = params_.max_;
+    auto const start_time = params_.start_time_;
+    auto const* const blocked = params_.blocked_;
+    auto const* const sharing = params_.sharing();
+    auto const* const elevations = params_.elevations_;
+
     while (!pq_.empty()) {
       auto l = pq_.pop();
       auto const curr_node = l.get_node();
@@ -233,43 +230,16 @@ struct astar {
     return !max_reached_;
   }
 
-  bool run(P::parameters const& params,
-           ways const& w,
-           ways::routing const& r,
-           cost_t const max,
-           std::optional<routing_time_t> const start_time,
-           bitvec<node_idx_t> const* blocked,
-           sharing_data const* sharing,
-           elevation_storage const* elevations,
-           direction const dir) {
-    if (blocked == nullptr) {
-      return dir == direction::kForward
-                 ? run<direction::kForward, false>(params, w, r, max,
-                                                   start_time, blocked, sharing,
-                                                   elevations)
-                 : run<direction::kBackward, false>(params, w, r, max,
-                                                    start_time, blocked,
-                                                    sharing, elevations);
+  bool run() {
+    if (params_.blocked_ == nullptr) {
+      return params_.dir_ == direction::kForward
+                 ? run<direction::kForward, false>()
+                 : run<direction::kBackward, false>();
     } else {
-      return dir == direction::kForward
-                 ? run<direction::kForward, true>(params, w, r, max, start_time,
-                                                  blocked, sharing, elevations)
-                 : run<direction::kBackward, true>(params, w, r, max,
-                                                   start_time, blocked, sharing,
-                                                   elevations);
+      return params_.dir_ == direction::kForward
+                 ? run<direction::kForward, true>()
+                 : run<direction::kBackward, true>();
     }
-  }
-
-  bool run(P::parameters const& params,
-           ways const& w,
-           ways::routing const& r,
-           cost_t const max,
-           bitvec<node_idx_t> const* blocked,
-           sharing_data const* sharing,
-           elevation_storage const* elevations,
-           direction const dir) {
-    return run(params, w, r, max, std::nullopt, blocked, sharing, elevations,
-               dir);
   }
 
   static geo::latlng get_node_pos(ways const& w,
@@ -301,6 +271,8 @@ struct astar {
     auto const dist = distapprox(node_pos, dest_centroid_) - dest_radius_;
     return dist > 0.0 ? P::lower_bound_heuristic(params, dist) : 0.0;
   }
+
+  params_t params_;
 
   dial<label, get_bucket> pq_{get_bucket{}};
   ankerl::unordered_dense::map<key, entry, hash> cost_;

@@ -96,8 +96,8 @@ struct bike_sharing {
 
   struct parameters {
     using profile_t = bike_sharing;
-    bikep::parameters const bike_{};
-    footp::parameters const foot_{};
+    bikep::parameters bike_{};
+    footp::parameters foot_{};
   };
 
   struct key {

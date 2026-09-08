@@ -47,8 +47,8 @@ struct car_parking {
 
   struct parameters {
     using profile_t = car_parking<IsWheelchair, UseParking>;
-    car::parameters const car_{};
-    footp::parameters const foot_{};
+    car::parameters car_{};
+    footp::parameters foot_{};
   };
 
   struct node {
