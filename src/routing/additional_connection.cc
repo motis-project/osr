@@ -129,7 +129,7 @@ geo::polyline get_additional_connection_offset_points(
   }
   return l.get_node_candidate_path(
       offset.way_, n, is_left ? direction::kBackward : direction::kForward,
-      true, location{start_point.as_latlng(), kNoLevel});
+      false, location{start_point.as_latlng(), kNoLevel});
 }
 
 ways::routing::additional_connection::offset to_offset(
