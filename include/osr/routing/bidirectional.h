@@ -272,40 +272,54 @@ struct bidirectional {
         });
 
     auto best_duration_now = kMaxDuration;
-    auto const evaluate_meetpoint = [&](cost_t cost, cost_t other_cost,
-                                        node meetpoint1, node meetpoint2,
-                                        cost_and_duration const transition =
-                                            cost_and_duration{}) {
-      if constexpr (kDebug) {
-        std::cout << "  potential MEETPOINT found by start ";
-        meetpoint1.print(std::cout, w);
+    auto best_duration_known = false;
+    auto const tie_break_duration = [&]() {
+      if (!best_duration_known) {
+        best_duration_now = best_duration();
+        best_duration_known = true;
       }
-      auto const tentative = static_cast<std::uint64_t>(cost) +
-                             static_cast<std::uint64_t>(other_cost) +
-                             static_cast<std::uint64_t>(transition.cost_);
-      auto const tentative_duration = clamp_add_duration(
-          get_duration_to_mp(meetpoint1, meetpoint2), transition.duration_);
-      if (tentative < best_cost_ ||
-          (tentative == best_cost_ && tentative_duration < best_duration_now)) {
-        meet_point_1_ = meetpoint1;
-        meet_point_2_ = meetpoint2;
-        best_cost_ = clamp_cost(tentative);
-        best_transition_ = transition;
-        best_duration_now = tentative_duration;
-
-        if constexpr (kDebug) {
-          std::cout << " with cost " << best_cost_ << " -> ACCEPTED\n";
-        }
-      } else if constexpr (kDebug) {
-        std::cout << " -> DOMINATED\n";
-      }
+      return best_duration_now;
     };
+
+    auto const evaluate_meetpoint =
+        [&](cost_t cost, cost_t other_cost, node meetpoint1, node meetpoint2,
+            cost_and_duration const transition = cost_and_duration{}) {
+          if constexpr (kDebug) {
+            std::cout << "  potential MEETPOINT found by start ";
+            meetpoint1.print(std::cout, w);
+          }
+          auto const tentative = static_cast<std::uint64_t>(cost) +
+                                 static_cast<std::uint64_t>(other_cost) +
+                                 static_cast<std::uint64_t>(transition.cost_);
+          if (tentative > static_cast<std::uint64_t>(best_cost_)) {
+            if constexpr (kDebug) {
+              std::cout << " -> DOMINATED\n";
+            }
+            return;
+          }
+          auto const tentative_duration = clamp_add_duration(
+              get_duration_to_mp(meetpoint1, meetpoint2), transition.duration_);
+          if (tentative < static_cast<std::uint64_t>(best_cost_) ||
+              tentative_duration < tie_break_duration()) {
+            meet_point_1_ = meetpoint1;
+            meet_point_2_ = meetpoint2;
+            best_cost_ = clamp_cost(tentative);
+            best_transition_ = transition;
+            best_duration_now = tentative_duration;
+            best_duration_known = true;
+
+            if constexpr (kDebug) {
+              std::cout << " with cost " << best_cost_ << " -> ACCEPTED\n";
+            }
+          } else if constexpr (kDebug) {
+            std::cout << " -> DOMINATED\n";
+          }
+        };
 
     auto const handle_end_of_way_meetpoint = [&]() {
       auto const opposite_cost_map = is_fwd ? &cost2_ : &cost1_;
       auto const opposite_candidate = opposite_cost_map->find(curr.get_key());
       if (opposite_candidate != end(*opposite_cost_map)) {
-        best_duration_now = best_duration();
         if constexpr (bidirectional_meet_policy<P>::kEnumerateStates) {
           P::resolve_all(r, curr.get_node(), [&](node const other) {
             auto const other_cost = opposite_candidate->second.cost(other);
