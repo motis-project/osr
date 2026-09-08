@@ -96,7 +96,7 @@ void check(graph const& g,
   auto const from = location{w.get_node_pos(node_idx_t{distr(prng)})};
   auto to = std::vector<location>{};
   for (auto i = 0U; i != kNumDestinations; ++i) {
-    to.emplace_back(w.get_node_pos(node_idx_t{distr(prng)}));
+    to.push_back(location{w.get_node_pos(node_idx_t{distr(prng)})});
   }
 
   auto const& pp = std::get<typename P::parameters>(params);
@@ -120,7 +120,7 @@ void check(graph const& g,
                                        from_match, to_m, kMax, dir);
 
   ASSERT_EQ(expected.size(), state->results().size());
-  auto n_found = 0U, n_identical = 0U;
+  auto n_found = 0U;
   for (auto k = 0U; k != to.size(); ++k) {
     ASSERT_EQ(expected[k].has_value(), state->results()[k].has_value()) << k;
     auto const reconstructed = state->reconstruct(w, l, k, nullptr);
@@ -135,21 +135,15 @@ void check(graph const& g,
     // start candidate, e.g. the far side of a loop way); they can be cheaper
     // when a later start candidate improved the path.
     EXPECT_LE(segment_cost_sum(*reconstructed), reconstructed->cost_) << k;
-    if (same_path(*expected[k], *reconstructed)) {
-      ++n_identical;
-    } else {
-      expect_contiguous(*reconstructed);
-      EXPECT_LE(segment_cost_sum(*reconstructed),
-                segment_cost_sum(*expected[k]))
-          << k;
-    }
+    expect_contiguous(*reconstructed);
+    EXPECT_LE(segment_cost_sum(*reconstructed), segment_cost_sum(*expected[k]))
+        << k;
     // Reconstructing twice is fine (the state is not consumed).
     EXPECT_TRUE(
         same_path(*reconstructed, *state->reconstruct(w, l, k, nullptr)))
         << k;
   }
   EXPECT_GT(n_found, 10U);
-  EXPECT_GE(n_identical * 2U, n_found);  // mostly identical
 }
 
 }  // namespace
