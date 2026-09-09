@@ -231,22 +231,15 @@ struct hgv {
     }
   }
 
-  template <endpoint_role Role, typename Fn>
+  template <typename Fn>
   static void resolve_endpoint(ways::routing const& w,
                                way_idx_t const way,
                                node_idx_t const n,
                                level_t,
                                route_end,
+                               endpoint_role const role,
                                Fn&& f) {
-    if constexpr (Role == endpoint_role::kRoot) {
-      resolve_all(w, n, [&](node const candidate) {
-        if (w.node_ways_[n][candidate.way_] == way) {
-          f(candidate);
-        }
-      });
-    } else {
-      resolve_all(w, n, f);
-    }
+    resolve_way_aware_endpoint<hgv>(w, way, n, role, std::forward<Fn>(f));
   }
 
   static cost_and_duration endpoint_transition_cost(

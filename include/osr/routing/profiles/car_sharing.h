@@ -590,16 +590,17 @@ struct car_sharing {
     return footp::node_cost(params.foot_, n);
   }
 
-  template <endpoint_role Role, typename Fn>
+  template <typename Fn>
   static void resolve_endpoint(ways::routing const& w,
                                way_idx_t const way,
                                node_idx_t const n,
                                level_t const lvl,
                                route_end const end,
+                               endpoint_role const role,
                                Fn&& f) {
-    footp::template resolve_endpoint<Role>(
-        w, way, n, lvl, end, [&](footp::node const resolved) {
-          if constexpr (Role == endpoint_role::kRoot) {
+    footp::resolve_endpoint(
+        w, way, n, lvl, end, role, [&](footp::node const resolved) {
+          if (role == endpoint_role::kRoot) {
             f(to_node(resolved, end == route_end::kOrigin
                                     ? node_type::kInitialFoot
                                     : node_type::kTrailingFoot));

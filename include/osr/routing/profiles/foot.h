@@ -138,10 +138,17 @@ struct foot {
   static void for_each_node_level(ways::routing const& w,
                                   node_idx_t const n,
                                   Fn&& f) {
-    resolve_all(w, n, std::forward<Fn>(f));
+    auto levels = level_bits_t{0U};
+    auto const emit = [&](level_t const lvl) {
+      auto const mask = level_bits_t{1U} << to_idx(lvl);
+      if ((levels & mask) == 0U) {
+        levels |= mask;
+        f(node{n, lvl});
+      }
+    };
+    resolve_all(w, n, [&](node const x) { emit(x.lvl_); });
     if (w.node_properties_[n].is_elevator()) {
-      for_each_elevator_level(w, n,
-                              [&](level_t const lvl) { f(node{n, lvl}); });
+      for_each_elevator_level(w, n, emit);
     }
   }
 
@@ -163,12 +170,13 @@ struct foot {
     }
   }
 
-  template <endpoint_role, typename Fn>
+  template <typename Fn>
   static void resolve_endpoint(ways::routing const& w,
                                way_idx_t const way,
                                node_idx_t const n,
                                level_t const lvl,
                                route_end const end,
+                               endpoint_role,
                                Fn&& f) {
     auto const p = w.way_properties_[way];
     auto const level_compatible =
@@ -191,15 +199,10 @@ struct foot {
       return;
     }
 
-    auto levels = std::uint64_t{0U};
     for_each_node_level(w, n, [&](node const candidate) {
-      auto const compatible =
-          node_side_level == kNoLevel || candidate.lvl_ == kNoLevel ||
+      if (node_side_level == kNoLevel || candidate.lvl_ == kNoLevel ||
           candidate.lvl_ == node_side_level ||
-          can_use_elevator(w, n, candidate.lvl_, node_side_level);
-      auto const mask = std::uint64_t{1U} << to_idx(candidate.lvl_);
-      if (compatible && (levels & mask) == 0U) {
-        levels |= mask;
+          can_use_elevator(w, n, candidate.lvl_, node_side_level)) {
         f(candidate);
       }
     });
@@ -261,13 +264,8 @@ struct foot {
             emit(*target_lvl);
           }
         } else {
-          auto levels = std::uint64_t{0U};
-          auto const consider = [&](level_t const predecessor_lvl) {
-            auto const mask = std::uint64_t{1U} << to_idx(predecessor_lvl);
-            if ((levels & mask) != 0U) {
-              return;
-            }
-            levels |= mask;
+          for_each_node_level(w, target_node, [&](node const predecessor) {
+            auto const predecessor_lvl = predecessor.lvl_;
             if (can_use_elevator(w, n.n_, predecessor_lvl)) {
               auto reaches_current = false;
               for_each_elevator_level(w, n.n_, [&](level_t const lvl) {
@@ -281,9 +279,6 @@ struct foot {
                        reached.has_value() && node{n.n_, *reached} == n) {
               emit(predecessor_lvl);
             }
-          };
-          for_each_node_level(w, target_node, [&](node const predecessor) {
-            consider(predecessor.lvl_);
           });
         }
       };
