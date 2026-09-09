@@ -10,13 +10,13 @@
 namespace osr {
 
 elevation_profile::elevation_profile(ways const& w,
-                                     path const& p,
-                                     unsigned steps) {
-  if (p.segments_.empty()) {
+                                     std::span<path::segment const> segments,
+                                     double resolution) {
+  if (segments.empty()) {
     return;
   }
 
-  baseline_ = p.segments_.front().elevation_.absolute_;
+  baseline_ = segments.front().elevation_.absolute_;
   if (baseline_ == elevation_absolute_t::invalid()) {
     return;
   }
@@ -44,26 +44,21 @@ elevation_profile::elevation_profile(ways const& w,
                     max_);
   };
 
-  steps = std::min(steps, static_cast<unsigned>(p.segments_.size()));
-  auto const step_size = p.dist_ / steps;
-
-  points_.resize(steps);
-  elevation_.resize(steps);
-  points_.push_back(w.get_node_pos(p.segments_.front().from_));
+  points_.push_back(w.get_node_pos(segments.front().from_));
   elevation_.emplace_back(0);
 
   auto dist_acc = distance_t{0};
   auto z_acc = elevation_difference_t{0};
-  auto from = w.get_node_pos(p.segments_.front().from_);
-  add(from, w.get_node_pos(p.segments_.front().to_), z_acc);
-  for (auto seg = begin(p.segments_); seg != end(p.segments_); seg++) {
+  auto from = w.get_node_pos(segments.front().from_);
+  add(from, w.get_node_pos(segments.front().to_), z_acc);
+  for (auto seg = begin(segments); seg != end(segments); seg++) {
     dist_acc += seg->dist_;
     z_acc += static_cast<cista::base_t<elevation_difference_t>>(
                  to_idx(seg->elevation_.up_)) -
              static_cast<cista::base_t<elevation_difference_t>>(
                  to_idx(seg->elevation_.down_));
 
-    if (dist_acc < step_size && seg != prev(end(p.segments_))) {
+    if (dist_acc < resolution && seg != prev(end(segments))) {
       continue;
     }
 

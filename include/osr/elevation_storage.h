@@ -29,6 +29,7 @@ struct elevation_storage {
     encoding() = default;
     elevation decode() const;
     explicit operator bool() const;
+    elevation_absolute_t absolute_{};
     coding up_ : 4 {};
     coding down_ : 4 {};
   };

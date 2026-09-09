@@ -364,12 +364,13 @@ elevation_monotonic_t decode_helper(
 }
 
 elevation_storage::encoding::encoding(elevation const& e)
-    : up_{encode(e.up_)}, down_{encode(e.down_)} {}
+    : absolute_{e.absolute_}, up_{encode(e.up_)}, down_{encode(e.down_)} {}
 
 elevation_storage::elevation elevation_storage::encoding::decode() const {
   return {
       .up_ = decode_helper(up_),
       .down_ = decode_helper(down_),
+      .absolute_ = absolute_,
   };
 }
 

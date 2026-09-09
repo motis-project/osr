@@ -10,7 +10,9 @@
 namespace osr {
 
 struct elevation_profile {
-  elevation_profile(ways const&, path const&, unsigned steps);
+  elevation_profile(ways const&,
+                    std::span<path::segment const>,
+                    double resolution);
 
   elevation_absolute_t median() const;
 
