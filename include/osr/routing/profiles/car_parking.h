@@ -330,15 +330,14 @@ struct car_parking {
                                way_idx_t const way,
                                node_idx_t const n,
                                level_t const lvl,
-                               direction const endpoint_dir,
+                               route_end const end,
                                Fn&& f) {
-    if (endpoint_dir == direction::kForward) {
+    if (end == route_end::kOrigin) {
       car::template resolve_endpoint<Role>(
-          w, way, n, lvl, endpoint_dir,
-          [&](car::node const cn) { f(to_node(cn)); });
+          w, way, n, lvl, end, [&](car::node const cn) { f(to_node(cn)); });
     } else {
       footp::template resolve_endpoint<Role>(
-          w, way, n, lvl, endpoint_dir,
+          w, way, n, lvl, end,
           [&](typename footp::node const fn) { f(to_node(fn)); });
     }
   }
@@ -434,9 +433,8 @@ struct car_parking {
 
   static bool endpoint_way_feasible(parameters const& params,
                                     endpoint_way_query const& q) {
-    return q.resolve_dir_ == direction::kForward
-               ? q.feasible<car>(params.car_)
-               : q.feasible<footp>(params.foot_);
+    return q.end_ == route_end::kOrigin ? q.feasible<car>(params.car_)
+                                        : q.feasible<footp>(params.foot_);
   }
 
   static constexpr double lower_bound_heuristic(parameters const& params,

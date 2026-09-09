@@ -21,10 +21,20 @@
 
 namespace osr {
 
-enum class endpoint_role : std::uint8_t {
-  kSource,  // where the *search* starts (fwd search: route start, bwd: end)
-  kTarget,  // where the *search* ends (fwd search: route end, bwd: start)
-};
+// which physical end of the route an endpoint is, independent of the search
+enum class route_end : std::uint8_t { kOrigin, kDestination };
+
+// how the search uses an endpoint, independent of where the route starts
+enum class endpoint_role : std::uint8_t { kRoot, kGoal };
+
+constexpr route_end route_end_of(direction const travel_dir) {
+  return travel_dir == direction::kForward ? route_end::kOrigin
+                                           : route_end::kDestination;
+}
+
+constexpr direction travel_dir_of(route_end const end) {
+  return end == route_end::kOrigin ? direction::kForward : direction::kBackward;
+}
 
 struct endpoint_way_query {
   template <typename M>
@@ -40,7 +50,7 @@ struct endpoint_way_query {
   way_properties props_;
   direction way_dir_;
   direction search_dir_;
-  direction resolve_dir_;
+  route_end end_;
   std::optional<routing_time_t> start_time_;
 };
 
@@ -125,20 +135,16 @@ concept Profile =
              way_idx_t const w,
              node_idx_t const node_idx,
              level_t const lvl,
-             direction const dir,
+             route_end const end,
              std::function<void(typename P::node const)>&& f) {
       { P::resolve_all(r, node_idx, f) } -> std::same_as<void>;
-      // for resolve_endpoint, dir describes the endpoint, not the search:
-      //   dir == direction::kForward: *route* starts here
-      //   dir == direction::kBackward: *route* ends here
-      // (= search direction for kSource, its opposite for kTarget)
       {
-        P::template resolve_endpoint<endpoint_role::kSource>(r, w, node_idx,
-                                                             lvl, dir, f)
+        P::template resolve_endpoint<endpoint_role::kRoot>(r, w, node_idx, lvl,
+                                                           end, f)
       } -> std::same_as<void>;
       {
-        P::template resolve_endpoint<endpoint_role::kTarget>(r, w, node_idx,
-                                                             lvl, dir, f)
+        P::template resolve_endpoint<endpoint_role::kGoal>(r, w, node_idx, lvl,
+                                                           end, f)
       } -> std::same_as<void>;
     } &&
     requires(typename P::parameters const& params,
