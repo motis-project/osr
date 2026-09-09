@@ -236,9 +236,9 @@ struct hgv {
                                way_idx_t const way,
                                node_idx_t const n,
                                level_t,
-                               direction,
+                               route_end,
                                Fn&& f) {
-    if constexpr (Role == endpoint_role::kSource) {
+    if constexpr (Role == endpoint_role::kRoot) {
       resolve_all(w, n, [&](node const candidate) {
         if (w.node_ways_[n][candidate.way_] == way) {
           f(candidate);

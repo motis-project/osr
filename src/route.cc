@@ -109,12 +109,12 @@ cost_and_duration get_endpoint_connection(
     ways const& w,
     endpoint_candidate const& endpoint,
     typename P::node const node,
-    direction const endpoint_dir,
+    route_end const end,
     std::optional<routing_time_t> const start_time,
     duration_t const current_duration,
     direction const search_dir) {
-  auto const way_dir = flip(endpoint_dir, endpoint.node_.way_dir_);
-  if constexpr (Role == endpoint_role::kSource) {
+  auto const way_dir = flip(travel_dir_of(end), endpoint.node_.way_dir_);
+  if constexpr (Role == endpoint_role::kRoot) {
     if (!P::endpoint_root_allowed(params, node, way_dir)) {
       return infeasible_cost_and_duration();
     }
@@ -126,7 +126,7 @@ cost_and_duration get_endpoint_connection(
                            start_time, current_duration, search_dir);
   auto total =
       clamp_add(connection, endpoint.matching_penalty_, duration_t{0U});
-  if constexpr (Role == endpoint_role::kTarget) {
+  if constexpr (Role == endpoint_role::kGoal) {
     total = clamp_add(
         total, P::endpoint_transition_cost(params, *w.r_, w.timezones_, node,
                                            endpoint.way_, way_dir, search_dir,
@@ -144,7 +144,7 @@ path::segment make_endpoint_segment(lookup const& l,
                                     endpoint_role const role,
                                     bool const reverse,
                                     direction const dir) {
-  auto const graph_node_at_from = role == endpoint_role::kSource
+  auto const graph_node_at_from = role == endpoint_role::kRoot
                                       ? dir == direction::kBackward
                                       : dir == direction::kForward;
   return {.polyline_ = l.get_node_candidate_path(
@@ -217,7 +217,7 @@ path reconstruct_bi(typename P::parameters const& params,
   auto const& start = get_endpoint_root<P>(b.cost1_, starts, forward_n);
   forward_segments.push_back(make_endpoint_segment(
       l, from, start.endpoint_, start.connection_, forward_n.get_node(),
-      forward_n.get_mode(), endpoint_role::kSource, dir == direction::kBackward,
+      forward_n.get_mode(), endpoint_role::kRoot, dir == direction::kBackward,
       dir));
 
   auto backward_segments = std::vector<path::segment>{};
@@ -249,7 +249,7 @@ path reconstruct_bi(typename P::parameters const& params,
       get_endpoint_root<P>(b.cost2_, destinations, backward_n);
   backward_segments.push_back(make_endpoint_segment(
       l, to, destination.endpoint_, destination.connection_,
-      backward_n.get_node(), backward_n.get_mode(), endpoint_role::kTarget,
+      backward_n.get_node(), backward_n.get_mode(), endpoint_role::kGoal,
       dir == direction::kForward, dir));
 
   // Neither search half includes the turn joining the two meeting states,
@@ -310,7 +310,7 @@ path reconstruct(typename P::parameters const& params,
   auto n = dest_node;
   auto segments = std::vector<path::segment>{make_endpoint_segment(
       l, to, destination, destination_connection, n.get_node(),
-      dest_node.get_mode(), endpoint_role::kTarget, dir == direction::kForward,
+      dest_node.get_mode(), endpoint_role::kGoal, dir == direction::kForward,
       dir)};
   auto dist = 0.0;
   while (true) {
@@ -334,7 +334,7 @@ path reconstruct(typename P::parameters const& params,
   auto const& start = get_endpoint_root<P>(search.cost_, starts, n);
   segments.push_back(make_endpoint_segment(
       l, from, start.endpoint_, start.connection_, n.get_node(), n.get_mode(),
-      endpoint_role::kSource, dir == direction::kBackward, dir));
+      endpoint_role::kRoot, dir == direction::kBackward, dir));
   if (dir == direction::kForward) {
     std::reverse(begin(segments), end(segments));
   }
@@ -354,14 +354,13 @@ path reconstruct(typename P::parameters const& params,
 
 // Turns every match candidate into the search roots it can be entered from,
 // with an initial cost covering the virtual edge from the query position to
-// the graph node. `endpoint_dir` is the endpoint direction of `profile.h`:
-// kForward means the route starts at this end.
+// the graph node.
 template <Profile P, typename AddFn>
 std::vector<endpoint_root<P>> add_endpoint_roots(
     typename P::parameters const& params,
     ways const& w,
     match_view_t const& matches,
-    direction const endpoint_dir,
+    route_end const end,
     direction const dir,
     std::optional<routing_time_t> const start_time,
     cost_t const max,
@@ -370,12 +369,12 @@ std::vector<endpoint_root<P>> add_endpoint_roots(
   auto roots = std::vector<endpoint_root<P>>{};
   for_each_endpoint_candidate(
       matches, penalty_factor, [&](endpoint_candidate const& endpoint) {
-        P::template resolve_endpoint<endpoint_role::kSource>(
-            *w.r_, endpoint.way_, endpoint.node_.node_, matches.lvl_,
-            endpoint_dir, [&](auto const node) {
+        P::template resolve_endpoint<endpoint_role::kRoot>(
+            *w.r_, endpoint.way_, endpoint.node_.node_, matches.lvl_, end,
+            [&](auto const node) {
               auto const connection =
-                  get_endpoint_connection<endpoint_role::kSource, P>(
-                      params, w, endpoint, node, endpoint_dir, start_time,
+                  get_endpoint_connection<endpoint_role::kRoot, P>(
+                      params, w, endpoint, node, end, start_time,
                       duration_t{0U}, dir);
               if (!connection.feasible() || connection.cost_ >= max) {
                 return;
@@ -408,11 +407,11 @@ std::optional<destination_candidate<P>> best_candidate(
     std::optional<routing_time_t> const start_time,
     double const penalty_factor) {
   auto best = std::optional<destination_candidate<P>>{};
-  auto const endpoint_dir = opposite(dir);
+  auto const end = route_end_of(opposite(dir));
   for_each_endpoint_candidate(
       matches, penalty_factor, [&](endpoint_candidate const& endpoint) {
         auto const& candidate_node = endpoint.node_;
-        auto const way_dir = flip(endpoint_dir, candidate_node.way_dir_);
+        auto const way_dir = flip(travel_dir_of(end), candidate_node.way_dir_);
         auto const consider = [&](auto const node) {
           auto const target_cost = search.get_cost(node);
           if (target_cost == kInfeasible) {
@@ -427,9 +426,9 @@ std::optional<destination_candidate<P>> best_candidate(
             return;
           }
           auto const connection =
-              get_endpoint_connection<endpoint_role::kTarget, P>(
-                  params, w, endpoint, node, endpoint_dir, start_time,
-                  target_duration, dir);
+              get_endpoint_connection<endpoint_role::kGoal, P>(
+                  params, w, endpoint, node, end, start_time, target_duration,
+                  dir);
           if (!connection.feasible()) {
             return;
           }
@@ -447,9 +446,9 @@ std::optional<destination_candidate<P>> best_candidate(
             best = destination_candidate<P>{endpoint, node, connection, total};
           }
         };
-        P::template resolve_endpoint<endpoint_role::kTarget>(
-            *w.r_, endpoint.way_, candidate_node.node_, matches.lvl_,
-            endpoint_dir, consider);
+        P::template resolve_endpoint<endpoint_role::kGoal>(
+            *w.r_, endpoint.way_, candidate_node.node_, matches.lvl_, end,
+            consider);
       });
   return best;
 }
@@ -516,12 +515,12 @@ std::optional<path> route_bidirectional(typename P::parameters const& params,
   }
 
   auto const starts = add_endpoint_roots<P>(
-      params, w, from_match, dir, dir, std::nullopt, max, penalty_factor,
-      [&](auto&& label, duration_t const duration) {
+      params, w, from_match, route_end_of(dir), dir, std::nullopt, max,
+      penalty_factor, [&](auto&& label, duration_t const duration) {
         b.add_start(std::forward<decltype(label)>(label), duration);
       });
   auto const destinations = add_endpoint_roots<P>(
-      params, w, to_match, opposite(dir), dir, std::nullopt, max,
+      params, w, to_match, route_end_of(opposite(dir)), dir, std::nullopt, max,
       penalty_factor, [&](auto&& label, duration_t const duration) {
         b.add_end(std::forward<decltype(label)>(label), duration);
       });
@@ -578,7 +577,7 @@ std::optional<path> route_dijkstra(
            .start_loc_ = from,
            .end_loc_ = to});
   auto const starts = add_endpoint_roots<P>(
-      params, w, from_match, dir, dir, start_time, max,
+      params, w, from_match, route_end_of(dir), dir, start_time, max,
       options.matching_penalty_factor_,
       [&](auto&& label, duration_t const duration) {
         d.add_start(std::forward<decltype(label)>(label), duration);
@@ -634,16 +633,16 @@ std::optional<path> route_astar(typename P::parameters const& params,
       to_match, penalty_factor, [&](endpoint_candidate const& endpoint) {
         auto const& candidate_node = endpoint.node_;
         auto const add = [&](auto const node) { a.add_destination(node); };
-        P::template resolve_endpoint<endpoint_role::kTarget>(
+        P::template resolve_endpoint<endpoint_role::kGoal>(
             *w.r_, endpoint.way_, candidate_node.node_, to_match.lvl_,
-            opposite(dir), add);
+            route_end_of(opposite(dir)), add);
       });
   if (a.destinations_.empty()) {
     return std::nullopt;
   }
   auto const starts = add_endpoint_roots<P>(
-      params, w, from_match, dir, dir, start_time, max, penalty_factor,
-      [&](auto&& label, duration_t const duration) {
+      params, w, from_match, route_end_of(dir), dir, start_time, max,
+      penalty_factor, [&](auto&& label, duration_t const duration) {
         a.add_start(std::forward<decltype(label)>(label), duration);
       });
   if (a.pq_.empty()) {
@@ -740,7 +739,7 @@ std::vector<std::optional<path>> route(
   auto local_starts = std::vector<endpoint_root<P>>{};
   auto& starts = state == nullptr ? local_starts : state->starts_;
   starts = add_endpoint_roots<P>(
-      params, w, from_match, dir, dir, start_time, max,
+      params, w, from_match, route_end_of(dir), dir, start_time, max,
       options.matching_penalty_factor_,
       [&](auto&& label, duration_t const duration) {
         d.add_start(std::forward<decltype(label)>(label), duration);
