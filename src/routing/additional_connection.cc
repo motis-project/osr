@@ -105,12 +105,11 @@ geo::polyline get_additional_connection_polyline(
     }
   };
   append_to_polyline(reverse(get_additional_connection_offset_points(
-      l, conn.from_, conn.from_.way_, conn.connection_.front(),
+      l, conn.from_, conn.connection_.front(),
       conn.from_.left_.node_ == from)));
   append_to_polyline(get_additional_connection_points(conn));
   append_to_polyline(get_additional_connection_offset_points(
-      l, conn.to_, conn.to_.way_, conn.connection_.back(),
-      conn.to_.left_.node_ == to));
+      l, conn.to_, conn.connection_.back(), conn.to_.left_.node_ == to));
 
   return polyline;
 }
@@ -123,7 +122,6 @@ geo::polyline get_additional_connection_points(
 geo::polyline get_additional_connection_offset_points(
     lookup const& l,
     ways::routing::additional_connection::offset const& offset,
-    way_idx_t const way_idx,
     point const& start_point,
     bool const is_left) {
   auto const& n = is_left ? offset.left_.node_ : offset.right_.node_;
@@ -131,8 +129,8 @@ geo::polyline get_additional_connection_offset_points(
     return {};
   }
   return l.get_node_candidate_path(
-      way_idx, n, is_left ? direction::kBackward : direction::kForward, false,
-      location{start_point.as_latlng(), kNoLevel});
+      offset.way_, n, is_left ? direction::kBackward : direction::kForward,
+      false, location{start_point.as_latlng(), kNoLevel});
 }
 
 ways::routing::additional_connection::offset to_offset(

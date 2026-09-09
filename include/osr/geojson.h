@@ -688,7 +688,7 @@ struct geojson_writer {
             std::pair{connection.to_, connection.connection_.back()}}) {
         for (auto const is_left : {true, false}) {
           if (auto line = osr::get_additional_connection_offset_points(
-                  l, offset, offset.way_, start_point, is_left);
+                  l, offset, start_point, is_left);
               !line.empty()) {
             geom.emplace_back(line);
           }
