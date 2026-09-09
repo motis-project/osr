@@ -688,7 +688,7 @@ struct geojson_writer {
             std::pair{connection.to_, connection.connection_.back()}}) {
         for (auto const is_left : {true, false}) {
           if (auto line = osr::get_additional_connection_offset_points(
-                  l, offset, start_point, is_left);
+                  l, offset, offset.way_, start_point, is_left);
               !line.empty()) {
             geom.emplace_back(line);
           }
@@ -702,14 +702,17 @@ struct geojson_writer {
                {"type", "parking-edge"},
                {"internal_id", to_idx(connection_idx)},
                {"connection.dist", connection.dist_},
-               {"from.left", connection.from_.left_ != node_idx_t::invalid()},
-               {"from.right", connection.from_.right_ != node_idx_t::invalid()},
-               {"from.left_dist", connection.from_.dist_left_},
-               {"from.right_dist", connection.from_.dist_right_},
-               {"to.left", connection.to_.left_ != node_idx_t::invalid()},
-               {"to.right", connection.to_.right_ != node_idx_t::invalid()},
-               {"to.left_dist", connection.to_.dist_left_},
-               {"to.right_dist", connection.to_.dist_right_},
+               {"from.left",
+                connection.from_.left_.node_ != node_idx_t::invalid()},
+               {"from.right",
+                connection.from_.right_.node_ != node_idx_t::invalid()},
+               {"from.left_dist", connection.from_.left_.dist_},
+               {"from.right_dist", connection.from_.right_.dist_},
+               {"to.left", connection.to_.left_.node_ != node_idx_t::invalid()},
+               {"to.right",
+                connection.to_.right_.node_ != node_idx_t::invalid()},
+               {"to.left_dist", connection.to_.left_.dist_},
+               {"to.right_dist", connection.to_.right_.dist_},
                // {"is_parking", connection.is_parking_},
            }},
           {"geometry", to_multi_line_string(geom)}});

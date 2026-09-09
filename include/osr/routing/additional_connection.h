@@ -17,6 +17,20 @@ struct additional_connection_offset {
   direction dir_;
 };
 
+struct additional_connection {
+  struct side {
+    node_idx_t node_;
+    way_idx_t way_;
+    std::uint16_t dist_;
+    direction dir_;
+  };
+
+  side from_;
+  side to_;
+  std::uint16_t connection_dist_;
+  way_idx_t connection_way_;
+};
+
 void for_each_connection(ways::routing const&,
                          node_idx_t,
                          std::function<void(connection_idx_t)> const&);
@@ -45,6 +59,7 @@ geo::polyline get_additional_connection_points(
 geo::polyline get_additional_connection_offset_points(
     lookup const&,
     ways::routing::additional_connection::offset const&,
+    way_idx_t,
     point const&,
     bool is_left);
 
@@ -54,10 +69,6 @@ void for_each_addional_connection(
     ways::routing const&,
     node_idx_t,
     direction,
-    std::function<void(ways::routing::additional_connection const&,
-                       way_idx_t,
-                       node_idx_t,
-                       additional_connection_offset const& from,
-                       additional_connection_offset const& to)> const&);
+    std::function<void(additional_connection)> const&);
 
 }  // namespace osr

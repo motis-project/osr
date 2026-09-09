@@ -531,13 +531,16 @@ struct ways {
       CISTA_COMPARABLE()
 
       struct offset {
+        struct side {
+          CISTA_COMPARABLE()
+          node_idx_t node_;
+          std::uint16_t dist_;
+        };
         CISTA_COMPARABLE()
 
+        side left_;
+        side right_;
         way_idx_t way_;
-        node_idx_t left_;
-        node_idx_t right_;
-        std::uint16_t dist_left_;  // Distance on segment to left node
-        std::uint16_t dist_right_;  // Distance on segment to right node
       };
 
       vec<point> connection_;
