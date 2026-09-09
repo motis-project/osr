@@ -174,7 +174,7 @@ struct bike {
                                way_idx_t,
                                node_idx_t const n,
                                level_t,
-                               direction,
+                               route_end,
                                Fn&& f) {
     resolve_all(w, n, f);
   }

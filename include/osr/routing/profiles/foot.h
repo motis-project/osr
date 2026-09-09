@@ -168,7 +168,7 @@ struct foot {
                                way_idx_t const way,
                                node_idx_t const n,
                                level_t const lvl,
-                               direction const endpoint_dir,
+                               route_end const end,
                                Fn&& f) {
     auto const p = w.way_properties_[way];
     auto const level_compatible =
@@ -186,7 +186,7 @@ struct foot {
       }
       return p.from_level();
     }();
-    if (endpoint_dir == direction::kForward) {
+    if (end == route_end::kOrigin) {
       f(node{n, node_side_level});
       return;
     }
