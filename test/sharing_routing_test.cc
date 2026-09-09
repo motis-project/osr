@@ -4,6 +4,7 @@
 #include "gtest/gtest.h"
 
 #include "osr/routing/profiles/bike_sharing.h"
+#include "osr/routing/profiles/car_sharing.h"
 #include "osr/routing/route.h"
 #include "osr/routing/sharing_data.h"
 
@@ -158,6 +159,115 @@ TEST_F(sharing_routing_test, bike_does_not_switch_at_bike_inaccessible_node) {
         switched_to_bike |= neighbor.n_ == *node && neighbor.is_bike_node();
       });
   EXPECT_FALSE(switched_to_bike);
+}
+
+struct levelled_sharing_test : testing::Test {
+  void SetUp() override {
+    std::filesystem::create_directories(dir_);
+    extract(false, test::write_osm_pbf("osr-levelled-sharing", R"(
+<osm version="0.6">
+  <node id="1" lat="49" lon="8"/>
+  <node id="2" lat="49" lon="8.001"/>
+  <node id="3" lat="49" lon="8.0013"/>
+  <node id="4" lat="49" lon="8.0043"/>
+  <node id="5" lat="49" lon="8.0046"/>
+  <node id="6" lat="49" lon="8.0056"/>
+  <node id="7" lat="49.002" lon="8"/>
+  <node id="8" lat="49.002" lon="8.0013"/>
+  <node id="9" lat="49.002" lon="8.0046"/>
+  <way id="1"><nd ref="1"/><nd ref="2"/>
+    <tag k="highway" v="footway"/><tag k="level" v="0"/></way>
+  <way id="2"><nd ref="3"/><nd ref="4"/>
+    <tag k="highway" v="residential"/></way>
+  <way id="3"><nd ref="5"/><nd ref="6"/>
+    <tag k="highway" v="footway"/><tag k="level" v="1"/></way>
+  <!-- Longer parallel ways retain the endpoints as routing junctions. -->
+  <way id="4"><nd ref="1"/><nd ref="7"/><nd ref="2"/>
+    <tag k="highway" v="footway"/><tag k="level" v="0"/></way>
+  <way id="5"><nd ref="3"/><nd ref="8"/><nd ref="4"/>
+    <tag k="highway" v="residential"/></way>
+  <way id="6"><nd ref="5"/><nd ref="9"/><nd ref="6"/>
+    <tag k="highway" v="footway"/><tag k="level" v="1"/></way>
+</osm>)"),
+            dir_, {});
+    w_ = std::make_unique<ways>(dir_, cista::mmap::protection::READ);
+    l_ = std::make_unique<lookup>(*w_, dir_, cista::mmap::protection::READ);
+    auto const size = w_->n_nodes() + 2U;
+    start_.resize(size);
+    end_.resize(size);
+    through_.resize(size);
+    through_.one_out();
+    start_.set(node_idx_t{w_->n_nodes()}, true);
+    end_.set(node_idx_t{w_->n_nodes() + 1U}, true);
+    for (auto const id : {2U, 3U, 4U, 5U}) {
+      auto const graph = w_->find_node_idx(osm_node_idx_t{id}).value();
+      auto const station = node_idx_t{w_->n_nodes() + (id >= 4U ? 1U : 0U)};
+      edges_[graph].push_back(
+          additional_edge{.to_ = station, .distance_ = 10U});
+      edges_[station].push_back(
+          additional_edge{.to_ = graph, .distance_ = 10U});
+    }
+    coordinates_ = {{49, 8.00115}, {49, 8.00445}};
+  }
+
+  void TearDown() override {
+    l_.reset();
+    w_.reset();
+    std::filesystem::remove_all(dir_);
+  }
+
+  void check(search_profile const profile) const {
+    auto const sharing =
+        sharing_data{.start_allowed_ = &start_,
+                     .end_allowed_ = &end_,
+                     .through_allowed_ = &through_,
+                     .additional_node_offset_ = w_->n_nodes(),
+                     .additional_node_coordinates_ = coordinates_,
+                     .additional_edges_ = edges_};
+    auto const params = get_parameters(profile);
+    for (auto const explicit_levels : {false, true}) {
+      auto const from =
+          location{{49, 8.001}, explicit_levels ? level_t{0.F} : kNoLevel};
+      auto const to =
+          location{{49, 8.0046}, explicit_levels ? level_t{1.F} : kNoLevel};
+      auto const fwd = route(params, *w_, *l_, profile, from, to, 3600U,
+                             direction::kForward, 2.0, nullptr, &sharing);
+      auto const bwd = route(params, *w_, *l_, profile, to, from, 3600U,
+                             direction::kBackward, 2.0, nullptr, &sharing);
+      ASSERT_TRUE(fwd.has_value());
+      ASSERT_TRUE(bwd.has_value());
+      EXPECT_EQ(fwd->cost_, bwd->cost_);
+      EXPECT_EQ(fwd->duration_, bwd->duration_);
+      // Both endpoints are directly at their station connector. Walking along
+      // a footway and back would only serve to change the routing level state.
+      for (auto const* p : {&*fwd, &*bwd}) {
+        auto road_segments = 0U;
+        for (auto const& segment : p->segments_) {
+          if (segment.way_ != way_idx_t::invalid()) {
+            EXPECT_EQ(w_->way_osm_idx_[segment.way_], osm_way_idx_t{2U});
+            ++road_segments;
+          }
+        }
+        EXPECT_EQ(road_segments, 1U);
+      }
+    }
+  }
+
+  std::filesystem::path dir_{std::filesystem::temp_directory_path() /
+                             "osr-levelled-sharing"};
+  std::unique_ptr<ways> w_;
+  std::unique_ptr<lookup> l_;
+  bitvec<node_idx_t> start_, end_, through_;
+  std::vector<geo::latlng> coordinates_;
+  hash_map<node_idx_t, std::vector<additional_edge>> edges_;
+};
+
+TEST_F(levelled_sharing_test, bike_pickup_and_return_preserve_walking_levels) {
+  check(search_profile::kBikeSharing);
+}
+
+TEST_F(levelled_sharing_test, car_pickup_and_return_preserve_walking_levels) {
+  check(search_profile::kCarSharing);
 }
 
 }  // namespace
