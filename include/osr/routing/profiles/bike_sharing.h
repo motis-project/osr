@@ -304,11 +304,27 @@ struct bike_sharing {
     auto const& handle_additional_edge = [&](additional_edge const& ae,
                                              node_type const nt,
                                              cost_and_duration const edge) {
-      fn(node{.n_ = ae.to_,
-              .type_ = nt,
-              .lvl_ = nt == node_type::kBike ? kNoLevel : n.lvl_},
-         edge.cost_, edge.duration_, ae.distance_, way_idx_t::invalid(), 0, 1,
-         elevation_storage::elevation{}, false);
+      auto const emit = [&](node const target) {
+        fn(target, edge.cost_, edge.duration_, ae.distance_,
+           way_idx_t::invalid(), 0, 1, elevation_storage::elevation{}, false);
+      };
+      if (n.is_additional_node(sharing) &&
+          !sharing->is_additional_node(ae.to_) && nt != node_type::kBike) {
+        // `n` is the vehicle state at the station, so it carries no level.
+        // Leaving the connector on foot - returning the vehicle (forward) or
+        // undoing the pickup (backward) - therefore cannot inherit the level
+        // from `n`: emit one walking state per level the graph side node
+        // actually has. A `kNoLevel` walking state would match any way (see
+        // `footp::get_target_level`) and the backward search would never
+        // produce it.
+        footp::resolve_all(w, ae.to_, [&](footp::node const foot_state) {
+          emit(to_node(foot_state, nt));
+        });
+        return;
+      }
+      emit(node{.n_ = ae.to_,
+                .type_ = nt,
+                .lvl_ = nt == node_type::kBike ? kNoLevel : n.lvl_});
     };
 
     auto const& continue_on_foot = [&](node_type const nt,
@@ -324,7 +340,14 @@ struct bike_sharing {
             fn(to_node(neighbor, nt), cost, duration, dist, way, from, to,
                elevation, false);
           });
-      if (include_additional_edges) {
+      // The connector's other end resolves walking states, so only offer it
+      // from a level `footp::resolve_all` produces here - otherwise the two
+      // search directions use different states.
+      if (include_additional_edges &&
+          is_resolved_foot_state<footp>(w, n,
+                                        [&](footp::node const foot_state) {
+                                          return to_node(foot_state, nt);
+                                        })) {
         // walk to station or free-floating bike
         if (auto const it = sharing->additional_edges_.find(n.n_);
             it != end(sharing->additional_edges_)) {
