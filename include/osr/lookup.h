@@ -470,9 +470,10 @@ struct lookup {
     auto const way_prop = ways_.r_->way_properties_[way];
     auto const edge_dir = reverse ? opposite(way_dir) : way_dir;
     auto best = std::optional<cost_t>{};
-    P::template resolve_endpoint<endpoint_role::kSource>(
+    P::template resolve_endpoint<endpoint_role::kRoot>(
         *ways_.r_, way, node_idx, query.lvl_,
-        reverse ? opposite(search_dir) : search_dir, [&](auto const resolved) {
+        route_end_of(reverse ? opposite(search_dir) : search_dir),
+        [&](auto const resolved) {
           if (!P::endpoint_node_cost(params, resolved, node_prop).feasible()) {
             return;
           }
@@ -507,15 +508,15 @@ struct lookup {
     auto const edge_dir = reverse ? opposite(dir) : dir;
     if (!P::endpoint_way_feasible(
             params,
-            endpoint_way_query{
-                .w_ = *ways_.r_,
-                .timezones_ = ways_.timezones_,
-                .way_ = way,
-                .props_ = ways_.r_->way_properties_[way],
-                .way_dir_ = flip(search_dir, edge_dir),
-                .search_dir_ = search_dir,
-                .resolve_dir_ = reverse ? opposite(search_dir) : search_dir,
-                .start_time_ = start_time})) {
+            endpoint_way_query{.w_ = *ways_.r_,
+                               .timezones_ = ways_.timezones_,
+                               .way_ = way,
+                               .props_ = ways_.r_->way_properties_[way],
+                               .way_dir_ = flip(search_dir, edge_dir),
+                               .search_dir_ = search_dir,
+                               .end_ = route_end_of(
+                                   reverse ? opposite(search_dir) : search_dir),
+                               .start_time_ = start_time})) {
       return candidate_node{};
     }
 

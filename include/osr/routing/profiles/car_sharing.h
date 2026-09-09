@@ -595,12 +595,12 @@ struct car_sharing {
                                way_idx_t const way,
                                node_idx_t const n,
                                level_t const lvl,
-                               direction const endpoint_dir,
+                               route_end const end,
                                Fn&& f) {
     footp::template resolve_endpoint<Role>(
-        w, way, n, lvl, endpoint_dir, [&](footp::node const resolved) {
-          if constexpr (Role == endpoint_role::kSource) {
-            f(to_node(resolved, endpoint_dir == direction::kForward
+        w, way, n, lvl, end, [&](footp::node const resolved) {
+          if constexpr (Role == endpoint_role::kRoot) {
+            f(to_node(resolved, end == route_end::kOrigin
                                     ? node_type::kInitialFoot
                                     : node_type::kTrailingFoot));
           } else {
