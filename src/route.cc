@@ -103,21 +103,21 @@ void for_each_endpoint_candidate(match_view_t const& matches,
   }
 }
 
-template <endpoint_role Role, Profile P>
+template <Profile P>
 cost_and_duration get_endpoint_connection(
     typename P::parameters const& params,
     ways const& w,
     endpoint_candidate const& endpoint,
     typename P::node const node,
     route_end const end,
+    endpoint_role const role,
     std::optional<routing_time_t> const start_time,
     duration_t const current_duration,
     direction const search_dir) {
   auto const way_dir = flip(travel_dir_of(end), endpoint.node_.way_dir_);
-  if constexpr (Role == endpoint_role::kRoot) {
-    if (!P::endpoint_root_allowed(params, node, way_dir)) {
-      return infeasible_cost_and_duration();
-    }
+  if (role == endpoint_role::kRoot &&
+      !P::endpoint_root_allowed(params, node, way_dir)) {
+    return infeasible_cost_and_duration();
   }
   auto const connection =
       P::endpoint_way_cost(params, *w.r_, w.timezones_, node, endpoint.way_,
@@ -126,7 +126,7 @@ cost_and_duration get_endpoint_connection(
                            start_time, current_duration, search_dir);
   auto total =
       clamp_add(connection, endpoint.matching_penalty_, duration_t{0U});
-  if constexpr (Role == endpoint_role::kGoal) {
+  if (role == endpoint_role::kGoal) {
     total = clamp_add(
         total, P::endpoint_transition_cost(params, *w.r_, w.timezones_, node,
                                            endpoint.way_, way_dir, search_dir,
@@ -369,13 +369,12 @@ std::vector<endpoint_root<P>> add_endpoint_roots(
   auto roots = std::vector<endpoint_root<P>>{};
   for_each_endpoint_candidate(
       matches, penalty_factor, [&](endpoint_candidate const& endpoint) {
-        P::template resolve_endpoint<endpoint_role::kRoot>(
+        P::resolve_endpoint(
             *w.r_, endpoint.way_, endpoint.node_.node_, matches.lvl_, end,
-            [&](auto const node) {
-              auto const connection =
-                  get_endpoint_connection<endpoint_role::kRoot, P>(
-                      params, w, endpoint, node, end, start_time,
-                      duration_t{0U}, dir);
+            endpoint_role::kRoot, [&](auto const node) {
+              auto const connection = get_endpoint_connection<P>(
+                  params, w, endpoint, node, end, endpoint_role::kRoot,
+                  start_time, duration_t{0U}, dir);
               if (!connection.feasible() || connection.cost_ >= max) {
                 return;
               }
@@ -425,10 +424,9 @@ std::optional<destination_candidate<P>> best_candidate(
           if (!reachable) {
             return;
           }
-          auto const connection =
-              get_endpoint_connection<endpoint_role::kGoal, P>(
-                  params, w, endpoint, node, end, start_time, target_duration,
-                  dir);
+          auto const connection = get_endpoint_connection<P>(
+              params, w, endpoint, node, end, endpoint_role::kGoal, start_time,
+              target_duration, dir);
           if (!connection.feasible()) {
             return;
           }
@@ -446,9 +444,8 @@ std::optional<destination_candidate<P>> best_candidate(
             best = destination_candidate<P>{endpoint, node, connection, total};
           }
         };
-        P::template resolve_endpoint<endpoint_role::kGoal>(
-            *w.r_, endpoint.way_, candidate_node.node_, matches.lvl_, end,
-            consider);
+        P::resolve_endpoint(*w.r_, endpoint.way_, candidate_node.node_,
+                            matches.lvl_, end, endpoint_role::kGoal, consider);
       });
   return best;
 }
@@ -633,9 +630,9 @@ std::optional<path> route_astar(typename P::parameters const& params,
       to_match, penalty_factor, [&](endpoint_candidate const& endpoint) {
         auto const& candidate_node = endpoint.node_;
         auto const add = [&](auto const node) { a.add_destination(node); };
-        P::template resolve_endpoint<endpoint_role::kGoal>(
-            *w.r_, endpoint.way_, candidate_node.node_, to_match.lvl_,
-            route_end_of(opposite(dir)), add);
+        P::resolve_endpoint(*w.r_, endpoint.way_, candidate_node.node_,
+                            to_match.lvl_, route_end_of(opposite(dir)),
+                            endpoint_role::kGoal, add);
       });
   if (a.destinations_.empty()) {
     return std::nullopt;

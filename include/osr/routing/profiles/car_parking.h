@@ -325,19 +325,20 @@ struct car_parking {
            });
   }
 
-  template <endpoint_role Role, typename Fn>
+  template <typename Fn>
   static void resolve_endpoint(ways::routing const& w,
                                way_idx_t const way,
                                node_idx_t const n,
                                level_t const lvl,
                                route_end const end,
+                               endpoint_role const role,
                                Fn&& f) {
     if (end == route_end::kOrigin) {
-      car::template resolve_endpoint<Role>(
-          w, way, n, lvl, end, [&](car::node const cn) { f(to_node(cn)); });
+      car::resolve_endpoint(w, way, n, lvl, end, role,
+                            [&](car::node const cn) { f(to_node(cn)); });
     } else {
-      footp::template resolve_endpoint<Role>(
-          w, way, n, lvl, end,
+      footp::resolve_endpoint(
+          w, way, n, lvl, end, role,
           [&](typename footp::node const fn) { f(to_node(fn)); });
     }
   }

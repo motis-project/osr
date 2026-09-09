@@ -470,10 +470,10 @@ struct lookup {
     auto const way_prop = ways_.r_->way_properties_[way];
     auto const edge_dir = reverse ? opposite(way_dir) : way_dir;
     auto best = std::optional<cost_t>{};
-    P::template resolve_endpoint<endpoint_role::kRoot>(
+    P::resolve_endpoint(
         *ways_.r_, way, node_idx, query.lvl_,
         route_end_of(reverse ? opposite(search_dir) : search_dir),
-        [&](auto const resolved) {
+        endpoint_role::kRoot, [&](auto const resolved) {
           if (!P::endpoint_node_cost(params, resolved, node_prop).feasible()) {
             return;
           }

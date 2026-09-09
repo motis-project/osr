@@ -134,14 +134,15 @@ struct ferry {
     f(node{n});
   }
 
-  template <endpoint_role, typename Fn>
+  template <typename Fn>
   static void resolve_endpoint(ways::routing const& w,
                                way_idx_t,
                                node_idx_t const n,
                                level_t,
                                route_end,
+                               endpoint_role,
                                Fn&& f) {
-    resolve_all(w, n, f);
+    resolve_all(w, n, std::forward<Fn>(f));
   }
 
   template <direction SearchDir, bool WithBlocked, typename Fn>
