@@ -136,15 +136,11 @@ concept Profile =
              node_idx_t const node_idx,
              level_t const lvl,
              route_end const end,
+             endpoint_role const role,
              std::function<void(typename P::node const)>&& f) {
       { P::resolve_all(r, node_idx, f) } -> std::same_as<void>;
       {
-        P::template resolve_endpoint<endpoint_role::kRoot>(r, w, node_idx, lvl,
-                                                           end, f)
-      } -> std::same_as<void>;
-      {
-        P::template resolve_endpoint<endpoint_role::kGoal>(r, w, node_idx, lvl,
-                                                           end, f)
+        P::resolve_endpoint(r, w, node_idx, lvl, end, role, f)
       } -> std::same_as<void>;
     } &&
     requires(typename P::parameters const& params,

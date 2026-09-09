@@ -93,6 +93,25 @@ constexpr cost_and_duration get_transition_cost(
           .duration_ = duration_t{0U}};
 }
 
+// A root has no incoming edge, so it has to sit on the endpoint way itself.
+// A goal can be reached on any way and pays the joining turn separately.
+template <WayAwareProfile P, typename Fn>
+void resolve_way_aware_endpoint(ways::routing const& w,
+                                way_idx_t const way,
+                                node_idx_t const n,
+                                endpoint_role const role,
+                                Fn&& f) {
+  if (role == endpoint_role::kGoal) {
+    P::resolve_all(w, n, std::forward<Fn>(f));
+    return;
+  }
+  P::resolve_all(w, n, [&](typename P::node const candidate) {
+    if (w.node_ways_[n][candidate.way_] == way) {
+      f(candidate);
+    }
+  });
+}
+
 // Cost of continuing from `n` onto the endpoint way. A way can pass through a
 // node more than once (loops) and each occurrence is a separate routing state:
 // the search would settle the cheapest one, so this has to do the same to stay

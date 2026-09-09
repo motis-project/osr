@@ -127,7 +127,7 @@ The current set of routing profiles can be found in the [`include/osr/routing/pr
 
 #### Static functions
 
-  - `resolve_endpoint<endpoint_role>(ways::routing, way_idx_t, node_idx_t, level_t, route_end, Fn&& f)`: resolves all profile nodes that can represent the given end of the route (`route_end`) on a matched way, either as a search root or as a search goal (`endpoint_role`). `Fn f` will be called with each `node`. It's the task of the profile to give the routing algorithm an entry point to its overlay graph.
+  - `resolve_endpoint(ways::routing, way_idx_t, node_idx_t, level_t, route_end, endpoint_role, Fn&& f)`: resolves all profile nodes that can represent the given end of the route (`route_end`) on a matched way, either as a search root or as a search goal (`endpoint_role`). `Fn f` will be called with each `node`. It's the task of the profile to give the routing algorithm an entry point to its overlay graph.
   - `resolve_all(ways::routing, node_idx_t, Fn&& f)`: resolves all profile nodes for an OSM node without restricting them to a matched way.
   - `adjacent<SearcHdir, WithBlocked, Fn>(ways::routing, node, bitvec<node_idx_t>* blocked, sharing_data*, elevation_storage*, Fn&& f)`: Calls `Fn f` with each adjacent neighbor of the given `node`. This is used in the shortest path algorithm to expand a node and visit all its neighbors. This takes a runtime provided bit vector `blocked` into account where bit `i` indicates if `i` can be visited or not. This allows us to dynamically block nodes depending on the routing query.
 
