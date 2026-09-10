@@ -52,9 +52,6 @@ struct cch {
 
   static constexpr auto const kDebug = false;
   static constexpr auto const kQueryDebugOutput = false;
-  // TODO: review POC implementation. Temporary debug bypass: do not use the
-  // exact-state meeting logic while inspecting CCH routes in the debug UI.
-  static constexpr auto const kDisableMeetPointLogicForDebug = true;
 
   struct get_bucket {
     cost_t operator()(label const& l) { return l.cost(); }
@@ -70,7 +67,6 @@ struct cch {
     settledForward_.clear();
     settledBackward_.clear();
     mu_ = kInfeasible;
-    meet_ = node::invalid();
     meet_forward_ = node::invalid();
     meet_backward_ = node::invalid();
     max_reached_ = false;
@@ -117,26 +113,10 @@ struct cch {
     }
   }
 
-  void update_mu(node const n, cost_t const f, cost_t const b) {
-    if constexpr (kDisableMeetPointLogicForDebug) {
-      return;
-    }
-    if (f != kInfeasible && b != kInfeasible) {
-      auto const candidate = clamp_cost(static_cast<std::uint64_t>(f) +
-                                        static_cast<std::uint64_t>(b));
-      if (candidate < mu_) {
-        mu_ = candidate;
-        meet_ = n;
-        meet_forward_ = n;
-        meet_backward_ = n;
-      }
-    }
-  }
-
-  cost_t debug_meeting_turn_cost(P::parameters const& params,
-                                 ways::routing const& r,
-                                 node const incoming,
-                                 node const outgoing) const {
+  cost_t meeting_turn_cost(P::parameters const& params,
+                           ways::routing const& r,
+                           node const incoming,
+                           node const outgoing) const {
     if constexpr (!uses_customized_cost_overlay() ||
                   !requires { incoming.way_; incoming.dir_; outgoing.way_;
                                outgoing.dir_; }) {
@@ -151,10 +131,10 @@ struct cch {
         return kInfeasible;
       }
 
-      // TODO: review POC implementation. In the backward predecessor chain,
-      // pred(outgoing) is the next graph state after the meeting node in the
-      // final forward route. If there is no predecessor, the meeting node is the
-      // destination seed and there is no outgoing turn to validate.
+      // In the backward predecessor chain, pred(outgoing) is the next graph
+      // state after the meeting node in the final forward route. If there is no
+      // predecessor, the meeting node is the destination seed and there is no
+      // outgoing turn to validate.
       if (!backward_it->second.pred(outgoing).has_value()) {
         return 0U;
       }
@@ -178,10 +158,9 @@ struct cch {
     }
   }
 
-  void select_debug_meet_by_node(P::parameters const& params,
-                                 ways::routing const& r) {
-    if constexpr (!kDisableMeetPointLogicForDebug ||
-                  !uses_customized_cost_overlay()) {
+  void select_meet_by_node(P::parameters const& params,
+                           ways::routing const& r) {
+    if constexpr (!uses_customized_cost_overlay()) {
       return;
     } else {
       auto best = kInfeasible;
@@ -207,7 +186,7 @@ struct cch {
             }
 
             auto const stitch_cost =
-                debug_meeting_turn_cost(params, r, forward_state, backward_state);
+                meeting_turn_cost(params, r, forward_state, backward_state);
             if (stitch_cost == kInfeasible) {
               return;
             }
@@ -226,20 +205,19 @@ struct cch {
 
       if (best != kInfeasible) {
         mu_ = best;
-        meet_ = best_forward;
         meet_forward_ = best_forward;
         meet_backward_ = best_backward;
         if constexpr (kQueryDebugOutput) {
           if constexpr (requires { best_forward.way_; best_forward.dir_;
                                     best_backward.way_; best_backward.dir_; }) {
             fmt::println(
-                "cch debug meet bypass | node={} cost={} forward_state=({}, {}) "
+                "cch meet | node={} cost={} forward_state=({}, {}) "
                 "backward_state=({}, {})",
                 to_idx(best_forward.get_node()), mu_, best_forward.way_,
                 to_str(best_forward.dir_), best_backward.way_,
                 to_str(best_backward.dir_));
           } else {
-            fmt::println("cch debug meet bypass | node={} cost={}",
+            fmt::println("cch meet | node={} cost={}",
                          to_idx(best_forward.get_node()), mu_);
           }
         }
@@ -275,20 +253,6 @@ struct cch {
       }
       pq.pop();
     }
-  }
-
-  bool done() {
-    if (mu_ == kInfeasible) {
-      return false;
-    }
-
-    if (pqForward_.empty() || pqBackward_.empty()) {
-      return false;
-    }
-
-    return static_cast<std::uint64_t>(pqForward_.get_next_bucket()) +
-               static_cast<std::uint64_t>(pqBackward_.get_next_bucket()) >=
-           static_cast<std::uint64_t>(mu_);
   }
 
   bool is_upward(ways::routing const& r, node const from, node const to) const {
@@ -378,12 +342,6 @@ struct cch {
     while (!pqForward_.empty() || !pqBackward_.empty()) {
       discard_stale_top<direction::kForward>(pqForward_);
       discard_stale_top<direction::kBackward>(pqBackward_);
-      if (!kDisableMeetPointLogicForDebug && done()) {
-        if constexpr (kQueryDebugOutput) {
-          fmt::println("cch mu: {}", mu_);
-        }
-        break;
-      }
       if (pqForward_.empty() && pqBackward_.empty()) {
         break;
       }
@@ -468,8 +426,6 @@ struct cch {
           auto const improved =
               costForward_[neighbor.get_key()].update(l, neighbor, total_cost,
                                                       curr);
-          update_mu(neighbor, get_cost<direction::kForward>(neighbor),
-                    get_cost<direction::kBackward>(neighbor));
           if (debug_meet_node) {
             if constexpr (requires { curr.way_; curr.dir_; neighbor.way_;
                                       neighbor.dir_; }) {
@@ -518,8 +474,6 @@ struct cch {
           auto const improved =
               costBackward_[neighbor.get_key()].update(l, neighbor, total_cost,
                                                        curr);
-          update_mu(neighbor, get_cost<direction::kForward>(neighbor),
-                    get_cost<direction::kBackward>(neighbor));
           if (debug_meet_node) {
             if constexpr (requires { curr.way_; curr.dir_; neighbor.way_;
                                       neighbor.dir_; }) {
@@ -717,7 +671,7 @@ struct cch {
         }
       }
     }
-    select_debug_meet_by_node(params, r);
+    select_meet_by_node(params, r);
     return !max_reached_ && mu_ == kInfeasible;
   }
 
@@ -754,7 +708,6 @@ struct cch {
   settled_set settledForward_;
   settled_set settledBackward_;
   cost_t mu_{kInfeasible};
-  node meet_{node::invalid()};
   node meet_forward_{node::invalid()};
   node meet_backward_{node::invalid()};
 
