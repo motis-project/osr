@@ -375,7 +375,8 @@ elevation_storage::elevation elevation_storage::encoding::decode() const {
 }
 
 elevation_storage::encoding::operator bool() const {
-  return up_ != 0U || down_ != 0U;
+  return up_ != 0U || down_ != 0U ||
+         absolute_ != elevation_absolute_t::invalid();
 }
 
 }  // namespace osr
