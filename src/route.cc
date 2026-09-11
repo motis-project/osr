@@ -893,22 +893,24 @@ double add_cch_path(typename P::parameters const& params,
       }
       auto const via_node = e.weight_->via_;
       if (via_node != node_idx_t::invalid()) {
-        // CCH DEBUG: keep a visible breadcrumb for each selected shortcut before
-        // it is recursively unpacked into original graph edges.
-        segments.push_back(path::segment{
-            .polyline_ = {w.get_node_pos(from.get_node()).as_latlng(),
-                          w.get_node_pos(to.get_node()).as_latlng()},
-            .from_level_ = level_t{0.F},
-            .to_level_ = level_t{0.F},
-            .from_ = from.get_node(),
-            .to_ = to.get_node(),
-            .way_ = way_idx_t::invalid(),
-            .cost_ = expected_cost,
-            .dist_ = e.weight_->distance_,
-            .mode_ = to.get_mode(),
-            .cch_debug_shortcut_ = true,
-            .cch_debug_depth_ = depth,
-            .cch_debug_via_ = via_node});
+        if constexpr (kCchRouteDebugOutput) {
+          // Keep a visible breadcrumb for each selected shortcut before it is
+          // recursively unpacked into original graph edges.
+          segments.push_back(path::segment{
+              .polyline_ = {w.get_node_pos(from.get_node()).as_latlng(),
+                            w.get_node_pos(to.get_node()).as_latlng()},
+              .from_level_ = level_t{0.F},
+              .to_level_ = level_t{0.F},
+              .from_ = from.get_node(),
+              .to_ = to.get_node(),
+              .way_ = way_idx_t::invalid(),
+              .cost_ = expected_cost,
+              .dist_ = e.weight_->distance_,
+              .mode_ = to.get_mode(),
+              .cch_debug_shortcut_ = true,
+              .cch_debug_depth_ = depth,
+              .cch_debug_via_ = via_node});
+        }
         // Customized CCH edges can represent a path through a lower-rank via-node,
         // even when the edge is also an original graph edge.
         auto const via_in =
@@ -954,20 +956,22 @@ double add_cch_path(typename P::parameters const& params,
           get_cch_edge_cost<P>(params, *w.r_, from, to), expected_cost,
           s->distance_, to_idx(w.node_to_osm_[s->via_]));
     }
-    segments.push_back(path::segment{
-        .polyline_ = {w.get_node_pos(from.get_node()).as_latlng(),
-                      w.get_node_pos(to.get_node()).as_latlng()},
-        .from_level_ = level_t{0.F},
-        .to_level_ = level_t{0.F},
-        .from_ = from.get_node(),
-        .to_ = to.get_node(),
-        .way_ = way_idx_t::invalid(),
-        .cost_ = expected_cost,
-        .dist_ = s->distance_,
-        .mode_ = to.get_mode(),
-        .cch_debug_shortcut_ = true,
-        .cch_debug_depth_ = depth,
-        .cch_debug_via_ = s->via_});
+    if constexpr (kCchRouteDebugOutput) {
+      segments.push_back(path::segment{
+          .polyline_ = {w.get_node_pos(from.get_node()).as_latlng(),
+                        w.get_node_pos(to.get_node()).as_latlng()},
+          .from_level_ = level_t{0.F},
+          .to_level_ = level_t{0.F},
+          .from_ = from.get_node(),
+          .to_ = to.get_node(),
+          .way_ = way_idx_t::invalid(),
+          .cost_ = expected_cost,
+          .dist_ = s->distance_,
+          .mode_ = to.get_mode(),
+          .cch_debug_shortcut_ = true,
+          .cch_debug_depth_ = depth,
+          .cch_debug_via_ = s->via_});
+    }
     auto const via = P::create_node(s->via_, kNoLevel, way_pos_t{0U}, dir);
     auto const first_cost = get_cch_edge_cost<P>(params, *w.r_, from, via);
     auto const second_cost = get_cch_edge_cost<P>(params, *w.r_, via, to);
