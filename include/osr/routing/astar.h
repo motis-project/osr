@@ -77,9 +77,9 @@ struct astar {
     auto const& w = params_.w();
     auto const heur = heuristic(params_.profile_, w, params_.sharing(),
                                 l.get_node().get_node());
-    if (cost_[l.get_node().get_key()].update(l, l.get_node(), l.cost(),
-                                             node::invalid(), duration, *w.r_,
-                                             arena_)) {
+    if (cost_[l.get_node().get_key()].update(
+            l, l.get_node(), {.cost_ = l.cost(), .duration_ = duration},
+            node::invalid(), *w.r_, arena_)) {
       auto const cost_with_heur = l.cost() + heur;
       if constexpr (kDebug) {
         std::cout << "START ";
@@ -233,17 +233,19 @@ struct astar {
               max_reached_ = true;
               return;
             }
-            auto const total_duration = clamp_add_duration(
-                cost_.at(curr_node.get_key()).duration(curr_node), duration);
+            auto const next_cd = cost_and_duration{
+                .cost_ = static_cast<cost_t>(total),
+                .duration_ = clamp_add_duration(
+                    cost_.at(curr_node.get_key()).duration(curr_node),
+                    duration)};
             auto const updated = [&]() {
               if (heur >= max) {
                 return false;
               }
               auto next = label{neighbor, static_cast<cost_t>(heur)};
               next.track(l, r, way, neighbor.get_node(), track);
-              if (!cost_[neighbor.get_key()].update(
-                      next, neighbor, static_cast<cost_t>(total), curr_node,
-                      total_duration, r, arena_)) {
+              if (!cost_[neighbor.get_key()].update(next, neighbor, next_cd,
+                                                    curr_node, r, arena_)) {
                 return false;
               }
               pq_.push(std::move(next));

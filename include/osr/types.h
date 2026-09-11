@@ -209,16 +209,11 @@ constexpr duration_t duration_from_cost(T const c) {
   return clamp_duration(static_cast<std::uint64_t>(c));
 }
 
-constexpr bool is_better_than(cost_t const cost,
-                              duration_t const duration,
-                              cost_t const other_cost,
-                              duration_t const other_duration) noexcept {
-  return cost < other_cost || (cost == other_cost && duration < other_duration);
-}
-
 struct cost_and_duration {
   cost_t cost_{0U};
   duration_t duration_{0U};
+
+  constexpr auto operator<=>(cost_and_duration const&) const noexcept = default;
 
   constexpr bool feasible() const noexcept { return cost_ != kInfeasible; }
 };

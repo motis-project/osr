@@ -227,21 +227,23 @@ struct bike_sharing {
     }
 
     constexpr duration_t duration(node const n) const noexcept {
-      auto const idx = get_index(n);
-      return duration_[idx];
+      return duration_[get_index(n)];
+    }
+
+    constexpr cost_and_duration cd(std::size_t const idx) const noexcept {
+      return {.cost_ = cost_[idx], .duration_ = duration_[idx]};
     }
 
     constexpr bool update(label const,
                           node const n,
-                          cost_t const c,
+                          cost_and_duration const c,
                           node const pred,
-                          duration_t const duration,
                           ways::routing const&,
                           entry_storage_arena&) noexcept {
       auto const idx = get_index(n);
-      if (is_better_than(c, duration, cost_[idx], duration_[idx])) {
-        cost_[idx] = c;
-        duration_[idx] = duration;
+      if (c < cd(idx)) {
+        cost_[idx] = c.cost_;
+        duration_[idx] = c.duration_;
         pred_[idx] = pred.n_;
         pred_lvl_[idx] = pred.lvl_;
         pred_type_[idx] = pred.type_;

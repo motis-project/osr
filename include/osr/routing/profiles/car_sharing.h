@@ -235,6 +235,10 @@ struct car_sharing {
         : 2 {static_cast<std::uint8_t>(node_type::kInvalid)};
     duration_t duration_{kMaxDuration};
     OSR_NO_UNIQUE_ADDRESS Tracking tracking_{};
+
+    constexpr cost_and_duration cd() const noexcept {
+      return {.cost_ = cost_, .duration_ = duration_};
+    }
   };
 
   struct entry {
@@ -264,17 +268,16 @@ struct car_sharing {
 
     bool update(label const& l,
                 node const n,
-                cost_t const c,
+                cost_and_duration const c,
                 node const pred,
-                duration_t const duration,
                 ways::routing const& w,
                 entry_storage_arena& a) {
       auto& s = s_.slot(get_index(n), w, n.n_, a);
-      if (!is_better_than(c, duration, s.cost_, s.duration_)) {
+      if (c >= s.cd()) {
         return false;
       }
-      s.cost_ = c;
-      s.duration_ = duration;
+      s.cost_ = c.cost_;
+      s.duration_ = c.duration_;
       s.pred_ = pred.n_;
       s.pred_lvl_ = pred.lvl_;
       s.pred_way_ = pred.way_;

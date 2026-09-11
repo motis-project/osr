@@ -58,9 +58,9 @@ struct dijkstra {
 
   void add_start(label const l, duration_t const duration) {
     auto const& w = params_.w();
-    if (cost_[l.get_node().get_key()].update(l, l.get_node(), l.cost(),
-                                             node::invalid(), duration, *w.r_,
-                                             arena_)) {
+    if (cost_[l.get_node().get_key()].update(
+            l, l.get_node(), {.cost_ = l.cost(), .duration_ = duration},
+            node::invalid(), *w.r_, arena_)) {
       if constexpr (kDebug) {
         std::cout << "START ";
         l.get_node().print(std::cout, w);
@@ -184,13 +184,13 @@ struct dijkstra {
               max_reached_ = true;
               return;
             }
-            auto const total_duration =
-                clamp_add_duration(curr_duration, duration);
-            auto next = label{neighbor, static_cast<cost_t>(total)};
+            auto const next_cd = cost_and_duration{
+                .cost_ = static_cast<cost_t>(total),
+                .duration_ = clamp_add_duration(curr_duration, duration)};
+            auto next = label{neighbor, next_cd.cost_};
             next.track(l, r, way, neighbor.get_node(), track);
-            if (cost_[neighbor.get_key()].update(
-                    next, neighbor, static_cast<cost_t>(total), curr,
-                    total_duration, r, arena_)) {
+            if (cost_[neighbor.get_key()].update(next, neighbor, next_cd, curr,
+                                                 r, arena_)) {
               pq_.push(std::move(next));
 
               if constexpr (kDebug) {

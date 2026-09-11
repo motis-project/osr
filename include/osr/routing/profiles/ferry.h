@@ -87,16 +87,19 @@ struct ferry {
 
     constexpr duration_t duration(node) const noexcept { return duration_; }
 
+    constexpr cost_and_duration cd() const noexcept {
+      return {.cost_ = cost_, .duration_ = duration_};
+    }
+
     constexpr bool update(label const&,
                           node const,
-                          cost_t const c,
+                          cost_and_duration const c,
                           node const pred,
-                          duration_t const duration,
                           ways::routing const&,
                           entry_storage_arena&) noexcept {
-      if (is_better_than(c, duration, cost_, duration_)) {
-        cost_ = c;
-        duration_ = duration;
+      if (c < cd()) {
+        cost_ = c.cost_;
+        duration_ = c.duration_;
         pred_ = pred.n_;
         return true;
       }
