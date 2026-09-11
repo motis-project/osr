@@ -3,6 +3,7 @@
 #include <cstdint>
 
 #include <algorithm>
+#include <optional>
 #include <vector>
 
 #include "utl/verify.h"
@@ -12,6 +13,7 @@
 #include "osr/routing/dial.h"
 #include "osr/routing/entry_storage_arena.h"
 #include "osr/routing/profile.h"
+#include "osr/routing/search_params.h"
 #include "osr/types.h"
 #include "osr/ways.h"
 
@@ -27,6 +29,7 @@ struct dijkstra {
   using node = typename P::node;
   using entry = typename P::entry;
   using hash = typename P::hash;
+  using params_t = search_params<typename P::parameters>;
 
   static constexpr auto const kDebug = false;
 
@@ -34,9 +37,10 @@ struct dijkstra {
     cost_t operator()(label const& l) { return l.cost(); }
   };
 
-  void reset(cost_t const max) {
+  void reset(params_t const& p) {
+    params_ = p;
     pq_.clear();
-    pq_.n_buckets(max + 1U);
+    pq_.n_buckets(params_.max_ + 1U);
     cost_.clear();
     arena_.reset();
     max_reached_ = false;
@@ -48,11 +52,10 @@ struct dijkstra {
     }
   }
 
-  void add_start(ways const& w, label const l) {
-    add_start(w, l, duration_from_cost(l.cost()));
-  }
+  void add_start(label const l) { add_start(l, duration_from_cost(l.cost())); }
 
-  void add_start(ways const& w, label const l, duration_t const duration) {
+  void add_start(label const l, duration_t const duration) {
+    auto const& w = params_.w();
     if (cost_[l.get_node().get_key()].update(l, l.get_node(), l.cost(),
                                              node::invalid(), duration, *w.r_,
                                              arena_)) {
@@ -84,14 +87,16 @@ struct dijkstra {
   }
 
   template <direction SearchDir, bool WithBlocked>
-  bool run(P::parameters const& params,
-           ways const& w,
-           ways::routing const& r,
-           cost_t const max,
-           std::optional<routing_time_t> const start_time,
-           bitvec<node_idx_t> const* blocked,
-           sharing_data const* sharing,
-           elevation_storage const* elevations) {
+  bool run() {
+    auto const& params = params_.profile_;
+    auto const& w = params_.w();
+    auto const& r = params_.r();
+    auto const max = params_.max_;
+    auto const start_time = params_.start_time_;
+    auto const* const blocked = params_.blocked_;
+    auto const* const sharing = params_.sharing();
+    auto const* const elevations = params_.elevations_;
+
     while (!pq_.empty()) {
       auto l = pq_.pop();
 
@@ -170,32 +175,19 @@ struct dijkstra {
     return !max_reached_;
   }
 
-  bool run(P::parameters const& params,
-           ways const& w,
-           ways::routing const& r,
-           cost_t const max,
-           std::optional<routing_time_t> const start_time,
-           bitvec<node_idx_t> const* blocked,
-           sharing_data const* sharing,
-           elevation_storage const* elevations,
-           direction const dir) {
-    if (blocked == nullptr) {
-      return dir == direction::kForward
-                 ? run<direction::kForward, false>(params, w, r, max,
-                                                   start_time, blocked, sharing,
-                                                   elevations)
-                 : run<direction::kBackward, false>(params, w, r, max,
-                                                    start_time, blocked,
-                                                    sharing, elevations);
+  bool run() {
+    if (params_.blocked_ == nullptr) {
+      return params_.dir_ == direction::kForward
+                 ? run<direction::kForward, false>()
+                 : run<direction::kBackward, false>();
     } else {
-      return dir == direction::kForward
-                 ? run<direction::kForward, true>(params, w, r, max, start_time,
-                                                  blocked, sharing, elevations)
-                 : run<direction::kBackward, true>(params, w, r, max,
-                                                   start_time, blocked, sharing,
-                                                   elevations);
+      return params_.dir_ == direction::kForward
+                 ? run<direction::kForward, true>()
+                 : run<direction::kBackward, true>();
     }
   }
+
+  params_t params_;
 
   dial<label, get_bucket> pq_{get_bucket{}};
   ankerl::unordered_dense::map<key, entry, hash> cost_;

@@ -29,7 +29,6 @@
 #include "osr/routing/profiles/car_sharing.h"
 #include "osr/routing/profiles/foot.h"
 #include "osr/routing/route.h"
-#include "osr/routing/with_profile.h"
 
 using namespace net;
 using net::web_server;
@@ -192,7 +191,6 @@ struct http_server::impl {
                     web_server::http_res_cb_t const& cb) {
     auto const query = boost::json::parse(req.body()).as_object();
     auto const waypoints = query.at("waypoints").as_array();
-    auto const profile = get_search_profile_from_request(query);
     auto const min =
         geo::latlng{waypoints[1].as_double(), waypoints[0].as_double()};
     auto const max =
@@ -201,15 +199,7 @@ struct http_server::impl {
     auto gj = geojson_writer{.w_ = w_};
     l_.find({min, max}, [&](way_idx_t const w) { gj.write_way(w); });
 
-    with_profile(profile,
-                 [&]<Profile P>(P&&) { send_graph_response<P>(req, cb, gj); });
-  }
-
-  template <Profile P>
-  void send_graph_response(web_server::http_req_t const& req,
-                           web_server::http_res_cb_t const& cb,
-                           geojson_writer& gj) {
-    gj.finish(&get_dijkstra<P>());
+    gj.finish();
     cb(json_response(req, gj.string()));
   }
 

@@ -21,7 +21,7 @@ struct foot {
 
   struct parameters {
     using profile_t = foot<IsWheelchair, Tracking>;
-    float const speed_meters_per_second_{IsWheelchair ? 0.8F : 1.2F};
+    float speed_meters_per_second_{IsWheelchair ? 0.8F : 1.2F};
   };
 
   struct node {
