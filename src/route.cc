@@ -322,8 +322,7 @@ best_candidate(typename P::parameters const& params,
                bool should_continue,
                way_idx_t const start_way,
                double const limit_squared_max_matching_distance) {
-  auto best_cost = path{.cost_ = std::numeric_limits<cost_t>::max(),
-                        .duration_ = kMaxDuration};
+  auto best_cd = infeasible_cost_and_duration();
   auto best_node = P::node::invalid();
   auto best = candidate_node{};
   auto have_best = false;
@@ -331,7 +330,7 @@ best_candidate(typename P::parameters const& params,
   auto const get_best = [&](way_idx_t const dest_way, candidate_node const& x) {
     P::resolve_all(*w.r_, x.node_, lvl, [&](auto&& node) {
       auto const target_cost = search.get_cost(node);
-      if (target_cost == kInfeasible || target_cost > best_cost.cost_) {
+      if (target_cost == kInfeasible || target_cost > best_cd.cost_) {
         return;
       }
 
@@ -352,17 +351,15 @@ best_candidate(typename P::parameters const& params,
         return;
       }
 
-      auto const total_cost = target_cost + dest_way_cost.cost_;
-      auto const total_duration =
-          clamp_add_duration(target_duration, dest_way_cost.duration_);
-      if (total_cost < best_cost.cost_ ||
-          (total_cost == best_cost.cost_ &&
-           total_duration < best_cost.duration_)) {
+      auto const total = cost_and_duration{
+          .cost_ = static_cast<cost_t>(target_cost + dest_way_cost.cost_),
+          .duration_ =
+              clamp_add_duration(target_duration, dest_way_cost.duration_)};
+      if (total < best_cd) {
         best_node = node;
         best = x;
         have_best = true;
-        best_cost.cost_ = static_cast<cost_t>(total_cost);
-        best_cost.duration_ = total_duration;
+        best_cd = total;
       }
     });
   };
@@ -390,9 +387,11 @@ best_candidate(typename P::parameters const& params,
     }
 
     if (have_best) {
-      return best_cost.cost_ < max ? std::optional{std::tuple{
-                                         best, dest_way, best_node, best_cost}}
-                                   : std::nullopt;
+      return best_cd.cost_ < max ? std::optional{std::tuple{
+                                       best, dest_way, best_node,
+                                       path{.cost_ = best_cd.cost_,
+                                            .duration_ = best_cd.duration_}}}
+                                 : std::nullopt;
     }
   }
   return std::nullopt;

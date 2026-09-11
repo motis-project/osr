@@ -23,6 +23,10 @@ struct car_slot {
   way_pos_t pred_way_{0U};
   bool pred_dir_{false};
   duration_t duration_{kMaxDuration};
+
+  constexpr cost_and_duration cd() const noexcept {
+    return {.cost_ = cost_, .duration_ = duration_};
+  }
 };
 
 template <bool IsBus>
@@ -132,17 +136,16 @@ struct generic_car {
 
     bool update(label const&,
                 node const n,
-                cost_t const c,
+                cost_and_duration const c,
                 node const pred,
-                duration_t const duration,
                 ways::routing const& w,
                 entry_storage_arena& a) {
       auto& s = s_.slot(get_index(n), w, n.n_, a);
-      if (!is_better_than(c, duration, s.cost_, s.duration_)) {
+      if (c >= s.cd()) {
         return false;
       }
-      s.cost_ = c;
-      s.duration_ = duration;
+      s.cost_ = c.cost_;
+      s.duration_ = c.duration_;
       s.pred_ = pred.n_;
       s.pred_way_ = pred.way_;
       s.pred_dir_ = to_bool(pred.dir_);
