@@ -13,6 +13,18 @@ namespace osr {
 struct additional_edge;
 struct sharing_data;
 
+template <typename FootProfile, typename Node, typename ToNode>
+bool is_resolved_foot_state(ways::routing const& w,
+                            Node const n,
+                            ToNode&& to_node) {
+  auto found = false;
+  FootProfile::resolve_all(w, n.n_,
+                           [&](typename FootProfile::node const foot_state) {
+                             found = found || to_node(foot_state) == n;
+                           });
+  return found;
+}
+
 template <Profile P, typename Fn>
 void for_each_additional_edge(typename P::parameters const&,
                               ways::routing const&,
@@ -41,7 +53,7 @@ void for_each_adjacent_node(typename P::parameters const&,
                             direction,
                             Fn&&);
 
-template <WayAwareProfile P>
+template <WayAwareProfile P, direction SearchDir = direction::kForward>
 constexpr cost_t get_profile_turn_cost(typename P::parameters const& params,
                                        ways::routing const& w,
                                        typename P::node const n,
@@ -52,26 +64,93 @@ constexpr cost_t get_profile_turn_cost(typename P::parameters const& params,
     return 0U;
   }
 
-  return P::turn_cost(params,
-                      w.get_turn_angle(n.n_, n.way_, n.dir_, way_pos, way_dir));
+  if constexpr (SearchDir == direction::kForward) {
+    return P::turn_cost(
+        params, w.get_turn_angle(n.n_, n.way_, n.dir_, way_pos, way_dir));
+  } else {
+    return P::turn_cost(
+        params, w.get_turn_angle(n.n_, way_pos, way_dir, n.way_, n.dir_));
+  }
 }
 
+// Cost of continuing from `n` onto `way_pos` in `way_dir`.
 template <WayAwareProfile P>
-constexpr cost_t get_profile_additional_turn_cost(
+constexpr cost_and_duration get_transition_cost(
     typename P::parameters const& params,
     ways::routing const& w,
     typename P::node const n,
-    sharing_data const* additional,
-    additional_edge const& ae,
-    direction const edge_dir,
-    bool const is_u_turn) {
-  if (additional == nullptr || additional->is_additional_node(n.n_)) {
-    return 0U;
+    way_pos_t const way_pos,
+    direction const way_dir,
+    cost_t const uturn_penalty) {
+  auto const is_u_turn = way_pos == n.way_ && way_dir == opposite(n.dir_);
+  auto const turn_cost =
+      get_profile_turn_cost<P>(params, w, n, way_pos, way_dir, is_u_turn);
+  if (turn_cost == kInfeasible) {
+    return infeasible_cost_and_duration();
   }
+  return {.cost_ = clamp_cost(static_cast<std::uint64_t>(turn_cost) +
+                              (is_u_turn ? uturn_penalty : 0U)),
+          .duration_ = duration_t{0U}};
+}
 
-  return get_profile_turn_cost<P>(
-      params, w, n, additional->get_way_pos(w, n.n_, ae.underlying_way_),
-      edge_dir, is_u_turn);
+// A root has no incoming edge, so it has to sit on the endpoint way itself.
+// A goal can be reached on any way and pays the joining turn separately.
+template <WayAwareProfile P, typename Fn>
+void resolve_way_aware_endpoint(ways::routing const& w,
+                                way_idx_t const way,
+                                node_idx_t const n,
+                                endpoint_role const role,
+                                Fn&& f) {
+  if (role == endpoint_role::kGoal) {
+    P::resolve_all(w, n, std::forward<Fn>(f));
+    return;
+  }
+  P::resolve_all(w, n, [&](typename P::node const candidate) {
+    if (w.node_ways_[n][candidate.way_] == way) {
+      f(candidate);
+    }
+  });
+}
+
+// Cost of continuing from `n` onto the endpoint way. A way can pass through a
+// node more than once (loops) and each occurrence is a separate routing state:
+// the search would settle the cheapest one, so this has to do the same to stay
+// cost-equivalent in both search directions.
+template <WayAwareProfile P, typename IsAllowed>
+constexpr cost_and_duration get_endpoint_transition_cost(
+    typename P::parameters const& params,
+    ways::routing const& w,
+    typename P::node const n,
+    way_idx_t const way,
+    direction const way_dir,
+    cost_t const uturn_penalty,
+    IsAllowed&& is_allowed) {
+  auto best = infeasible_cost_and_duration();
+  auto const ways = w.node_ways_[n.n_];
+  for (auto way_pos = way_pos_t{0U}; way_pos != ways.size(); ++way_pos) {
+    if (ways[way_pos] != way || !is_allowed(way_pos)) {
+      continue;
+    }
+    auto const c =
+        get_transition_cost<P>(params, w, n, way_pos, way_dir, uturn_penalty);
+    if (c.cost_ < best.cost_) {
+      best = c;
+    }
+  }
+  return best;
+}
+
+template <WayAwareProfile P>
+constexpr cost_and_duration get_endpoint_transition_cost(
+    typename P::parameters const& params,
+    ways::routing const& w,
+    typename P::node const n,
+    way_idx_t const way,
+    direction const way_dir,
+    cost_t const uturn_penalty) {
+  return get_endpoint_transition_cost<P>(params, w, n, way, way_dir,
+                                         uturn_penalty,
+                                         [](way_pos_t) { return true; });
 }
 
 template <WayAwareProfile P, direction SearchDir, bool IsBus>
@@ -135,9 +214,10 @@ void for_each_additional_edge(typename P::parameters const& params,
         continue;
       }
 
-      if (!additional->is_additional_node(ae.to_)) {
-        auto const target_node_prop = w.node_properties_[ae.to_];
-        if (P::node_cost(params, target_node_prop).cost_ == kInfeasible) {
+      auto const cost_node = search_dir == direction::kForward ? ae.to_ : n.n_;
+      if (!additional->is_additional_node(cost_node)) {
+        auto const cost_node_prop = w.node_properties_[cost_node];
+        if (P::node_cost(params, cost_node_prop).cost_ == kInfeasible) {
           continue;
         }
       }
@@ -147,7 +227,7 @@ void for_each_additional_edge(typename P::parameters const& params,
   }
 }
 
-template <WayAwareProfile P>
+template <WayAwareProfile P, direction SearchDir>
 std::tuple<typename P::node, cost_t, duration_t> get_adjacent_additional_node(
     typename P::parameters const& params,
     ways::routing const& w,
@@ -160,8 +240,13 @@ std::tuple<typename P::node, cost_t, duration_t> get_adjacent_additional_node(
   auto const prev_way = n.get_way(w, additional);
 
   auto const is_u_turn = prev_way == ae.underlying_way_ && n.dir_ != edge_dir;
-  auto const turn_cost = get_profile_additional_turn_cost<P>(
-      params, w, n, additional, ae, edge_dir, is_u_turn);
+  auto const turn_cost =
+      additional->is_additional_node(n.n_)
+          ? cost_t{0U}
+          : get_profile_turn_cost<P, SearchDir>(
+                params, w, n,
+                additional->get_way_pos(w, n.n_, ae.underlying_way_), edge_dir,
+                is_u_turn);
   if (turn_cost == kInfeasible) {
     return {P::node::invalid(), kInfeasible, duration_t{0}};
   }
@@ -174,8 +259,10 @@ std::tuple<typename P::node, cost_t, duration_t> get_adjacent_additional_node(
     total = clamp_add(total, uturn_penalty, duration_t{0});
   }
 
-  if (!additional->is_additional_node(ae.to_)) {
-    total = clamp_add(total, P::node_cost(params, w.node_properties_[ae.to_]));
+  auto const cost_node = SearchDir == direction::kForward ? ae.to_ : n.n_;
+  if (!additional->is_additional_node(cost_node)) {
+    total =
+        clamp_add(total, P::node_cost(params, w.node_properties_[cost_node]));
   }
 
   return {target, total.cost_, total.duration_};
@@ -222,14 +309,16 @@ void for_each_adjacent_node(typename P::parameters const& params,
                             std::uint16_t const to) {
       // NOLINTNEXTLINE(clang-analyzer-core.CallAndMessage)
       auto const target_node = w.way_nodes_[way][to];
+      auto const cost_node =
+          SearchDir == direction::kForward ? target_node : n.n_;
       if constexpr (WithBlocked) {
-        if (blocked->test(target_node)) {
+        if (blocked->test(cost_node)) {
           return;
         }
       }
 
-      auto const target_node_prop = w.node_properties_[target_node];
-      auto const nc = P::node_cost(params, target_node_prop);
+      auto const cost_node_prop = w.node_properties_[cost_node];
+      auto const nc = P::node_cost(params, cost_node_prop);
       if (nc.cost_ == kInfeasible) {
         return;
       }
@@ -250,8 +339,8 @@ void for_each_adjacent_node(typename P::parameters const& params,
       }
 
       auto const is_u_turn = way_pos == n.way_ && way_dir == opposite(n.dir_);
-      auto const turn_cost =
-          get_profile_turn_cost<P>(params, w, n, way_pos, way_dir, is_u_turn);
+      auto const turn_cost = get_profile_turn_cost<P, SearchDir>(
+          params, w, n, way_pos, way_dir, is_u_turn);
       if (turn_cost == kInfeasible) {
         return;
       }

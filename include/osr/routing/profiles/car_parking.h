@@ -8,6 +8,7 @@
 #include "osr/routing/entry_storage.h"
 #include "osr/routing/mode.h"
 #include "osr/routing/path.h"
+#include "osr/routing/profile.h"
 #include "osr/routing/profiles/car.h"
 #include "osr/routing/profiles/foot.h"
 #include "osr/ways.h"
@@ -38,7 +39,14 @@ struct car_parking {
   static constexpr auto const kSwitchPenalty = cost_t{200U};
   static constexpr auto const kMaxMatchDistance = car::kMaxMatchDistance;
 
-  using key = node_idx_t;
+  struct key {
+    friend constexpr bool operator==(key const&, key const&) = default;
+
+    node_idx_t n_{node_idx_t::invalid()};
+    level_t lvl_{};
+  };
+
+  using hash = typename footp::hash;
 
   enum class node_type : std::uint8_t { kCar, kFoot, kInvalid };
 
@@ -58,14 +66,7 @@ struct car_parking {
   };
 
   struct node {
-    friend bool operator==(node const& a, node const& b) {
-      auto const is_zero = [](level_t const l) {
-        return l == kNoLevel || l == level_t{0.F};
-      };
-      return a.n_ == b.n_ && a.type_ == b.type_ && a.dir_ == b.dir_ &&
-             a.way_ == b.way_ &&
-             (a.lvl_ == b.lvl_ || (is_zero(a.lvl_) && is_zero(b.lvl_)));
-    }
+    friend constexpr bool operator==(node const&, node const&) = default;
 
     friend constexpr bool operator<(node const& a, node const& b) noexcept {
       return std::tie(a.n_, a.type_, a.lvl_, a.way_, a.dir_) <
@@ -92,7 +93,7 @@ struct car_parking {
 
     static constexpr node invalid() noexcept { return node{}; }
     constexpr node_idx_t get_node() const noexcept { return n_; }
-    constexpr node_idx_t get_key() const noexcept { return n_; }
+    constexpr key get_key() const noexcept { return {n_, lvl_}; }
 
     constexpr std::optional<direction> get_direction() const noexcept {
       return dir_;
@@ -216,14 +217,6 @@ struct car_parking {
     storage_t s_;
   };
 
-  struct hash {
-    using is_avalanching = void;
-    auto operator()(key const n) const noexcept -> std::uint64_t {
-      using namespace ankerl::unordered_dense::detail;
-      return wyhash::hash(static_cast<std::uint64_t>(to_idx(n)));
-    }
-  };
-
   static car::node to_car(node const n) {
     return {.n_ = n.n_, .way_ = n.way_, .dir_ = n.dir_};
   }
@@ -232,10 +225,10 @@ struct car_parking {
     return {.n_ = n.n_, .lvl_ = n.lvl_};
   }
 
-  static node to_node(car::node const n, level_t const lvl) {
+  static node to_node(car::node const n) {
     return {.n_ = n.n_,
             .type_ = node_type::kCar,
-            .lvl_ = lvl,
+            .lvl_ = kNoLevel,  // car nodes don't have levels
             .dir_ = n.dir_,
             .way_ = n.way_};
   }
@@ -256,17 +249,11 @@ struct car_parking {
   }
 
   template <typename Fn>
-  static void resolve_all(ways::routing const& w,
-                          node_idx_t const n,
-                          level_t const lvl,
-                          Fn&& f) {
+  static void resolve_all(ways::routing const& w, node_idx_t const n, Fn&& f) {
     footp::resolve_all(
-        w, n, lvl, [&](footp::node const neighbor) { f(to_node(neighbor)); });
-    car::resolve_all(w, n, lvl, [&](car::node const neighbor) {
-      auto const p = w.way_properties_[w.node_ways_[n][neighbor.way_]];
-      auto const node_level = lvl == kNoLevel ? p.from_level() : lvl;
-      f(to_node(neighbor, node_level));
-    });
+        w, n, [&](footp::node const neighbor) { f(to_node(neighbor)); });
+    car::resolve_all(w, n,
+                     [&](car::node const neighbor) { f(to_node(neighbor)); });
   }
 
   template <direction SearchDir, bool WithBlocked, typename Fn>
@@ -280,16 +267,7 @@ struct car_parking {
                        sharing_data const*,
                        elevation_storage const* elevations,
                        Fn&& fn) {
-    static constexpr auto const kFwd = SearchDir == direction::kForward;
-    static constexpr auto const kBwd = SearchDir == direction::kBackward;
-
-    auto const is_parking =
-        !UseParking || w.node_properties_[n.n_].is_parking() ||
-        utl::any_of(w.node_ways_[n.n_], [&](way_idx_t const way) {
-          return w.way_properties_[way].is_parking();
-        });
-
-    if (n.is_foot_node() || (kFwd && n.is_car_node() && is_parking)) {
+    if (n.is_foot_node()) {
       footp::template adjacent<SearchDir, WithBlocked>(
           params.foot_, w, timezones, to_foot(n), current_duration, start_time,
           blocked, nullptr, elevations,
@@ -298,17 +276,10 @@ struct car_parking {
               way_idx_t const way, std::uint16_t const from,
               std::uint16_t const to,
               elevation_storage::elevation const elevation, bool) {
-            auto const switch_duration =
-                n.is_foot_node() ? duration_t{0}
-                                 : duration_from_cost(kSwitchPenalty);
-            fn(to_node(neighbor),
-               cost + (n.is_foot_node() ? 0 : kSwitchPenalty),
-               clamp_add_duration(duration, switch_duration), dist, way, from,
-               to, elevation, false);
+            fn(to_node(neighbor), cost, duration, dist, way, from, to,
+               elevation, false);
           });
-    }
-
-    if (n.is_car_node() || (kBwd && n.is_foot_node() && is_parking)) {
+    } else {
       car::template adjacent<SearchDir, WithBlocked>(
           params.car_, w, timezones, to_car(n), current_duration, start_time,
           blocked, nullptr, elevations,
@@ -317,37 +288,83 @@ struct car_parking {
               way_idx_t const way, std::uint16_t const from,
               std::uint16_t const to,
               elevation_storage::elevation const elevation, bool) {
-            auto const way_prop = w.way_properties_[way];
-            auto const switch_duration =
-                n.is_car_node() ? duration_t{0}
-                                : duration_from_cost(kSwitchPenalty);
-            fn(to_node(neighbor, way_prop.from_level()),
-               cost + (n.is_car_node() ? 0 : kSwitchPenalty),
-               clamp_add_duration(duration, switch_duration), dist, way, from,
-               to, elevation, false);
+            fn(to_node(neighbor), cost, duration, dist, way, from, to,
+               elevation, false);
           });
+    }
+
+    if (!can_leave_car(w, n.n_)) {
+      return;
+    }
+    auto const leave_car = [&](node const target) {
+      fn(target, kSwitchPenalty, duration_from_cost(kSwitchPenalty),
+         distance_t{0U}, way_idx_t::invalid(), 0U, 0U,
+         elevation_storage::elevation{}, false);
+    };
+    if constexpr (SearchDir == direction::kForward) {
+      if (n.is_car_node()) {
+        footp::resolve_all(w, n.n_, [&](footp::node const foot_state) {
+          leave_car(to_node(foot_state));
+        });
+      }
+    } else {
+      if (n.is_foot_node() && is_resolved_foot_state<footp>(
+                                  w, n, [&](footp::node const foot_state) {
+                                    return to_node(foot_state);
+                                  })) {
+        car::resolve_all(w, n.n_,
+                         [&](car::node const cn) { leave_car(to_node(cn)); });
+      }
     }
   }
 
+  static bool can_leave_car(ways::routing const& w, node_idx_t const n) {
+    return !UseParking || w.node_properties_[n].is_parking() ||
+           utl::any_of(w.node_ways_[n], [&](way_idx_t const way) {
+             return w.way_properties_[way].is_parking();
+           });
+  }
+
   template <typename Fn>
-  static void resolve_start_node(ways::routing const& w,
-                                 way_idx_t const way,
-                                 node_idx_t const n,
-                                 level_t lvl,
-                                 direction search_dir,
-                                 Fn&& f) {
-    auto const way_properties = w.way_properties_[way];
-    search_dir == direction::kForward
-        ? car::resolve_start_node(
-              w, way, n, lvl, search_dir,
-              [&](car::node const cn) {
-                auto const node_level =
-                    lvl == kNoLevel ? way_properties.from_level() : lvl;
-                f(to_node(cn, node_level));
-              })
-        : footp::resolve_start_node(
-              w, way, n, lvl, search_dir,
-              [&](footp::node const fn) { f(to_node(fn)); });
+  static void resolve_endpoint(ways::routing const& w,
+                               way_idx_t const way,
+                               node_idx_t const n,
+                               level_t const lvl,
+                               route_end const end,
+                               endpoint_role const role,
+                               Fn&& f) {
+    if (end == route_end::kOrigin) {
+      car::resolve_endpoint(w, way, n, lvl, end, role,
+                            [&](car::node const cn) { f(to_node(cn)); });
+    } else {
+      footp::resolve_endpoint(
+          w, way, n, lvl, end, role,
+          [&](typename footp::node const fn) { f(to_node(fn)); });
+    }
+  }
+
+  static cost_and_duration endpoint_transition_cost(
+      parameters const& params,
+      ways::routing const& w,
+      timezone_cache_t const& timezones,
+      node const n,
+      way_idx_t const way,
+      direction const way_dir,
+      direction const search_dir,
+      std::optional<routing_time_t> const start_time,
+      duration_t const current_duration) {
+    return n.is_car_node()
+               ? car::endpoint_transition_cost(
+                     params.car_, w, timezones, to_car(n), way, way_dir,
+                     search_dir, start_time, current_duration)
+               : cost_and_duration{};
+  }
+
+  static constexpr bool endpoint_root_allowed(parameters const& params,
+                                              node const n,
+                                              direction const way_dir) {
+    return !n.is_car_node() ||
+           car::endpoint_root_allowed(params.car_, to_car(n), way_dir);
   }
 
   static bool is_dest_reachable(parameters const& params,
@@ -359,16 +376,13 @@ struct car_parking {
                                 direction const search_dir,
                                 std::optional<routing_time_t> const start_time,
                                 duration_t const current_duration) {
-    return !UseParking || w.way_properties_[way].is_parking() ||
-           (search_dir == direction::kForward
-                ? n.is_foot_node() &&
-                      footp::is_dest_reachable(
-                          params.foot_, w, timezones, to_foot(n), way, way_dir,
-                          search_dir, start_time, current_duration)
-                : n.is_car_node() &&
-                      car::is_dest_reachable(
-                          params.car_, w, timezones, to_car(n), way, way_dir,
-                          search_dir, start_time, current_duration));
+    return n.is_foot_node()
+               ? footp::is_dest_reachable(params.foot_, w, timezones,
+                                          to_foot(n), way, way_dir, search_dir,
+                                          start_time, current_duration)
+               : car::is_dest_reachable(params.car_, w, timezones, to_car(n),
+                                        way, way_dir, search_dir, start_time,
+                                        current_duration);
   }
 
   static constexpr cost_and_duration way_cost(
@@ -386,9 +400,42 @@ struct car_parking {
                            start_time, current_duration, search_dir);
   }
 
+  static constexpr cost_and_duration endpoint_way_cost(
+      parameters const& params,
+      ways::routing const& w,
+      timezone_cache_t const& timezones,
+      node const n,
+      way_idx_t const way,
+      way_properties const& properties,
+      direction const way_dir,
+      distance_t const distance,
+      std::optional<routing_time_t> const start_time,
+      duration_t const current_duration,
+      direction const search_dir) {
+    return n.is_car_node()
+               ? car::way_cost(params.car_, w, timezones, way, properties,
+                               way_dir, distance, start_time, current_duration,
+                               search_dir)
+               : footp::way_cost(params.foot_, w, timezones, way, properties,
+                                 way_dir, distance, start_time,
+                                 current_duration, search_dir);
+  }
+
   static constexpr cost_and_duration node_cost(parameters const& params,
                                                node_properties const n) {
     return footp::node_cost(params.foot_, n);
+  }
+
+  static constexpr cost_and_duration endpoint_node_cost(
+      parameters const& params, node const n, node_properties const props) {
+    return n.is_car_node() ? car::node_cost(params.car_, props)
+                           : footp::node_cost(params.foot_, props);
+  }
+
+  static bool endpoint_way_feasible(parameters const& params,
+                                    endpoint_way_query const& q) {
+    return q.end_ == route_end::kOrigin ? q.feasible<car>(params.car_)
+                                        : q.feasible<footp>(params.foot_);
   }
 
   static constexpr double lower_bound_heuristic(parameters const& params,

@@ -14,6 +14,7 @@
 #include "osr/routing/entry_storage.h"
 #include "osr/routing/mode.h"
 #include "osr/routing/path.h"
+#include "osr/routing/profile.h"
 #include "osr/routing/profiles/car.h"
 #include "osr/routing/profiles/foot.h"
 #include "osr/routing/sharing_data.h"
@@ -101,13 +102,7 @@ struct car_sharing {
   };
 
   struct key {
-    friend bool operator==(key const a, key const b) {
-      auto const is_zero = [](level_t const l) {
-        return l == kNoLevel || l == level_t{0.F};
-      };
-      return a.n_ == b.n_ &&
-             (a.lvl_ == b.lvl_ || (is_zero(a.lvl_) && is_zero(b.lvl_)));
-    }
+    friend constexpr bool operator==(key const&, key const&) = default;
 
     node_idx_t n_{node_idx_t::invalid()};
     level_t lvl_{};
@@ -117,12 +112,8 @@ struct car_sharing {
 
   struct node {
     friend bool operator==(node const a, node const b) {
-      auto const is_zero = [](level_t const l) {
-        return l == kNoLevel || l == level_t{0.F};
-      };
       return a.n_ == b.n_ && a.type_ == b.type_ && a.dir_ == b.dir_ &&
-             a.way_ == b.way_ &&
-             (a.lvl_ == b.lvl_ || (is_zero(a.lvl_) && is_zero(b.lvl_)));
+             a.way_ == b.way_ && a.lvl_ == b.lvl_;
     }
 
     friend constexpr bool operator<(node const& a, node const& b) noexcept {
@@ -339,26 +330,8 @@ struct car_sharing {
   }
 
   template <typename Fn>
-  static void resolve_start_node(ways::routing const& w,
-                                 way_idx_t const way,
-                                 node_idx_t const n,
-                                 level_t lvl,
-                                 direction search_dir,
-                                 Fn&& f) {
-    footp::resolve_start_node(w, way, n, lvl, search_dir,
-                              [&](footp::node const fn) {
-                                f(to_node(fn, search_dir == direction::kForward
-                                                  ? node_type::kInitialFoot
-                                                  : node_type::kTrailingFoot));
-                              });
-  }
-
-  template <typename Fn>
-  static void resolve_all(ways::routing const& w,
-                          node_idx_t const n,
-                          level_t const lvl,
-                          Fn&& f) {
-    footp::resolve_all(w, n, lvl, [&](footp::node const neighbor) {
+  static void resolve_all(ways::routing const& w, node_idx_t const n, Fn&& f) {
+    footp::resolve_all(w, n, [&](footp::node const neighbor) {
       f(to_node(neighbor, node_type::kInitialFoot));
       f(to_node(neighbor, node_type::kTrailingFoot));
       f(to_node(neighbor, node_type::kRental));
@@ -381,16 +354,41 @@ struct car_sharing {
     auto const& handle_additional_edge = [&](additional_edge const& ae,
                                              node_type const nt,
                                              cost_and_duration const edge) {
-      fn(node{.n_ = ae.to_,
-              .type_ = nt,
-              .lvl_ = nt == node_type::kRental ? kNoLevel : n.lvl_},
-         edge.cost_, edge.duration_, ae.distance_, way_idx_t::invalid(), 0, 1,
-         elevation_storage::elevation{}, false);
+      auto const emit = [&](node const target) {
+        fn(target, edge.cost_, edge.duration_, ae.distance_,
+           way_idx_t::invalid(), 0, 1, elevation_storage::elevation{}, false);
+      };
+      if (nt == node_type::kRental && !sharing->is_additional_node(ae.to_)) {
+        // Picking the vehicle up at a station leaves it without an incoming
+        // way, so every way/direction state has to be offered - otherwise the
+        // first driving edge is charged a turn against a fabricated way that
+        // the opposite search direction never pays.
+        car::resolve_all(w, ae.to_, [&](car::node const rental) {
+          emit(to_node(rental, kNoLevel));
+        });
+        return;
+      }
+      if (n.is_additional_node(sharing) &&
+          !sharing->is_additional_node(ae.to_) && nt != node_type::kRental) {
+        // `n` is the vehicle state at the station, so it carries no level.
+        // Leaving the connector on foot - returning the vehicle (forward) or
+        // undoing the pickup (backward) - therefore cannot inherit the level
+        // from `n`: emit one walking state per level the graph side node
+        // actually has. A `kNoLevel` walking state would match any way (see
+        // `footp::get_target_level`) and the backward search would never
+        // produce it.
+        footp::resolve_all(w, ae.to_, [&](footp::node const foot_state) {
+          emit(to_node(foot_state, nt));
+        });
+        return;
+      }
+      emit(node{.n_ = ae.to_,
+                .type_ = nt,
+                .lvl_ = nt == node_type::kRental ? kNoLevel : n.lvl_});
     };
 
     auto const& continue_on_foot = [&](node_type const nt,
-                                       bool const include_additional_edges,
-                                       cost_t const switch_penalty = 0) {
+                                       bool const include_additional_edges) {
       footp::template adjacent<SearchDir, WithBlocked>(
           params.foot_, w, timezones, to_foot(n), current_duration, start_time,
           blocked, nullptr, elevations,
@@ -399,30 +397,63 @@ struct car_sharing {
               way_idx_t const way, std::uint16_t const from,
               std::uint16_t const to,
               elevation_storage::elevation const elevation, bool) {
-            fn(to_node(neighbor, nt), cost + switch_penalty,
-               clamp_add_duration(duration, duration_from_cost(switch_penalty)),
-               dist, way, from, to, elevation, switch_penalty != 0);
+            fn(to_node(neighbor, nt), cost, duration, dist, way, from, to,
+               elevation, false);
           });
-      if (include_additional_edges) {
+      // The connector's other end resolves walking states, so only offer it
+      // from a level `footp::resolve_all` produces here - otherwise the two
+      // search directions use different states.
+      if (include_additional_edges &&
+          is_resolved_foot_state<footp>(w, n,
+                                        [&](footp::node const foot_state) {
+                                          return to_node(foot_state, nt);
+                                        })) {
         // walk to station or free-floating vehicle
         if (auto const it = sharing->additional_edges_.find(n.n_);
             it != end(sharing->additional_edges_)) {
           for (auto const& ae : it->second) {
             handle_additional_edge(
                 ae, nt,
-                clamp_add(
-                    footp::way_cost(
-                        params.foot_, w, timezones, way_idx_t::invalid(),
-                        kAdditionalWayProperties, direction::kForward,
-                        ae.distance_, start_time, current_duration, SearchDir),
-                    switch_penalty));
+                footp::way_cost(params.foot_, w, timezones,
+                                way_idx_t::invalid(), kAdditionalWayProperties,
+                                direction::kForward, ae.distance_, start_time,
+                                current_duration, SearchDir));
           }
         }
       }
     };
 
-    auto const& continue_with_vehicle = [&](bool const include_additional_edges,
-                                            cost_t const switch_penalty = 0) {
+    auto const& switch_mode = [&](node_type const to_type,
+                                  bitvec<node_idx_t> const* allowed,
+                                  cost_t const penalty) {
+      if (!is_allowed(allowed, n.n_) ||
+          car::node_cost(params.car_, w.node_properties_[n.n_]).cost_ ==
+              kInfeasible) {
+        return;
+      }
+      auto const emit = [&](node const target) {
+        fn(target, penalty, duration_from_cost(penalty), distance_t{0U},
+           way_idx_t::invalid(), 0U, 0U, elevation_storage::elevation{}, false);
+      };
+      if (to_type == node_type::kRental) {
+        // foot -> vehicle: only from a level the vehicle side resolves back to
+        if (!is_resolved_foot_state<footp>(
+                w, n, [&](footp::node const foot_state) {
+                  return to_node(foot_state, n.type_);
+                })) {
+          return;
+        }
+        car::resolve_all(w, n.n_, [&](car::node const rental) {
+          emit(to_node(rental, kNoLevel));
+        });
+      } else {
+        footp::resolve_all(w, n.n_, [&](footp::node const foot_state) {
+          emit(to_node(foot_state, to_type));
+        });
+      }
+    };
+
+    auto const& continue_with_vehicle = [&]() {
       car::adjacent<SearchDir, WithBlocked>(
           params.car_, w, timezones, to_rental(n), current_duration, start_time,
           blocked, nullptr, elevations,
@@ -431,27 +462,25 @@ struct car_sharing {
               way_idx_t const way, std::uint16_t const from,
               std::uint16_t const to,
               elevation_storage::elevation const elevation, bool) {
-            if (is_allowed(sharing->through_allowed_, neighbor.n_)) {
-              fn(to_node(neighbor, kNoLevel), cost + switch_penalty,
-                 clamp_add_duration(duration,
-                                    duration_from_cost(switch_penalty)),
-                 dist, way, from, to, elevation, false);
+            // the forward orientation of this edge arrives at `neighbor`
+            // going forward and at `n` going backward
+            if (is_allowed(
+                    sharing->through_allowed_,
+                    SearchDir == direction::kForward ? neighbor.n_ : n.n_)) {
+              fn(to_node(neighbor, kNoLevel), cost, duration, dist, way, from,
+                 to, elevation, false);
             }
           });
-      if (include_additional_edges) {
-        // drive to station
-        if (auto const it = sharing->additional_edges_.find(n.n_);
-            it != end(sharing->additional_edges_)) {
-          for (auto const& ae : it->second) {
-            handle_additional_edge(
-                ae, node_type::kRental,
-                clamp_add(
-                    car::way_cost(
-                        params.car_, w, timezones, way_idx_t::invalid(),
-                        kAdditionalWayProperties, direction::kForward,
-                        ae.distance_, start_time, current_duration, SearchDir),
-                    switch_penalty));
-          }
+      // drive to station
+      if (auto const it = sharing->additional_edges_.find(n.n_);
+          it != end(sharing->additional_edges_)) {
+        for (auto const& ae : it->second) {
+          handle_additional_edge(
+              ae, node_type::kRental,
+              car::way_cost(params.car_, w, timezones, way_idx_t::invalid(),
+                            kAdditionalWayProperties, direction::kForward,
+                            ae.distance_, start_time, current_duration,
+                            SearchDir));
         }
       }
     };
@@ -490,18 +519,14 @@ struct car_sharing {
       } else {
         if (n.is_initial_foot_node() || n.is_trailing_foot_node()) {
           continue_on_foot(n.type_, n.is_initial_foot_node());
-          if (n.is_initial_foot_node() &&
-              is_allowed(sharing->start_allowed_, n.n_)) {
-            // switch to vehicle
-            continue_with_vehicle(false, kStartSwitchPenalty);
+          if (n.is_initial_foot_node()) {
+            switch_mode(node_type::kRental, sharing->start_allowed_,
+                        kStartSwitchPenalty);
           }
         } else if (n.is_rental_node()) {
-          continue_with_vehicle(true);
-          if (is_allowed(sharing->end_allowed_, n.n_)) {
-            // switch to foot
-            continue_on_foot(node_type::kTrailingFoot, false,
-                             kEndSwitchPenalty);
-          }
+          continue_with_vehicle();
+          switch_mode(node_type::kTrailingFoot, sharing->end_allowed_,
+                      kEndSwitchPenalty);
         }
       }
 
@@ -539,17 +564,14 @@ struct car_sharing {
       } else {
         if (n.is_initial_foot_node() || n.is_trailing_foot_node()) {
           continue_on_foot(n.type_, n.is_trailing_foot_node());
-          if (n.is_trailing_foot_node() &&
-              is_allowed(sharing->end_allowed_, n.n_)) {
-            // switch to vehicle
-            continue_with_vehicle(false, kEndSwitchPenalty);
+          if (n.is_trailing_foot_node()) {
+            switch_mode(node_type::kRental, sharing->end_allowed_,
+                        kEndSwitchPenalty);
           }
         } else if (n.is_rental_node()) {
-          continue_with_vehicle(true);
-          if (is_allowed(sharing->start_allowed_, n.n_)) {
-            // switch to foot
-            continue_on_foot(node_type::kInitialFoot, false, kEndSwitchPenalty);
-          }
+          continue_with_vehicle();
+          switch_mode(node_type::kInitialFoot, sharing->start_allowed_,
+                      kStartSwitchPenalty);
         }
       }
     }
@@ -564,8 +586,7 @@ struct car_sharing {
                                 direction const search_dir,
                                 std::optional<routing_time_t> const start_time,
                                 duration_t const current_duration) {
-    return !n.is_rental_node() &&
-           footp::is_dest_reachable(params.foot_, w, timezones, to_foot(n), way,
+    return footp::is_dest_reachable(params.foot_, w, timezones, to_foot(n), way,
                                     way_dir, search_dir, start_time,
                                     current_duration);
   }
@@ -588,6 +609,72 @@ struct car_sharing {
   static constexpr cost_and_duration node_cost(parameters const& params,
                                                node_properties const n) {
     return footp::node_cost(params.foot_, n);
+  }
+
+  template <typename Fn>
+  static void resolve_endpoint(ways::routing const& w,
+                               way_idx_t const way,
+                               node_idx_t const n,
+                               level_t const lvl,
+                               route_end const end,
+                               endpoint_role const role,
+                               Fn&& f) {
+    footp::resolve_endpoint(
+        w, way, n, lvl, end, role, [&](footp::node const resolved) {
+          if (role == endpoint_role::kRoot) {
+            f(to_node(resolved, end == route_end::kOrigin
+                                    ? node_type::kInitialFoot
+                                    : node_type::kTrailingFoot));
+          } else {
+            f(to_node(resolved, node_type::kInitialFoot));
+            f(to_node(resolved, node_type::kTrailingFoot));
+          }
+        });
+  }
+
+  static cost_and_duration endpoint_way_cost(
+      parameters const& params,
+      ways::routing const& w,
+      timezone_cache_t const& timezones,
+      node const,
+      way_idx_t const way,
+      way_properties const& properties,
+      direction const way_dir,
+      distance_t const distance,
+      std::optional<routing_time_t> const start_time,
+      duration_t const current_duration,
+      direction const search_dir) {
+    return footp::way_cost(params.foot_, w, timezones, way, properties, way_dir,
+                           distance, start_time, current_duration, search_dir);
+  }
+
+  static constexpr bool endpoint_root_allowed(parameters const&,
+                                              node const,
+                                              direction) {
+    return true;
+  }
+
+  static constexpr cost_and_duration endpoint_transition_cost(
+      parameters const&,
+      ways::routing const&,
+      timezone_cache_t const&,
+      node const,
+      way_idx_t,
+      direction,
+      direction,
+      std::optional<routing_time_t>,
+      duration_t) {
+    return {};
+  }
+
+  static constexpr cost_and_duration endpoint_node_cost(
+      parameters const& params, node const, node_properties const& n) {
+    return node_cost(params, n);
+  }
+
+  static bool endpoint_way_feasible(parameters const& params,
+                                    endpoint_way_query const& q) {
+    return q.template feasible<typename parameters::profile_t>(params);
   }
 
   static constexpr double lower_bound_heuristic(parameters const& params,

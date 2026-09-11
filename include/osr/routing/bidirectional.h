@@ -47,6 +47,7 @@ struct bidirectional {
     meet_point_1_ = meet_point_1_.invalid();
     meet_point_2_ = meet_point_2_.invalid();
     best_cost_ = kInfeasible;
+    best_transition_ = {};
   }
 
   void reset(params_t const& p) {
@@ -70,28 +71,34 @@ struct bidirectional {
     search_bounds_valid_ =
         diameter < max && max + std::max(diameter, kLongestNodeDistance * 2.0) <
                               std::numeric_limits<cost_t>::max();
+    auto const max_edge_radius =
+        static_cast<cost_t>((static_cast<std::uint64_t>(max) + 1U) / 2U);
     radius_ = search_bounds_valid_
-                  ? std::max(static_cast<cost_t>(diameter * 0.5),
-                             kLongestNodeDistance)
+                  ? std::max({static_cast<cost_t>(diameter * 0.5),
+                              kLongestNodeDistance, max_edge_radius})
                   : max;
     max_reached_1_ = false;
     max_reached_2_ = false;
+    draining_ = false;
+    drain_key_1_ = kInfeasible;
+    drain_key_2_ = kInfeasible;
   }
 
-  void add(label const l,
+  void add(label l,
            direction const dir,
            cost_map& cost_map,
            dial<label, get_bucket>& d,
            duration_t const duration) {
     auto const& w = params_.w();
+    radius_ = std::max(radius_, l.cost());
     auto const heur =
         heuristic(params_.profile_, w, l.n_, dir, params_.sharing());
     if (l.cost() + heur < d.n_buckets() - 1U &&
         cost_map[l.get_node().get_key()].update(
             l, l.get_node(), {.cost_ = l.cost(), .duration_ = duration},
             node::invalid(), *w.r_, arena_)) {
-      auto const total = static_cast<cost_t>(l.cost() + heur);
-      d.push(label{l.get_node(), total});
+      l.cost_ = static_cast<cost_t>(l.cost() + heur);
+      d.push(std::move(l));
     }
   }
 
@@ -157,13 +164,30 @@ struct bidirectional {
            (dir == direction::kForward ? 1 : -1);
   }
 
-  cost_t get_cost_to_mp(node const n1, node const n2) const {
-    auto const f_cost = get_cost<direction::kForward>(n1);
-    auto const b_cost = get_cost<direction::kBackward>(n2);
-    if (f_cost == kInfeasible || b_cost == kInfeasible) {
-      return kInfeasible;
+  duration_t get_duration_to_mp(node const n1, node const n2) const {
+    auto const f = cost1_.find(n1.get_key());
+    auto const b = cost2_.find(n2.get_key());
+    if (f == end(cost1_) || b == end(cost2_)) {
+      return kMaxDuration;
     }
-    return clamp_cost(static_cast<std::uint64_t>(f_cost) + b_cost);
+    return clamp_add_duration(f->second.duration(n1), b->second.duration(n2));
+  }
+
+  duration_t best_duration() const {
+    return best_cost_ == kInfeasible
+               ? kMaxDuration
+               : clamp_add_duration(
+                     get_duration_to_mp(meet_point_1_, meet_point_2_),
+                     best_transition_.duration_);
+  }
+
+  static cost_t next_key(dial<label, get_bucket> const& pq) {
+    return static_cast<cost_t>(pq.get_next_bucket());
+  }
+
+  static bool bucket_drained(dial<label, get_bucket> const& pq,
+                             cost_t const key) {
+    return pq.empty() || next_key(pq) > key;
   }
 
   template <direction SearchDir, bool WithBlocked, direction PathDir>
@@ -176,8 +200,6 @@ struct bidirectional {
     auto const* sharing = params_.sharing();
     auto const* elevations = params_.elevations_;
 
-    auto const adjusted_max = std::min(
-        clamp_cost(static_cast<std::uint64_t>(max) / 2 + radius_), max);
     auto const is_fwd = PathDir == direction::kForward;
 
     auto const l = pq.pop();
@@ -216,7 +238,7 @@ struct bidirectional {
               clamp_cost(static_cast<std::int64_t>(total) +
                          static_cast<std::int64_t>(heuristic(
                              params, w, neighbor.n_, PathDir, sharing)));
-          if (total >= adjusted_max) {
+          if (total >= max) {
             if (is_fwd) {
               max_reached_1_ = true;
             } else {
@@ -249,85 +271,80 @@ struct bidirectional {
           }
         });
 
-    auto const evaluate_meetpoint = [&](cost_t cost, cost_t other_cost,
-                                        node meetpoint1, node meetpoint2) {
-      if constexpr (kDebug) {
-        std::cout << "  potential MEETPOINT found by start ";
-        meetpoint1.print(std::cout, w);
+    auto best_duration_now = kMaxDuration;
+    auto best_duration_known = false;
+    auto const tie_break_duration = [&]() {
+      if (!best_duration_known) {
+        best_duration_now = best_duration();
+        best_duration_known = true;
       }
-      auto const tentative = static_cast<std::uint64_t>(cost) +
-                             static_cast<std::uint64_t>(other_cost);
-      if (tentative < best_cost_) {
-        meet_point_1_ = meetpoint1;
-        meet_point_2_ = meetpoint2;
-        assert(tentative == get_cost_to_mp(meet_point_1_, meet_point_2_));
-        best_cost_ = clamp_cost(tentative);
-
-        if constexpr (kDebug) {
-          std::cout << " with cost " << best_cost_ << " -> ACCEPTED\n";
-        }
-      } else if constexpr (kDebug) {
-        std::cout << " -> DOMINATED\n";
-      }
+      return best_duration_now;
     };
+
+    auto const evaluate_meetpoint =
+        [&](cost_t cost, cost_t other_cost, node meetpoint1, node meetpoint2,
+            cost_and_duration const transition = cost_and_duration{}) {
+          if constexpr (kDebug) {
+            std::cout << "  potential MEETPOINT found by start ";
+            meetpoint1.print(std::cout, w);
+          }
+          auto const tentative = static_cast<std::uint64_t>(cost) +
+                                 static_cast<std::uint64_t>(other_cost) +
+                                 static_cast<std::uint64_t>(transition.cost_);
+          if (tentative > static_cast<std::uint64_t>(best_cost_)) {
+            if constexpr (kDebug) {
+              std::cout << " -> DOMINATED\n";
+            }
+            return;
+          }
+          auto const tentative_duration = clamp_add_duration(
+              get_duration_to_mp(meetpoint1, meetpoint2), transition.duration_);
+          if (tentative < static_cast<std::uint64_t>(best_cost_) ||
+              tentative_duration < tie_break_duration()) {
+            meet_point_1_ = meetpoint1;
+            meet_point_2_ = meetpoint2;
+            best_cost_ = clamp_cost(tentative);
+            best_transition_ = transition;
+            best_duration_now = tentative_duration;
+            best_duration_known = true;
+
+            if constexpr (kDebug) {
+              std::cout << " with cost " << best_cost_ << " -> ACCEPTED\n";
+            }
+          } else if constexpr (kDebug) {
+            std::cout << " -> DOMINATED\n";
+          }
+        };
 
     auto const handle_end_of_way_meetpoint = [&]() {
       auto const opposite_cost_map = is_fwd ? &cost2_ : &cost1_;
       auto const opposite_candidate = opposite_cost_map->find(curr.get_key());
       if (opposite_candidate != end(*opposite_cost_map)) {
-        auto const other_cost = opposite_candidate->second.cost(curr);
-        if (other_cost != kInfeasible) {
-          evaluate_meetpoint(curr_cost, other_cost, curr, curr);
+        if constexpr (bidirectional_meet_policy<P>::kEnumerateStates) {
+          P::resolve_all(r, curr.get_node(), [&](node const other) {
+            auto const other_cost = opposite_candidate->second.cost(other);
+            if (other_cost == kInfeasible) {
+              return;
+            }
+            // Which of the two states arrives at and which one leaves the
+            // meet point depends on the edge direction this search expands,
+            // not on which of the two queues it belongs to.
+            constexpr auto const kCurrArrives =
+                SearchDir == direction::kForward;
+            auto const transition = P::bidirectional_meet_cost(
+                params, r, kCurrArrives ? curr : other,
+                kCurrArrives ? other : curr, sharing);
+            if (!transition.feasible()) {
+              return;
+            }
+            evaluate_meetpoint(curr_cost, other_cost, is_fwd ? curr : other,
+                               is_fwd ? other : curr, transition);
+          });
         } else {
-          auto const pred_it = costs.find(curr.get_key());
-          if (pred_it == end(costs)) {
-            return;
+          auto const other_cost = opposite_candidate->second.cost(curr);
+          if (other_cost != kInfeasible) {
+            evaluate_meetpoint(curr_cost, other_cost, curr, curr);
           }
-          auto const pred = pred_it->second.pred(curr);
-          if (!pred.has_value()) {
-            return;
-          }
-          P::template adjacent<opposite(SearchDir), WithBlocked>(
-              params, r, w.timezones_, curr, curr_duration, std::nullopt,
-              blocked, sharing, elevations,
-              [&](node const neighbor, std::uint32_t const, duration_t const,
-                  distance_t, way_idx_t const, std::uint16_t, std::uint16_t,
-                  elevation_storage::elevation const, bool const) {
-                if (neighbor.get_key() != pred->get_key()) {
-                  return;
-                }
-                auto const opposite_it =
-                    opposite_cost_map->find(neighbor.get_key());
-                if (opposite_it == end(*opposite_cost_map)) {
-                  return;
-                }
-                auto const opposite_curr = opposite_it->second.pred(neighbor);
-                if (!opposite_curr.has_value() ||
-                    opposite_curr->get_key() != curr.get_key()) {
-                  return;
-                }
-                auto const opposite_curr_cost =
-                    opposite_candidate->second.cost(*opposite_curr);
-                auto const pred_cost = get_cost<PathDir>(*pred);
-                auto const opposite_pred_cost =
-                    opposite_it->second.cost(neighbor);
-                auto const evaluate_meetpoint_with_potential_u_turn_cost =
-                    [&](cost_t const cost_1, cost_t const cost_2,
-                        node const meet_1, node const meet_2) {
-                      evaluate_meetpoint(cost_1, cost_2,
-                                         is_fwd ? meet_1 : meet_2,
-                                         is_fwd ? meet_2 : meet_1);
-                    };
-                if (static_cast<std::uint64_t>(pred_cost) + opposite_pred_cost >
-                    static_cast<std::uint64_t>(curr_cost) +
-                        opposite_curr_cost) {
-                  evaluate_meetpoint_with_potential_u_turn_cost(
-                      pred_cost, opposite_pred_cost, *pred, neighbor);
-                } else {
-                  evaluate_meetpoint_with_potential_u_turn_cost(
-                      curr_cost, opposite_curr_cost, curr, *opposite_curr);
-                }
-              });
         }
       }
     };
@@ -341,14 +358,26 @@ struct bidirectional {
       auto const top_r =
           pq2_.empty() ? get_cost<direction::kBackward>(meet_point_2_)
                        : pq2_.buckets_[pq2_.get_next_bucket()].back().cost();
-      if (static_cast<std::uint64_t>(top_f) + top_r >=
+      if (static_cast<std::uint64_t>(top_f) + top_r >
           static_cast<std::uint64_t>(best_cost_) +
               static_cast<std::uint64_t>(radius_)) {
-        if (kDebug) {
-          std::cout << "stopping criterion met " << top_f << " " << top_r << " "
-                    << best_cost_ << " " << radius_ << std::endl;
+        // Re-evaluate equal-cost meeting states with shorter durations before
+        // stopping: their labels may still be in either queue's current bucket.
+        if (!draining_) {
+          draining_ = true;
+          drain_key_1_ = pq1_.empty() ? kInfeasible : next_key(pq1_);
+          drain_key_2_ = pq2_.empty() ? kInfeasible : next_key(pq2_);
         }
-        return false;
+        if (bucket_drained(pq1_, drain_key_1_) &&
+            bucket_drained(pq2_, drain_key_2_)) {
+          if (kDebug) {
+            std::cout << "stopping criterion met " << top_f << " " << top_r
+                      << " " << best_cost_ << " " << radius_ << std::endl;
+          }
+          return false;
+        }
+      } else {
+        draining_ = false;
       }
     }
     return true;
@@ -397,6 +426,7 @@ struct bidirectional {
   node meet_point_1_;
   node meet_point_2_;
   cost_t best_cost_;
+  cost_and_duration best_transition_;
   ankerl::unordered_dense::map<key, entry, hash> cost1_;
   ankerl::unordered_dense::map<key, entry, hash> cost2_;
   entry_storage_arena arena_;
@@ -407,6 +437,9 @@ struct bidirectional {
   bool search_bounds_valid_{};
   bool max_reached_1_;
   bool max_reached_2_;
+  bool draining_{false};
+  cost_t drain_key_1_{kInfeasible};
+  cost_t drain_key_2_{kInfeasible};
 };
 
 }  // namespace osr
