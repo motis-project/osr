@@ -44,9 +44,6 @@ elevation_profile::elevation_profile(ways const& w,
                     max_);
   };
 
-  points_.push_back(w.get_node_pos(segments.front().from_));
-  elevation_.emplace_back(0);
-
   auto dist_acc = distance_t{0};
   auto z_acc = elevation_difference_t{0};
   auto from = w.get_node_pos(segments.front().from_);
