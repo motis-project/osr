@@ -76,7 +76,6 @@ routing_algorithm to_algorithm(std::string_view s) {
   switch (cista::hash(s)) {
     case cista::hash("dijkstra"): return routing_algorithm::kDijkstra;
     case cista::hash("bidirectional"): return routing_algorithm::kAStarBi;
-    // TODO: review POC implementation
     case cista::hash("dijkstra_bidir"): return routing_algorithm::kDijkstraBi;
     case cista::hash("cch"): return routing_algorithm::kCCH;
   }
@@ -275,7 +274,6 @@ path reconstruct(typename P::parameters const& params,
 }
 
 template <Profile P>
-// TODO: review POC implementation
 std::optional<path> reconstruct_dijkstra_bidir(
     typename P::parameters const& params,
     ways const& w,
@@ -427,7 +425,6 @@ double add_cch_path(typename P::parameters const& params,
                     bool turn_at_target = false);
 
 template <Profile P>
-// TODO: review POC implementation
 std::optional<path> reconstruct_cch(
     typename P::parameters const& params,
     ways const& w,
@@ -1361,10 +1358,9 @@ std::optional<path> route_dijkstra_bidir(typename P::parameters const& params,
         continue;
       }
 
-      // Keep one destination match per prototype run. This makes the
+      // Keep one destination match per query run. This makes the
       // reconstruction use the exact end candidate that seeded the backward
       // queue instead of guessing among all destination candidates afterwards.
-      // TODO: review POC implementation
       d.reset(max);
       for (auto const* nc : {&start.left_, &start.right_}) {
         if (nc->valid() && nc->cost_ < max) {
@@ -1392,7 +1388,6 @@ std::optional<path> route_dijkstra_bidir(typename P::parameters const& params,
           should_continue;
 
       if (d.mu_ != kInfeasible) {
-        // TODO: review POC implementation
         return reconstruct_dijkstra_bidir<P>(params, w, l, blocked, sharing,
                                              elevations, d, from, to, start,
                                              end, dir);
@@ -1438,10 +1433,9 @@ std::optional<path> route_cch(typename P::parameters const& params,
         continue;
       }
 
-      // Keep one destination match per prototype run. This makes the
+      // Keep one destination match per query run. This makes the
       // reconstruction use the exact end candidate that seeded the backward
       // queue instead of guessing among all destination candidates afterwards.
-      // TODO: review POC implementation
       c.reset(max);
       for (auto const* nc : {&start.left_, &start.right_}) {
         if (nc->valid() && nc->cost_ < max) {
@@ -1469,7 +1463,6 @@ std::optional<path> route_cch(typename P::parameters const& params,
           should_continue;
 
       if (c.mu_ != kInfeasible) {
-        // TODO: review POC implementation
         return reconstruct_cch<P>(params, w, l, blocked, sharing, elevations, c,
                                   from, to, start, end, dir);
       }

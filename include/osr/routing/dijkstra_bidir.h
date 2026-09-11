@@ -19,6 +19,10 @@ namespace osr {
 
 struct sharing_data;
 
+// Added during CCH development to make bidirectional search easier to study and
+// to provide an initial foundation for the CCH query. The CCH implementation
+// now has its own copy of the relevant query logic in cch.h, so most changes to
+// this implementation do not affect CCH.
 template <Profile P, bool EarlyTermination = false>
 struct dijkstra_bidir {
   using profile_t = P;

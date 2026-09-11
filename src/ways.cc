@@ -403,7 +403,7 @@ void ways::add_shortcuts() {
   }
   fmt::println("shortcuts: {}", shortcut_count);
 
-  // Basic Customization POC
+  // Customize directed edge weights for the Car and Bus profiles.
   auto customize = [&]<bool IsBus>(auto& cch_edge_weights) {
     using profile = generic_car<IsBus>;
 

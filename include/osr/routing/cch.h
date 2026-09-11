@@ -318,9 +318,8 @@ struct cch {
     return best;
   }
 
-  // POC customization: CCH currently stores only distance, so the query derives
-  // a profile cost with the same distance-to-time rule as the foot profile. A
-  // real customization would store profile-specific edge costs.
+  // Profiles without customized edge weights derive their shortcut cost from
+  // distance.
   static cost_t shortcut_cost(P::parameters const& params,
                               distance_t const distance) {
     if constexpr (requires { params.speed_meters_per_second_; }) {
