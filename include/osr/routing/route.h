@@ -1,5 +1,6 @@
 #pragma once
 
+#include <algorithm>
 #include <memory>
 #include <optional>
 #include <string_view>
@@ -35,7 +36,22 @@ struct sharing_data;
 inline constexpr auto kDefaultMatchingPenaltyFactor = 20.0;
 
 struct route_options {
+  bool exact_return_at_from_{};
+  std::vector<bool> exact_return_at_to_{};
   double matching_penalty_factor_{kDefaultMatchingPenaltyFactor};
+
+  bool exact_return_at_to(std::size_t const i) const {
+    return i < exact_return_at_to_.size() && exact_return_at_to_[i];
+  }
+
+  // Callers size `exact_return_at_to_` to the destination count and leave it
+  // all false when they do not want exact returns, so a non-empty vector is
+  // not by itself a request.
+  bool wants_exact_return() const {
+    return exact_return_at_from_ ||
+           std::ranges::any_of(exact_return_at_to_,
+                               [](bool const b) { return b; });
+  }
 };
 
 struct one_to_many_state {

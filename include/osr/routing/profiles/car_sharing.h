@@ -586,6 +586,11 @@ struct car_sharing {
                                 direction const search_dir,
                                 std::optional<routing_time_t> const start_time,
                                 duration_t const current_duration) {
+    if (n.is_rental_node()) {
+      return car::is_dest_reachable(params.car_, w, timezones, to_rental(n),
+                                    way, way_dir, search_dir, start_time,
+                                    current_duration);
+    }
     return footp::is_dest_reachable(params.foot_, w, timezones, to_foot(n), way,
                                     way_dir, search_dir, start_time,
                                     current_duration);
@@ -611,6 +616,20 @@ struct car_sharing {
     return footp::node_cost(params.foot_, n);
   }
 
+  static constexpr cost_and_duration endpoint_node_cost(
+      parameters const& params,
+      node const n,
+      node_properties const properties) {
+    return n.is_rental_node() ? car::node_cost(params.car_, properties)
+                              : footp::node_cost(params.foot_, properties);
+  }
+
+  static bool endpoint_way_feasible(parameters const& params,
+                                    endpoint_way_query const& q) {
+    return q.feasible<footp>(params.foot_) ||
+           (q.exact_return_allowed_ && q.feasible<car>(params.car_));
+  }
+
   template <typename Fn>
   static void resolve_endpoint(ways::routing const& w,
                                way_idx_t const way,
@@ -618,9 +637,10 @@ struct car_sharing {
                                level_t const lvl,
                                route_end const end,
                                endpoint_role const role,
+                               bool const exact_return_allowed,
                                Fn&& f) {
     footp::resolve_endpoint(
-        w, way, n, lvl, end, role, [&](footp::node const resolved) {
+        w, way, n, lvl, end, role, false, [&](footp::node const resolved) {
           if (role == endpoint_role::kRoot) {
             f(to_node(resolved, end == route_end::kOrigin
                                     ? node_type::kInitialFoot
@@ -630,13 +650,42 @@ struct car_sharing {
             f(to_node(resolved, node_type::kTrailingFoot));
           }
         });
+    if (exact_return_allowed) {
+      car::resolve_endpoint(
+          w, way, n, kNoLevel, end, role, false,
+          [&](car::node const rental) { f(to_node(rental, kNoLevel)); });
+    }
+  }
+
+  static cost_and_duration endpoint_transition_cost(
+      parameters const& params,
+      ways::routing const& w,
+      timezone_cache_t const& timezones,
+      node const n,
+      way_idx_t const way,
+      direction const way_dir,
+      direction const search_dir,
+      std::optional<routing_time_t> const start_time,
+      duration_t const current_duration) {
+    return n.is_rental_node()
+               ? car::endpoint_transition_cost(
+                     params.car_, w, timezones, to_rental(n), way, way_dir,
+                     search_dir, start_time, current_duration)
+               : cost_and_duration{.cost_ = 0U, .duration_ = duration_t{0U}};
+  }
+
+  static constexpr bool endpoint_root_allowed(parameters const& params,
+                                              node const n,
+                                              direction const way_dir) {
+    return !n.is_rental_node() ||
+           car::endpoint_root_allowed(params.car_, to_rental(n), way_dir);
   }
 
   static cost_and_duration endpoint_way_cost(
       parameters const& params,
       ways::routing const& w,
       timezone_cache_t const& timezones,
-      node const,
+      node const n,
       way_idx_t const way,
       way_properties const& properties,
       direction const way_dir,
@@ -644,37 +693,14 @@ struct car_sharing {
       std::optional<routing_time_t> const start_time,
       duration_t const current_duration,
       direction const search_dir) {
+    if (n.is_rental_node()) {
+      return clamp_add(
+          car::way_cost(params.car_, w, timezones, way, properties, way_dir,
+                        distance, start_time, current_duration, search_dir),
+          kEndSwitchPenalty);
+    }
     return footp::way_cost(params.foot_, w, timezones, way, properties, way_dir,
                            distance, start_time, current_duration, search_dir);
-  }
-
-  static constexpr bool endpoint_root_allowed(parameters const&,
-                                              node const,
-                                              direction) {
-    return true;
-  }
-
-  static constexpr cost_and_duration endpoint_transition_cost(
-      parameters const&,
-      ways::routing const&,
-      timezone_cache_t const&,
-      node const,
-      way_idx_t,
-      direction,
-      direction,
-      std::optional<routing_time_t>,
-      duration_t) {
-    return {};
-  }
-
-  static constexpr cost_and_duration endpoint_node_cost(
-      parameters const& params, node const, node_properties const& n) {
-    return node_cost(params, n);
-  }
-
-  static bool endpoint_way_feasible(parameters const& params,
-                                    endpoint_way_query const& q) {
-    return q.template feasible<typename parameters::profile_t>(params);
   }
 
   static constexpr double lower_bound_heuristic(parameters const& params,
