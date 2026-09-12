@@ -43,7 +43,6 @@ struct dijkstra {
     pq_.n_buckets(params_.max_ + 1U);
     cost_.clear();
     arena_.reset();
-    max_reached_ = false;
     if constexpr (EarlyTermination) {
       destinations_.clear();
       settled_.clear();
@@ -110,7 +109,7 @@ struct dijkstra {
   }
 
   template <direction SearchDir, bool WithBlocked>
-  bool run() {
+  void run() {
     auto const& params = params_.profile_;
     auto const& w = params_.w();
     auto const& r = params_.r();
@@ -181,7 +180,6 @@ struct dijkstra {
 
             auto const total = static_cast<std::uint64_t>(l.cost()) + cost;
             if (total >= max) {
-              max_reached_ = true;
               return;
             }
             auto const next_cd = cost_and_duration{
@@ -203,18 +201,21 @@ struct dijkstra {
             }
           });
     }
-    return !max_reached_;
   }
 
-  bool run() {
+  void run() {
     if (params_.blocked_ == nullptr) {
-      return params_.dir_ == direction::kForward
-                 ? run<direction::kForward, false>()
-                 : run<direction::kBackward, false>();
+      if (params_.dir_ == direction::kForward) {
+        run<direction::kForward, false>();
+      } else {
+        run<direction::kBackward, false>();
+      }
     } else {
-      return params_.dir_ == direction::kForward
-                 ? run<direction::kForward, true>()
-                 : run<direction::kBackward, true>();
+      if (params_.dir_ == direction::kForward) {
+        run<direction::kForward, true>();
+      } else {
+        run<direction::kBackward, true>();
+      }
     }
   }
 
@@ -223,7 +224,6 @@ struct dijkstra {
   dial<label, get_bucket> pq_{get_bucket{}};
   ankerl::unordered_dense::map<key, entry, hash> cost_;
   entry_storage_arena arena_;
-  bool max_reached_{};
 
   // for early termination
   std::vector<node> destinations_;
