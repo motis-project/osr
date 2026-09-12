@@ -154,7 +154,7 @@ struct astar {
   }
 
   template <direction SearchDir, bool WithBlocked>
-  bool run() {
+  void run() {
     auto const& params = params_.profile_;
     auto const& w = params_.w();
     auto const& r = params_.r();
@@ -263,18 +263,21 @@ struct astar {
             }
           });
     }
-    return !max_reached_;
   }
 
-  bool run() {
+  void run() {
     if (params_.blocked_ == nullptr) {
-      return params_.dir_ == direction::kForward
-                 ? run<direction::kForward, false>()
-                 : run<direction::kBackward, false>();
+      if (params_.dir_ == direction::kForward) {
+        run<direction::kForward, false>();
+      } else {
+        run<direction::kBackward, false>();
+      }
     } else {
-      return params_.dir_ == direction::kForward
-                 ? run<direction::kForward, true>()
-                 : run<direction::kBackward, true>();
+      if (params_.dir_ == direction::kForward) {
+        run<direction::kForward, true>();
+      } else {
+        run<direction::kBackward, true>();
+      }
     }
   }
 
