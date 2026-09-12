@@ -1,8 +1,8 @@
 #pragma once
 
+#include <cmath>
 #include <cstdint>
 #include <algorithm>
-#include <cmath>
 #include <vector>
 
 #include "fmt/core.h"
@@ -29,6 +29,8 @@ struct cch {
   using entry = typename P::entry;
   using hash = typename P::hash;
 
+  entry_storage_arena arena_;
+
   struct settled_hash {
     using is_avalanching = void;
 
@@ -37,8 +39,7 @@ struct cch {
 
       auto h = hash{}(n.get_key());
       if constexpr (requires { n.way_; }) {
-        h = wyhash::mix(h,
-                        wyhash::hash(static_cast<std::uint64_t>(n.way_)));
+        h = wyhash::mix(h, wyhash::hash(static_cast<std::uint64_t>(n.way_)));
       }
       if constexpr (requires { n.dir_; }) {
         h = wyhash::mix(
@@ -64,6 +65,7 @@ struct cch {
     pqBackward_.n_buckets(max + 1U);
     costForward_.clear();
     costBackward_.clear();
+    arena_.reset();
     settledForward_.clear();
     settledBackward_.clear();
     mu_ = kInfeasible;
@@ -73,8 +75,9 @@ struct cch {
   }
 
   void add_start(ways const& w, label const l) {
-    if (costForward_[l.get_node().get_key()].update(l, l.get_node(), l.cost(),
-                                                    node::invalid())) {
+    if (costForward_[l.get_node().get_key()].update(
+            l, l.get_node(), l.cost(), node::invalid(),
+            duration_from_cost(l.cost()), *w.r_, arena_)) {
       if constexpr (kDebug) {
         std::cout << "START ";
         l.get_node().print(std::cout, w);
@@ -88,8 +91,9 @@ struct cch {
   }
 
   void add_destination(ways const& w, label const l) {
-    if (costBackward_[l.get_node().get_key()].update(l, l.get_node(), l.cost(),
-                                                     node::invalid())) {
+    if (costBackward_[l.get_node().get_key()].update(
+            l, l.get_node(), l.cost(), node::invalid(),
+            duration_from_cost(l.cost()), *w.r_, arena_)) {
       if constexpr (kDebug) {
         std::cout << "DESTINATION ";
         l.get_node().print(std::cout, w);
@@ -117,9 +121,12 @@ struct cch {
                            ways::routing const& r,
                            node const incoming,
                            node const outgoing) const {
-    if constexpr (!uses_customized_cost_overlay() ||
-                  !requires { incoming.way_; incoming.dir_; outgoing.way_;
-                               outgoing.dir_; }) {
+    if constexpr (!uses_customized_cost_overlay() || !requires {
+                    incoming.way_;
+                    incoming.dir_;
+                    outgoing.way_;
+                    outgoing.dir_;
+                  }) {
       return 0U;
     } else {
       if (incoming.get_node() != outgoing.get_node()) {
@@ -139,9 +146,9 @@ struct cch {
         return 0U;
       }
 
-      // The backward meeting state stores the outgoing way context at the shared
-      // graph node. Validate the stitch from the forward arrival context into
-      // that outgoing context before accepting this meeting pair.
+      // The backward meeting state stores the outgoing way context at the
+      // shared graph node. Validate the stitch from the forward arrival context
+      // into that outgoing context before accepting this meeting pair.
       if (r.template is_restricted<direction::kForward, is_bus_profile()>(
               incoming.get_node(), incoming.way_, outgoing.way_)) {
         return kInfeasible;
@@ -149,12 +156,12 @@ struct cch {
 
       auto const is_u_turn = incoming.way_ == outgoing.way_ &&
                              outgoing.dir_ == opposite(incoming.dir_);
-      return is_u_turn ? params.uturn_penalty_
-                       : P::turn_cost(
-                             params, r.get_turn_angle(
-                                         incoming.get_node(), incoming.way_,
-                                         incoming.dir_, outgoing.way_,
-                                         outgoing.dir_));
+      return is_u_turn
+                 ? params.uturn_penalty_
+                 : P::turn_cost(params,
+                                r.get_turn_angle(incoming.get_node(),
+                                                 incoming.way_, incoming.dir_,
+                                                 outgoing.way_, outgoing.dir_));
     }
   }
 
@@ -208,8 +215,12 @@ struct cch {
         meet_forward_ = best_forward;
         meet_backward_ = best_backward;
         if constexpr (kQueryDebugOutput) {
-          if constexpr (requires { best_forward.way_; best_forward.dir_;
-                                    best_backward.way_; best_backward.dir_; }) {
+          if constexpr (requires {
+                          best_forward.way_;
+                          best_forward.dir_;
+                          best_backward.way_;
+                          best_backward.dir_;
+                        }) {
             fmt::println(
                 "cch meet | node={} cost={} forward_state=({}, {}) "
                 "backward_state=({}, {})",
@@ -304,7 +315,12 @@ struct cch {
       if (w.up_ != up || w.cost_ == kInfeasible) {
         continue;
       }
-      if constexpr (requires { from.way_; from.dir_; to.way_; to.dir_; }) {
+      if constexpr (requires {
+                      from.way_;
+                      from.dir_;
+                      to.way_;
+                      to.dir_;
+                    }) {
         if (w.from_way_ != from.way_ || w.from_dir_ != from.dir_ ||
             w.to_way_ != to.way_ || w.to_dir_ != to.dir_) {
           continue;
@@ -385,9 +401,9 @@ struct cch {
         }
 
         // Compact CCH queries relax upward edges and state-changing self-loops.
-        auto const is_state_loop =
-            uses_customized_cost_overlay() &&
-            curr.get_node() == neighbor.get_node() && curr != neighbor;
+        auto const is_state_loop = uses_customized_cost_overlay() &&
+                                   curr.get_node() == neighbor.get_node() &&
+                                   curr != neighbor;
         if (!is_upward(r, curr, neighbor) && !is_state_loop) {
           return;
         }
@@ -406,28 +422,36 @@ struct cch {
           }
           fmt::println("  cch meet probe states at node/{}",
                        to_idx(w.node_to_osm_[neighbor.get_node()]));
-          P::resolve_all(r, neighbor.get_node(), kNoLevel, [&](auto const state) {
-            auto const f = get_cost<direction::kForward>(state);
-            auto const b = get_cost<direction::kBackward>(state);
-            if (f == kInfeasible && b == kInfeasible) {
-              return;
-            }
-            if constexpr (requires { state.way_; state.dir_; }) {
-              fmt::println("    state=({}, {}) forward={} backward={}",
-                           state.way_, to_str(state.dir_), f, b);
-            } else {
-              fmt::println("    state forward={} backward={}", f, b);
-            }
-          });
+          P::resolve_all(
+              r, neighbor.get_node(), kNoLevel, [&](auto const state) {
+                auto const f = get_cost<direction::kForward>(state);
+                auto const b = get_cost<direction::kBackward>(state);
+                if (f == kInfeasible && b == kInfeasible) {
+                  return;
+                }
+                if constexpr (requires {
+                                state.way_;
+                                state.dir_;
+                              }) {
+                  fmt::println("    state=({}, {}) forward={} backward={}",
+                               state.way_, to_str(state.dir_), f, b);
+                } else {
+                  fmt::println("    state forward={} backward={}", f, b);
+                }
+              });
         };
         if (forward) {
           auto const total_cost = static_cast<cost_t>(total);
-          auto const improved =
-              costForward_[neighbor.get_key()].update(l, neighbor, total_cost,
-                                                      curr);
+          auto const improved = costForward_[neighbor.get_key()].update(
+              l, neighbor, total_cost, curr, duration_from_cost(total_cost), r,
+              arena_);
           if (debug_meet_node) {
-            if constexpr (requires { curr.way_; curr.dir_; neighbor.way_;
-                                      neighbor.dir_; }) {
+            if constexpr (requires {
+                            curr.way_;
+                            curr.dir_;
+                            neighbor.way_;
+                            neighbor.dir_;
+                          }) {
               fmt::println(
                   "cch meet probe | search=forward curr={} rank={} state=({}, "
                   "{}) neighbor={} rank={} state=({}, {}) edge_cost={} "
@@ -470,12 +494,16 @@ struct cch {
           }
         } else {
           auto const total_cost = static_cast<cost_t>(total);
-          auto const improved =
-              costBackward_[neighbor.get_key()].update(l, neighbor, total_cost,
-                                                       curr);
+          auto const improved = costBackward_[neighbor.get_key()].update(
+              l, neighbor, total_cost, curr, duration_from_cost(total_cost), r,
+              arena_);
           if (debug_meet_node) {
-            if constexpr (requires { curr.way_; curr.dir_; neighbor.way_;
-                                      neighbor.dir_; }) {
+            if constexpr (requires {
+                            curr.way_;
+                            curr.dir_;
+                            neighbor.way_;
+                            neighbor.dir_;
+                          }) {
               fmt::println(
                   "cch meet probe | search=backward curr={} rank={} state=({}, "
                   "{}) neighbor={} rank={} state=({}, {}) edge_cost={} "
@@ -557,9 +585,8 @@ struct cch {
                   r.node_importance_[curr.get_node()], curr.way_,
                   to_str(curr.dir_), to_idx(w.node_to_osm_[e.to_]),
                   r.node_importance_[e.to_], weight.up_, weight.cost_,
-                  weight.distance_, weight.from_way_,
-                  to_str(weight.from_dir_), weight.to_way_,
-                  to_str(weight.to_dir_),
+                  weight.distance_, weight.from_way_, to_str(weight.from_dir_),
+                  weight.to_way_, to_str(weight.to_dir_),
                   weight.via_ == node_idx_t::invalid()
                       ? 0U
                       : to_idx(w.node_to_osm_[weight.via_]),
@@ -623,22 +650,19 @@ struct cch {
             auto const turn_cost =
                 is_u_turn
                     ? params.uturn_penalty_
-                    : P::turn_cost(params, forward
-                                               ? r.get_turn_angle(
-                                                     curr.get_node(), curr.way_,
+                    : P::turn_cost(
+                          params,
+                          forward ? r.get_turn_angle(curr.get_node(), curr.way_,
                                                      curr.dir_, edge_source_way,
                                                      edge_source_dir)
-                                               : r.get_turn_angle(
-                                                     curr.get_node(),
-                                                     edge_source_way,
-                                                     edge_source_dir, curr.way_,
-                                                     curr.dir_));
+                                  : r.get_turn_angle(
+                                        curr.get_node(), edge_source_way,
+                                        edge_source_dir, curr.way_, curr.dir_));
             edge_cost = clamp_cost(static_cast<std::uint64_t>(edge_cost) +
                                    static_cast<std::uint64_t>(turn_cost));
-            auto const neighbor =
-                P::create_node(e.to_, kNoLevel,
-                               forward ? weight.to_way_ : weight.from_way_,
-                               forward ? weight.to_dir_ : weight.from_dir_);
+            auto const neighbor = P::create_node(
+                e.to_, kNoLevel, forward ? weight.to_way_ : weight.from_way_,
+                forward ? weight.to_dir_ : weight.from_dir_);
             if constexpr (WithBlocked) {
               if (blocked->test(e.to_)) {
                 if (debug_node || debug_edge) {
@@ -648,9 +672,10 @@ struct cch {
               }
             }
             if (debug_node || debug_edge) {
-              fmt::println("  -> relax neighbor={} state=({}, {}) total_edge_cost={}",
-                           to_idx(w.node_to_osm_[neighbor.get_node()]),
-                           neighbor.way_, to_str(neighbor.dir_), edge_cost);
+              fmt::println(
+                  "  -> relax neighbor={} state=({}, {}) total_edge_cost={}",
+                  to_idx(w.node_to_osm_[neighbor.get_node()]), neighbor.way_,
+                  to_str(neighbor.dir_), edge_cost);
             }
             relax_neighbor(neighbor, edge_cost, weight.distance_,
                            way_idx_t::invalid(), 0U, 0U,
@@ -660,10 +685,26 @@ struct cch {
       } else {
         if (forward) {
           P::template adjacent<SearchDir, WithBlocked>(
-              params, r, curr, blocked, sharing, elevations, relax_neighbor);
+              params, r, w.timezones_, curr, duration_t{0}, std::nullopt,
+              blocked, sharing, elevations,
+              [&](node const n, std::uint32_t const cost, duration_t,
+                  distance_t const dist, way_idx_t const way,
+                  std::uint16_t const a, std::uint16_t const b,
+                  elevation_storage::elevation const elevation,
+                  bool const track) {
+                relax_neighbor(n, cost, dist, way, a, b, elevation, track);
+              });
         } else {
           P::template adjacent<opposite(SearchDir), WithBlocked>(
-              params, r, curr, blocked, sharing, elevations, relax_neighbor);
+              params, r, w.timezones_, curr, duration_t{0}, std::nullopt,
+              blocked, sharing, elevations,
+              [&](node const n, std::uint32_t const cost, duration_t,
+                  distance_t const dist, way_idx_t const way,
+                  std::uint16_t const a, std::uint16_t const b,
+                  elevation_storage::elevation const elevation,
+                  bool const track) {
+                relax_neighbor(n, cost, dist, way, a, b, elevation, track);
+              });
         }
         for (auto const& s : r.shortcuts_[curr.get_node()]) {
           relax_shortcut(s);

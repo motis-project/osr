@@ -143,29 +143,26 @@ point_data<P> match_input_point(ways const& w,
             .dist_to_way_ = std::sqrt(squared_dist),
             .projected_point_ = best,
             .segment_idx_ = static_cast<unsigned>(segment_idx),
-            .oneway_ = P::way_cost(params, way_prop, direction::kBackward,
-                                   0U) == kInfeasible};
-        auto const wc = way_candidate{.dist_to_way_ = mw.dist_to_way_,
-                                      .way_ = way,
-                                      .closest_point_on_way_ = best,
-                                      .segment_idx_ = mw.segment_idx_};
-
-        mw.fwd_out_ =
-            l.find_next_node<P>(params, wc, loc, direction::kForward, loc.lvl_,
-                                false, direction::kForward, blocked,
-                                approx_distance_lng_degrees, best, segment_idx);
-        mw.fwd_in_ =
-            l.find_next_node<P>(params, wc, loc, direction::kBackward, loc.lvl_,
-                                true, direction::kForward, blocked,
-                                approx_distance_lng_degrees, best, segment_idx);
-        mw.bwd_out_ =
-            l.find_next_node<P>(params, wc, loc, direction::kBackward, loc.lvl_,
-                                false, direction::kForward, blocked,
-                                approx_distance_lng_degrees, best, segment_idx);
-        mw.bwd_in_ =
-            l.find_next_node<P>(params, wc, loc, direction::kForward, loc.lvl_,
-                                false, direction::kBackward, blocked,
-                                approx_distance_lng_degrees, best, segment_idx);
+            .oneway_ = P::way_cost(params, *w.r_, w.timezones_, way, way_prop,
+                                   direction::kBackward, 0U, std::nullopt,
+                                   duration_t{0}, direction::kForward)
+                           .cost_ == kInfeasible};
+        mw.fwd_out_ = l.find_next_node<P>(
+            params, way, mw.dist_to_way_, loc, direction::kForward, loc.lvl_,
+            false, direction::kForward, blocked, approx_distance_lng_degrees,
+            best, segment_idx, std::nullopt, &mw.fwd_out_path_);
+        mw.fwd_in_ = l.find_next_node<P>(
+            params, way, mw.dist_to_way_, loc, direction::kBackward, loc.lvl_,
+            true, direction::kForward, blocked, approx_distance_lng_degrees,
+            best, segment_idx, std::nullopt, &mw.fwd_in_path_);
+        mw.bwd_out_ = l.find_next_node<P>(
+            params, way, mw.dist_to_way_, loc, direction::kBackward, loc.lvl_,
+            false, direction::kForward, blocked, approx_distance_lng_degrees,
+            best, segment_idx, std::nullopt, &mw.bwd_out_path_);
+        mw.bwd_in_ = l.find_next_node<P>(
+            params, way, mw.dist_to_way_, loc, direction::kForward, loc.lvl_,
+            false, direction::kBackward, blocked, approx_distance_lng_degrees,
+            best, segment_idx, std::nullopt, &mw.bwd_in_path_);
         if (!mw.fwd_out_.valid() && !mw.fwd_in_.valid() &&
             !mw.bwd_out_.valid() && !mw.bwd_in_.valid()) {
           return;
@@ -268,12 +265,12 @@ matched_route map_match(
         seg_idx != 0U ? &segments[seg_idx - 1U] : nullptr;
 
     auto add_additional_edge = [&](matched_way<P> const& mw,
-                                   node_candidate const& nc, bool reverse,
-                                   bool outgoing) {
+                                   candidate_node const& nc,
+                                   std::vector<geo::latlng> const& path,
+                                   bool reverse, bool outgoing) {
       if (nc.valid()) {
         auto const from_node = outgoing ? mw.additional_node_idx_ : nc.node_;
         auto const to_node = outgoing ? nc.node_ : mw.additional_node_idx_;
-        auto const& path = nc.path_;
         seg.additional_edges_[from_node].push_back(additional_edge{
             .to_ = to_node,
             .distance_ =
@@ -285,12 +282,12 @@ matched_route map_match(
     };
 
     for (auto const& mw : from_pd.matched_ways_) {
-      add_additional_edge(mw, mw.fwd_out_, false, true);
-      add_additional_edge(mw, mw.bwd_out_, true, true);
+      add_additional_edge(mw, mw.fwd_out_, mw.fwd_out_path_, false, true);
+      add_additional_edge(mw, mw.bwd_out_, mw.bwd_out_path_, true, true);
     }
     for (auto const& mw : to_pd.matched_ways_) {
-      add_additional_edge(mw, mw.fwd_in_, false, false);
-      add_additional_edge(mw, mw.bwd_in_, true, false);
+      add_additional_edge(mw, mw.fwd_in_, mw.fwd_in_path_, false, false);
+      add_additional_edge(mw, mw.bwd_in_, mw.bwd_in_path_, true, false);
     }
     for (auto const& from_mw : from_pd.matched_ways_) {
       for (auto const& to_mw : to_pd.matched_ways_) {
@@ -350,7 +347,6 @@ matched_route map_match(
                  dijkstra_max));
 
     seg.dijkstra_cost_limit_ = dijkstra_max_cost;
-    seg.astar_.reset(dijkstra_max_cost, from_pd.loc_, to_pd.loc_);
 
     auto const get_min_start_cost = [&](matched_way<P> const& from_mw) {
       auto min_start_cost = kInfeasible;
@@ -365,19 +361,28 @@ matched_route map_match(
       return min_start_cost;
     };
 
+    verify_additional_edge_count(seg.additional_edges_, additional_node_offset);
     seg.sharing_ = std::make_unique<sharing_data>(sharing_data{
         .additional_node_offset_ = additional_node_offset,
         .additional_node_coordinates_ = additional_node_coordinates,
         .additional_edges_ = seg.additional_edges_});
 
+    seg.astar_.reset({.profile_ = params,
+                      .w_ = &w,
+                      .max_ = dijkstra_max_cost,
+                      .dir_ = direction::kForward,
+                      .blocked_ = blocked,
+                      .sharing_ = seg.sharing_.get(),
+                      .elevations_ = elevations,
+                      .start_loc_ = from_pd.loc_,
+                      .end_loc_ = to_pd.loc_});
+
     for (auto& to_mw : to_pd.matched_ways_) {
       if (to_mw.fwd_node_ != P::node::invalid()) {
-        seg.astar_.add_destination(params, w, seg.sharing_.get(),
-                                   to_mw.fwd_node_);
+        seg.astar_.add_destination(to_mw.fwd_node_);
       }
       if (to_mw.bwd_node_ != P::node::invalid()) {
-        seg.astar_.add_destination(params, w, seg.sharing_.get(),
-                                   to_mw.bwd_node_);
+        seg.astar_.add_destination(to_mw.bwd_node_);
       }
     }
 
@@ -391,8 +396,7 @@ matched_route map_match(
           if (!cost.has_value()) {
             return;
           }
-          seg.astar_.add_start(params, w, seg.sharing_.get(),
-                               typename P::label{node, *cost});
+          seg.astar_.add_start(typename P::label{node, *cost});
         };
 
         add_start(from_mw.fwd_node_, from_mw.fwd_cost_);
@@ -400,8 +404,7 @@ matched_route map_match(
       }
 
       auto const dijkstra_start = std::chrono::steady_clock::now();
-      seg.astar_.run(params, w, *w.r_, dijkstra_max_cost, blocked,
-                     seg.sharing_.get(), elevations, direction::kForward);
+      seg.astar_.run();
       seg.astar_.reset_pq();
       seg.astar_duration_ =
           std::chrono::duration_cast<std::chrono::microseconds>(

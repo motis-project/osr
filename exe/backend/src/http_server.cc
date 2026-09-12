@@ -30,7 +30,6 @@
 #include "osr/routing/profiles/car_sharing.h"
 #include "osr/routing/profiles/foot.h"
 #include "osr/routing/route.h"
-#include "osr/routing/with_profile.h"
 
 using namespace net;
 using net::web_server;
@@ -90,10 +89,10 @@ json::value to_json(std::vector<geo::latlng> const& polyline) {
 }
 
 json::value to_line_string(geo::latlng const from, geo::latlng const to) {
-  return json::object{{"type", "LineString"},
-                      {"coordinates",
-                       json::array{json::array{from.lng(), from.lat()},
-                                   json::array{to.lng(), to.lat()}}}};
+  return json::object{
+      {"type", "LineString"},
+      {"coordinates", json::array{json::array{from.lng(), from.lat()},
+                                  json::array{to.lng(), to.lat()}}}};
 }
 
 struct http_server::impl {
@@ -152,27 +151,29 @@ struct http_server::impl {
     auto const max_it = q.find("max");
     auto const max = static_cast<cost_t>(
         max_it == q.end() ? 3600 : max_it->value().as_int64());
-    auto const foot_speed_result =
-        q.try_at("footSpeed")->try_to_number<float>();
-    auto const params =
-        profile == search_profile::kFoot && foot_speed_result.has_value()
-            ? foot<false,
-                   elevator_tracking>::parameters{.speed_meters_per_second_ =
-                                                      foot_speed_result.value()}
-            : get_parameters(profile);
+    auto params = get_parameters(profile);
+    if (profile == search_profile::kFoot) {
+      if (auto const* speed = q.if_contains("footSpeed"); speed != nullptr) {
+        if (auto const value = speed->try_to_number<float>();
+            value.has_value()) {
+          params = foot<false, elevator_tracking>::parameters{
+              .speed_meters_per_second_ = value.value()};
+        }
+      }
+    }
 
     auto const query_start = std::chrono::steady_clock::now();
     auto const p = route(params, w_, l_, profile, from, to, max, dir, 100,
                          nullptr, nullptr, elevations_, routing_algo);
     auto const query_end = std::chrono::steady_clock::now();
-    auto const query_us =
-        std::chrono::duration_cast<std::chrono::microseconds>(query_end -
-                                                              query_start)
-            .count();
-    fmt::println("route_query routing={} profile={} query_ms={:.3f} found={} cost={}",
-                 to_log_string(routing_algo), to_str(profile),
-                 static_cast<double>(query_us) / 1000.0, p.has_value(),
-                 p.has_value() ? p->cost_ : kInfeasible);
+    auto const query_us = std::chrono::duration_cast<std::chrono::microseconds>(
+                              query_end - query_start)
+                              .count();
+    fmt::println(
+        "route_query routing={} profile={} query_ms={:.3f} found={} cost={}",
+        to_log_string(routing_algo), to_str(profile),
+        static_cast<double>(query_us) / 1000.0, p.has_value(),
+        p.has_value() ? p->cost_ : kInfeasible);
 
     if constexpr (kRouteComparisonDebugOutput) {
       auto const p1 = route(params, w_, l_, profile, from, std::vector{to}, max,
@@ -225,7 +226,6 @@ struct http_server::impl {
                     web_server::http_res_cb_t const& cb) {
     auto const query = boost::json::parse(req.body()).as_object();
     auto const waypoints = query.at("waypoints").as_array();
-    auto const profile = get_search_profile_from_request(query);
     auto const min =
         geo::latlng{waypoints[1].as_double(), waypoints[0].as_double()};
     auto const max =
@@ -234,17 +234,16 @@ struct http_server::impl {
     auto gj = geojson_writer{.w_ = w_};
     l_.find({min, max}, [&](way_idx_t const w) { gj.write_way(w); });
 
-    with_profile(profile,
-                 [&]<Profile P>(P&&) { send_graph_response<P>(req, cb, gj); });
+    send_graph_response(req, cb, gj);
   }
 
   void handle_cch_adjacent(web_server::http_req_t const& req,
                            web_server::http_res_cb_t const& cb) {
     auto const query = boost::json::parse(req.body()).as_object();
     auto const profile = get_search_profile_from_request(query);
-    auto const& edge_weights =
-        profile == search_profile::kBus ? w_.r_->cch_bus_edge_weights_
-                                        : w_.r_->cch_car_edge_weights_;
+    auto const& edge_weights = profile == search_profile::kBus
+                                   ? w_.r_->cch_bus_edge_weights_
+                                   : w_.r_->cch_car_edge_weights_;
     auto const node = query.contains("internal_id")
                           ? node_idx_t{static_cast<node_idx_t::value_t>(
                                 query.at("internal_id").as_int64())}
@@ -258,8 +257,7 @@ struct http_server::impl {
     }
 
     auto features = json::array{};
-    auto const add_feature = [&](node_idx_t const from,
-                                 node_idx_t const to,
+    auto const add_feature = [&](node_idx_t const from, node_idx_t const to,
                                  cch_edge const& edge,
                                  bool const stored_from_clicked) {
       auto min_cost = kInfeasible;
@@ -290,25 +288,24 @@ struct http_server::impl {
       features.emplace_back(json::object{
           {"type", "Feature"},
           {"properties",
-           json::object{
-               {"type", "cch-adjacent"},
-               {"kind", kind},
-               {"from_osm_node_id", to_idx(w_.node_to_osm_[from])},
-               {"to_osm_node_id", to_idx(w_.node_to_osm_[to])},
-               {"from_internal_id", to_idx(from)},
-               {"to_internal_id", to_idx(to)},
-               {"from_rank", w_.r_->node_importance_[from]},
-               {"to_rank", w_.r_->node_importance_[to]},
-               {"stored_from_clicked", stored_from_clicked},
-               {"weights", edge.weights_.size()},
-               {"shortcut_weights", shortcut_weights},
-               {"base_weights", base_weights},
-               {"min_cost", min_cost},
-               {"min_distance", min_distance},
-               {"sample_via_osm_node_id",
-                sample_via == node_idx_t::invalid()
-                    ? 0U
-                    : to_idx(w_.node_to_osm_[sample_via])}}},
+           json::object{{"type", "cch-adjacent"},
+                        {"kind", kind},
+                        {"from_osm_node_id", to_idx(w_.node_to_osm_[from])},
+                        {"to_osm_node_id", to_idx(w_.node_to_osm_[to])},
+                        {"from_internal_id", to_idx(from)},
+                        {"to_internal_id", to_idx(to)},
+                        {"from_rank", w_.r_->node_importance_[from]},
+                        {"to_rank", w_.r_->node_importance_[to]},
+                        {"stored_from_clicked", stored_from_clicked},
+                        {"weights", edge.weights_.size()},
+                        {"shortcut_weights", shortcut_weights},
+                        {"base_weights", base_weights},
+                        {"min_cost", min_cost},
+                        {"min_distance", min_distance},
+                        {"sample_via_osm_node_id",
+                         sample_via == node_idx_t::invalid()
+                             ? 0U
+                             : to_idx(w_.node_to_osm_[sample_via])}}},
           {"geometry",
            to_line_string(w_.get_node_pos(from), w_.get_node_pos(to))}});
     };
@@ -332,11 +329,10 @@ struct http_server::impl {
                                           {"features", std::move(features)}})));
   }
 
-  template <Profile P>
   void send_graph_response(web_server::http_req_t const& req,
                            web_server::http_res_cb_t const& cb,
                            geojson_writer& gj) {
-    gj.finish(&get_dijkstra<P>());
+    gj.finish();
     cb(json_response(req, gj.string()));
   }
 

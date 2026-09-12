@@ -1,47 +1,47 @@
 [boost]
   url=git@github.com:motis-project/boost.git
   branch=boost-1.89.0
-  commit=77467bf580d98ea06716e2931cbe3b1f28e0cd37
-[osmium]
-  url=git@github.com:motis-project/libosmium.git
+  commit=b050b3988ba25ea7757462d26a38d225bfe20f75
+[cista]
+  url=git@github.com:felixguendling/cista.git
   branch=master
-  commit=6e6d6b3081cc8bdf25dda89730e25c36eb995516
+  commit=427f0a873be43f1de94289bd53d5678e07cd243f
 [conf]
   url=git@github.com:motis-project/conf.git
   branch=master
   commit=f9bf4bd83bf55a2170725707e526cbacc45dcc66
+[expat]
+  url=git@github.com:motis-project/expat.git
+  branch=master
+  commit=636c9861e8e7c119f3626d1e6c260603ab624516
+[fmt]
+  url=git@github.com:motis-project/fmt.git
+  branch=master
+  commit=34a5bee1df1f0d144de0e127807d161d08670472
 [geo]
   url=git@github.com:motis-project/geo.git
   branch=master
-  commit=d862550fd867cd5435225b5f0998981ec4fc2ae3
-[cista]
-  url=git@github.com:felixguendling/cista.git
-  branch=master
-  commit=02fc087619fc913aca2c3fd3e07ec12279b8d6c6
+  commit=7c78f91a7ae9a9fdb9ed29ce5ba2e8c19acc8cb1
 [googletest]
   url=git@github.com:motis-project/googletest.git
   branch=master
   commit=9758d168fd1ccff2d76f3bd6ef802943d0f8f7e5
-[utl]
-  url=git@github.com:motis-project/utl.git
-  branch=master
-  commit=d9930c90e440df761c8c4916c36072de9dd00f49
-[protozero]
-  url=git@github.com:motis-project/protozero.git
-  branch=master
-  commit=a94574f49d3820dc2f90121f8d5c5ffb6210b5b2
-[zlib-ng]
-  url=git@github.com:motis-project/zlib-ng.git
-  branch=develop
-  commit=d68e1d908e789c31c1f2fafe4bd8e09cb91e21c5
-[tiles]
-  url=git@github.com:motis-project/tiles.git
-  branch=master
-  commit=fb8187e7b1ff30f0fffa6e508575b6b1d6c33791
 [mimalloc]
   url=git@github.com:motis-project/mimalloc.git
   branch=master
   commit=189b0ac416b94848bc0a7702f7e97fe6ebd91829
+[net]
+  url=git@github.com:motis-project/net.git
+  branch=master
+  commit=c2599102dcffa4babfdcf5320a6bd6f5c6e9b731
+[osm]
+  url=git@github.com:motis-project/osm.git
+  branch=dev
+  commit=2311ac613036187e98093e5963024c28407be1cb
+[protozero]
+  url=git@github.com:motis-project/protozero.git
+  branch=master
+  commit=a94574f49d3820dc2f90121f8d5c5ffb6210b5b2
 [rapidjson]
   url=git@github.com:motis-project/rapidjson.git
   branch=master
@@ -50,22 +50,22 @@
   url=git@github.com:triptix-tech/rtree.c.git
   branch=master
   commit=855982edf7efbba1798bacfea12997bf541f5661
-[fmt]
-  url=git@github.com:motis-project/fmt.git
-  branch=master
-  commit=dc10f83be70ac2873d5f8d1ce317596f1fd318a2
+[tg]
+  url=git@github.com:triptix-tech/tg.git
+  branch=main
+  commit=20c0f298b8ce58de29a790290f44dca7c4ecc364
 [unordered_dense]
   url=git@github.com:motis-project/unordered_dense.git
   branch=main
   commit=2c7230ae7f9c30849a5b089fb4a5d11896b45dcf
-[expat]
-  url=git@github.com:motis-project/expat.git
+[utl]
+  url=git@github.com:motis-project/utl.git
   branch=master
-  commit=636c9861e8e7c119f3626d1e6c260603ab624516
-[net]
-  url=git@github.com:motis-project/net.git
-  branch=master
-  commit=c2599102dcffa4babfdcf5320a6bd6f5c6e9b731
+  commit=158339cb270d6cb2ed2d6e2baf876b8c32faeef0
+[zlib-ng]
+  url=git@github.com:motis-project/zlib-ng.git
+  branch=develop
+  commit=d68e1d908e789c31c1f2fafe4bd8e09cb91e21c5
 [inertialflowcutter]
   url=git@github.com:motis-project/InertialFlowCutter.git
   branch=master

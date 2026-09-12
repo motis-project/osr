@@ -32,6 +32,8 @@ struct dijkstra_bidir {
   using entry = typename P::entry;
   using hash = typename P::hash;
 
+  entry_storage_arena arena_;
+
   struct settled_hash {
     using is_avalanching = void;
 
@@ -40,8 +42,7 @@ struct dijkstra_bidir {
 
       auto h = hash{}(n.get_key());
       if constexpr (requires { n.way_; }) {
-        h = wyhash::mix(h,
-                        wyhash::hash(static_cast<std::uint64_t>(n.way_)));
+        h = wyhash::mix(h, wyhash::hash(static_cast<std::uint64_t>(n.way_)));
       }
       if constexpr (requires { n.dir_; }) {
         h = wyhash::mix(
@@ -66,6 +67,7 @@ struct dijkstra_bidir {
     pqBackward_.n_buckets(max + 1U);
     costForward_.clear();
     costBackward_.clear();
+    arena_.reset();
     settledForward_.clear();
     settledBackward_.clear();
     mu_ = kInfeasible;
@@ -74,8 +76,9 @@ struct dijkstra_bidir {
   }
 
   void add_start(ways const& w, label const l) {
-    if (costForward_[l.get_node().get_key()].update(l, l.get_node(), l.cost(),
-                                                    node::invalid())) {
+    if (costForward_[l.get_node().get_key()].update(
+            l, l.get_node(), l.cost(), node::invalid(),
+            duration_from_cost(l.cost()), *w.r_, arena_)) {
       if constexpr (kDebug) {
         std::cout << "START ";
         l.get_node().print(std::cout, w);
@@ -92,8 +95,9 @@ struct dijkstra_bidir {
     // std::cout << "DEST ";
     // n.get_node().print(std::cout, w);
     // std::cout << "\n";
-    if (costBackward_[l.get_node().get_key()].update(l, l.get_node(), l.cost(),
-                                                     node::invalid())) {
+    if (costBackward_[l.get_node().get_key()].update(
+            l, l.get_node(), l.cost(), node::invalid(),
+            duration_from_cost(l.cost()), *w.r_, arena_)) {
       if constexpr (kDebug) {
         std::cout << "DESTINATION ";
         l.get_node().print(std::cout, w);
@@ -244,7 +248,8 @@ struct dijkstra_bidir {
         if (forward) {
           auto const total_cost = static_cast<cost_t>(total);
           auto const improved = costForward_[neighbor.get_key()].update(
-              l, neighbor, total_cost, curr);
+              l, neighbor, total_cost, curr, duration_from_cost(total_cost), r,
+              arena_);
           update_mu(neighbor, get_cost<direction::kForward>(neighbor),
                     get_cost<direction::kBackward>(neighbor));
           if (improved) {
@@ -263,7 +268,8 @@ struct dijkstra_bidir {
         } else {
           auto const total_cost = static_cast<cost_t>(total);
           auto const improved = costBackward_[neighbor.get_key()].update(
-              l, neighbor, total_cost, curr);
+              l, neighbor, total_cost, curr, duration_from_cost(total_cost), r,
+              arena_);
           update_mu(neighbor, get_cost<direction::kForward>(neighbor),
                     get_cost<direction::kBackward>(neighbor));
           if (improved) {
@@ -284,10 +290,26 @@ struct dijkstra_bidir {
 
       if (forward) {
         P::template adjacent<SearchDir, WithBlocked>(
-            params, r, curr, blocked, sharing, elevations, relax_neighbor);
+            params, r, w.timezones_, curr, duration_t{0}, std::nullopt, blocked,
+            sharing, elevations,
+            [&](node const n, std::uint32_t const cost, duration_t,
+                distance_t const dist, way_idx_t const way,
+                std::uint16_t const a, std::uint16_t const b,
+                elevation_storage::elevation const elevation,
+                bool const track) {
+              relax_neighbor(n, cost, dist, way, a, b, elevation, track);
+            });
       } else {
         P::template adjacent<opposite(SearchDir), WithBlocked>(
-            params, r, curr, blocked, sharing, elevations, relax_neighbor);
+            params, r, w.timezones_, curr, duration_t{0}, std::nullopt, blocked,
+            sharing, elevations,
+            [&](node const n, std::uint32_t const cost, duration_t,
+                distance_t const dist, way_idx_t const way,
+                std::uint16_t const a, std::uint16_t const b,
+                elevation_storage::elevation const elevation,
+                bool const track) {
+              relax_neighbor(n, cost, dist, way, a, b, elevation, track);
+            });
       }
     }
     return !max_reached_ && mu_ == kInfeasible;

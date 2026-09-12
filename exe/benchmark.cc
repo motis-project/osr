@@ -103,51 +103,38 @@ void print_result(std::vector<benchmark_result> const& var,
 }
 
 template <Profile P>
-void set_start(dijkstra<P>& d, ways const& w, node_idx_t const start) {
-  d.add_start(w, typename P::label{typename P::node{start}, 0U});
+void set_start(dijkstra<P>& d, node_idx_t const start) {
+  d.add_start(typename P::label{typename P::node{start}, 0U});
 }
 
 template <>
-void set_start<car>(dijkstra<car>& d, ways const& w, node_idx_t const start) {
-  d.add_start(w, car::label{car::node{start, 0, direction::kForward}, 0U});
-  d.add_start(w, car::label{car::node{start, 0, direction::kBackward}, 0U});
+void set_start<car>(dijkstra<car>& d, node_idx_t const start) {
+  d.add_start(car::label{car::node{start, 0, direction::kForward}, 0U});
+  d.add_start(car::label{car::node{start, 0, direction::kBackward}, 0U});
 };
 
 template <Profile P>
-void set_start(typename P::parameters const& params,
-               bidirectional<P>& b,
-               ways const& w,
-               node_idx_t const start) {
-  b.add_start(params, w, typename P::label{typename P::node{start}, 0U},
-              nullptr);
+void set_start(bidirectional<P>& b, node_idx_t const start) {
+  b.add_start(typename P::label{typename P::node{start}, 0U});
 }
 
 template <>
-void set_start<car>(car::parameters const& params,
-                    bidirectional<car>& b,
-                    ways const& w,
-                    node_idx_t const start) {
-  b.add_start(params, w,
-              car::label{car::node{start, 0, direction::kForward}, 0U},
-              nullptr);
-  b.add_start(params, w,
-              car::label{car::node{start, 0, direction::kBackward}, 0U},
-              nullptr);
+void set_start<car>(bidirectional<car>& b, node_idx_t const start) {
+  b.add_start(car::label{car::node{start, 0, direction::kForward}, 0U});
+  b.add_start(car::label{car::node{start, 0, direction::kBackward}, 0U});
 };
 
 template <Profile P>
-std::vector<typename P::label> set_end(typename P::parameters const& params,
-                                       bidirectional<P>& b,
-                                       ways const& w,
+std::vector<typename P::label> set_end(bidirectional<P>& b,
+                                       ways const&,
                                        node_idx_t const end) {
   auto const l = typename P::label{typename P::node{end}, 0U};
-  b.add_end(params, w, l, nullptr);
+  b.add_end(l);
   return {l};
 }
 
 template <>
-std::vector<typename car::label> set_end<car>(car::parameters const& params,
-                                              bidirectional<car>& b,
+std::vector<typename car::label> set_end<car>(bidirectional<car>& b,
                                               ways const& w,
                                               node_idx_t const end) {
   std::vector<typename car::label> ends;
@@ -156,8 +143,8 @@ std::vector<typename car::label> set_end<car>(car::parameters const& params,
   for (auto i = way_pos_t{0U}; i != ways.size(); ++i) {
     auto const l1 = car::label{car::node{end, i, direction::kForward}, 0U};
     auto const l2 = car::label{car::node{end, i, direction::kBackward}, 0U};
-    b.add_end(params, w, l1, nullptr);
-    b.add_end(params, w, l2, nullptr);
+    b.add_end(l1);
+    b.add_end(l2);
     ends.push_back(l1);
     ends.push_back(l2);
   }
@@ -261,20 +248,24 @@ int main(int argc, char const* argv[]) {
               std::cout << "skipping" << std::endl;
               continue;
             }
-            d.reset(opt.max_dist_);
-            b.reset(params, opt.max_dist_, start_loc, end_loc);
-            set_start<P>(d, w, start);
-            set_start<P>(params, b, w, start);
+            auto const sp = search_params<typename P::parameters>{
+                .profile_ = params,
+                .w_ = &w,
+                .max_ = opt.max_dist_,
+                .dir_ = direction::kForward,
+                .elevations_ = elevations.get(),
+                .start_loc_ = start_loc,
+                .end_loc_ = end_loc};
+            d.reset(sp);
+            b.reset(sp);
+            set_start<P>(d, start);
+            set_start<P>(b, start);
 
-            auto const ends = set_end<P>(params, b, w, end);
+            auto const ends = set_end<P>(b, w, end);
             auto const start_time = std::chrono::steady_clock::now();
-            d.template run<direction::kForward, false>(
-                params, w, *w.r_, opt.max_dist_, nullptr, nullptr,
-                elevations.get());
+            d.template run<direction::kForward, false>();
             auto const middle_time = std::chrono::steady_clock::now();
-            b.template run<direction::kForward, false>(
-                params, w, *w.r_, opt.max_dist_, nullptr, nullptr,
-                elevations.get());
+            b.template run<direction::kForward, false>();
             auto const end_time = std::chrono::steady_clock::now();
             /*std::cout << "took "
                       << std::chrono::duration_cast<std::chrono::milliseconds>(

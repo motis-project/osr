@@ -61,42 +61,49 @@ TEST(simple_dijkstra, monaco) {
   // const start = [7.418969078064066, 43.7330953688176]
   // const destination = [7.4261553024191755, 43.73175634804065];
   //
-  auto const from =
-      location{geo::latlng{43.7330953688176, 7.418969078064066}};
+  auto const from = location{geo::latlng{43.7330953688176, 7.418969078064066}};
   auto const to = location{geo::latlng{43.73175634804065, 7.4261553024191755}};
   using profile = car;
   auto const params = profile::parameters{};
 
   // Snap the locations onto the routing graph.
-  auto const from_matches =
-      l.match<profile>(params, from, false, dir, kMaxMatchDistance, nullptr);
-  auto const to_matches =
-      l.match<profile>(params, to, true, dir, kMaxMatchDistance, nullptr);
+  auto from_storage = match_result{};
+  auto to_storage = match_result{};
+  l.match<profile>(params, from, false, dir, kMaxMatchDistance, nullptr,
+                   from_storage);
+  l.match<profile>(params, to, true, dir, kMaxMatchDistance, nullptr,
+                   to_storage);
+  auto const from_matches = from_storage[match_idx_t{0U}];
+  auto const to_matches = to_storage[match_idx_t{0U}];
 
   ASSERT_FALSE(from_matches.empty()) << "no graph match near 'from'";
   ASSERT_FALSE(to_matches.empty()) << "no graph match near 'to'";
 
-  auto const dump_matches = [&](std::string_view name, match_t const& matches) {
+  auto const dump_matches = [&](std::string_view name,
+                                match_view_t const& matches) {
     fmt::println("{} matches: {}", name, matches.size());
-    for (auto const [i, m] : utl::enumerate(matches)) {
-      fmt::println("  [{}] way={} osm_way={} dist_to_way={:.2f} segment={}", i,
-                   to_idx(m.way_), to_idx(w.way_osm_idx_[m.way_]),
-                   m.dist_to_way_, m.segment_idx_);
-      auto const dump_node = [&](std::string_view side, node_candidate const& nc) {
+    for (auto i = std::size_t{0U}; i != matches.size(); ++i) {
+      fmt::println("  [{}] way={} osm_way={} dist_to_way={:.2f}", i,
+                   to_idx(matches.way_[i]),
+                   to_idx(w.way_osm_idx_[matches.way_[i]]),
+                   matches.dist_to_way_[i]);
+      auto const dump_node = [&](std::string_view side,
+                                 candidate_node const& nc) {
         if (!nc.valid()) {
           fmt::println("    {}: invalid", side);
           return;
         }
         auto const pos = w.get_node_pos(nc.node_).as_latlng();
         fmt::println(
-            "    {}: node={} osm_node={} rank={} way_dir={} dist_to_node={:.2f} "
+            "    {}: node={} osm_node={} rank={} way_dir={} "
+            "dist_to_node={:.2f} "
             "cost={} lat={} lng={}",
             side, to_idx(nc.node_), to_idx(w.node_to_osm_[nc.node_]),
             w.r_->node_importance_[nc.node_], to_str(nc.way_dir_),
             nc.dist_to_node_, nc.cost_, pos.lat_, pos.lng_);
       };
-      dump_node("left", m.left_);
-      dump_node("right", m.right_);
+      dump_node("left", matches.left(i));
+      dump_node("right", matches.right(i));
     }
   };
   dump_matches("start", from_matches);
@@ -108,11 +115,12 @@ TEST(simple_dijkstra, monaco) {
     auto const dest_node = w.get_node_idx(dest_osm);
 
     auto d = dijkstra<profile>{};
-    d.reset(max_cost);
+    d.reset(search_params<profile::parameters>{
+        .profile_ = params, .w_ = &w, .max_ = max_cost, .dir_ = dir});
     profile::resolve_all(*w.r_, start_node, kNoLevel, [&](auto const node) {
-      d.add_start(w, {node, 0U});
+      d.add_start({node, 0U}, duration_t{0});
     });
-    d.run(params, w, *w.r_, max_cost, nullptr, nullptr, nullptr, dir);
+    d.run();
 
     auto dijkstra_cost = kInfeasible;
     profile::resolve_all(*w.r_, dest_node, kNoLevel, [&](auto const node) {
@@ -121,9 +129,8 @@ TEST(simple_dijkstra, monaco) {
 
     auto bd = dijkstra_bidir<profile>{};
     bd.reset(max_cost);
-    profile::resolve_all(*w.r_, start_node, kNoLevel, [&](auto const node) {
-      bd.add_start(w, {node, 0U});
-    });
+    profile::resolve_all(*w.r_, start_node, kNoLevel,
+                         [&](auto const node) { bd.add_start(w, {node, 0U}); });
     profile::resolve_all(*w.r_, dest_node, kNoLevel, [&](auto const node) {
       bd.add_destination(w, {node, 0U});
     });
@@ -131,9 +138,8 @@ TEST(simple_dijkstra, monaco) {
 
     auto c = cch<profile>{};
     c.reset(max_cost);
-    profile::resolve_all(*w.r_, start_node, kNoLevel, [&](auto const node) {
-      c.add_start(w, {node, 0U});
-    });
+    profile::resolve_all(*w.r_, start_node, kNoLevel,
+                         [&](auto const node) { c.add_start(w, {node, 0U}); });
     profile::resolve_all(*w.r_, dest_node, kNoLevel, [&](auto const node) {
       c.add_destination(w, {node, 0U});
     });
@@ -149,9 +155,8 @@ TEST(simple_dijkstra, monaco) {
   run_exact_node_query(osm_node_idx_t{25194304U}, osm_node_idx_t{7787103278U});
   run_exact_node_query(osm_node_idx_t{25194304U}, osm_node_idx_t{2737814240U});
 
-  auto const from_matches_span =
-      std::span{begin(from_matches), end(from_matches)};
-  auto const to_matches_span = std::span{begin(to_matches), end(to_matches)};
+  auto const from_matches_span = from_matches;
+  auto const to_matches_span = to_matches;
 
   // Set a breakpoint here (or inside osr::dijkstra) and step into the search.
   auto const dijkstra_result =
@@ -187,16 +192,18 @@ TEST(simple_dijkstra, monaco) {
   }
 
   if (dijkstra_result.has_value() != bidir_result.has_value()) {
-    fmt::println("comparison mismatch | dijkstra_has_path: {} | bidir_has_path: {}",
-                 dijkstra_result.has_value(), bidir_result.has_value());
+    fmt::println(
+        "comparison mismatch | dijkstra_has_path: {} | bidir_has_path: {}",
+        dijkstra_result.has_value(), bidir_result.has_value());
   } else if (dijkstra_result.has_value() && bidir_result.has_value()) {
     fmt::println("comparison | cost equal: {} | dist equal: {}",
                  dijkstra_result->cost_ == bidir_result->cost_,
                  dijkstra_result->dist_ == bidir_result->dist_);
   }
   if (dijkstra_result.has_value() != cch_result.has_value()) {
-    fmt::println("cch comparison mismatch | dijkstra_has_path: {} | cch_has_path: {}",
-                 dijkstra_result.has_value(), cch_result.has_value());
+    fmt::println(
+        "cch comparison mismatch | dijkstra_has_path: {} | cch_has_path: {}",
+        dijkstra_result.has_value(), cch_result.has_value());
   } else if (dijkstra_result.has_value() && cch_result.has_value()) {
     fmt::println("cch comparison | cost equal: {} | dist equal: {}",
                  dijkstra_result->cost_ == cch_result->cost_,
