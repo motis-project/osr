@@ -23,6 +23,9 @@ struct path {
     distance_t dist_{0};
     elevation_storage::elevation elevation_{};
     mode mode_{mode::kFoot};
+    bool cch_debug_shortcut_{false};
+    std::uint32_t cch_debug_depth_{0U};
+    node_idx_t cch_debug_via_{node_idx_t::invalid()};
   };
 
   cost_t cost_{kInfeasible};

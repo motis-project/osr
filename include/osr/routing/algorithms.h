@@ -5,7 +5,12 @@
 
 namespace osr {
 
-enum class routing_algorithm : std::uint8_t { kDijkstra, kAStarBi };
+enum class routing_algorithm : std::uint8_t {
+  kDijkstra,
+  kAStarBi,
+  kDijkstraBi,
+  kCCH
+};
 
 routing_algorithm to_algorithm(std::string_view);
 

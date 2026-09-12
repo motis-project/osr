@@ -1,0 +1,47 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "build osr-test (Debug)",
+      "type": "shell",
+      "command": "cmake --preset macos-arm64-debug && cmake --build --preset macos-arm64-debug --target osr-test",
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "group": "build",
+      "presentation": {
+        "reveal": "silent",
+        "panel": "shared"
+      },
+      "problemMatcher": "$gcc"
+    },
+    {
+      "label": "build osr-test (RelWithDebInfo)",
+      "type": "shell",
+      "command": "cmake --preset macos-arm64-relwithdebinfo && cmake --build --preset macos-arm64-relwithdebinfo --target osr-test",
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "group": "build",
+      "presentation": {
+        "reveal": "silent",
+        "panel": "shared"
+      },
+      "problemMatcher": "$gcc"
+    },
+    {
+      "label": "build osr-backend (RelWithDebInfo)",
+      "type": "shell",
+      "command": "cmake --preset macos-arm64-relwithdebinfo && cmake --build --preset macos-arm64-relwithdebinfo --target osr-backend",
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "group": "build",
+      "presentation": {
+        "reveal": "silent",
+        "panel": "shared"
+      },
+      "problemMatcher": "$gcc"
+    }
+  ]
+}

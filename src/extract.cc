@@ -208,22 +208,37 @@ std::optional<hgv_way_info> get_hgv_way_info(tags const& t) {
   return info.fields_ == 0U ? std::nullopt : std::optional{info};
 }
 
-bool is_big_street(tags const& t) {
+std::uint8_t get_importance(tags const& t) {
   switch (cista::hash(t.highway_)) {
-    case cista::hash("motorway"):
-    case cista::hash("motorway_link"):
-    case cista::hash("trunk"):
-    case cista::hash("trunk_link"):
-    case cista::hash("primary"):
-    case cista::hash("primary_link"):
+    case cista::hash("pedestrian"):
+    case cista::hash("busway"):
+    case cista::hash("footway"):
+    case cista::hash("cycleway"):
+    case cista::hash("bridleway"):
+    case cista::hash("steps"):
+    case cista::hash("corridor"):
+    case cista::hash("path"): return 0;
+    case cista::hash("track"): return 1;
+    case cista::hash("living_street"):
+    case cista::hash("service"): return 2;
+    case cista::hash("residential"): return 3;
+    case cista::hash("road"): return 4;
+    case cista::hash("unclassified"):
+    case cista::hash("tertiary"):
+    case cista::hash("tertiary_link"): return 5;
     case cista::hash("secondary"):
     case cista::hash("secondary_link"):
-    case cista::hash("tertiary"):
-    case cista::hash("tertiary_link"):
-    case cista::hash("unclassified"): return true;
-    default: return false;
+    case cista::hash("primary"):
+    case cista::hash("primary_link"): return 6;
+    case cista::hash("trunk"):
+    case cista::hash("trunk_link"):
+    case cista::hash("motorway"):
+    case cista::hash("motorway_link"): return 7;
+    default: return 4;
   }
 }
+
+bool is_big_street(std::uint8_t const importance) { return importance > 4; }
 
 speed_limit get_speed_limit(tags const& t) {
   if (auto const speed = parse_speed_km_h(t.max_speed_); speed.has_value()) {
@@ -303,7 +318,7 @@ way_properties get_way_properties(
   p.motor_vehicle_no_ =
       (t.motor_vehicle_ == "no"sv) || (t.vehicle_ == override::kBlacklist);
   p.has_toll_ = t.toll_;
-  p.is_big_street_ = is_big_street(t);
+  p.is_big_street_ = is_big_street(get_importance(t));
   p.in_route_ = t.is_route_ && t.is_public_transport_route();
   p.is_bus_accessible_with_penalty_ =
       is_accessible_with_penalty<bus_profile>(t, obj_type);
@@ -477,6 +492,7 @@ struct way_handler : public osmium::handler::Handler {
 
     w_.way_osm_idx_.push_back(to_osm_way_idx(w.id()));
     w_.r_->way_properties_.emplace_back(p);
+    w_.r_->way_importance_.emplace_back(get_importance(t));
     if (hgv_info.has_value()) {
       w_.r_->way_hgv_info_.emplace_back(way_idx, *hgv_info);
     }
@@ -918,7 +934,6 @@ void extract(bool const with_platforms,
   w.sync();
 
   w.connect_ways();
-  w.build_components();
 
   auto r = std::vector<resolved_restriction>{};
   {  // Pass 3: node properties + turn restrictions.
@@ -1038,7 +1053,9 @@ void extract(bool const with_platforms,
         pt->update_fn());
   }
 
+  w.build_components_and_importance();
   w.add_restriction(r);
+  w.add_shortcuts();
 
   utl::sort(w.r_->multi_level_elevators_);
 
