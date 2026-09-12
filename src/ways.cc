@@ -129,6 +129,11 @@ void ways::build_components_and_importance() {
   r_->way_importance_.clear();
 
 #ifdef USE_INERTIAL_FLOW_CUT
+  // Some extraction-only fixtures have ways but no routing nodes. IFC's
+  // ordering routines require a nonempty graph.
+  if (n_nodes() == 0U) {
+    return;
+  }
   pt->status("Run inertial flow cutter").in_high(n_ways()).out_bounds(90, 91);
 
   auto v_tail = std::vector<unsigned>{};

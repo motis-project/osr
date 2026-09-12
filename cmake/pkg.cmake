@@ -31,6 +31,10 @@ if (NOT DEFINED PROJECT_IS_TOP_LEVEL OR PROJECT_IS_TOP_LEVEL)
     endif ()
 
     if (DEFINED ENV{GITHUB_ACTIONS})
+        # pkg's fast path validates dependency commits, but not the generated
+        # deps/CMakeLists.txt in the runner's shared dependency cache.
+        # Rebuild that integration file from the manifest on every CI run.
+        file(REMOVE "${CMAKE_SOURCE_DIR}/.pkg.lock")
         message(STATUS "${pkg-bin} -l -h -f")
         execute_process(
                 COMMAND ${pkg-bin} -l -h -f

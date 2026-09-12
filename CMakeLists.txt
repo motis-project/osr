@@ -47,6 +47,10 @@ endif ()
 include(cmake/buildcache.cmake)
 include(cmake/pkg.cmake)
 
+if (NOT TARGET inertialflowcutter)
+    message(FATAL_ERROR "InertialFlowCutter target missing. Regenerate dependencies with pkg before configuring OSR.")
+endif ()
+
 if (OSR_MIMALLOC)
     if (WIN32)
         set(osr-mimalloc-lib mimalloc)

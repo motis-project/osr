@@ -5,6 +5,7 @@
 
 #include <algorithm>
 #include <optional>
+#include <type_traits>
 
 #include "utl/concat.h"
 #include "utl/enumerate.h"
@@ -2061,8 +2062,14 @@ std::optional<path> route_cch(profile_parameters const& params,
       return std::nullopt;
     }
 
-    return route_cch<P>(pp, w, l, get_cch<P>(), from, to, from_match, to_match,
-                        max, dir, blocked, sharing, elevations);
+    if constexpr (std::is_same_v<P, car> || std::is_same_v<P, bus>) {
+      return route_cch<P>(pp, w, l, get_cch<P>(), from, to, from_match,
+                          to_match, max, dir, blocked, sharing, elevations);
+    } else {
+      auto d = dijkstra<P>{};
+      return route_dijkstra(pp, w, l, d, from, to, from_match, to_match, max,
+                            dir, std::nullopt, blocked, sharing, elevations);
+    }
   });
 }
 
@@ -2165,9 +2172,18 @@ std::optional<path> route(profile_parameters const& params,
       });
     case routing_algorithm::kCCH:
       return with_profile(profile, [&]<Profile P>(P&&) {
-        return route_cch<P>(std::get<typename P::parameters>(params), w, l,
-                            get_cch<P>(), from, to, from_match, to_match, max,
-                            dir, blocked, sharing, elevations);
+        auto const& pp = std::get<typename P::parameters>(params);
+        // Only Car and Bus have customized CCH overlays. Keep unsupported
+        // profile query code out of template instantiation as well as runtime.
+        if constexpr (std::is_same_v<P, car> || std::is_same_v<P, bus>) {
+          return route_cch<P>(pp, w, l, get_cch<P>(), from, to, from_match,
+                              to_match, max, dir, blocked, sharing, elevations);
+        } else {
+          auto d = dijkstra<P>{};
+          return route_dijkstra(pp, w, l, d, from, to, from_match, to_match,
+                                max, dir, start_time, blocked, sharing,
+                                elevations);
+        }
       });
   }
   throw utl::fail("not implemented");

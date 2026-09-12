@@ -290,7 +290,12 @@ jobs:
           wget -N https://github.com/motis-project/test-data/releases/download/osr-test-data-1/monaco.osm.pbf
           wget -N https://github.com/motis-project/test-data/releases/download/osr-test-data-1/switzerland.osm.pbf
           cd -
-          ln -s /testdata/* test/
+          for fixture in /testdata/*; do
+            target="test/$(basename "$fixture")"
+            if [ ! -e "$target" ] && [ ! -L "$target" ]; then
+              ln -s "$fixture" "$target"
+            fi
+          done
 
       # ==== TESTS ====
       - name: Run Tests
