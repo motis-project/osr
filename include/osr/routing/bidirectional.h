@@ -77,8 +77,6 @@ struct bidirectional {
                   ? std::max({static_cast<cost_t>(diameter * 0.5),
                               kLongestNodeDistance, max_edge_radius})
                   : max;
-    max_reached_1_ = false;
-    max_reached_2_ = false;
     draining_ = false;
     drain_key_1_ = kInfeasible;
     drain_key_2_ = kInfeasible;
@@ -239,11 +237,6 @@ struct bidirectional {
                          static_cast<std::int64_t>(heuristic(
                              params, w, neighbor.n_, PathDir, sharing)));
           if (total >= max) {
-            if (is_fwd) {
-              max_reached_1_ = true;
-            } else {
-              max_reached_2_ = true;
-            }
             return;
           }
           auto const updated = [&]() {
@@ -384,9 +377,9 @@ struct bidirectional {
   }
 
   template <direction SearchDir, bool WithBlocked>
-  bool run() {
+  void run() {
     if (!search_bounds_valid_) {
-      return false;
+      return;
     }
     while (!pq1_.empty() || !pq2_.empty()) {
       if (!pq1_.empty() &&
@@ -402,20 +395,22 @@ struct bidirectional {
     }
     if (best_cost_ != kInfeasible && best_cost_ > params_.max_) {
       clear_mp();
-      return false;
     }
-    return !max_reached_1_ || !max_reached_2_;
   }
 
-  bool run() {
+  void run() {
     if (params_.blocked_ == nullptr) {
-      return params_.dir_ == direction::kForward
-                 ? run<direction::kForward, false>()
-                 : run<direction::kBackward, false>();
+      if (params_.dir_ == direction::kForward) {
+        run<direction::kForward, false>();
+      } else {
+        run<direction::kBackward, false>();
+      }
     } else {
-      return params_.dir_ == direction::kForward
-                 ? run<direction::kForward, true>()
-                 : run<direction::kBackward, true>();
+      if (params_.dir_ == direction::kForward) {
+        run<direction::kForward, true>();
+      } else {
+        run<direction::kBackward, true>();
+      }
     }
   }
 
@@ -435,8 +430,6 @@ struct bidirectional {
   geo::latlng end_pos_;
   double distance_lon_degrees_;
   bool search_bounds_valid_{};
-  bool max_reached_1_;
-  bool max_reached_2_;
   bool draining_{false};
   cost_t drain_key_1_{kInfeasible};
   cost_t drain_key_2_{kInfeasible};
