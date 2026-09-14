@@ -18,6 +18,7 @@
 #include "osr/routing/entry_storage.h"
 #include "osr/routing/mode.h"
 #include "osr/routing/path.h"
+#include "osr/routing/profile.h"
 #include "osr/routing/profiles/common.h"
 #include "osr/routing/sharing_data.h"
 #include "osr/routing/turns.h"
@@ -42,7 +43,6 @@ struct hgv_slot {
 struct hgv {
   static constexpr auto const kName = "hgv";
   static constexpr auto const kMaxMatchDistance = 200U;
-  static constexpr auto const kExactBidirectional = true;
   static constexpr auto const kDetourCostFactor = 0.9F;
 
   using key = node_idx_t;
@@ -223,31 +223,52 @@ struct hgv {
   }
 
   template <typename Fn>
-  static void resolve_start_node(ways::routing const& w,
-                                 way_idx_t const way,
-                                 node_idx_t const n,
-                                 level_t,
-                                 direction,
-                                 Fn&& f) {
-    auto const ways = w.node_ways_[n];
-    for (auto i = way_pos_t{0U}; i != ways.size(); ++i) {
-      if (ways[i] == way) {
-        f(node{n, i, direction::kForward});
-        f(node{n, i, direction::kBackward});
-      }
-    }
-  }
-
-  template <typename Fn>
-  static void resolve_all(ways::routing const& w,
-                          node_idx_t const n,
-                          level_t,
-                          Fn&& f) {
+  static void resolve_all(ways::routing const& w, node_idx_t const n, Fn&& f) {
     auto const ways = w.node_ways_[n];
     for (auto i = way_pos_t{0U}; i != ways.size(); ++i) {
       f(node{n, i, direction::kForward});
       f(node{n, i, direction::kBackward});
     }
+  }
+
+  template <typename Fn>
+  static void resolve_endpoint(ways::routing const& w,
+                               way_idx_t const way,
+                               node_idx_t const n,
+                               level_t,
+                               route_end,
+                               endpoint_role const role,
+                               Fn&& f) {
+    resolve_way_aware_endpoint<hgv>(w, way, n, role, std::forward<Fn>(f));
+  }
+
+  static cost_and_duration endpoint_transition_cost(
+      parameters const& params,
+      ways::routing const& w,
+      timezone_cache_t const& timezones,
+      node const n,
+      way_idx_t const way,
+      direction const way_dir,
+      direction const search_dir,
+      std::optional<routing_time_t> const start_time,
+      duration_t const current_duration) {
+    auto const transition_node =
+        search_dir == direction::kForward ? n : get_reverse(n);
+    auto const transition_dir =
+        search_dir == direction::kForward ? way_dir : opposite(way_dir);
+    return get_endpoint_transition_cost<hgv>(
+        params, w, transition_node, way, transition_dir, params.uturn_penalty_,
+        [&](way_pos_t const way_pos) {
+          return !is_restricted(params, w, timezones, n.n_, n.way_, way_pos,
+                                search_dir, start_time, current_duration,
+                                search_dir);
+        });
+  }
+
+  static constexpr bool endpoint_root_allowed(parameters const&,
+                                              node const n,
+                                              direction const way_dir) {
+    return n.dir_ == way_dir;
   }
 
   template <direction SearchDir, bool WithBlocked, typename Fn>
@@ -292,9 +313,9 @@ struct hgv {
             }
 
             auto const [target, cost, duration] =
-                get_adjacent_additional_node<hgv>(params, w, n, additional, ae,
-                                                  edge_dir, edge_cost,
-                                                  params.uturn_penalty_);
+                get_adjacent_additional_node<hgv, SearchDir>(
+                    params, w, n, additional, ae, edge_dir, edge_cost,
+                    params.uturn_penalty_);
             if (cost == kInfeasible) {
               return;
             }
@@ -362,7 +383,7 @@ struct hgv {
   static bool is_dest_reachable(parameters const& params,
                                 ways::routing const& w,
                                 timezone_cache_t const& timezones,
-                                node const n,
+                                node const,
                                 way_idx_t const way,
                                 direction const way_dir,
                                 direction const search_dir,
@@ -372,12 +393,6 @@ struct hgv {
     if (way_cost(params, w, timezones, way, target_way_prop, way_dir, 0U,
                  start_time, current_duration, search_dir)
             .cost_ == kInfeasible) {
-      return false;
-    }
-
-    if (is_restricted(params, w, timezones, n.n_, n.way_,
-                      w.get_way_pos(n.n_, way), search_dir, start_time,
-                      current_duration, search_dir)) {
       return false;
     }
 
@@ -444,6 +459,22 @@ struct hgv {
                                            state.max_speed_km_h_)};
   }
 
+  static cost_and_duration endpoint_way_cost(
+      parameters const& params,
+      ways::routing const& w,
+      timezone_cache_t const& timezones,
+      node const,
+      way_idx_t const way,
+      way_properties const& properties,
+      direction const way_dir,
+      distance_t const distance,
+      std::optional<routing_time_t> const start_time,
+      duration_t const current_duration,
+      direction const search_dir) {
+    return way_cost(params, w, timezones, way, properties, way_dir, distance,
+                    start_time, current_duration, search_dir);
+  }
+
   static constexpr cost_and_duration node_cost(parameters const&,
                                                node_properties const& n) {
     return n.is_car_accessible() ? cost_and_duration_from_cost(0U)
@@ -462,6 +493,15 @@ struct hgv {
     return cost;
   }
 
+  static constexpr cost_and_duration endpoint_node_cost(
+      parameters const& params, node const, node_properties const& n) {
+    return node_cost(params, n);
+  }
+
+  static bool endpoint_way_feasible(parameters const& params,
+                                    endpoint_way_query const& q) {
+    return q.feasible<hgv>(params);
+  }
   static double lower_bound_heuristic(parameters const& params,
                                       double const dist) {
     return (3.6 / static_cast<double>(params.top_speed_km_h_)) * dist;

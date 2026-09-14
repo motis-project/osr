@@ -8,6 +8,7 @@
 #include "osr/routing/entry_storage_arena.h"
 #include "osr/routing/mode.h"
 #include "osr/routing/path.h"
+#include "osr/routing/profile.h"
 #include "osr/routing/tracking.h"
 #include "osr/ways.h"
 
@@ -25,13 +26,7 @@ struct foot {
   };
 
   struct node {
-    friend bool operator==(node const a, node const b) {
-      auto const is_zero = [](level_t const l) {
-        return l == kNoLevel || l == level_t{0.F};
-      };
-      return a.n_ == b.n_ &&
-             (a.lvl_ == b.lvl_ || (is_zero(a.lvl_) && is_zero(b.lvl_)));
-    }
+    friend constexpr bool operator==(node const&, node const&) = default;
 
     friend constexpr bool operator<(node const& a, node const& b) noexcept {
       return std::tie(a.n_, a.lvl_) < std::tie(b.n_, b.lvl_);
@@ -126,10 +121,9 @@ struct foot {
     using is_avalanching = void;
     auto operator()(auto const n) const noexcept -> std::uint64_t {
       using namespace ankerl::unordered_dense::detail;
-      return wyhash::mix(
-          wyhash::hash(static_cast<std::uint64_t>(
-              to_idx(n.lvl_ == kNoLevel ? level_t{0.F} : n.lvl_))),
-          wyhash::hash(static_cast<std::uint64_t>(to_idx(n.n_))));
+      auto const packed = (static_cast<std::uint64_t>(to_idx(n.lvl_)) << 32U) |
+                          static_cast<std::uint64_t>(to_idx(n.n_));
+      return wyhash::hash(packed);
     }
   };
 
@@ -141,45 +135,77 @@ struct foot {
   }
 
   template <typename Fn>
-  static void resolve_start_node(ways::routing const& w,
-                                 way_idx_t const way,
-                                 node_idx_t const n,
-                                 level_t const lvl,
-                                 direction,
-                                 Fn&& f) {
-    auto const p = w.way_properties_[way];
-    if (lvl == kNoLevel ||
-        (p.from_level() == lvl || p.to_level() == lvl ||
-         can_use_elevator(w, n, lvl)) ||
-        (lvl == level_t{0.F} &&
-         (p.from_level() == kNoLevel && p.to_level() == kNoLevel))) {
-      f(node{n, p.from_level()});
+  static void for_each_node_level(ways::routing const& w,
+                                  node_idx_t const n,
+                                  Fn&& f) {
+    auto levels = level_bits_t{0U};
+    auto const emit = [&](level_t const lvl) {
+      auto const mask = level_bits_t{1U} << to_idx(lvl);
+      if ((levels & mask) == 0U) {
+        levels |= mask;
+        f(node{n, lvl});
+      }
+    };
+    resolve_all(w, n, [&](node const x) { emit(x.lvl_); });
+    if (w.node_properties_[n].is_elevator()) {
+      for_each_elevator_level(w, n, emit);
     }
   }
 
   template <typename Fn>
-  static void resolve_all(ways::routing const& w,
-                          node_idx_t const n,
-                          level_t const lvl,
-                          Fn&& f) {
-    auto const ways = w.node_ways_[n];
-    auto levels = hash_set<level_t>{};
-    for (auto i = way_pos_t{0U}; i != ways.size(); ++i) {
-      // TODO what's with stairs? need to resolve to from_level or to_level?
-      auto const p = w.way_properties_[w.node_ways_[n][i]];
-      if (lvl == kNoLevel) {
-        if (levels.emplace(p.from_level()).second) {
-          f(node{n, p.from_level()});
-        }
-        if (levels.emplace(p.to_level()).second) {
-          f(node{n, p.to_level()});
-        }
-      } else if ((p.from_level() == lvl || p.to_level() == lvl ||
-                  p.from_level() == kNoLevel || can_use_elevator(w, n, lvl)) &&
-                 levels.emplace(lvl).second) {
-        f(node{n, lvl});
+  static void resolve_all(ways::routing const& w, node_idx_t const n, Fn&& f) {
+    auto levels = std::uint64_t{0U};
+    auto const emit = [&](level_t const l) {
+      auto const mask = std::uint64_t{1U} << to_idx(l);
+      if ((levels & mask) == 0U) {
+        levels |= mask;
+        f(node{n, l});
       }
+    };
+    for (auto const way : w.node_ways_[n]) {
+      // TODO what's with stairs? need to resolve to from_level or to_level?
+      auto const p = w.way_properties_[way];
+      emit(p.from_level());
+      emit(p.to_level());
     }
+  }
+
+  template <typename Fn>
+  static void resolve_endpoint(ways::routing const& w,
+                               way_idx_t const way,
+                               node_idx_t const n,
+                               level_t const lvl,
+                               route_end const end,
+                               endpoint_role,
+                               Fn&& f) {
+    auto const p = w.way_properties_[way];
+    auto const level_compatible =
+        lvl == kNoLevel || p.from_level() == lvl || p.to_level() == lvl ||
+        can_use_elevator(w, n, lvl) ||
+        (lvl == level_t{0.F} && p.from_level() == kNoLevel &&
+         p.to_level() == kNoLevel);
+    if (!level_compatible) {
+      return;
+    }
+
+    auto const node_side_level = [&]() {
+      if ((p.is_steps() || p.is_ramp()) && n == w.way_nodes_[way].back()) {
+        return p.to_level();
+      }
+      return p.from_level();
+    }();
+    if (end == route_end::kOrigin) {
+      f(node{n, node_side_level});
+      return;
+    }
+
+    for_each_node_level(w, n, [&](node const candidate) {
+      if (node_side_level == kNoLevel || candidate.lvl_ == kNoLevel ||
+          candidate.lvl_ == node_side_level ||
+          can_use_elevator(w, n, candidate.lvl_, node_side_level)) {
+        f(candidate);
+      }
+    });
   }
 
   template <direction SearchDir, bool WithBlocked, typename Fn>
@@ -199,14 +225,16 @@ struct foot {
                               std::uint16_t const to) {
         // NOLINTNEXTLINE(clang-analyzer-core.CallAndMessage)
         auto const target_node = w.way_nodes_[way][to];
+        auto const cost_node =
+            SearchDir == direction::kForward ? target_node : n.n_;
         if constexpr (WithBlocked) {
-          if (blocked->test(target_node)) {
+          if (blocked->test(cost_node)) {
             return;
           }
         }
 
-        auto const target_node_prop = w.node_properties_[target_node];
-        if (node_cost(params, target_node_prop).cost_ == kInfeasible) {
+        auto const cost_node_prop = w.node_properties_[cost_node];
+        if (node_cost(params, cost_node_prop).cost_ == kInfeasible) {
           return;
         }
 
@@ -217,32 +245,41 @@ struct foot {
           return;
         }
 
-        if (can_use_elevator(w, target_node, n.lvl_)) {
-          for_each_elevator_level(
-              w, target_node, [&](level_t const target_lvl) {
-                auto const dist =
-                    w.get_way_node_distance(way, std::min(from, to));
-                auto const step =
-                    clamp_add(way_cost(params, w, timezones, way,
-                                       target_way_prop, way_dir, dist,
-                                       start_time, current_duration, SearchDir),
-                              node_cost(params, target_node_prop));
-                fn(node{target_node, target_lvl}, step.cost_, step.duration_,
-                   dist, way, from, to, elevation_storage::elevation{}, false);
-              });
-        } else {
-          auto const target_lvl = get_target_level(w, n.n_, n.lvl_, way);
-          if (!target_lvl.has_value()) {
-            return;
-          }
-
+        auto const emit = [&](level_t const target_lvl) {
           auto const dist = w.get_way_node_distance(way, std::min(from, to));
           auto const step = clamp_add(
               way_cost(params, w, timezones, way, target_way_prop, way_dir,
                        dist, start_time, current_duration, SearchDir),
-              node_cost(params, target_node_prop));
-          fn(node{target_node, *target_lvl}, step.cost_, step.duration_, dist,
+              node_cost(params, cost_node_prop));
+          fn(node{target_node, target_lvl}, step.cost_, step.duration_, dist,
              way, from, to, elevation_storage::elevation{}, false);
+        };
+
+        if constexpr (SearchDir == direction::kForward) {
+          if (can_use_elevator(w, target_node, n.lvl_)) {
+            for_each_elevator_level(w, target_node, emit);
+          } else if (auto const target_lvl =
+                         get_target_level(w, n.n_, n.lvl_, way);
+                     target_lvl.has_value()) {
+            emit(*target_lvl);
+          }
+        } else {
+          for_each_node_level(w, target_node, [&](node const predecessor) {
+            auto const predecessor_lvl = predecessor.lvl_;
+            if (can_use_elevator(w, n.n_, predecessor_lvl)) {
+              auto reaches_current = false;
+              for_each_elevator_level(w, n.n_, [&](level_t const lvl) {
+                reaches_current = reaches_current || lvl == n.lvl_;
+              });
+              if (reaches_current) {
+                emit(predecessor_lvl);
+              }
+            } else if (auto const reached = get_target_level(
+                           w, target_node, predecessor_lvl, way);
+                       reached.has_value() && node{n.n_, *reached} == n) {
+              emit(predecessor_lvl);
+            }
+          });
         }
       };
 
@@ -303,7 +340,8 @@ struct foot {
       } else {
         return std::nullopt;
       }
-    } else if (can_use_elevator(w, to_way, from_level)) {
+    } else if (from_level != kNoLevel &&
+               can_use_elevator(w, to_way, from_level)) {
       return from_level;
     } else if (can_use_elevator(w, from_node, way_prop.from_level(),
                                 from_level)) {
@@ -393,6 +431,51 @@ struct foot {
                                   (e.is_big_street_ ? -0.2 : 0) +
                                   (e.motor_vehicle_no_ ? 0.1 : 0.0))));
     return {.cost_ = cost, .duration_ = duration};
+  }
+
+  static constexpr cost_and_duration endpoint_way_cost(
+      parameters const& params,
+      ways::routing const& w,
+      timezone_cache_t const& timezones,
+      node const,
+      way_idx_t const way,
+      way_properties const& properties,
+      direction const way_dir,
+      distance_t const distance,
+      std::optional<routing_time_t> const start_time,
+      duration_t const current_duration,
+      direction const search_dir) {
+    return way_cost(params, w, timezones, way, properties, way_dir, distance,
+                    start_time, current_duration, search_dir);
+  }
+
+  static constexpr bool endpoint_root_allowed(parameters const&,
+                                              node const,
+                                              direction) {
+    return true;
+  }
+
+  static constexpr cost_and_duration endpoint_transition_cost(
+      parameters const&,
+      ways::routing const&,
+      timezone_cache_t const&,
+      node const,
+      way_idx_t,
+      direction,
+      direction,
+      std::optional<routing_time_t>,
+      duration_t) {
+    return {};
+  }
+
+  static constexpr cost_and_duration endpoint_node_cost(
+      parameters const& params, node const, node_properties const& n) {
+    return node_cost(params, n);
+  }
+
+  static bool endpoint_way_feasible(parameters const& params,
+                                    endpoint_way_query const& q) {
+    return q.template feasible<typename parameters::profile_t>(params);
   }
 
   static constexpr cost_and_duration node_cost(parameters const&,

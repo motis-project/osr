@@ -667,7 +667,7 @@ struct geojson_writer {
   void finish(Dijkstra const& s) {
     write_nodes([&](node_idx_t const n) {
       auto ss = std::stringstream{};
-      Dijkstra::profile_t::resolve_all(*w_.r_, n, kNoLevel, [&](auto const x) {
+      Dijkstra::profile_t::resolve_all(*w_.r_, n, [&](auto const x) {
         auto const cost = s.get_cost(x);
         if (cost != kInfeasible) {
           ss << "{";

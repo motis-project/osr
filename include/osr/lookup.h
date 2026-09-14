@@ -298,23 +298,14 @@ struct lookup {
     if (!nc.valid()) {
       return;
     }
-    if (!is_way_node_feasible<P>(params, way, nc.node_, query, reverse,
-                                 search_dir)) {
+    auto const cost =
+        get_candidate_cost<P>(params, way, nc.node_, nc.dist_to_node_, way_dir,
+                              query, reverse, search_dir, start_time);
+    if (!cost.has_value() || (blocked != nullptr && blocked->test(nc.node_))) {
       nc.node_ = node_idx_t::invalid();
       return;
     }
-    auto const way_prop = ways_.r_->way_properties_[way];
-    auto const edge_dir = reverse ? opposite(way_dir) : way_dir;
-    auto const cost = P::way_cost(params, *ways_.r_, ways_.timezones_, way,
-                                  way_prop, flip(search_dir, edge_dir),
-                                  static_cast<distance_t>(nc.dist_to_node_),
-                                  start_time, duration_t{0}, search_dir);
-    if (cost.cost_ != kInfeasible &&
-        (blocked == nullptr || !blocked->test(nc.node_))) {
-      nc.cost_ = cost.cost_;
-    } else {
-      nc.node_ = node_idx_t::invalid();
-    }
+    nc.cost_ = *cost;
   }
 
   // Recomputes the geometry between the query position and the candidate
@@ -465,21 +456,37 @@ struct lookup {
   }
 
   template <Profile P>
-  bool is_way_node_feasible(P::parameters const& params,
-                            way_idx_t const way,
-                            node_idx_t const node_idx,
-                            location const& query,
-                            bool const reverse,
-                            direction const search_dir) const {
+  std::optional<cost_t> get_candidate_cost(
+      P::parameters const& params,
+      way_idx_t const way,
+      node_idx_t const node_idx,
+      double const distance,
+      direction const way_dir,
+      location const& query,
+      bool const reverse,
+      direction const search_dir,
+      std::optional<routing_time_t> const start_time) const {
     auto const node_prop = ways_.r_->node_properties_[node_idx];
-    if (P::node_cost(params, node_prop).cost_ == kInfeasible) {
-      return false;
-    }
-    auto found = false;
-    P::resolve_start_node(*ways_.r_, way, node_idx, query.lvl_,
-                          reverse ? opposite(search_dir) : search_dir,
-                          [&](auto const) { found = true; });
-    return found;
+    auto const way_prop = ways_.r_->way_properties_[way];
+    auto const edge_dir = reverse ? opposite(way_dir) : way_dir;
+    auto best = std::optional<cost_t>{};
+    P::resolve_endpoint(
+        *ways_.r_, way, node_idx, query.lvl_,
+        route_end_of(reverse ? opposite(search_dir) : search_dir),
+        endpoint_role::kRoot, [&](auto const resolved) {
+          if (!P::endpoint_node_cost(params, resolved, node_prop).feasible()) {
+            return;
+          }
+          auto const way_cost = P::endpoint_way_cost(
+              params, *ways_.r_, ways_.timezones_, resolved, way, way_prop,
+              flip(search_dir, edge_dir), static_cast<distance_t>(distance),
+              start_time, duration_t{0}, search_dir);
+          if (way_cost.feasible() &&
+              (!best.has_value() || way_cost.cost_ < *best)) {
+            best = way_cost.cost_;
+          }
+        });
+    return best;
   }
 
   template <Profile P>
@@ -498,12 +505,18 @@ struct lookup {
       size_t segment_idx,
       std::optional<routing_time_t> const start_time = std::nullopt,
       std::vector<geo::latlng>* path = nullptr) const {
-    auto const way_prop = ways_.r_->way_properties_[way];
     auto const edge_dir = reverse ? opposite(dir) : dir;
-    if (P::way_cost(params, *ways_.r_, ways_.timezones_, way, way_prop,
-                    flip(search_dir, edge_dir), 0U, start_time, duration_t{0},
-                    search_dir)
-            .cost_ == kInfeasible) {
+    if (!P::endpoint_way_feasible(
+            params,
+            endpoint_way_query{.w_ = *ways_.r_,
+                               .timezones_ = ways_.timezones_,
+                               .way_ = way,
+                               .props_ = ways_.r_->way_properties_[way],
+                               .way_dir_ = flip(search_dir, edge_dir),
+                               .search_dir_ = search_dir,
+                               .end_ = route_end_of(
+                                   reverse ? opposite(search_dir) : search_dir),
+                               .start_time_ = start_time})) {
       return candidate_node{};
     }
 
@@ -516,36 +529,34 @@ struct lookup {
     auto const polyline = ways_.way_polylines_[way];
     auto const osm_nodes = ways_.way_osm_nodes_[way];
 
-    till_the_end(
-        segment_idx + (dir == direction::kForward ? 1U : 0U),
-        utl::zip(polyline, osm_nodes), dir, [&](auto&& x) {
-          auto const& [pos, osm_node_idx] = x;
+    till_the_end(segment_idx + (dir == direction::kForward ? 1U : 0U),
+                 utl::zip(polyline, osm_nodes), dir, [&](auto&& x) {
+                   auto const& [pos, osm_node_idx] = x;
 
-          auto const segment_dist = std::sqrt(geo::approx_squared_distance(
-              last_path_pos, pos, approx_distance_lng_degrees));
-          c.dist_to_node_ += segment_dist;
-          last_path_pos = pos;
-          if (path != nullptr) {
-            path->push_back(pos);
-          }
+                   auto const segment_dist =
+                       std::sqrt(geo::approx_squared_distance(
+                           last_path_pos, pos, approx_distance_lng_degrees));
+                   c.dist_to_node_ += segment_dist;
+                   last_path_pos = pos;
+                   if (path != nullptr) {
+                     path->push_back(pos);
+                   }
 
-          auto const way_node = ways_.find_node_idx(osm_node_idx);
-          if (way_node.has_value()) {
-            if (is_way_node_feasible<P>(params, way, *way_node, query, reverse,
-                                        search_dir) &&
-                (blocked == nullptr || !blocked->test(*way_node))) {
-              c.node_ = *way_node;
-              c.cost_ = P::way_cost(params, *ways_.r_, ways_.timezones_, way,
-                                    way_prop, flip(search_dir, edge_dir),
-                                    static_cast<distance_t>(c.dist_to_node_),
-                                    start_time, duration_t{0}, search_dir)
-                            .cost_;
-            }
-            return utl::cflow::kBreak;
-          }
+                   auto const way_node = ways_.find_node_idx(osm_node_idx);
+                   if (way_node.has_value()) {
+                     auto const cost = get_candidate_cost<P>(
+                         params, way, *way_node, c.dist_to_node_, dir, query,
+                         reverse, search_dir, start_time);
+                     if (cost.has_value() &&
+                         (blocked == nullptr || !blocked->test(*way_node))) {
+                       c.node_ = *way_node;
+                       c.cost_ = *cost;
+                     }
+                     return utl::cflow::kBreak;
+                   }
 
-          return utl::cflow::kContinue;
-        });
+                   return utl::cflow::kContinue;
+                 });
 
     if (path != nullptr && (reverse ^ (search_dir == direction::kBackward))) {
       std::reverse(begin(*path), end(*path));
