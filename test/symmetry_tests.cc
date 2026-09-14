@@ -408,22 +408,29 @@ TEST(symmetry, sharing_random_pairs_forward_backward_equivalence) {
         auto const from = rnd_loc();
         auto const to = rnd_loc();
         for (auto const& [params, profile] : profiles) {
-          auto const fwd =
-              osr::route(params, w, l, profile, from, to, osr::cost_t{3600U},
-                         osr::direction::kForward, 100.0, nullptr, &sharing);
-          auto const bwd =
-              osr::route(params, w, l, profile, to, from, osr::cost_t{3600U},
-                         osr::direction::kBackward, 100.0, nullptr, &sharing);
-          auto const ctx = [&]() {
-            auto ss = std::stringstream{};
-            ss << map << " " << osr::to_str(profile) << " cfg" << cfg
-               << " from=" << from.pos_ << " to=" << to.pos_;
-            return ss.str();
-          };
-          ASSERT_EQ(fwd.has_value(), bwd.has_value()) << ctx();
-          if (fwd.has_value()) {
-            EXPECT_EQ(fwd->cost_, bwd->cost_) << ctx();
-            EXPECT_EQ(fwd->duration_, bwd->duration_) << ctx();
+          for (auto const exact : {false, true}) {
+            auto const fwd = osr::route(
+                params, w, l, profile, from, to, osr::cost_t{3600U},
+                osr::direction::kForward, 100.0, nullptr, &sharing, nullptr,
+                osr::routing_algorithm::kDijkstra, std::nullopt,
+                osr::route_options{.exact_return_at_to_ = {exact}});
+            auto const bwd = osr::route(
+                params, w, l, profile, to, from, osr::cost_t{3600U},
+                osr::direction::kBackward, 100.0, nullptr, &sharing, nullptr,
+                osr::routing_algorithm::kDijkstra, std::nullopt,
+                osr::route_options{.exact_return_at_from_ = exact});
+            auto const ctx = [&]() {
+              auto ss = std::stringstream{};
+              ss << map << " " << osr::to_str(profile) << " cfg" << cfg
+                 << (exact ? " exact-return" : "") << " from=" << from.pos_
+                 << " to=" << to.pos_;
+              return ss.str();
+            };
+            ASSERT_EQ(fwd.has_value(), bwd.has_value()) << ctx();
+            if (fwd.has_value()) {
+              EXPECT_EQ(fwd->cost_, bwd->cost_) << ctx();
+              EXPECT_EQ(fwd->duration_, bwd->duration_) << ctx();
+            }
           }
         }
       }
