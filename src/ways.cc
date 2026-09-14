@@ -255,13 +255,7 @@ void ways::connect_ways() {
 
               if (node_way_counter_.is_multi(to_idx(osm_node_idx))) {
                 auto const to = get_node_idx(osm_node_idx);
-                auto const rank =
-                    count[to_idx(to)].fetch_add(1U, std::memory_order_relaxed);
-                if (rank >= kMaxWaysPerNode) {
-                  pred_pos = pos;
-                  continue;
-                }
-
+                count[to_idx(to)].fetch_add(1U, std::memory_order_relaxed);
                 c.nodes_.push_back(to);
 
                 if (from != node_idx_t::invalid()) {
@@ -314,9 +308,10 @@ void ways::connect_ways() {
 
     // Reserve node_ways_ / node_in_way_idx_ for each node.
     for (auto n = std::size_t{0U}; n != n_nodes; ++n) {
-      auto const size =
-          std::min(count[n].exchange(0U, std::memory_order_relaxed),
-                   static_cast<std::uint32_t>(kMaxWaysPerNode));
+      auto const size = count[n].exchange(0U, std::memory_order_relaxed);
+      utl::verify(size <= kMaxWaysPerNode,
+                  "node {} (osm={}) has {} ways, maximum is {}", n,
+                  node_to_osm_[node_idx_t{n}], size, kMaxWaysPerNode);
       r_->node_ways_.add_back_sized(size);
       r_->node_in_way_idx_.add_back_sized(size);
     }

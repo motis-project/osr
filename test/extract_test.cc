@@ -245,7 +245,7 @@ TEST(extract, bus_only_on_highway) {
   ASSERT_TRUE(wp.is_foot_accessible());
 }
 
-TEST(extract, ignores_ways_exceeding_max_ways_per_node) {
+TEST(extract, accept_node_with_many_ways) {
   auto const p = fs::temp_directory_path() / "osr_24_way_node_test";
   auto ec = std::error_code{};
   fs::remove_all(p, ec);
