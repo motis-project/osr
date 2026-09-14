@@ -1,3 +1,4 @@
+#include <chrono>
 #include <filesystem>
 #include <fstream>
 
@@ -16,7 +17,7 @@ namespace fs = std::filesystem;
 
 // Geometry tests allow endpoint matching penalties; cost_budget_test covers
 // tight limits.
-constexpr auto kTestMaxCost = osr::cost_t{100'000U};
+constexpr auto kTestMaxDuration = std::chrono::seconds{60000};
 
 std::string extract_and_route(
     std::string_view path,
@@ -36,7 +37,7 @@ std::string extract_and_route(
   auto w = osr::ways{dir, cista::mmap::protection::READ};
   auto l = osr::lookup{w, dir, cista::mmap::protection::READ};
 
-  auto const p = osr::route(params, w, l, profile, from, {to}, kTestMaxCost,
+  auto const p = osr::route(params, w, l, profile, from, {to}, kTestMaxDuration,
                             osr::direction::kForward, max_match_distance,
                             nullptr, nullptr, nullptr);
   utl::verify(p.has_value(), "{}: from={} to={} -> no route", path,
@@ -83,8 +84,8 @@ TEST(routing, sharing_geofencing_does_not_restrict_walking) {
          {osr::direction::kForward, osr::direction::kBackward}) {
       auto const route =
           osr::route(osr::get_parameters(profile), w, l, profile, from, to,
-                     osr::cost_t{900}, direction, 250.0, nullptr, &sharing,
-                     nullptr, osr::routing_algorithm::kDijkstra);
+                     std::chrono::seconds{900}, direction, 250.0, nullptr,
+                     &sharing, nullptr, osr::routing_algorithm::kDijkstra);
       EXPECT_TRUE(route.has_value())
           << osr::to_str(profile) << " " << osr::to_str(direction);
     }
@@ -279,8 +280,8 @@ TEST(routing, aplerbeck_levels) {
 
   auto const route_fwd =
       osr::route(foot_params, w, l, osr::search_profile::kFoot, station, south,
-                 osr::cost_t{900}, osr::direction::kForward, 250.0, nullptr,
-                 nullptr, nullptr, osr::routing_algorithm::kDijkstra);
+                 std::chrono::seconds{900}, osr::direction::kForward, 250.0,
+                 nullptr, nullptr, nullptr, osr::routing_algorithm::kDijkstra);
   EXPECT_TRUE(route_fwd.has_value());
   if (debug) {
     std::cout << "\n=== FORWARD (station lvl=1 -> south) ===\n"
@@ -291,8 +292,8 @@ TEST(routing, aplerbeck_levels) {
 
   auto const route_bwd =
       osr::route(foot_params, w, l, osr::search_profile::kFoot, south, station,
-                 osr::cost_t{900}, osr::direction::kBackward, 250.0, nullptr,
-                 nullptr, nullptr, osr::routing_algorithm::kDijkstra);
+                 std::chrono::seconds{900}, osr::direction::kBackward, 250.0,
+                 nullptr, nullptr, nullptr, osr::routing_algorithm::kDijkstra);
   EXPECT_TRUE(route_bwd.has_value());
   if (debug) {
     std::cout << "\n=== BACKWARD (south -> station lvl=1) ===\n"
@@ -307,10 +308,10 @@ TEST(routing, aplerbeck_levels) {
 
   auto const south_lvl0 = osr::location{51.493164, 7.556224, osr::level_t{0.F}};
 
-  auto const route_fwd_lvl0 =
-      osr::route(foot_params, w, l, osr::search_profile::kFoot, station,
-                 south_lvl0, osr::cost_t{900}, osr::direction::kForward, 250.0,
-                 nullptr, nullptr, nullptr, osr::routing_algorithm::kDijkstra);
+  auto const route_fwd_lvl0 = osr::route(
+      foot_params, w, l, osr::search_profile::kFoot, station, south_lvl0,
+      std::chrono::seconds{900}, osr::direction::kForward, 250.0, nullptr,
+      nullptr, nullptr, osr::routing_algorithm::kDijkstra);
   EXPECT_TRUE(route_fwd_lvl0.has_value());
   if (debug) {
     std::cout << "\n=== FORWARD (station lvl=1 -> south lvl=0) ===\n"
@@ -319,10 +320,10 @@ TEST(routing, aplerbeck_levels) {
   }
   write_graph("forward_lvl0");
 
-  auto const route_bwd_lvl0 =
-      osr::route(foot_params, w, l, osr::search_profile::kFoot, south_lvl0,
-                 station, osr::cost_t{900}, osr::direction::kBackward, 250.0,
-                 nullptr, nullptr, nullptr, osr::routing_algorithm::kDijkstra);
+  auto const route_bwd_lvl0 = osr::route(
+      foot_params, w, l, osr::search_profile::kFoot, south_lvl0, station,
+      std::chrono::seconds{900}, osr::direction::kBackward, 250.0, nullptr,
+      nullptr, nullptr, osr::routing_algorithm::kDijkstra);
   EXPECT_TRUE(route_bwd_lvl0.has_value());
   if (debug) {
     std::cout << "\n=== BACKWARD (south lvl=0 -> station lvl=1) ===\n"

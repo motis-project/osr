@@ -1,3 +1,4 @@
+#include <chrono>
 #include <filesystem>
 #include <limits>
 #include <numeric>
@@ -7,6 +8,7 @@
 #include "osr/extract/extract.h"
 #include "osr/lookup.h"
 #include "osr/routing/bidirectional.h"
+#include "osr/routing/cost_search_limit.h"
 #include "osr/routing/dijkstra.h"
 #include "osr/routing/profiles/car.h"
 #include "osr/routing/profiles/foot.h"
@@ -36,15 +38,15 @@ struct endpoint_routing : testing::Test {
   <node id="10" lat="49.2" lon="8.002"><tag k="highway" v="elevator"/><tag k="level" v="0;1"/></node>
   <node id="11" lat="49.2" lon="8.003"/>
   <node id="12" lat="49.2" lon="8.004"/>
-  <way id="8"><nd ref="8"/><nd ref="9"/><tag k="highway" v="footway"/></way>
-  <way id="9"><nd ref="9"/><nd ref="10"/><tag k="highway" v="footway"/></way>
-  <way id="10"><nd ref="10"/><nd ref="11"/><tag k="highway" v="footway"/></way>
-  <way id="11"><nd ref="11"/><nd ref="12"/><tag k="highway" v="footway"/></way>
   <way id="1"><nd ref="1"/><nd ref="2"/><tag k="highway" v="residential"/></way>
   <way id="2"><nd ref="2"/><nd ref="3"/><tag k="highway" v="residential"/></way>
   <way id="3"><nd ref="4"/><nd ref="5"/><tag k="highway" v="footway"/></way>
   <way id="4"><nd ref="4"/><nd ref="6"/><tag k="highway" v="footway"/></way>
   <way id="5"><nd ref="5"/><nd ref="7"/><tag k="highway" v="footway"/></way>
+  <way id="8"><nd ref="8"/><nd ref="9"/><tag k="highway" v="footway"/></way>
+  <way id="9"><nd ref="9"/><nd ref="10"/><tag k="highway" v="footway"/></way>
+  <way id="10"><nd ref="10"/><nd ref="11"/><tag k="highway" v="footway"/></way>
+  <way id="11"><nd ref="11"/><nd ref="12"/><tag k="highway" v="footway"/></way>
 </osm>)"),
             dir_, {});
     w_ = std::make_unique<ways>(dir_, cista::mmap::protection::READ);
@@ -96,15 +98,16 @@ TEST_F(endpoint_routing, elevator_tracking_includes_both_halves_and_roots) {
       auto const bwd = dir == direction::kBackward;
       for (auto const algo :
            {routing_algorithm::kDijkstra, routing_algorithm::kAStarBi}) {
-        auto const p = route(params, *w_, *l_, search_profile::kFoot,
-                             bwd ? to : from, bwd ? from : to, 3600U, dir, 2.0,
-                             nullptr, nullptr, nullptr, algo);
+        auto const p =
+            route(params, *w_, *l_, search_profile::kFoot, bwd ? to : from,
+                  bwd ? from : to, std::chrono::seconds{3600}, dir, 2.0,
+                  nullptr, nullptr, nullptr, algo);
         ASSERT_TRUE(p.has_value());
         EXPECT_TRUE(p->uses_elevator_);
       }
       auto const p =
           route_astar(params, *w_, *l_, search_profile::kFoot, bwd ? to : from,
-                      bwd ? from : to, 3600U, dir, 2.0);
+                      bwd ? from : to, std::chrono::seconds{3600}, dir, 2.0);
       ASSERT_TRUE(p.has_value());
       EXPECT_TRUE(p->uses_elevator_);
     }
@@ -117,12 +120,13 @@ TEST_F(endpoint_routing,
   auto const from = location{49.195, 8.00099};
   auto const to = location{49.205, 8.00099};
   for (auto const dir : {direction::kForward, direction::kBackward}) {
-    auto const d = route_dijkstra(params, *w_, *l_, search_profile::kWheelchair,
-                                  from, to, 1200U, dir, 600.0);
+    auto const d =
+        route_dijkstra(params, *w_, *l_, search_profile::kWheelchair, from, to,
+                       std::chrono::seconds{1200}, dir, 600.0);
     ASSERT_TRUE(d.has_value());
     auto const b =
         route_bidirectional(params, *w_, *l_, search_profile::kWheelchair, from,
-                            to, 1200U, dir, 600.0);
+                            to, std::chrono::seconds{1200}, dir, 600.0);
     ASSERT_TRUE(b.has_value());
     EXPECT_EQ(b->cost_, d->cost_);
     EXPECT_EQ(b->duration_, d->duration_);
@@ -135,9 +139,10 @@ TEST_F(endpoint_routing, direct_without_affordable_graph_root) {
     auto const from = location{49.1, 8.01};
     auto const to = location{49.1, 8.01001};
     auto const single = route(params, *w_, *l_, search_profile::kFoot, from, to,
-                              100U, dir, 2.0);
-    auto const many = route(params, *w_, *l_, search_profile::kFoot, from,
-                            std::vector<location>{to}, 100U, dir, 2.0);
+                              std::chrono::seconds{100}, dir, 2.0);
+    auto const many =
+        route(params, *w_, *l_, search_profile::kFoot, from,
+              std::vector<location>{to}, std::chrono::seconds{100}, dir, 2.0);
     ASSERT_TRUE(single.has_value());
     ASSERT_EQ(many.size(), 1U);
     ASSERT_TRUE(many.front().has_value());
@@ -146,22 +151,36 @@ TEST_F(endpoint_routing, direct_without_affordable_graph_root) {
   }
 }
 
-TEST_F(endpoint_routing, unaffordable_direct_does_not_hide_graph_route) {
+// The direct path (60 s) is the only candidate for endpoints this close: a
+// tighter limit must not return a routed path instead.
+TEST_F(endpoint_routing, direct_is_independent_of_limit) {
   auto const params = get_parameters(search_profile::kFoot);
   for (auto const dir : {direction::kForward, direction::kBackward}) {
     for (auto const algo :
          {routing_algorithm::kDijkstra, routing_algorithm::kAStarBi}) {
-      for (auto const max : {30U, 60U}) {
+      for (auto const max :
+           {std::chrono::seconds{30}, std::chrono::seconds{59},
+            std::chrono::seconds{60}, std::chrono::seconds{1000}}) {
         auto const from = location{49., 8.00099};
         auto const to = location{49.00001, 8.001};
         auto const p = route(params, *w_, *l_, search_profile::kFoot, from, to,
                              max, dir, 2.0, nullptr, nullptr, nullptr, algo);
-        ASSERT_TRUE(p.has_value());
-        EXPECT_LT(p->cost_, max);
+        EXPECT_EQ(p.has_value(), max >= std::chrono::seconds{60});
+        if (p.has_value()) {
+          EXPECT_EQ(p->cost_, 60U);
+          EXPECT_EQ(p->duration_, duration_t{60U});
+        }
         auto const a = route_astar(params, *w_, *l_, search_profile::kFoot,
                                    from, to, max, dir, 2.0);
-        ASSERT_TRUE(a.has_value());
-        EXPECT_LT(a->cost_, max);
+        EXPECT_EQ(a.has_value(), max >= std::chrono::seconds{60});
+        auto const many = route(params, *w_, *l_, search_profile::kFoot, from,
+                                std::vector<location>{to}, max, dir, 2.0);
+        ASSERT_EQ(many.size(), 1U);
+        EXPECT_EQ(many.front().has_value(), max >= std::chrono::seconds{60});
+        if (a.has_value() && many.front().has_value()) {
+          EXPECT_EQ(a->cost_, 60U);
+          EXPECT_EQ(many.front()->cost_, 60U);
+        }
       }
     }
   }
@@ -175,15 +194,15 @@ TEST_F(endpoint_routing, meeting_turn_is_in_segment_totals) {
     // TODO: the bidirectional search falls back to Dijkstra when it finds
     // nothing, and there is no way to observe which of the two produced the
     // result, so this can only check that both agree.
-    auto const p =
-        route(get_parameters(search_profile::kBus), *w_, *l_,
-              search_profile::kBus, bwd ? to : from, bwd ? from : to, 3600U,
-              dir, 2.0, nullptr, nullptr, nullptr, routing_algorithm::kAStarBi);
+    auto const p = route(get_parameters(search_profile::kBus), *w_, *l_,
+                         search_profile::kBus, bwd ? to : from, bwd ? from : to,
+                         std::chrono::seconds{3600}, dir, 2.0, nullptr, nullptr,
+                         nullptr, routing_algorithm::kAStarBi);
     ASSERT_TRUE(p.has_value());
     auto const dijkstra_path = route(
         get_parameters(search_profile::kBus), *w_, *l_, search_profile::kBus,
-        bwd ? to : from, bwd ? from : to, 3600U, dir, 2.0, nullptr, nullptr,
-        nullptr, routing_algorithm::kDijkstra);
+        bwd ? to : from, bwd ? from : to, std::chrono::seconds{3600}, dir, 2.0,
+        nullptr, nullptr, nullptr, routing_algorithm::kDijkstra);
     ASSERT_TRUE(dijkstra_path.has_value());
     EXPECT_EQ(p->cost_, dijkstra_path->cost_);
     EXPECT_EQ(p->duration_, dijkstra_path->duration_);
@@ -231,15 +250,17 @@ TEST_F(endpoint_routing, geometry_follows_physical_travel) {
       auto const bwd = dir == direction::kBackward;
       auto const many =
           route(params, *w_, *l_, search_profile::kFoot, bwd ? to : from,
-                std::vector<location>{bwd ? from : to}, 100'000U, dir, 2.0,
-                nullptr, nullptr, nullptr, [](path const&) { return true; });
+                std::vector<location>{bwd ? from : to},
+                std::chrono::seconds{60000}, dir, 2.0, nullptr, nullptr,
+                nullptr, [](path const&) { return true; });
       ASSERT_TRUE(many.front().has_value());
       check_geometry(*many.front());
       for (auto const algo :
            {routing_algorithm::kDijkstra, routing_algorithm::kAStarBi}) {
-        auto const p = route(params, *w_, *l_, search_profile::kFoot,
-                             bwd ? to : from, bwd ? from : to, 100'000U, dir,
-                             2.0, nullptr, nullptr, nullptr, algo);
+        auto const p =
+            route(params, *w_, *l_, search_profile::kFoot, bwd ? to : from,
+                  bwd ? from : to, std::chrono::seconds{60000}, dir, 2.0,
+                  nullptr, nullptr, nullptr, algo);
         ASSERT_TRUE(p.has_value());
         check_geometry(*p);
         EXPECT_EQ(p->cost_, many.front()->cost_);
@@ -307,19 +328,21 @@ TEST_F(endpoint_routing, rejects_invalid_matching_penalty_factors) {
     auto const options = route_options{.matching_penalty_factor_ = factor};
     for (auto const algo :
          {routing_algorithm::kDijkstra, routing_algorithm::kAStarBi}) {
-      EXPECT_THROW(route(params, *w_, *l_, search_profile::kFoot, from, to,
-                         3600U, direction::kForward, 2.0, nullptr, nullptr,
-                         nullptr, algo, std::nullopt, options),
-                   std::exception);
+      EXPECT_THROW(
+          route(params, *w_, *l_, search_profile::kFoot, from, to,
+                std::chrono::seconds{3600}, direction::kForward, 2.0, nullptr,
+                nullptr, nullptr, algo, std::nullopt, options),
+          std::exception);
     }
-    EXPECT_THROW(route_astar(params, *w_, *l_, search_profile::kFoot, from, to,
-                             3600U, direction::kForward, 2.0, nullptr, nullptr,
-                             nullptr, std::nullopt, options),
-                 std::exception);
+    EXPECT_THROW(
+        route_astar(params, *w_, *l_, search_profile::kFoot, from, to,
+                    std::chrono::seconds{3600}, direction::kForward, 2.0,
+                    nullptr, nullptr, nullptr, std::nullopt, options),
+        std::exception);
     EXPECT_THROW(route(
                      params, *w_, *l_, search_profile::kFoot, from,
-                     std::vector<location>{to}, 3600U, direction::kForward, 2.0,
-                     nullptr, nullptr, nullptr,
+                     std::vector<location>{to}, std::chrono::seconds{3600},
+                     direction::kForward, 2.0, nullptr, nullptr, nullptr,
                      [](path const&) { return false; }, std::nullopt, options),
                  std::exception);
   }
@@ -348,12 +371,224 @@ TEST_F(endpoint_routing, matching_penalty_saturates_before_integer_conversion) {
   for (auto const factor : {0.0, 1.0e10, std::numeric_limits<double>::max()}) {
     auto const p =
         route(params, *w_, *l_, search_profile::kFoot, from, to,
-              penalized[match_idx_t{0U}], to_matches[match_idx_t{0U}], 3600U,
-              direction::kForward, nullptr, nullptr, nullptr,
-              routing_algorithm::kDijkstra, std::nullopt,
+              penalized[match_idx_t{0U}], to_matches[match_idx_t{0U}],
+              std::chrono::seconds{3600}, direction::kForward, nullptr, nullptr,
+              nullptr, routing_algorithm::kDijkstra, std::nullopt,
               route_options{.matching_penalty_factor_ = factor});
     EXPECT_EQ(p.has_value(), factor == 0.0);
   }
+}
+
+TEST_F(endpoint_routing, duration_budget_includes_both_matching_penalties) {
+  using foot_t = foot<false, elevator_tracking>;
+  auto const params = foot_t::parameters{};
+  auto const from = location{49., 8.0005};
+  auto const to = location{49.0005, 8.001};
+  auto from_matches = match_result{};
+  auto to_matches = match_result{};
+  l_->match<foot_t>(params, from, false, direction::kForward, 2.0, nullptr,
+                    from_matches);
+  l_->match<foot_t>(params, to, true, direction::kForward, 2.0, nullptr,
+                    to_matches);
+  auto const penalize = [](match_view_t const& matches) {
+    auto out = match_result{};
+    out.start(matches.lvl_);
+    out.add(0.0F, matches.way_.front(), {});
+    for (auto i = std::size_t{0U}; i != matches.size(); ++i) {
+      auto nodes = matches.nodes_[i];
+      nodes.left_.dist_to_node_ += 25.0F;
+      nodes.right_.dist_to_node_ += 25.0F;
+      out.add(matches.dist_to_way_[i] + 25.0F, matches.way_[i], nodes);
+    }
+    out.finish();
+    return out;
+  };
+  auto const fm = penalize(from_matches[match_idx_t{0U}]);
+  auto const tm = penalize(to_matches[match_idx_t{0U}]);
+  auto const baseline = route(params, *w_, *l_, search_profile::kFoot, from, to,
+                              fm[match_idx_t{0U}], tm[match_idx_t{0U}],
+                              std::chrono::seconds{10000}, direction::kForward);
+  ASSERT_TRUE(baseline.has_value());
+  auto const max_duration = std::chrono::seconds{baseline->duration_.count()};
+  EXPECT_GT(baseline->cost_, cost_search_limit(params, baseline->duration_));
+  for (auto const algo :
+       {routing_algorithm::kDijkstra, routing_algorithm::kAStarBi}) {
+    auto const p = route(params, *w_, *l_, search_profile::kFoot, from, to,
+                         fm[match_idx_t{0U}], tm[match_idx_t{0U}], max_duration,
+                         direction::kForward, nullptr, nullptr, nullptr, algo);
+    ASSERT_TRUE(p.has_value());
+    EXPECT_EQ(p->cost_, baseline->cost_);
+    EXPECT_EQ(p->duration_, baseline->duration_);
+  }
+  auto const state = route_one_to_many(params, *w_, *l_, search_profile::kFoot,
+                                       from, {to}, fm[match_idx_t{0U}], tm,
+                                       max_duration, direction::kForward);
+  ASSERT_TRUE(state->results().front().has_value());
+  auto const p = state->reconstruct(*w_, *l_, 0U, nullptr);
+  ASSERT_TRUE(p.has_value());
+  EXPECT_EQ(p->cost_, baseline->cost_);
+  EXPECT_EQ(p->duration_, baseline->duration_);
+}
+
+TEST_F(endpoint_routing, phase_two_rejects_cheaper_over_duration_winner) {
+  using foot_t = foot<false, elevator_tracking>;
+  auto const params = foot_t::parameters{};
+  auto const from = location{49.2, 8.001};
+  auto const to = location{49.2, 8.003};
+  auto const root = w_->get_node_idx(osm_node_idx_t{9U});
+  auto const goal = w_->get_node_idx(osm_node_idx_t{11U});
+  auto const first_way = *w_->find_way(osm_way_idx_t{9U});
+  auto const last_way = *w_->find_way(osm_way_idx_t{10U});
+  auto fm = match_result{};
+  fm.start(kNoLevel);
+  fm.add(0.F, first_way, {.left_ = {.node_ = root}});
+  fm.finish();
+  auto tm = match_result{};
+  tm.start(kNoLevel);
+  tm.add(0.F, last_way, {.right_ = {.node_ = goal}});
+  tm.add(20.F, first_way, {.left_ = {.node_ = root, .dist_to_node_ = 20.F}});
+  tm.finish();
+
+  // Phase 1 stops before reaching the cheap, slow destination. The root is
+  // already a feasible destination through its cost-420 matching alternative.
+  auto d = dijkstra<foot_t, false>{};
+  d.reset({.profile_ = params,
+           .w_ = w_.get(),
+           .max_ = 1000U,
+           .max_duration_ = duration_t{10U}});
+  d.add_start(foot_t::label{{root, kNoLevel}, 0U}, duration_t{0U});
+  d.run();
+  EXPECT_EQ(d.get_cost({goal, kNoLevel}), kInfeasible);
+  ASSERT_TRUE(d.settle_up_to(420U));
+  EXPECT_LT(d.get_cost({goal, kNoLevel}), 420U);
+
+  auto const baseline = route(params, *w_, *l_, search_profile::kFoot, from, to,
+                              fm[match_idx_t{0U}], tm[match_idx_t{0U}],
+                              std::chrono::seconds{1000}, direction::kForward);
+  ASSERT_TRUE(baseline.has_value());
+  EXPECT_LT(baseline->cost_, 420U);
+  EXPECT_GT(baseline->duration_, duration_t{10U});
+  auto const max_duration = std::chrono::seconds{10};
+  EXPECT_FALSE(route(params, *w_, *l_, search_profile::kFoot, from, to,
+                     fm[match_idx_t{0U}], tm[match_idx_t{0U}], max_duration,
+                     direction::kForward)
+                   .has_value());
+  auto const state = route_one_to_many(params, *w_, *l_, search_profile::kFoot,
+                                       from, {to}, fm[match_idx_t{0U}], tm,
+                                       max_duration, direction::kForward);
+  EXPECT_FALSE(state->results().front().has_value());
+  EXPECT_FALSE(state->reconstruct(*w_, *l_, 0U, nullptr).has_value());
+}
+
+TEST_F(endpoint_routing, destination_budget_independent_of_batch) {
+  using foot_t = foot<false, elevator_tracking>;
+  auto const params = foot_t::parameters{};
+  auto const from = location{49.2, 8.001};
+  auto const to = location{49.2, 8.003};
+  auto const root = w_->get_node_idx(osm_node_idx_t{9U});
+  auto const goal = w_->get_node_idx(osm_node_idx_t{11U});
+  auto fm = match_result{};
+  fm.start(kNoLevel);
+  fm.add(0.F, *w_->find_way(osm_way_idx_t{9U}), {.left_ = {.node_ = root}});
+  fm.finish();
+  // Destination 0 has a 25 m farther match (penalty 525, below the budget
+  // slack), so its route only fits its own budget and not that of the other
+  // destinations. It must be found whatever else shares the batch.
+  auto single = match_result{};
+  single.start(kNoLevel);
+  single.add(0.F, *w_->find_way(osm_way_idx_t{10U}), {});
+  single.add(25.F, *w_->find_way(osm_way_idx_t{10U}),
+             {.right_ = {.node_ = goal, .dist_to_node_ = 25.F}});
+  single.finish();
+  auto const baseline = route(params, *w_, *l_, search_profile::kFoot, from, to,
+                              fm[match_idx_t{0U}], single[match_idx_t{0U}],
+                              std::chrono::seconds{60000}, direction::kForward);
+  ASSERT_TRUE(baseline.has_value());
+  auto const budget = [&](int const t, cost_t const penalty) {
+    return static_cast<std::uint64_t>(
+               cost_search_limit(params, duration_t{t})) +
+           penalty + 1U;
+  };
+  auto t = static_cast<int>(baseline->duration_.count());
+  while (baseline->cost_ >= budget(t, 525U)) {
+    ++t;
+  }
+  ASSERT_GE(baseline->cost_, budget(t, 0U));
+
+  for (auto const matched : {2U, 19U, 20U, 24U}) {
+    auto tm = match_result{};
+    for (auto i = 0U; i != 25U; ++i) {
+      tm.start(kNoLevel);
+      if (i < matched) {
+        auto const way = *w_->find_way(osm_way_idx_t{10U});
+        if (i == 0U) {
+          tm.add(0.F, way, {});
+          tm.add(25.F, way, {.right_ = {.node_ = goal, .dist_to_node_ = 25.F}});
+        } else {
+          tm.add(0.F, way, {.right_ = {.node_ = goal}});
+        }
+      }
+      tm.finish();
+    }
+    auto const state =
+        route_one_to_many(params, *w_, *l_, search_profile::kFoot, from,
+                          std::vector<location>(25U, to), fm[match_idx_t{0U}],
+                          tm, std::chrono::seconds{t}, direction::kForward);
+    ASSERT_EQ(state->results().size(), 25U);
+    EXPECT_TRUE(state->results()[0].has_value()) << "matched: " << matched;
+    EXPECT_TRUE(state->results()[1].has_value()) << "matched: " << matched;
+    EXPECT_FALSE(state->results()[24].has_value()) << "matched: " << matched;
+  }
+}
+
+TEST_F(endpoint_routing, matching_penalty_above_budget_slack_counts_fully) {
+  using foot_t = foot<false, elevator_tracking>;
+  auto const params = foot_t::parameters{};
+  auto const from = location{49.2, 8.001};
+  auto const to = location{49.2, 8.003};
+  auto const root = w_->get_node_idx(osm_node_idx_t{9U});
+  auto const goal = w_->get_node_idx(osm_node_idx_t{11U});
+  auto fm = match_result{};
+  fm.start(kNoLevel);
+  fm.add(0.F, *w_->find_way(osm_way_idx_t{9U}), {.left_ = {.node_ = root}});
+  fm.finish();
+  // The only usable destination candidate is 100 m farther away than the
+  // closest match: its penalty (2100) exceeds the budget slack (600).
+  auto tm = match_result{};
+  tm.start(kNoLevel);
+  tm.add(0.F, *w_->find_way(osm_way_idx_t{10U}), {});
+  tm.add(100.F, *w_->find_way(osm_way_idx_t{10U}),
+         {.right_ = {.node_ = goal, .dist_to_node_ = 100.F}});
+  tm.finish();
+
+  auto const baseline = route(params, *w_, *l_, search_profile::kFoot, from, to,
+                              fm[match_idx_t{0U}], tm[match_idx_t{0U}],
+                              std::chrono::seconds{60000}, direction::kForward);
+  ASSERT_TRUE(baseline.has_value());
+  ASSERT_GT(baseline->cost_, 2100U);
+
+  auto found = 0U;
+  auto missed = 0U;
+  for (auto t = static_cast<int>(baseline->duration_.count()); t < 4000;
+       t += 10) {
+    auto const budget =
+        static_cast<std::uint64_t>(cost_search_limit(params, duration_t{t})) +
+        600U + 1U;
+    auto const p = route(params, *w_, *l_, search_profile::kFoot, from, to,
+                         fm[match_idx_t{0U}], tm[match_idx_t{0U}],
+                         std::chrono::seconds{t}, direction::kForward);
+    EXPECT_EQ(p.has_value(), baseline->cost_ < budget) << "t=" << t;
+    if (p.has_value()) {
+      // The full penalty is part of the route cost.
+      EXPECT_EQ(p->cost_, baseline->cost_);
+      EXPECT_EQ(p->duration_, baseline->duration_);
+      ++found;
+    } else {
+      ++missed;
+    }
+  }
+  EXPECT_GT(found, 0U);
+  EXPECT_GT(missed, 0U);
 }
 
 TEST_F(endpoint_routing, explicit_bidirectional_uses_supported_profile_policy) {
@@ -372,10 +607,12 @@ TEST_F(endpoint_routing, explicit_bidirectional_uses_supported_profile_policy) {
     auto const params = get_parameters(profile);
     for (auto const dir : {direction::kForward, direction::kBackward}) {
       SCOPED_TRACE(to_str(profile));
-      auto const d = route_dijkstra(params, *w_, *l_, profile, from, to, 3600U,
-                                    dir, 2.0, nullptr, &sharing);
+      auto const d = route_dijkstra(params, *w_, *l_, profile, from, to,
+                                    std::chrono::seconds{3600}, dir, 2.0,
+                                    nullptr, &sharing);
       auto const b = route_bidirectional(params, *w_, *l_, profile, from, to,
-                                         3600U, dir, 2.0, nullptr, &sharing);
+                                         std::chrono::seconds{3600}, dir, 2.0,
+                                         nullptr, &sharing);
       ASSERT_EQ(d.has_value(), b.has_value());
       if (d.has_value()) {
         EXPECT_EQ(d->cost_, b->cost_);
