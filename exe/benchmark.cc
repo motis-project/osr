@@ -213,15 +213,15 @@ int main(int argc, char const* argv[]) {
               location{w.get_node_pos(end).as_latlng(), level_t{0.F}};
           if (opt.from_coords_) {
             auto const start_time = std::chrono::steady_clock::now();
-            auto const d_res =
-                route(params, w, l, profile, start_loc, end_loc, opt.max_dist_,
-                      direction::kForward, 250, nullptr, nullptr, nullptr,
-                      routing_algorithm::kDijkstra);
+            auto const d_res = route(params, w, l, profile, start_loc, end_loc,
+                                     std::chrono::seconds{opt.max_dist_},
+                                     direction::kForward, 250, nullptr, nullptr,
+                                     nullptr, routing_algorithm::kDijkstra);
             auto const middle_time = std::chrono::steady_clock::now();
-            auto const b_res =
-                route(params, w, l, profile, start_loc, end_loc, opt.max_dist_,
-                      direction::kForward, 250, nullptr, nullptr, nullptr,
-                      routing_algorithm::kAStarBi);
+            auto const b_res = route(params, w, l, profile, start_loc, end_loc,
+                                     std::chrono::seconds{opt.max_dist_},
+                                     direction::kForward, 250, nullptr, nullptr,
+                                     nullptr, routing_algorithm::kAStarBi);
             auto const end_time = std::chrono::steady_clock::now();
 
             /*std::cout << "took "

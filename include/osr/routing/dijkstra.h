@@ -43,6 +43,7 @@ struct dijkstra {
     pq_.n_buckets(params_.max_ + 1U);
     cost_.clear();
     arena_.reset();
+    settle_horizon_ = 0U;
     if constexpr (EarlyTermination) {
       destinations_.clear();
       settled_.clear();
@@ -68,6 +69,7 @@ struct dijkstra {
       utl::verify(l.cost() < pq_.n_buckets(),
                   "dijkstra::add_start: label cost exceeds max: {} >= {}",
                   l.cost(), pq_.n_buckets());
+      extend_settle_horizon(l.cost(), duration);
       pq_.push(l);
     }
   }
@@ -108,6 +110,24 @@ struct dijkstra {
     return it != end(cost_) ? it->second.cost(n) : kInfeasible;
   }
 
+  // Drain the entire bucket: equal-cost labels can still improve duration.
+  void extend_settle_horizon(cost_t const cost, duration_t const duration) {
+    if (duration <= params_.max_duration_) {
+      settle_horizon_ = std::max(settle_horizon_, cost);
+    }
+  }
+
+  // Resumes a search stopped at its settle horizon until every state with a
+  // cost <= `cost` is final. Returns whether the search had to continue.
+  bool settle_up_to(cost_t const cost) {
+    if (pq_.empty() || pq_.get_next_bucket() > cost) {
+      return false;
+    }
+    settle_horizon_ = std::max(settle_horizon_, cost);
+    run();
+    return true;
+  }
+
   template <direction SearchDir, bool WithBlocked>
   void run() {
     auto const& params = params_.profile_;
@@ -119,7 +139,7 @@ struct dijkstra {
     auto const* const sharing = params_.sharing();
     auto const* const elevations = params_.elevations_;
 
-    while (!pq_.empty()) {
+    while (!pq_.empty() && pq_.get_next_bucket() <= settle_horizon_) {
       auto l = pq_.pop();
 
       if (get_cost(l.get_node()) < l.cost()) {
@@ -189,6 +209,7 @@ struct dijkstra {
             next.track(l, r, way, neighbor.get_node(), track);
             if (cost_[neighbor.get_key()].update(next, neighbor, next_cd, curr,
                                                  r, arena_)) {
+              extend_settle_horizon(next_cd.cost_, next_cd.duration_);
               pq_.push(std::move(next));
 
               if constexpr (kDebug) {
@@ -224,6 +245,11 @@ struct dijkstra {
   dial<label, get_bucket> pq_{get_bucket{}};
   ankerl::unordered_dense::map<key, entry, hash> cost_;
   entry_storage_arena arena_;
+
+  // Highest cost reached within the duration limit, or requested by
+  // settle_up_to(). Over-limit labels still expand to dominate costlier routes,
+  // but cannot raise the horizon because their successors are also over limit.
+  cost_t settle_horizon_{0U};
 
   // for early termination
   std::vector<node> destinations_;

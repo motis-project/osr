@@ -21,6 +21,7 @@ struct search_params {
   ways const* w_{nullptr};
 
   cost_t max_{0U};  // caller clamps to max(kMinCostSettled, max)
+  duration_t max_duration_{kMaxDuration};
   direction dir_{direction::kForward};
   std::optional<routing_time_t> start_time_{};
 
