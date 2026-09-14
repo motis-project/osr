@@ -1,3 +1,4 @@
+#include <chrono>
 #include <algorithm>
 #include <iterator>
 #include <tuple>
@@ -39,12 +40,13 @@ TEST_F(endpoint_matching_test, endpoint_matches_work_with_all_algorithms) {
 
   auto const dijkstra =
       route_dijkstra(params, w, l, search_profile::kFoot, from, to,
-                     cost_t{3600U}, direction::kForward, 50.0);
-  auto const astar = route_astar(params, w, l, search_profile::kFoot, from, to,
-                                 cost_t{3600U}, direction::kForward, 50.0);
-  auto const bidirectional =
-      route_bidirectional(params, w, l, search_profile::kFoot, from, to,
-                          cost_t{3600U}, direction::kForward, 50.0);
+                     std::chrono::seconds{3600}, direction::kForward, 50.0);
+  auto const astar =
+      route_astar(params, w, l, search_profile::kFoot, from, to,
+                  std::chrono::seconds{3600}, direction::kForward, 50.0);
+  auto const bidirectional = route_bidirectional(
+      params, w, l, search_profile::kFoot, from, to, std::chrono::seconds{3600},
+      direction::kForward, 50.0);
 
   ASSERT_TRUE(dijkstra.has_value());
   ASSERT_TRUE(astar.has_value());
@@ -63,8 +65,8 @@ TEST_F(endpoint_matching_test,
   auto const to = location{{49.040100, 8.004000}, kNoLevel};
   auto const result = route_dijkstra(
       get_parameters(search_profile::kFoot), w, l, search_profile::kFoot, from,
-      to, cost_t{3600U}, direction::kForward, 50.0, nullptr, nullptr, nullptr,
-      std::nullopt, route_options{});
+      to, std::chrono::seconds{3600}, direction::kForward, 50.0, nullptr,
+      nullptr, nullptr, std::nullopt, route_options{});
 
   ASSERT_TRUE(result.has_value());
   auto segment_duration = duration_t{0U};
@@ -81,9 +83,9 @@ TEST_F(endpoint_matching_test,
   auto const& l = *lookup_;
   auto const from = location{{49.060000, 8.000250}, kNoLevel};
   auto const to = location{{49.060000, 8.001750}, kNoLevel};
-  auto const result = route_dijkstra(profile_parameters{car::parameters{}}, w,
-                                     l, search_profile::kCar, from, to,
-                                     cost_t{3600U}, direction::kForward, 50.0);
+  auto const result = route_dijkstra(
+      profile_parameters{car::parameters{}}, w, l, search_profile::kCar, from,
+      to, std::chrono::seconds{3600}, direction::kForward, 50.0);
 
   ASSERT_TRUE(result.has_value());
   ASSERT_GE(result->segments_.size(), 2U);
@@ -107,9 +109,9 @@ TEST_F(endpoint_matching_test, closer_match_wins_over_graph_shortcut) {
   auto const to = location{{49.040100, 8.004000}, kNoLevel};
 
   auto const without_preference =
-      route(params, w, l, search_profile::kFoot, from, to, cost_t{3600U},
-            direction::kForward, 50.0, nullptr, nullptr, nullptr,
-            routing_algorithm::kDijkstra, std::nullopt,
+      route(params, w, l, search_profile::kFoot, from, to,
+            std::chrono::seconds{3600}, direction::kForward, 50.0, nullptr,
+            nullptr, nullptr, routing_algorithm::kDijkstra, std::nullopt,
             route_options{.matching_penalty_factor_ = 0.0});
   ASSERT_TRUE(without_preference.has_value());
   ASSERT_FALSE(without_preference->segments_.empty());
@@ -117,8 +119,9 @@ TEST_F(endpoint_matching_test, closer_match_wins_over_graph_shortcut) {
   EXPECT_EQ(project_to_osm_way(w, 901, from.pos_),
             without_preference->segments_.front().polyline_.front());
 
-  auto const preferred = route(params, w, l, search_profile::kFoot, from, to,
-                               cost_t{3600U}, direction::kForward, 50.0);
+  auto const preferred =
+      route(params, w, l, search_profile::kFoot, from, to,
+            std::chrono::seconds{3600}, direction::kForward, 50.0);
   ASSERT_TRUE(preferred.has_value());
   ASSERT_FALSE(preferred->segments_.empty());
   ASSERT_FALSE(preferred->segments_.front().polyline_.empty());
@@ -135,9 +138,9 @@ TEST_F(endpoint_matching_test,
   auto const to = location{{49.040000, 8.000000}, kNoLevel};
 
   auto const without_preference =
-      route(params, w, l, search_profile::kFoot, from, to, cost_t{3600U},
-            direction::kForward, 50.0, nullptr, nullptr, nullptr,
-            routing_algorithm::kDijkstra, std::nullopt,
+      route(params, w, l, search_profile::kFoot, from, to,
+            std::chrono::seconds{3600}, direction::kForward, 50.0, nullptr,
+            nullptr, nullptr, routing_algorithm::kDijkstra, std::nullopt,
             route_options{.matching_penalty_factor_ = 0.0});
   ASSERT_TRUE(without_preference.has_value());
   ASSERT_FALSE(without_preference->segments_.empty());
@@ -145,8 +148,9 @@ TEST_F(endpoint_matching_test,
   EXPECT_EQ(project_to_osm_way(w, 901, to.pos_),
             without_preference->segments_.back().polyline_.back());
 
-  auto const preferred = route(params, w, l, search_profile::kFoot, from, to,
-                               cost_t{3600U}, direction::kForward, 50.0);
+  auto const preferred =
+      route(params, w, l, search_profile::kFoot, from, to,
+            std::chrono::seconds{3600}, direction::kForward, 50.0);
   ASSERT_TRUE(preferred.has_value());
   ASSERT_FALSE(preferred->segments_.empty());
   ASSERT_FALSE(preferred->segments_.back().polyline_.empty());
@@ -170,8 +174,9 @@ TEST_F(endpoint_matching_test, unreachable_closest_match_uses_farther_match) {
   EXPECT_EQ(std::optional<std::int64_t>{400}, w.get_osm_way(matches.way_[0]));
   EXPECT_EQ(std::optional<std::int64_t>{300}, w.get_osm_way(matches.way_[1]));
 
-  auto const result = route(params, w, l, search_profile::kCar, from, to,
-                            cost_t{3600U}, direction::kForward, 50.0);
+  auto const result =
+      route(params, w, l, search_profile::kCar, from, to,
+            std::chrono::seconds{3600}, direction::kForward, 50.0);
   ASSERT_TRUE(result.has_value());
   ASSERT_FALSE(result->segments_.empty());
   EXPECT_EQ(std::optional<std::int64_t>{31},

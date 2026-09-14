@@ -1,3 +1,4 @@
+#include <chrono>
 #include <filesystem>
 #include <iostream>
 #include <random>
@@ -15,7 +16,7 @@
 
 namespace fs = std::filesystem;
 
-constexpr auto kSymmetryMaxCost = osr::cost_t{100'000U};
+constexpr auto kSymmetryMaxDuration = std::chrono::seconds{60000};
 
 struct symmetry_case {
   std::string_view path_;
@@ -52,9 +53,10 @@ result_t route_sym(osr::profile_parameters const& params,
                    osr::direction const dir,
                    osr::routing_algorithm const algo,
                    Args&&... args) {
-  auto const p = osr::route(params, w, l, profile, from, to, kSymmetryMaxCost,
-                            dir, 250.0, nullptr, nullptr, nullptr, algo,
-                            std::nullopt, std::forward<Args>(args)...);
+  auto const p =
+      osr::route(params, w, l, profile, from, to, kSymmetryMaxDuration, dir,
+                 250.0, nullptr, nullptr, nullptr, algo, std::nullopt,
+                 std::forward<Args>(args)...);
   return p.has_value() ? result_t{true, p->cost_, p->duration_}
                        : result_t{false, 0U, osr::duration_t{0}};
 }
@@ -408,12 +410,12 @@ TEST(symmetry, sharing_random_pairs_forward_backward_equivalence) {
         auto const from = rnd_loc();
         auto const to = rnd_loc();
         for (auto const& [params, profile] : profiles) {
-          auto const fwd =
-              osr::route(params, w, l, profile, from, to, osr::cost_t{3600U},
-                         osr::direction::kForward, 100.0, nullptr, &sharing);
-          auto const bwd =
-              osr::route(params, w, l, profile, to, from, osr::cost_t{3600U},
-                         osr::direction::kBackward, 100.0, nullptr, &sharing);
+          auto const fwd = osr::route(
+              params, w, l, profile, from, to, std::chrono::seconds{3600},
+              osr::direction::kForward, 100.0, nullptr, &sharing);
+          auto const bwd = osr::route(
+              params, w, l, profile, to, from, std::chrono::seconds{3600},
+              osr::direction::kBackward, 100.0, nullptr, &sharing);
           auto const ctx = [&]() {
             auto ss = std::stringstream{};
             ss << map << " " << osr::to_str(profile) << " cfg" << cfg
@@ -447,10 +449,12 @@ TEST(symmetry_costs, way_aware_profiles_price_both_directions_alike) {
   for (auto const profile :
        {search_profile::kBus, search_profile::kHgv, search_profile::kRailway}) {
     auto const params = get_parameters(profile);
-    auto const fwd = route(params, w, l, profile, from, to, cost_t{100'000U},
-                           direction::kForward, 250.0);
-    auto const bwd = route(params, w, l, profile, to, from, cost_t{100'000U},
-                           direction::kBackward, 250.0);
+    auto const fwd =
+        route(params, w, l, profile, from, to, std::chrono::seconds{60000},
+              direction::kForward, 250.0);
+    auto const bwd =
+        route(params, w, l, profile, to, from, std::chrono::seconds{60000},
+              direction::kBackward, 250.0);
     ASSERT_TRUE(fwd.has_value()) << to_str(profile);
     ASSERT_TRUE(bwd.has_value()) << to_str(profile);
     EXPECT_EQ(fwd->cost_, bwd->cost_) << to_str(profile);
@@ -484,10 +488,12 @@ TEST(symmetry_costs, node_penalties_are_charged_in_both_directions) {
     auto const l = lookup{w, dir, cista::mmap::protection::READ};
     auto const params = get_parameters(c.profile_);
 
-    auto const fwd = route(params, w, l, c.profile_, c.from_, c.to_,
-                           cost_t{100'000U}, direction::kForward, 250.0);
-    auto const bwd = route(params, w, l, c.profile_, c.to_, c.from_,
-                           cost_t{100'000U}, direction::kBackward, 250.0);
+    auto const fwd =
+        route(params, w, l, c.profile_, c.from_, c.to_,
+              std::chrono::seconds{60000}, direction::kForward, 250.0);
+    auto const bwd =
+        route(params, w, l, c.profile_, c.to_, c.from_,
+              std::chrono::seconds{60000}, direction::kBackward, 250.0);
     ASSERT_TRUE(fwd.has_value()) << c.fixture_;
     ASSERT_TRUE(bwd.has_value()) << c.fixture_;
     EXPECT_EQ(fwd->cost_, bwd->cost_) << c.fixture_;
@@ -508,10 +514,12 @@ TEST(symmetry_levels, elevator_endpoint_is_direction_independent) {
   auto const from = location{48.7265456, 2.259178, kNoLevel};
   auto const to = location{48.7263761, 2.2576106, kNoLevel};
 
-  auto const fwd = route(params, w, l, search_profile::kFoot, from, to,
-                         cost_t{100'000U}, direction::kForward, 250.0);
-  auto const bwd = route(params, w, l, search_profile::kFoot, to, from,
-                         cost_t{100'000U}, direction::kBackward, 250.0);
+  auto const fwd =
+      route(params, w, l, search_profile::kFoot, from, to,
+            std::chrono::seconds{60000}, direction::kForward, 250.0);
+  auto const bwd =
+      route(params, w, l, search_profile::kFoot, to, from,
+            std::chrono::seconds{60000}, direction::kBackward, 250.0);
   ASSERT_TRUE(fwd.has_value());
   ASSERT_TRUE(bwd.has_value());
   EXPECT_EQ(fwd->cost_, bwd->cost_);
@@ -546,10 +554,12 @@ TEST(symmetry_modes, car_parking_transition_is_direction_independent) {
     auto const l = lookup{w, dir, cista::mmap::protection::READ};
     auto const params = get_parameters(c.profile_);
 
-    auto const fwd = route(params, w, l, c.profile_, c.from_, c.to_,
-                           cost_t{100'000U}, direction::kForward, 250.0);
-    auto const bwd = route(params, w, l, c.profile_, c.to_, c.from_,
-                           cost_t{100'000U}, direction::kBackward, 250.0);
+    auto const fwd =
+        route(params, w, l, c.profile_, c.from_, c.to_,
+              std::chrono::seconds{60000}, direction::kForward, 250.0);
+    auto const bwd =
+        route(params, w, l, c.profile_, c.to_, c.from_,
+              std::chrono::seconds{60000}, direction::kBackward, 250.0);
     ASSERT_TRUE(fwd.has_value()) << c.fixture_ << " " << to_str(c.profile_);
     ASSERT_TRUE(bwd.has_value()) << c.fixture_ << " " << to_str(c.profile_);
     EXPECT_EQ(fwd->cost_, bwd->cost_)
@@ -590,12 +600,12 @@ TEST(symmetry_modes, sharing_transitions_are_direction_independent) {
     auto const sharing = data.view(w);
     auto const params = get_parameters(c.profile_);
 
-    auto const fwd =
-        route(params, w, l, c.profile_, c.from_, c.to_, cost_t{3600U},
-              direction::kForward, 100.0, nullptr, &sharing);
-    auto const bwd =
-        route(params, w, l, c.profile_, c.to_, c.from_, cost_t{3600U},
-              direction::kBackward, 100.0, nullptr, &sharing);
+    auto const fwd = route(params, w, l, c.profile_, c.from_, c.to_,
+                           std::chrono::seconds{3600}, direction::kForward,
+                           100.0, nullptr, &sharing);
+    auto const bwd = route(params, w, l, c.profile_, c.to_, c.from_,
+                           std::chrono::seconds{3600}, direction::kBackward,
+                           100.0, nullptr, &sharing);
     ASSERT_TRUE(fwd.has_value()) << c.fixture_ << " " << to_str(c.profile_);
     ASSERT_TRUE(bwd.has_value()) << c.fixture_ << " " << to_str(c.profile_);
     EXPECT_EQ(fwd->cost_, bwd->cost_)

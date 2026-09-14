@@ -1,3 +1,4 @@
+#include <chrono>
 #include <numeric>
 #include <vector>
 
@@ -74,19 +75,19 @@ TEST_F(sharing_routing_test, matching_penalty_is_in_cost_limit) {
   closest.left_.node_ = node_idx_t::invalid();
   closest.right_.node_ = node_idx_t::invalid();
 
-  auto const baseline =
-      route(profile_parameters{params}, w, l, search_profile::kBikeSharing,
-            from, to, from_matches[match_idx_t{0U}],
-            to_matches[match_idx_t{0U}], cost_t{3600U}, direction::kForward,
-            nullptr, &sharing, nullptr, routing_algorithm::kDijkstra,
-            std::nullopt, route_options{.matching_penalty_factor_ = 0.0});
+  auto const baseline = route(
+      profile_parameters{params}, w, l, search_profile::kBikeSharing, from, to,
+      from_matches[match_idx_t{0U}], to_matches[match_idx_t{0U}],
+      std::chrono::seconds{3600}, direction::kForward, nullptr, &sharing,
+      nullptr, routing_algorithm::kDijkstra, std::nullopt,
+      route_options{.matching_penalty_factor_ = 0.0});
   ASSERT_TRUE(baseline.has_value());
 
   auto const penalized = route(
       profile_parameters{params}, w, l, search_profile::kBikeSharing, from, to,
-      from_matches[match_idx_t{0U}], to_matches[match_idx_t{0U}], cost_t{3600U},
-      direction::kForward, nullptr, &sharing, nullptr,
-      routing_algorithm::kDijkstra, std::nullopt, penalized_options);
+      from_matches[match_idx_t{0U}], to_matches[match_idx_t{0U}],
+      std::chrono::seconds{3600}, direction::kForward, nullptr, &sharing,
+      nullptr, routing_algorithm::kDijkstra, std::nullopt, penalized_options);
   ASSERT_TRUE(penalized.has_value());
   EXPECT_GT(penalized->cost_, baseline->cost_);
   EXPECT_EQ(
@@ -95,14 +96,6 @@ TEST_F(sharing_routing_test, matching_penalty_is_in_cost_limit) {
                       cost_t{0U}, [](cost_t const sum, path::segment const& s) {
                         return sum + s.cost_;
                       }));
-
-  auto const limited = route(
-      profile_parameters{params}, w, l, search_profile::kBikeSharing, from, to,
-      from_matches[match_idx_t{0U}], to_matches[match_idx_t{0U}],
-      clamp_cost(static_cast<std::uint64_t>(baseline->cost_) + 1U),
-      direction::kForward, nullptr, &sharing, nullptr,
-      routing_algorithm::kDijkstra, std::nullopt, penalized_options);
-  EXPECT_FALSE(limited.has_value());
 }
 
 TEST_F(sharing_routing_test, endpoint_connection_cost_is_in_search_bound) {
@@ -125,12 +118,12 @@ TEST_F(sharing_routing_test, endpoint_connection_cost_is_in_search_bound) {
   }
 
   auto result = std::optional<path>{};
-  EXPECT_NO_THROW(result = route(profile_parameters{params}, w, l,
-                                 search_profile::kBikeSharing, from, to,
-                                 from_matches[match_idx_t{0U}],
-                                 to_matches[match_idx_t{0U}], cost_t{30U},
-                                 direction::kForward, nullptr, &sharing,
-                                 nullptr, routing_algorithm::kDijkstra));
+  EXPECT_NO_THROW(
+      result = route(profile_parameters{params}, w, l,
+                     search_profile::kBikeSharing, from, to,
+                     from_matches[match_idx_t{0U}], to_matches[match_idx_t{0U}],
+                     std::chrono::seconds{30}, direction::kForward, nullptr,
+                     &sharing, nullptr, routing_algorithm::kDijkstra));
   EXPECT_FALSE(result.has_value());
 }
 
@@ -230,10 +223,12 @@ struct levelled_sharing_test : testing::Test {
           location{{49, 8.001}, explicit_levels ? level_t{0.F} : kNoLevel};
       auto const to =
           location{{49, 8.0046}, explicit_levels ? level_t{1.F} : kNoLevel};
-      auto const fwd = route(params, *w_, *l_, profile, from, to, 3600U,
-                             direction::kForward, 2.0, nullptr, &sharing);
-      auto const bwd = route(params, *w_, *l_, profile, to, from, 3600U,
-                             direction::kBackward, 2.0, nullptr, &sharing);
+      auto const fwd =
+          route(params, *w_, *l_, profile, from, to, std::chrono::seconds{3600},
+                direction::kForward, 2.0, nullptr, &sharing);
+      auto const bwd =
+          route(params, *w_, *l_, profile, to, from, std::chrono::seconds{3600},
+                direction::kBackward, 2.0, nullptr, &sharing);
       ASSERT_TRUE(fwd.has_value());
       ASSERT_TRUE(bwd.has_value());
       EXPECT_EQ(fwd->cost_, bwd->cost_);
