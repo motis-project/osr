@@ -683,7 +683,7 @@ struct geojson_writer {
       auto geom =
           vec<geo::polyline>{get_additional_connection_points(connection)};
 
-      for (auto const [offset, start_point] :
+      for (auto const& [offset, start_point] :
            {std::pair{connection.from_, connection.connection_.front()},
             std::pair{connection.to_, connection.connection_.back()}}) {
         for (auto const is_left : {true, false}) {

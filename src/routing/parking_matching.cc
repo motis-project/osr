@@ -208,12 +208,12 @@ void connect_parking_ways(
                             .way_ = way_idx,
                             .left_ =
                                 {
-                                    .lvl_ = lvl,
-                                    .way_dir_ = is_from ? direction::kBackward
-                                                        : direction::kForward,
                                     .node_ = node,
                                     .dist_to_node_ = 0U,
                                     .cost_ = 0U,
+                                    .way_dir_ = is_from ? direction::kBackward
+                                                        : direction::kForward,
+                                    .lvl_ = lvl,
                                 },
                             .right_ = {},
                             .closest_point_on_way_ =
@@ -224,12 +224,12 @@ void connect_parking_ways(
                             .left_ = {},
                             .right_ =
                                 {
-                                    .lvl_ = lvl,
-                                    .way_dir_ = is_from ? direction::kForward
-                                                        : direction::kBackward,
                                     .node_ = node,
                                     .dist_to_node_ = 0U,
                                     .cost_ = 0U,
+                                    .way_dir_ = is_from ? direction::kForward
+                                                        : direction::kBackward,
+                                    .lvl_ = lvl,
                                 },
                             .closest_point_on_way_ =
                                 w.r_->node_positions_[node].as_latlng(),

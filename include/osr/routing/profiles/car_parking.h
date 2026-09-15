@@ -344,11 +344,13 @@ struct car_parking {
                     clamp_add(
                         car::way_cost(params.car_, w, timezones, car_side.way_,
                                       w.way_properties_[car_side.way_],
-                                      car_side.dir_, car_side.dist_, start_time,
+                                      flip<SearchDir>(car_side.dir_),
+                                      car_side.dist_, start_time,
                                       current_duration, SearchDir),
                         footp::way_cost(
                             params.foot_, w, timezones, foot_side.way_,
-                            w.way_properties_[foot_side.way_], foot_side.dir_,
+                            w.way_properties_[foot_side.way_],
+                            flip<SearchDir>(foot_side.dir_),
                             connection.connection_dist_ + foot_side.dist_,
                             start_time, current_duration, SearchDir)),
                     cost_and_duration{
@@ -360,7 +362,13 @@ struct car_parking {
                      connection.connection_way_, 0, 0,
                      elevation_storage::elevation{}, false);
                 } else {
-                  fn({target, node_type::kCar, lvl, connection.to_.dir_, 0U},
+                  fn({target, node_type::kCar, lvl,
+                      flip<SearchDir>(connection.to_.dir_), 0U},
+                     cost.cost_, cost.duration_, dist,
+                     connection.connection_way_, 0, 0,
+                     elevation_storage::elevation{}, false);
+                  fn({target, node_type::kCar, lvl,
+                      flip<SearchDir>(opposite(connection.to_.dir_)), 0U},
                      cost.cost_, cost.duration_, dist,
                      connection.connection_way_, 0, 0,
                      elevation_storage::elevation{}, false);
