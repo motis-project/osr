@@ -1,7 +1,12 @@
 #include "osr/routing/elevation_profile.h"
-#include <cista/strong.h>
+
 #include <algorithm>
 #include <vector>
+
+#include "geo/latlng.h"
+#include "utl/helpers/algorithm.h"
+
+#include "cista/strong.h"
 
 #include "osr/elevation_storage.h"
 #include "osr/types.h"
@@ -11,13 +16,11 @@ namespace osr {
 
 elevation_profile::elevation_profile(ways const& w,
                                      std::span<path::segment const> segments,
-                                     double resolution) {
-  if (segments.empty()) {
-    return;
-  }
-
-  baseline_ = segments.front().elevation_.absolute_;
-  if (baseline_ == elevation_absolute_t::invalid()) {
+                                     double resolution)
+    : resolution_(resolution) {
+  if (segments.empty() || utl::all_of(segments, [](auto const& s) {
+        return s.elevation_.absolute_ == elevation_absolute_t::invalid();
+      })) {
     return;
   }
 
@@ -31,40 +34,43 @@ elevation_profile::elevation_profile(ways const& w,
     }
   };
 
-  auto const add = [&](point const& a, point const& b,
-                       elevation_difference_t z) {
-    auto const lat = a.lat() + (b.lat() - a.lat()) * 0.5;
-    auto const lng = adjust_lng(a.lng() + (b.lng() - a.lng()) * 0.5);
-    points_.emplace_back(lat, lng);
+  auto it = utl::find_if(segments, [&](auto const& s) {
+    return s.elevation_.absolute_ != elevation_absolute_t::invalid();
+  });
+  baseline_ = it->elevation_.absolute_;
+
+  auto const add = [&](node_idx_t a, node_idx_t b, elevation_absolute_t z) {
+    if (a == node_idx_t::invalid() || b == node_idx_t::invalid() ||
+        a >= w.n_nodes() || b >= w.n_nodes()) {
+      return;
+    }
+
+    auto const a_pos = w.get_node_pos(a);
+    auto const b_pos = w.get_node_pos(b);
+
+    auto const lat = a_pos.lat() + (b_pos.lat() - a_pos.lat()) * 0.5;
+    auto const lng =
+        adjust_lng(a_pos.lng() + (b_pos.lng() - a_pos.lng()) * 0.5);
+    points_.push_back(point::from_latlng({lat, lng}));
     elevation_.push_back(z);
 
-    min_ = std::min(static_cast<elevation_absolute_t>(to_idx(z)) + baseline_,
-                    min_);
-    max_ = std::max(static_cast<elevation_absolute_t>(to_idx(z)) + baseline_,
-                    max_);
+    min_ = std::min(z, min_);
+    max_ = std::max(z, max_);
   };
 
   auto dist_acc = distance_t{0};
-  auto z_acc = elevation_difference_t{0};
-  auto from = w.get_node_pos(segments.front().from_);
-  add(from, w.get_node_pos(segments.front().to_), z_acc);
-  for (auto seg = begin(segments); seg != end(segments); seg++) {
-    dist_acc += seg->dist_;
-    z_acc += static_cast<cista::base_t<elevation_difference_t>>(
-                 to_idx(seg->elevation_.up_)) -
-             static_cast<cista::base_t<elevation_difference_t>>(
-                 to_idx(seg->elevation_.down_));
+  add(it->from_, it->to_, baseline_);
+  while (++it != prev(end(segments), 2)) {
+    dist_acc += it->dist_;
 
-    if (dist_acc < resolution && seg != prev(end(segments))) {
+    if (dist_acc < resolution) {
       continue;
     }
 
-    auto const to = w.get_node_pos(seg->to_);
-    add(from, to, z_acc);
-    from = to;
+    add(it->from_, it->to_, it->elevation_.absolute_);
     dist_acc = 0;
-    z_acc = elevation_difference_t{0};
   }
+  add(it->from_, it->to_, it->elevation_.absolute_);
 }
 
 elevation_absolute_t elevation_profile::median() const {
@@ -73,25 +79,22 @@ elevation_absolute_t elevation_profile::median() const {
   }
 
   if (elevation_.size() == 1) {
-    return static_cast<elevation_absolute_t>(to_idx(elevation_[0])) + baseline_;
+    return baseline_;
   }
 
-  auto sorted = std::vector<elevation_difference_t>{elevation_};
+  auto sorted = std::vector<elevation_absolute_t>{elevation_};
   auto const n = sorted.size() / 2;
   std::nth_element(
       begin(sorted),
-      next(
-          begin(sorted),
-          static_cast<std::vector<elevation_difference_t>::difference_type>(n)),
+      next(begin(sorted),
+           static_cast<std::vector<elevation_absolute_t>::difference_type>(n)),
       end(sorted));
 
   if (n % 2 == 0) {
-    return static_cast<elevation_absolute_t>(
-               to_idx((sorted[n] + sorted[n - 1]) / 2)) +
-           baseline_;
+    return (sorted[n] + sorted[n - 1]) / 2;
   }
 
-  return static_cast<elevation_absolute_t>(to_idx(sorted[n])) + baseline_;
+  return sorted[n];
 }
 
 }  // namespace osr
