@@ -329,50 +329,42 @@ struct car_parking {
       if ((kFwd && n.is_car_node()) || (kBwd && n.is_foot_node())) {
         for_each_addional_connection(
             w, n.n_, SearchDir, [&](additional_connection const connection) {
-              if ((kFwd && connection.from_.dir_ == direction::kForward) ||
-                  (kBwd && connection.to_.dir_ == direction::kBackward)) {
-                auto const& car_side = kFwd ? connection.from_ : connection.to_;
-                auto const& foot_side =
-                    kFwd ? connection.to_ : connection.from_;
-                auto const target = connection.to_.node_;
-                auto const lvl = w.node_properties_[target].from_level();
+              auto const& car_side = kFwd ? connection.from_ : connection.to_;
+              auto const& foot_side = kFwd ? connection.to_ : connection.from_;
+              auto const target = connection.to_.node_;
+              auto const lvl = w.node_properties_[target].from_level();
 
-                auto const dist = static_cast<distance_t>(
-                    car_side.dist_ + connection.connection_dist_ +
-                    foot_side.dist_);
-                auto const cost = clamp_add(
-                    clamp_add(
-                        car::way_cost(params.car_, w, timezones, car_side.way_,
-                                      w.way_properties_[car_side.way_],
-                                      flip<SearchDir>(car_side.dir_),
-                                      car_side.dist_, start_time,
-                                      current_duration, SearchDir),
-                        footp::way_cost(
-                            params.foot_, w, timezones, foot_side.way_,
-                            w.way_properties_[foot_side.way_],
-                            flip<SearchDir>(foot_side.dir_),
-                            connection.connection_dist_ + foot_side.dist_,
-                            start_time, current_duration, SearchDir)),
-                    cost_and_duration{
-                        .cost_ = kSwitchPenalty,
-                        .duration_ = duration_from_cost(kSwitchPenalty)});
-                if (kFwd) {
-                  fn({target, node_type::kFoot, lvl, direction::kForward, 0U},
-                     cost.cost_, cost.duration_, dist,
-                     connection.connection_way_, 0, 0,
-                     elevation_storage::elevation{}, false);
-                } else {
-                  fn({target, node_type::kCar, lvl,
-                      flip<SearchDir>(connection.to_.dir_), 0U},
-                     cost.cost_, cost.duration_, dist,
-                     connection.connection_way_, 0, 0,
-                     elevation_storage::elevation{}, false);
-                  fn({target, node_type::kCar, lvl,
-                      flip<SearchDir>(opposite(connection.to_.dir_)), 0U},
-                     cost.cost_, cost.duration_, dist,
-                     connection.connection_way_, 0, 0,
-                     elevation_storage::elevation{}, false);
-                }
+              auto const dist = static_cast<distance_t>(
+                  car_side.dist_ + connection.connection_dist_ +
+                  foot_side.dist_);
+              auto const cost = clamp_add(
+                  clamp_add(car::way_cost(
+                                params.car_, w, timezones, car_side.way_,
+                                w.way_properties_[car_side.way_],
+                                flip<SearchDir>(car_side.dir_), car_side.dist_,
+                                start_time, current_duration, SearchDir),
+                            footp::way_cost(
+                                params.foot_, w, timezones, foot_side.way_,
+                                w.way_properties_[foot_side.way_],
+                                flip<SearchDir>(foot_side.dir_),
+                                connection.connection_dist_ + foot_side.dist_,
+                                start_time, current_duration, SearchDir)),
+                  cost_and_duration{
+                      .cost_ = kSwitchPenalty,
+                      .duration_ = duration_from_cost(kSwitchPenalty)});
+              if (kFwd) {
+                fn({target, node_type::kFoot, lvl, direction::kForward, 0U},
+                   cost.cost_, cost.duration_, dist, connection.connection_way_,
+                   0, 0, elevation_storage::elevation{}, false);
+              } else {
+                fn({target, node_type::kCar, lvl,
+                    flip<SearchDir>(connection.to_.dir_), 0U},
+                   cost.cost_, cost.duration_, dist, connection.connection_way_,
+                   0, 0, elevation_storage::elevation{}, false);
+                fn({target, node_type::kCar, lvl,
+                    flip<SearchDir>(opposite(connection.to_.dir_)), 0U},
+                   cost.cost_, cost.duration_, dist, connection.connection_way_,
+                   0, 0, elevation_storage::elevation{}, false);
               }
             });
       }
