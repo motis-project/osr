@@ -157,6 +157,46 @@ struct hgv_way_info {
   std::uint16_t maxaxleload_100kg_{0U};
 };
 
+struct shortcut {
+  friend bool operator==(shortcut, shortcut) = default;
+
+  // Persisted shortcut edge from the owning shortcuts_ bucket to to_, created
+  // by contracting via_.
+  node_idx_t to_{};
+  node_idx_t via_{};
+  distance_t distance_{};
+};
+
+struct cch_edge_weight {
+  friend bool operator==(cch_edge_weight, cch_edge_weight) = default;
+
+  // One state-aware customized value for a CCH edge. If up_ is true, the value
+  // models travel from the lower-ranked node to the higher-ranked node;
+  // otherwise it models travel from the higher-ranked node to the lower-ranked
+  // node.
+  node_idx_t via_{node_idx_t::invalid()};
+  distance_t distance_{};
+  cost_t cost_{kInfeasible};
+  way_pos_t from_way_{};
+  way_pos_t to_way_{};
+  way_pos_t via_in_way_{};
+  way_pos_t via_out_way_{};
+  direction from_dir_{direction::kForward};
+  direction to_dir_{direction::kForward};
+  direction via_in_dir_{direction::kForward};
+  direction via_out_dir_{direction::kForward};
+  bool up_{true};
+};
+
+struct cch_edge {
+  friend bool operator==(cch_edge, cch_edge) = default;
+
+  // Customized CCH edge from its owning lower-rank profile bucket to the
+  // higher-rank to_. The edge can have multiple boundary-state weights.
+  node_idx_t to_{};
+  vec<cch_edge_weight> weights_{};
+};
+
 struct way_properties {
   constexpr bool is_accessible() const {
     return is_car_accessible() || is_bike_accessible() ||
@@ -323,8 +363,9 @@ struct ways {
   void add_restriction(std::vector<resolved_restriction>&);
   void compute_big_street_neighbors();
   void connect_ways();
+  void add_shortcuts();
   void compute_turn_bearings();
-  void build_components();
+  void build_components_and_importance();
 
   std::optional<way_idx_t> find_way(osm_way_idx_t const i) {
     auto const it = std::lower_bound(
@@ -551,15 +592,22 @@ struct ways {
     vecvec<node_idx_t, way_idx_t> node_ways_;
     vecvec<node_idx_t, std::uint16_t> node_in_way_idx_;
     vecvec<node_idx_t, turn_bearing> node_turn_bearings_;
+    // Shortcut adjacency, bucketed by source node.
+    vecvec<node_idx_t, shortcut> shortcuts_;
+    // Profile-specific customized CCH edge weights, bucketed by source node.
+    vecvec<node_idx_t, cch_edge> cch_car_edge_weights_;
+    vecvec<node_idx_t, cch_edge> cch_bus_edge_weights_;
 
     bitvec<node_idx_t> node_is_restricted_;
     vecvec<node_idx_t, restriction> node_restrictions_;
 
     vec_map<node_idx_t, point> node_positions_;
+    vec_map<node_idx_t, std::uint32_t> node_importance_;
 
     vec<pair<node_idx_t, level_bits_t>> multi_level_elevators_;
 
     vec_map<way_idx_t, component_idx_t> way_component_;
+    vec_map<way_idx_t, std::uint8_t> way_importance_;
   };
 
   cista::wrapped<routing> r_;

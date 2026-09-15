@@ -28,6 +28,7 @@ template <bool IsBus>
 struct generic_car {
   static constexpr auto const kName = "car";
   static constexpr auto const kMaxMatchDistance = 200U;
+  static constexpr auto const kIsBus = IsBus;
 
   using key = node_idx_t;
 

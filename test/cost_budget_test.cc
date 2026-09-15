@@ -87,3 +87,16 @@ TEST(cost_budget, short_walk_with_generous_budget) {
   ASSERT_TRUE(astar_bi.has_value());
   EXPECT_EQ(dijkstra->cost_, astar_bi->cost_);
 }
+
+TEST(cost_budget, cch_falls_back_to_dijkstra_for_foot) {
+  auto const g = graph{};
+  auto const reference =
+      g.route(kReconstructionBudget, osr::routing_algorithm::kDijkstra);
+  auto const result =
+      g.route(kReconstructionBudget, osr::routing_algorithm::kCCH);
+  ASSERT_TRUE(reference.has_value());
+  ASSERT_TRUE(result.has_value());
+  EXPECT_EQ(reference->cost_, result->cost_);
+  EXPECT_EQ(reference->duration_, result->duration_);
+  EXPECT_DOUBLE_EQ(reference->dist_, result->dist_);
+}

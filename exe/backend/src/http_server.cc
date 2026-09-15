@@ -1,5 +1,6 @@
 #include "osr/backend/http_server.h"
 
+#include <chrono>
 #include <utility>
 
 #include "boost/algorithm/string.hpp"
@@ -39,6 +40,19 @@ namespace json = boost::json;
 
 namespace osr::backend {
 
+constexpr auto const kRequestDebugOutput = false;
+constexpr auto const kRouteComparisonDebugOutput = false;
+
+constexpr std::string_view to_log_string(routing_algorithm const algo) {
+  switch (algo) {
+    case routing_algorithm::kDijkstra: return "dijkstra";
+    case routing_algorithm::kAStarBi: return "bidirectional";
+    case routing_algorithm::kDijkstraBi: return "dijkstra_bidir";
+    case routing_algorithm::kCCH: return "cch";
+  }
+  return "unknown";
+}
+
 template <typename Body>
 void set_cors_headers(http::response<Body>& res) {
   using namespace boost::beast::http;
@@ -72,6 +86,13 @@ json::value to_json(std::vector<geo::latlng> const& polyline) {
     a.emplace_back(json::array{p.lng(), p.lat()});
   }
   return a;
+}
+
+json::value to_line_string(geo::latlng const from, geo::latlng const to) {
+  return json::object{
+      {"type", "LineString"},
+      {"coordinates", json::array{json::array{from.lng(), from.lat()},
+                                  json::array{to.lng(), to.lat()}}}};
 }
 
 struct http_server::impl {
@@ -130,30 +151,44 @@ struct http_server::impl {
     auto const max_it = q.find("max");
     auto const max = static_cast<cost_t>(
         max_it == q.end() ? 3600 : max_it->value().as_int64());
-    auto const foot_speed_result =
-        q.try_at("footSpeed")->try_to_number<float>();
-    auto const params =
-        profile == search_profile::kFoot && foot_speed_result.has_value()
-            ? foot<false,
-                   elevator_tracking>::parameters{.speed_meters_per_second_ =
-                                                      foot_speed_result.value()}
-            : get_parameters(profile);
+    auto params = get_parameters(profile);
+    if (profile == search_profile::kFoot) {
+      if (auto const* speed = q.if_contains("footSpeed"); speed != nullptr) {
+        if (auto const value = speed->try_to_number<float>();
+            value.has_value()) {
+          params = foot<false, elevator_tracking>::parameters{
+              .speed_meters_per_second_ = value.value()};
+        }
+      }
+    }
 
+    auto const query_start = std::chrono::steady_clock::now();
     auto const p = route(params, w_, l_, profile, from, to, max, dir, 100,
                          nullptr, nullptr, elevations_, routing_algo);
+    auto const query_end = std::chrono::steady_clock::now();
+    auto const query_us = std::chrono::duration_cast<std::chrono::microseconds>(
+                              query_end - query_start)
+                              .count();
+    fmt::println(
+        "route_query routing={} profile={} query_ms={:.3f} found={} cost={}",
+        to_log_string(routing_algo), to_str(profile),
+        static_cast<double>(query_us) / 1000.0, p.has_value(),
+        p.has_value() ? p->cost_ : kInfeasible);
 
-    auto const p1 = route(params, w_, l_, profile, from, std::vector{to}, max,
-                          dir, 100, nullptr, nullptr, elevations_);
+    if constexpr (kRouteComparisonDebugOutput) {
+      auto const p1 = route(params, w_, l_, profile, from, std::vector{to}, max,
+                            dir, 100, nullptr, nullptr, elevations_);
 
-    auto const print = [](char const* name, std::optional<path> const& p) {
-      if (p.has_value()) {
-        std::cout << name << " cost: " << p->cost_ << "\n";
-      } else {
-        std::cout << name << ": not found\n";
-      }
-    };
-    print("p", p);
-    print("p1", p1.at(0));
+      auto const print = [](char const* name, std::optional<path> const& p) {
+        if (p.has_value()) {
+          std::cout << name << " cost: " << p->cost_ << "\n";
+        } else {
+          std::cout << name << ": not found\n";
+        }
+      };
+      print("p", p);
+      print("p1", p1.at(0));
+    }
 
     if (!p.has_value()) {
       cb(json_response(req, "could not find a valid path",
@@ -199,6 +234,104 @@ struct http_server::impl {
     auto gj = geojson_writer{.w_ = w_};
     l_.find({min, max}, [&](way_idx_t const w) { gj.write_way(w); });
 
+    send_graph_response(req, cb, gj);
+  }
+
+  void handle_cch_adjacent(web_server::http_req_t const& req,
+                           web_server::http_res_cb_t const& cb) {
+    auto const query = boost::json::parse(req.body()).as_object();
+    auto const profile = get_search_profile_from_request(query);
+    auto const& edge_weights = profile == search_profile::kBus
+                                   ? w_.r_->cch_bus_edge_weights_
+                                   : w_.r_->cch_car_edge_weights_;
+    auto const node = query.contains("internal_id")
+                          ? node_idx_t{static_cast<node_idx_t::value_t>(
+                                query.at("internal_id").as_int64())}
+                          : w_.get_node_idx(osm_node_idx_t{
+                                static_cast<osm_node_idx_t::value_t>(
+                                    query.at("osm_node_id").as_int64())});
+    if (node >= w_.n_nodes()) {
+      cb(json_response(req, R"({"error": "invalid node"})",
+                       http::status::bad_request));
+      return;
+    }
+
+    auto features = json::array{};
+    auto const add_feature = [&](node_idx_t const from, node_idx_t const to,
+                                 cch_edge const& edge,
+                                 bool const stored_from_clicked) {
+      auto min_cost = kInfeasible;
+      auto min_distance = std::numeric_limits<distance_t>::max();
+      auto shortcut_weights = std::uint64_t{0U};
+      auto base_weights = std::uint64_t{0U};
+      auto sample_via = node_idx_t::invalid();
+
+      for (auto const& weight : edge.weights_) {
+        if (weight.via_ == node_idx_t::invalid()) {
+          ++base_weights;
+        } else {
+          ++shortcut_weights;
+          if (sample_via == node_idx_t::invalid()) {
+            sample_via = weight.via_;
+          }
+        }
+        if (weight.cost_ < min_cost ||
+            (weight.cost_ == min_cost && weight.distance_ < min_distance)) {
+          min_cost = weight.cost_;
+          min_distance = weight.distance_;
+        }
+      }
+
+      auto const kind = shortcut_weights != 0U && base_weights != 0U
+                            ? "mixed"
+                            : (shortcut_weights != 0U ? "shortcut" : "base");
+      features.emplace_back(json::object{
+          {"type", "Feature"},
+          {"properties",
+           json::object{{"type", "cch-adjacent"},
+                        {"kind", kind},
+                        {"from_osm_node_id", to_idx(w_.node_to_osm_[from])},
+                        {"to_osm_node_id", to_idx(w_.node_to_osm_[to])},
+                        {"from_internal_id", to_idx(from)},
+                        {"to_internal_id", to_idx(to)},
+                        {"from_rank", w_.r_->node_importance_[from]},
+                        {"to_rank", w_.r_->node_importance_[to]},
+                        {"stored_from_clicked", stored_from_clicked},
+                        {"weights", edge.weights_.size()},
+                        {"shortcut_weights", shortcut_weights},
+                        {"base_weights", base_weights},
+                        {"min_cost", min_cost},
+                        {"min_distance", min_distance},
+                        {"sample_via_osm_node_id",
+                         sample_via == node_idx_t::invalid()
+                             ? 0U
+                             : to_idx(w_.node_to_osm_[sample_via])}}},
+          {"geometry",
+           to_line_string(w_.get_node_pos(from), w_.get_node_pos(to))}});
+    };
+
+    for (auto const& edge : edge_weights[node]) {
+      add_feature(node, edge.to_, edge, true);
+    }
+    for (auto low = node_idx_t{0U}; low != w_.n_nodes(); ++low) {
+      if (low == node) {
+        continue;
+      }
+      for (auto const& edge : edge_weights[low]) {
+        if (edge.to_ == node) {
+          add_feature(low, node, edge, false);
+        }
+      }
+    }
+
+    cb(json_response(
+        req, json::serialize(json::object{{"type", "FeatureCollection"},
+                                          {"features", std::move(features)}})));
+  }
+
+  void send_graph_response(web_server::http_req_t const& req,
+                           web_server::http_res_cb_t const& cb,
+                           geojson_writer& gj) {
     gj.finish();
     cb(json_response(req, gj.string()));
   }
@@ -241,7 +374,9 @@ struct http_server::impl {
 
   void handle_request(web_server::http_req_t const& req,
                       web_server::http_res_cb_t const& cb) {
-    std::cout << "[" << req.method_string() << "] " << req.target() << '\n';
+    if constexpr (kRequestDebugOutput) {
+      std::cout << "[" << req.method_string() << "] " << req.target() << '\n';
+    }
     switch (req.method()) {
       case http::verb::options: return cb(json_response(req, {}));
       case http::verb::post: {
@@ -265,6 +400,13 @@ struct http_server::impl {
               [this](web_server::http_req_t const& req1,
                      web_server::http_res_cb_t const& cb1) {
                 handle_graph(req1, cb1);
+              },
+              req, cb);
+        } else if (target.starts_with("/api/cch-adjacent")) {
+          return run_parallel(
+              [this](web_server::http_req_t const& req1,
+                     web_server::http_res_cb_t const& cb1) {
+                handle_cch_adjacent(req1, cb1);
               },
               req, cb);
         } else if (target.starts_with("/api/platforms")) {
