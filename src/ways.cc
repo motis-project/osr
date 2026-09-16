@@ -85,7 +85,7 @@ ways::ways(std::filesystem::path p, cista::mmap::protection const mode)
           mm_vec<std::uint64_t>(mm("way_has_conditional_access_no"))},
       way_conditional_access_no_{mm("way_conditional_access_no")} {}
 
-void ways::build_components_and_importance() {
+void ways::build_components_and_importance(bool const with_cch) {
   r_->node_importance_.resize(n_nodes());
   auto q = hash_set<way_idx_t>{};
   auto flood_fill = [&](way_idx_t const way_idx, component_idx_t const c) {
@@ -127,6 +127,10 @@ void ways::build_components_and_importance() {
     pt->increment();
   }
   r_->way_importance_.clear();
+
+  if (!with_cch) {
+    return;
+  }
 
 #ifdef USE_INERTIAL_FLOW_CUT
   // Some extraction-only fixtures have ways but no routing nodes. IFC's

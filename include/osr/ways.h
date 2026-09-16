@@ -365,7 +365,7 @@ struct ways {
   void connect_ways();
   void add_shortcuts();
   void compute_turn_bearings();
-  void build_components_and_importance();
+  void build_components_and_importance(bool with_cch);
 
   std::optional<way_idx_t> find_way(osm_way_idx_t const i) {
     auto const it = std::lower_bound(

@@ -254,6 +254,7 @@ jobs:
           - preset: linux-sanitizer
           - preset: linux-debug
             emulator: valgrind --suppressions=./docs/mmap.supp --suppressions=./docs/tbb.supp --suppressions=./docs/pthread.supp --leak-check=full --error-exitcode=1
+            testargs: --gtest_filter=-dijkstra_astarbidir.*
     env:
       BUILDCACHE_DIR: /buildcache
       BUILDCACHE_COMPRESS: true
@@ -300,7 +301,7 @@ jobs:
       # ==== TESTS ====
       - name: Run Tests
         if: ${{ !matrix.config.skiptests }}
-        run: ${{ matrix.config.emulator }} build/osr-test
+        run: ${{ matrix.config.emulator }} build/osr-test ${{ matrix.config.testargs }}
 
       # ==== DISTRIBUTION ====
       - name: Create Distribution

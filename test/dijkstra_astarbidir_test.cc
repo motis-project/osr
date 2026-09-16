@@ -39,7 +39,7 @@ void load(std::string_view raw_data, std::string_view data_dir) {
     auto ec = std::error_code{};
     fs::remove_all(p, ec);
     fs::create_directories(p, ec);
-    osr::extract(false, raw_data, data_dir, fs::path{});
+    osr::extract(false, raw_data, data_dir, fs::path{}, /*with_cch=*/false);
   }
 }
 

@@ -714,7 +714,8 @@ struct rel_ways_handler : public osmium::handler::Handler {
 void extract(bool const with_platforms,
              fs::path const& in,
              fs::path const& out,
-             fs::path const& elevation_dir) {
+             fs::path const& elevation_dir,
+             bool const with_cch) {
   auto ec = std::error_code{};
   fs::remove_all(out, ec);
   if (!fs::is_directory(out)) {
@@ -1053,9 +1054,11 @@ void extract(bool const with_platforms,
         pt->update_fn());
   }
 
-  w.build_components_and_importance();
+  w.build_components_and_importance(with_cch);
   w.add_restriction(r);
-  w.add_shortcuts();
+  if (with_cch) {
+    w.add_shortcuts();
+  }
 
   utl::sort(w.r_->multi_level_elevators_);
 
