@@ -300,7 +300,6 @@ void connect_parking_ways(
                                 true, is_car_accessible)
             : find_closest<car>(w, l, loc, direction::kBackward,
                                 matching_component, way_idx, car_score);
-		fmt::println("FOOT TEST: {}  CAR TEST: {}",foot_offset.has_value(), car_offset.has_value());
     if (!foot_offset.has_value() || !car_offset.has_value()) {
       fmt::println(
           "WARNING: No usable way candidate found for way {}"
