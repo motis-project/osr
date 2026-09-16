@@ -33,7 +33,8 @@ public:
     fs::remove_all(dir_, ec);
     fs::create_directories(dir_, ec);
 
-    osr::extract(false, "test/miraustr.osm.pbf", dir_, {});
+    osr::extract(false, "test/miraustr.osm.pbf", dir_, {},
+                 /*with_cch=*/false);
     w_ = std::make_unique<osr::ways>(dir_, cista::mmap::protection::READ);
     l_ =
         std::make_unique<osr::lookup>(*w_, dir_, cista::mmap::protection::READ);

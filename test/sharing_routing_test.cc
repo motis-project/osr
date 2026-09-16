@@ -28,7 +28,8 @@ struct sharing_routing_test : public ::testing::Test {
     auto ec = std::error_code{};
     fs::remove_all(dir_, ec);
     fs::create_directories(dir_, ec);
-    extract(false, test::osm_to_pbf("test/sharing-routing.osm"), dir_, {});
+    extract(false, test::osm_to_pbf("test/sharing-routing.osm"), dir_, {},
+            /*with_cch=*/false);
     ways_ = std::make_unique<ways>(dir_, cista::mmap::protection::READ);
     lookup_ =
         std::make_unique<lookup>(*ways_, dir_, cista::mmap::protection::READ);

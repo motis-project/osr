@@ -192,7 +192,7 @@ struct crossing_node_access_test : public ::testing::Test {
             osr::test::write_osm_pbf("osr_crossing_node_access",
                                      kCrossingNodeAccessOsm)
                 .generic_string(),
-            dir_, {});
+            dir_, {}, /*with_cch=*/false);
     ways_ = std::make_unique<ways>(dir_, cista::mmap::protection::READ);
   }
 
@@ -214,7 +214,8 @@ TEST(extract, string_cache) {
   fs::remove_all(p, ec);
   fs::create_directories(p, ec);
 
-  extract(false, osr::test::osm_to_pbf("test/map.osm").generic_string(), p, {});
+  extract(false, osr::test::osm_to_pbf("test/map.osm").generic_string(), p, {},
+          /*with_cch=*/false);
 
   auto w = ways{p, cista::mmap::protection::READ};
   // 140186757 and 519430215 have the same name=Pankratiusstraße
@@ -234,7 +235,8 @@ TEST(extract, bus_only_on_highway) {
   fs::remove_all(p, ec);
   fs::create_directories(p, ec);
 
-  extract(false, "test/luisenplatz-darmstadt.osm.pbf", p, {});
+  extract(false, "test/luisenplatz-darmstadt.osm.pbf", p, {},
+          /*with_cch=*/false);
 
   auto w = ways{p, cista::mmap::protection::READ};
   auto const luisenplatz_outer = w.find_way(osm_way_idx_t{53341306});
@@ -253,7 +255,7 @@ TEST(extract, standalone_ramp) {
 
   extract(false,
           osr::test::osm_to_pbf("test/standalone-ramp.osm").generic_string(), p,
-          {});
+          {}, /*with_cch=*/false);
 
   auto w = ways{p, cista::mmap::protection::READ};
   auto const ramp = w.find_way(osm_way_idx_t{1});
@@ -276,7 +278,7 @@ TEST(extract, supports_negative_custom_ids) {
   fs::remove_all(dir, ec);
   fs::create_directories(dir, ec);
 
-  extract(false, osm_path.generic_string(), dir, {});
+  extract(false, osm_path.generic_string(), dir, {}, /*with_cch=*/false);
 
   auto w = ways{dir, cista::mmap::protection::READ};
 
@@ -305,7 +307,7 @@ TEST(extract, supports_huge_positive_custom_ids) {
   fs::remove_all(dir, ec);
   fs::create_directories(dir, ec);
 
-  extract(false, osm_path.generic_string(), dir, {});
+  extract(false, osm_path.generic_string(), dir, {}, /*with_cch=*/false);
 
   auto w = ways{dir, cista::mmap::protection::READ};
   auto const sparse_way = w.find_way(osm_way_idx_t{35184372088831ULL});
@@ -326,7 +328,7 @@ TEST(extract, marks_low_emission_zone_ways) {
   fs::remove_all(dir, ec);
   fs::create_directories(dir, ec);
 
-  extract(false, osm_path.generic_string(), dir, {});
+  extract(false, osm_path.generic_string(), dir, {}, /*with_cch=*/false);
 
   auto w = ways{dir, cista::mmap::protection::READ};
   auto const inside = w.find_way(osm_way_idx_t{10});
