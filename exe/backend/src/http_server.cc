@@ -194,7 +194,6 @@ struct http_server::impl {
                     web_server::http_res_cb_t const& cb) {
     auto const query = boost::json::parse(req.body()).as_object();
     auto const waypoints = query.at("waypoints").as_array();
-    auto const profile = get_search_profile_from_request(query);
     auto const min =
         geo::latlng{waypoints[1].as_double(), waypoints[0].as_double()};
     auto const max =
@@ -218,15 +217,7 @@ struct http_server::impl {
     });
     gj.write_additional_connections(l_, connections);
 
-    with_profile(profile,
-                 [&]<Profile P>(P&&) { send_graph_response<P>(req, cb, gj); });
-  }
-
-  template <Profile P>
-  void send_graph_response(web_server::http_req_t const& req,
-                           web_server::http_res_cb_t const& cb,
-                           geojson_writer& gj) {
-    gj.finish(&get_dijkstra<P>());
+    gj.finish();
     cb(json_response(req, gj.string()));
   }
 

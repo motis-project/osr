@@ -39,7 +39,7 @@ struct bike {
   struct parameters {
     using profile_t =
         bike<Costing, ElevationUpCost, ElevationExponentThousandth>;
-    float const speed_meters_per_second_{4.2F};
+    float speed_meters_per_second_{4.2F};
   };
 
   struct node {

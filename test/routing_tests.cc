@@ -261,7 +261,7 @@ TEST(routing, aplerbeck_levels) {
     }
     auto gj = osr::geojson_writer{.w_ = w};
     l.find(bbox, [&](osr::way_idx_t const way) { gj.write_way(way); });
-    gj.finish(&osr::get_dijkstra<foot_t>());
+    gj.finish();
     auto const path = dir / (label + ".geojson");
     std::ofstream{path} << boost::json::serialize(gj.json());
     std::cout << "  wrote " << path << std::endl;
