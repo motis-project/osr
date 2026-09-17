@@ -441,7 +441,8 @@ bool is_steps(tags const& t, osm_obj_type const type) {
   switch (type) {
     case osr::osm_obj_type::kWay: return t.highway_ == "steps"sv;
     case osr::osm_obj_type::kNode:
-      return !t.kerb_.empty() && (t.kerb_ == "yes"sv || t.kerb_ == "raised"sv);
+      return !t.is_platform() && !t.kerb_.empty() &&
+             (t.kerb_ == "yes"sv || t.kerb_ == "raised"sv);
     case osm_obj_type::kRelation:
       utl::fail("is_steps should be unreachable for kRelation");
   }
@@ -521,8 +522,11 @@ struct foot_profile {
 struct wheelchair_profile {
   static override access_override(tags const& t, osm_obj_type const type) {
     switch (cista::hash(t.kerb_)) {
-      case cista::hash("raised"):
       case cista::hash("rolled"): return override::kBlacklist;
+      case cista::hash("raised"):
+        if (!t.is_platform()) {
+          return override::kBlacklist;
+        }
     }
 
     return foot_profile::access_override(t, type);
