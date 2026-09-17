@@ -1,0 +1,8 @@
+diff --git a/src/connected_components.h b/src/connected_components.h
+index aeb1278..5aa9142 100644
+--- a/src/connected_components.h
++++ b/src/connected_components.h
+@@ -230 +230,2 @@ ArrayIDIDFunc compute_biconnected_components(
+-		depth[x] = 0;
++		depth[x] = 0;
++		min_succ_depth[x] = std::numeric_limits<int>::max();
