@@ -1,0 +1,30 @@
+{
+  "configurations": [
+    {
+      "name": "Mac",
+      "includePath": [
+        "${workspaceFolder}/**",
+        "${workspaceFolder}/deps/googletest/googletest/include",
+        "${workspaceFolder}/deps/cista/include",
+        "${workspaceFolder}/deps/fmt/include",
+        "${workspaceFolder}/deps/boost",
+        "${workspaceFolder}/deps/geo/include",
+        "${workspaceFolder}/deps/utl/include",
+        "${workspaceFolder}/deps/date/include",
+        "${workspaceFolder}/deps/rapidjson/include",
+        "${workspaceFolder}/deps/unordered_dense/include",
+        "${workspaceFolder}/deps/oneTBB/include"
+      ],
+      "defines": [],
+      "macFrameworkPath": [
+        "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/System/Library/Frameworks"
+      ],
+      "compilerPath": "/usr/bin/clang++",
+      "cStandard": "c17",
+      "cppStandard": "c++20",
+      "intelliSenseMode": "macos-clang-arm64",
+      "compileCommands": "${workspaceFolder}/build/macos-arm64-relwithdebinfo/compile_commands.json"
+    }
+  ],
+  "version": 4
+}

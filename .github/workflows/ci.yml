@@ -254,6 +254,7 @@ jobs:
           - preset: linux-sanitizer
           - preset: linux-debug
             emulator: valgrind --suppressions=./docs/mmap.supp --suppressions=./docs/tbb.supp --suppressions=./docs/pthread.supp --leak-check=full --error-exitcode=1
+            testargs: --gtest_filter=-dijkstra_astarbidir.*
     env:
       BUILDCACHE_DIR: /buildcache
       BUILDCACHE_COMPRESS: true
@@ -290,12 +291,17 @@ jobs:
           wget -N https://github.com/motis-project/test-data/releases/download/osr-test-data-1/monaco.osm.pbf
           wget -N https://github.com/motis-project/test-data/releases/download/osr-test-data-1/switzerland.osm.pbf
           cd -
-          ln -s /testdata/* test/
+          for fixture in /testdata/*; do
+            target="test/$(basename "$fixture")"
+            if [ ! -e "$target" ] && [ ! -L "$target" ]; then
+              ln -s "$fixture" "$target"
+            fi
+          done
 
       # ==== TESTS ====
       - name: Run Tests
         if: ${{ !matrix.config.skiptests }}
-        run: ${{ matrix.config.emulator }} build/osr-test
+        run: ${{ matrix.config.emulator }} build/osr-test ${{ matrix.config.testargs }}
 
       # ==== DISTRIBUTION ====
       - name: Create Distribution

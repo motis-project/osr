@@ -66,7 +66,60 @@ const sport_outline = "#b3e998";
 const building = "#ded7d3";
 const building_outline = "#cfc8c4";
 
+const useLegacyMotisVectorTiles = false;
+const basemapStyle = "carto-voyager";
+
+const basemaps = {
+    "osm-standard": {
+        tiles: ["https://tile.openstreetmap.org/{z}/{x}/{y}.png"],
+        maxzoom: 19,
+        attribution: "© OpenStreetMap contributors"
+    },
+    "carto-light": {
+        tiles: [
+            "https://a.basemaps.cartocdn.com/light_all/{z}/{x}/{y}@2x.png",
+            "https://b.basemaps.cartocdn.com/light_all/{z}/{x}/{y}@2x.png",
+            "https://c.basemaps.cartocdn.com/light_all/{z}/{x}/{y}@2x.png"
+        ],
+        maxzoom: 20,
+        attribution: "© OpenStreetMap contributors © CARTO"
+    },
+    "carto-voyager": {
+        tiles: [
+            "https://a.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}@2x.png",
+            "https://b.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}@2x.png",
+            "https://c.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}@2x.png"
+        ],
+        maxzoom: 20,
+        attribution: "© OpenStreetMap contributors © CARTO"
+    }
+};
+
 const style = (map, level) => {
+    if (!useLegacyMotisVectorTiles) {
+        const basemap = basemaps[basemapStyle] ?? basemaps["carto-voyager"];
+        map.setStyle({
+            version: 8,
+            sources: {
+                basemap: {
+                    type: "raster",
+                    tiles: basemap.tiles,
+                    tileSize: 256,
+                    maxzoom: basemap.maxzoom,
+                    attribution: basemap.attribution
+                }
+            },
+            layers: [
+                {
+                    id: "basemap",
+                    type: "raster",
+                    source: "basemap"
+                }
+            ]
+        });
+        return;
+    }
+
     const demSource = new mlcontour.DemSource({
         url: 'https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png',
         encoding: 'terrarium',
@@ -133,13 +186,13 @@ const style = (map, level) => {
             {
                 "id": "background",
                 "type": "background",
-                "paint": {"background-color": "#f8f4f0"}
+                "paint": { "background-color": "#f8f4f0" }
             }, {
                 "id": "coastline",
                 "type": "fill",
                 "source": "osm",
                 "source-layer": "coastline",
-                "paint": {"fill-color": water}
+                "paint": { "fill-color": water }
             },
             {
                 "id": "landuse_park",
@@ -185,7 +238,7 @@ const style = (map, level) => {
                 "type": "fill",
                 "source": "osm",
                 "source-layer": "water",
-                "paint": {"fill-color": water}
+                "paint": { "fill-color": water }
             },
             {
                 "id": "sport",
@@ -202,14 +255,14 @@ const style = (map, level) => {
                 "type": "fill",
                 "source": "osm",
                 "source-layer": "pedestrian",
-                "paint": {"fill-color": pedestrian}
+                "paint": { "fill-color": pedestrian }
             },
             {
                 "id": "waterway",
                 "type": "line",
                 "source": "osm",
                 "source-layer": "waterway",
-                "paint": {"line-color": water}
+                "paint": { "line-color": water }
             },
             {
                 "id": "building",
@@ -329,7 +382,7 @@ const style = (map, level) => {
                 },
                 "minzoom": 14,
                 "paint": {
-                    "line-dasharray": [ 0.75, 1.5 ],
+                    "line-dasharray": [0.75, 1.5],
                     "line-color": "#fff",
                     "line-opacity": 0.5,
                     "line-width": [
@@ -370,7 +423,7 @@ const style = (map, level) => {
                         ]
                 ],
                 "paint": {
-                    "line-dasharray": [ 0.5, 0.5 ],
+                    "line-dasharray": [0.5, 0.5],
                     "line-color": "#ff4524",
                     "line-opacity": 1,
                     "line-width": [
@@ -442,7 +495,7 @@ const style = (map, level) => {
                 "type": "line",
                 "source": "osm",
                 "source-layer": "road",
-                "filter": [ "==", "highway", "residential" ],
+                "filter": ["==", "highway", "residential"],
                 "layout": {
                     "line-cap": "round",
                 },
@@ -510,12 +563,12 @@ const style = (map, level) => {
                         [">", ["zoom"], 11]]],
                 "paint": {
                     "line-color": ["match", ["get", "highway"],
-                            "motorway", "#ffb366",
-                            ["trunk", "motorway_link"], "#f7e06e",
-                            ["primary", "secondary", "aeroway", "trunk_link"], "#fffbf8",
-                            ["primary_link", "secondary_link", "tertiary", "tertiary_link"], "#ffffff",
-                            "residential", "#ffffff",
-                            "#ffffff"],
+                        "motorway", "#ffb366",
+                        ["trunk", "motorway_link"], "#f7e06e",
+                        ["primary", "secondary", "aeroway", "trunk_link"], "#fffbf8",
+                        ["primary_link", "secondary_link", "tertiary", "tertiary_link"], "#ffffff",
+                        "residential", "#ffffff",
+                        "#ffffff"],
                     "line-width": [
                         "let",
                         "base", ["match", ["get", "highway"],

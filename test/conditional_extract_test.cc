@@ -113,7 +113,8 @@ TEST(conditional_extract, stores_parseable_conditional_restrictions) {
       osr::test::write_osm_pbf("osr_conditionals", kConditionalRestrictionsOsm);
   auto const dir = prepare_extract_dir("osr_conditionals_dir");
 
-  osr::extract(false, osm_path.generic_string(), dir, {});
+  osr::extract(false, osm_path.generic_string(), dir, {},
+               /*with_cch=*/false);
 
   auto w = osr::ways{dir, cista::mmap::protection::READ};
   auto const way = w.find_way(osr::osm_way_idx_t{10});
@@ -155,7 +156,8 @@ TEST(conditional_extract, writes_conditionals_to_geojson_debug_output) {
                                                  kConditionalRestrictionsOsm);
   auto const dir = prepare_extract_dir("osr_conditionals_geojson_dir");
 
-  osr::extract(false, osm_path.generic_string(), dir, {});
+  osr::extract(false, osm_path.generic_string(), dir, {},
+               /*with_cch=*/false);
 
   auto w = osr::ways{dir, cista::mmap::protection::READ};
   auto const way = w.find_way(osr::osm_way_idx_t{10});
@@ -183,7 +185,8 @@ TEST(conditional_extract, ignores_unsupported_conditionals) {
                                                  kConditionalRestrictionsOsm);
   auto const dir = prepare_extract_dir("osr_conditionals_unsupported_dir");
 
-  osr::extract(false, osm_path.generic_string(), dir, {});
+  osr::extract(false, osm_path.generic_string(), dir, {},
+               /*with_cch=*/false);
 
   auto w = osr::ways{dir, cista::mmap::protection::READ};
   auto const way = w.find_way(osr::osm_way_idx_t{20});
@@ -198,7 +201,8 @@ TEST(conditional_extract, stores_hgv_access_values_separately) {
       osr::test::write_osm_pbf("osr_hgv_access", kHgvAccessOsm);
   auto const dir = prepare_extract_dir("osr_hgv_access_dir");
 
-  osr::extract(false, osm_path.generic_string(), dir, {});
+  osr::extract(false, osm_path.generic_string(), dir, {},
+               /*with_cch=*/false);
 
   auto w = osr::ways{dir, cista::mmap::protection::READ};
   auto const get_hgv_access = [&](osr::osm_way_idx_t const osm_way) {

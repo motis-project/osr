@@ -1,0 +1,7 @@
+{
+  "recommendations": [
+    "vadimcn.vscode-lldb",
+    "matepek.vscode-catch2-test-adapter",
+    "ms-vscode.cpptools"
+  ]
+}

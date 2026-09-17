@@ -33,7 +33,8 @@ public:
     fs::remove_all(dir_, ec);
     fs::create_directories(dir_, ec);
 
-    osr::extract(false, "test/miraustr.osm.pbf", dir_, {});
+    osr::extract(false, "test/miraustr.osm.pbf", dir_, {},
+                 /*with_cch=*/false);
     w_ = std::make_unique<osr::ways>(dir_, cista::mmap::protection::READ);
     l_ =
         std::make_unique<osr::lookup>(*w_, dir_, cista::mmap::protection::READ);
@@ -86,4 +87,17 @@ TEST(cost_budget, short_walk_with_generous_budget) {
   ASSERT_TRUE(dijkstra.has_value());
   ASSERT_TRUE(astar_bi.has_value());
   EXPECT_EQ(dijkstra->cost_, astar_bi->cost_);
+}
+
+TEST(cost_budget, cch_falls_back_to_dijkstra_for_foot) {
+  auto const g = graph{};
+  auto const reference =
+      g.route(kReconstructionBudget, osr::routing_algorithm::kDijkstra);
+  auto const result =
+      g.route(kReconstructionBudget, osr::routing_algorithm::kCCH);
+  ASSERT_TRUE(reference.has_value());
+  ASSERT_TRUE(result.has_value());
+  EXPECT_EQ(reference->cost_, result->cost_);
+  EXPECT_EQ(reference->duration_, result->duration_);
+  EXPECT_DOUBLE_EQ(reference->dist_, result->dist_);
 }

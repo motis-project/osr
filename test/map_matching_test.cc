@@ -24,7 +24,7 @@ fs::path extract(fs::path const& osm_path) {
   fs::remove_all(dir, ec);
   fs::create_directories(dir, ec);
 
-  osr::extract(false, osm_path, dir, {});
+  osr::extract(false, osm_path, dir, {}, /*with_cch=*/false);
 
   return dir;
 }

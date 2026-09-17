@@ -5,3 +5,8 @@
 /.clang-tidy
 /.vs
 /out
+.DS_Store
+/test/monaco
+/test/hamburg
+/test/rheinland-pfalz
+/_notes/

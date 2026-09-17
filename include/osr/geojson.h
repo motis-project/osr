@@ -53,18 +53,24 @@ inline boost::json::object to_featurecollection_value(
                        : boost::json::value{{}}},
       {"features",
        utl::all(p->segments_) | utl::transform([&](const path::segment& s) {
-         return boost::json::object{
-             {"type", "Feature"},
-             {
-                 "properties",
-                 {{"level", s.from_level_.to_float()},
-                  {"osm_way_id", s.way_ == way_idx_t::invalid()
-                                     ? 0U
-                                     : to_idx(w.way_osm_idx_[s.way_])},
-                  {"cost", s.cost_},
-                  {"distance", s.dist_}},
-             },
-             {"geometry", to_line_string(s.polyline_)}};
+         auto properties = boost::json::object{
+             {"level", s.from_level_.to_float()},
+             {"osm_way_id", s.way_ == way_idx_t::invalid()
+                                ? 0U
+                                : to_idx(w.way_osm_idx_[s.way_])},
+             {"cost", s.cost_},
+             {"distance", s.dist_}};
+         if (s.cch_debug_shortcut_) {
+           properties["cch_debug_type"] = "shortcut";
+           properties["cch_debug_depth"] = s.cch_debug_depth_;
+           properties["cch_debug_via"] =
+               s.cch_debug_via_ == node_idx_t::invalid()
+                   ? 0U
+                   : to_idx(w.node_to_osm_[s.cch_debug_via_]);
+         }
+         return boost::json::object{{"type", "Feature"},
+                                    {"properties", properties},
+                                    {"geometry", to_line_string(s.polyline_)}};
        }) | utl::emplace_back_to<boost::json::array>()}};
 }
 
@@ -694,6 +700,8 @@ struct geojson_writer {
           {"car", p.is_car_accessible()},
           {"bike", p.is_bike_accessible()},
           {"foot", p.is_walk_accessible()},
+          {"rank", w_.r_->node_importance_[n]},
+          {"importance", w_.r_->node_importance_[n]},
           {"bus", p.is_bus_accessible()},
           {"bus_with_penalty", p.is_bus_accessible_with_penalty()},
           {"is_restricted", w_.r_->node_is_restricted_[n]},

@@ -30,6 +30,12 @@ struct astar;
 template <Profile>
 struct bidirectional;
 
+template <Profile, bool EarlyTermination>
+struct dijkstra_bidir;
+
+template <Profile, bool EarlyTermination>
+struct cch;
+
 struct sharing_data;
 
 struct one_to_many_state {
@@ -58,6 +64,12 @@ std::unique_ptr<one_to_many_state> route_one_to_many(
     std::function<bool(path const&)> const& do_reconstruct =
         [](path const&) { return false; },
     std::optional<routing_time_t> = std::nullopt);
+
+template <Profile P>
+dijkstra_bidir<P, false>& get_dijkstra_bidir();
+
+template <Profile P>
+cch<P, false>& get_cch();
 
 std::vector<std::optional<path>> route(
     profile_parameters const&,

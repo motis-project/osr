@@ -31,6 +31,10 @@ if (NOT DEFINED PROJECT_IS_TOP_LEVEL OR PROJECT_IS_TOP_LEVEL)
     endif ()
 
     if (DEFINED ENV{GITHUB_ACTIONS})
+        # pkg's fast path validates dependency commits, but not the generated
+        # deps/CMakeLists.txt in the runner's shared dependency cache.
+        # Rebuild that integration file from the manifest on every CI run.
+        file(REMOVE "${CMAKE_SOURCE_DIR}/.pkg.lock")
         message(STATUS "${pkg-bin} -l -h -f")
         execute_process(
                 COMMAND ${pkg-bin} -l -h -f
@@ -48,6 +52,44 @@ if (NOT DEFINED PROJECT_IS_TOP_LEVEL OR PROJECT_IS_TOP_LEVEL)
 
     if (NOT pkg-result EQUAL 0)
         message(FATAL_ERROR "pkg failed: ${pkg-result}")
+    endif ()
+
+    # TinyIntIDFunc::set performs a read-modify-write, so its packed storage
+    # must be initialized before individual entries are assigned.
+    set(ifc-source-dir "${CMAKE_CURRENT_SOURCE_DIR}/deps/InertialFlowCutter")
+    set(ifc-init-patches
+            "${CMAKE_CURRENT_SOURCE_DIR}/cmake/patches/inertialflowcutter-initialize-tiny-int.patch"
+            "${CMAKE_CURRENT_SOURCE_DIR}/cmake/patches/inertialflowcutter-initialize-dfs-root.patch")
+    if (EXISTS "${ifc-source-dir}")
+        foreach (ifc-init-patch IN LISTS ifc-init-patches)
+            execute_process(
+                    COMMAND git apply --unidiff-zero --reverse --check "${ifc-init-patch}"
+                    WORKING_DIRECTORY "${ifc-source-dir}"
+                    RESULT_VARIABLE ifc-reverse-patch-check-result
+                    OUTPUT_QUIET
+                    ERROR_QUIET
+            )
+            if (NOT ifc-reverse-patch-check-result EQUAL 0)
+                execute_process(
+                        COMMAND git apply --unidiff-zero --check "${ifc-init-patch}"
+                        WORKING_DIRECTORY "${ifc-source-dir}"
+                        RESULT_VARIABLE ifc-patch-check-result
+                        OUTPUT_QUIET
+                        ERROR_QUIET
+                )
+                if (NOT ifc-patch-check-result EQUAL 0)
+                    message(FATAL_ERROR "InertialFlowCutter initialization patch does not apply: ${ifc-init-patch}")
+                endif ()
+                execute_process(
+                        COMMAND git apply --unidiff-zero "${ifc-init-patch}"
+                        WORKING_DIRECTORY "${ifc-source-dir}"
+                        RESULT_VARIABLE ifc-patch-result
+                )
+                if (NOT ifc-patch-result EQUAL 0)
+                    message(FATAL_ERROR "Failed to patch InertialFlowCutter: ${ifc-patch-result}")
+                endif ()
+            endif ()
+        endforeach ()
     endif ()
 
     if (IS_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/deps")

@@ -1,0 +1,11 @@
+diff --git a/src/tiny_id_func.h b/src/tiny_id_func.h
+index 7bdc9f7..5a47b50 100644
+--- a/src/tiny_id_func.h
++++ b/src/tiny_id_func.h
+@@ -21 +21,3 @@ public:
+-		:preimage_(preimage), data_((preimage + entry_count_per_uint64 - 1) / entry_count_per_uint64){}
++		:preimage_(preimage), data_((preimage + entry_count_per_uint64 - 1) / entry_count_per_uint64){
++		data_.fill(0);
++	}
+@@ -30,0 +33 @@ public:
++		data_.fill(0);
