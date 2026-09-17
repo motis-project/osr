@@ -113,6 +113,7 @@ private:
         case cista::hash("hazmat"): hazmat_ = value; break;
         case cista::hash("hazmat:water"): hazmat_water_ = value; break;
         case cista::hash("foot"): foot_ = value; break;
+        case cista::hash("wheelchair"): wheelchair_ = value; break;
         case cista::hash("bicycle"): bicycle_ = value; break;
         case cista::hash("highway"):
           highway_ = value;
@@ -318,6 +319,9 @@ public:
   // https://wiki.openstreetmap.org/wiki/Key:foot
   std::string_view foot_;
 
+  // https://wiki.openstreetmap.org/wiki/Key:wheelchair
+  std::string_view wheelchair_;
+
   // https://wiki.openstreetmap.org/wiki/Key:bicycle
   std::string_view bicycle_;
 
@@ -521,6 +525,12 @@ struct foot_profile {
 
 struct wheelchair_profile {
   static override access_override(tags const& t, osm_obj_type const type) {
+    switch (cista::hash(t.wheelchair_)) {
+      case cista::hash("yes"):
+      case cista::hash("limited"): [[fallthrough]];
+      case cista::hash("designated"): return override::kWhitelist;
+      case cista::hash("no"): return override::kBlacklist;
+    }
     switch (cista::hash(t.kerb_)) {
       case cista::hash("rolled"): return override::kBlacklist;
       case cista::hash("raised"):
@@ -537,10 +547,6 @@ struct wheelchair_profile {
   }
 
   static bool access_with_penalty(tags const& t, osm_obj_type const type) {
-    using namespace std::string_view_literals;
-    if (t.kerb_ == "yes"sv) {
-      return true;
-    }
     return foot_profile::access_with_penalty(t, type);
   }
 };

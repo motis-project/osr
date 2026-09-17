@@ -399,10 +399,8 @@ struct foot {
         return infeasible_cost_and_duration();
       }
     }
-    auto const wheelchair_penalty = IsWheelchair && n.is_steps() ? 30U : 0U;
     return n.is_walk_accessible()
-               ? cost_and_duration_from_cost(
-                     n.is_elevator() ? 90U : wheelchair_penalty)
+               ? cost_and_duration_from_cost(n.is_elevator() ? 90U : 0U)
                : infeasible_cost_and_duration();
   }
 

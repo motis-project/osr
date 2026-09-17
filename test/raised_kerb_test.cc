@@ -210,7 +210,7 @@ TEST(routing, kerbs) {
     for (auto const [profile, cost, dist] :
          std::initializer_list<std::tuple<search_profile, cost_t, double>>{
              {search_profile::kFoot, 36U, path_dist},
-             {search_profile::kWheelchair, 56U + 30U, path_dist},
+             {search_profile::kWheelchair, 56U, path_dist},
              {search_profile::kBike, 12U + 30U, path_dist},
          }) {
       auto const p = route(profile, center, west);
