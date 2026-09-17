@@ -307,7 +307,9 @@ struct bike {
 
   static constexpr cost_and_duration node_cost(parameters const&,
                                                node_properties const n) {
-    return n.is_bike_accessible() ? cost_and_duration_from_cost(0U)
+    return n.is_bike_accessible() ? n.is_steps()
+                                        ? cost_and_duration_from_cost(30U)
+                                        : cost_and_duration_from_cost(0U)
                                   : infeasible_cost_and_duration();
   }
 

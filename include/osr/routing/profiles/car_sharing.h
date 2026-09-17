@@ -67,6 +67,7 @@ struct car_sharing {
   static constexpr auto const kAdditionalNodeProperties =
       node_properties{.from_level_ = 0,
                       .is_foot_accessible_ = true,
+                      .is_wheelchair_accessible_ = true,
                       .is_bike_accessible_ = true,
                       .is_car_accessible_ = true,
                       .is_bus_accessible_ = true,
@@ -74,6 +75,7 @@ struct car_sharing {
                       .is_entrance_ = false,
                       .is_multi_level_ = false,
                       .is_parking_ = false,
+                      .is_steps_ = false,
                       .to_level_ = 0,
                       .is_bus_accessible_with_penalty_ = false};
 
