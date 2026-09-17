@@ -54,6 +54,42 @@ if (NOT DEFINED PROJECT_IS_TOP_LEVEL OR PROJECT_IS_TOP_LEVEL)
         message(FATAL_ERROR "pkg failed: ${pkg-result}")
     endif ()
 
+    # TinyIntIDFunc::set performs a read-modify-write, so its packed storage
+    # must be initialized before individual entries are assigned.
+    set(ifc-source-dir "${CMAKE_CURRENT_SOURCE_DIR}/deps/InertialFlowCutter")
+    set(ifc-init-patch
+            "${CMAKE_CURRENT_SOURCE_DIR}/cmake/patches/inertialflowcutter-initialize-tiny-int.patch")
+    if (EXISTS "${ifc-source-dir}")
+        execute_process(
+                COMMAND git apply --unidiff-zero --check "${ifc-init-patch}"
+                WORKING_DIRECTORY "${ifc-source-dir}"
+                RESULT_VARIABLE ifc-patch-check-result
+                OUTPUT_QUIET
+                ERROR_QUIET
+        )
+        if (ifc-patch-check-result EQUAL 0)
+            execute_process(
+                    COMMAND git apply --unidiff-zero "${ifc-init-patch}"
+                    WORKING_DIRECTORY "${ifc-source-dir}"
+                    RESULT_VARIABLE ifc-patch-result
+            )
+            if (NOT ifc-patch-result EQUAL 0)
+                message(FATAL_ERROR "Failed to patch InertialFlowCutter: ${ifc-patch-result}")
+            endif ()
+        else ()
+            execute_process(
+                    COMMAND git apply --unidiff-zero --reverse --check "${ifc-init-patch}"
+                    WORKING_DIRECTORY "${ifc-source-dir}"
+                    RESULT_VARIABLE ifc-reverse-patch-check-result
+                    OUTPUT_QUIET
+                    ERROR_QUIET
+            )
+            if (NOT ifc-reverse-patch-check-result EQUAL 0)
+                message(FATAL_ERROR "InertialFlowCutter initialization patch does not apply")
+            endif ()
+        endif ()
+    endif ()
+
     if (IS_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/deps")
         add_subdirectory(deps)
     endif ()
