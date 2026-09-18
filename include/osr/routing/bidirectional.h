@@ -71,12 +71,7 @@ struct bidirectional {
     search_bounds_valid_ =
         diameter < max && max + std::max(diameter, kLongestNodeDistance * 2.0) <
                               std::numeric_limits<cost_t>::max();
-    auto const max_edge_radius =
-        static_cast<cost_t>((static_cast<std::uint64_t>(max) + 1U) / 2U);
-    radius_ = search_bounds_valid_
-                  ? std::max({static_cast<cost_t>(diameter * 0.5),
-                              kLongestNodeDistance, max_edge_radius})
-                  : max;
+    radius_ = search_bounds_valid_ ? kLongestNodeDistance : max;
     draining_ = false;
     drain_key_1_ = kInfeasible;
     drain_key_2_ = kInfeasible;
