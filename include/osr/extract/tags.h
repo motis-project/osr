@@ -445,8 +445,7 @@ bool is_steps(tags const& t, osm_obj_type const type) {
   switch (type) {
     case osr::osm_obj_type::kWay: return t.highway_ == "steps"sv;
     case osr::osm_obj_type::kNode:
-      return !t.is_platform() && !t.kerb_.empty() &&
-             (t.kerb_ == "yes"sv || t.kerb_ == "raised"sv);
+      return !t.kerb_.empty() && (t.kerb_ == "yes"sv || t.kerb_ == "raised"sv);
     case osm_obj_type::kRelation:
       utl::fail("is_steps should be unreachable for kRelation");
   }
