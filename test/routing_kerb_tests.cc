@@ -27,7 +27,7 @@ using namespace osr;
 namespace {
 
 // Star like ways
-// North, east, south, west: Kerb on interior node => needs to be pushed
+// Cardinals: Kerb on interior node => needs to be pushed
 // Diagonals: Kerbs on junctions, as possibly not pushed
 constexpr auto const kWayWithKerbs =
     R"(<?xml version="1.0" encoding="UTF-8"?>
