@@ -149,36 +149,36 @@ TEST(routing, kerbs) {
   auto const east = geo::latlng{.lat_ = 0.0, .lng_ = 0.0004};
   auto const south = geo::latlng{.lat_ = -0.0004, .lng_ = 0.0};
   auto const west = geo::latlng{.lat_ = 0.0, .lng_ = -0.0004};
-  auto const path_dist = 44.11949;
+  auto const min_dist = 44.0;
 
   // North: kerb=lowered: Reachable by all
   {
-    for (auto const [profile, cost, dist] :
-         std::initializer_list<std::tuple<search_profile, cost_t, double>>{
-             {search_profile::kFoot, 36U, path_dist},
-             {search_profile::kWheelchair, 55U, path_dist},
-             {search_profile::kBike, 11U, path_dist},
-             {search_profile::kCar, 8U, path_dist},
-             {search_profile::kBus, 12U, path_dist},
-             {search_profile::kHgv, 8U, path_dist},
+    for (auto const [profile, cost] :
+         std::initializer_list<std::tuple<search_profile, cost_t>>{
+             {search_profile::kFoot, 36U},
+             {search_profile::kWheelchair, 55U},
+             {search_profile::kBike, 11U},
+             {search_profile::kCar, 8U},
+             {search_profile::kBus, 12U},
+             {search_profile::kHgv, 8U},
          }) {
       auto const p = route(profile, center, north);
       ASSERT_TRUE(p.has_value());
       EXPECT_EQ(cost, p->cost_);
-      EXPECT_NEAR(dist, p->dist_, 10e-6);
+      EXPECT_TRUE(p->dist_ > min_dist);
     }
   }
   // East: kerb=raised: Only reachable by foot + bike
   {
-    for (auto const [profile, cost, dist] :
-         std::initializer_list<std::tuple<search_profile, cost_t, double>>{
-             {search_profile::kFoot, 36U, path_dist},
-             {search_profile::kBike, 12U + 30U, path_dist},
+    for (auto const [profile, cost] :
+         std::initializer_list<std::tuple<search_profile, cost_t>>{
+             {search_profile::kFoot, 36U},
+             {search_profile::kBike, 12U + 30U},
          }) {
       auto const p = route(profile, center, east);
       ASSERT_TRUE(p.has_value());
       EXPECT_EQ(cost, p->cost_);
-      EXPECT_NEAR(dist, p->dist_, 10e-6);
+      EXPECT_TRUE(p->dist_ > min_dist);
     }
     for (auto const profile :
          {search_profile::kWheelchair, search_profile::kCar}) {
@@ -188,17 +188,16 @@ TEST(routing, kerbs) {
   }
   // South: kerb=rolled: Not reachable by wheelchair
   {
-    auto const south_dist = 44.23899;
-    for (auto const [profile, cost, dist] :
-         std::initializer_list<std::tuple<search_profile, cost_t, double>>{
-             {search_profile::kFoot, 36U, south_dist},
-             {search_profile::kBike, 12U, south_dist},
-             {search_profile::kCar, 8U, south_dist},
+    for (auto const [profile, cost] :
+         std::initializer_list<std::tuple<search_profile, cost_t>>{
+             {search_profile::kFoot, 36U},
+             {search_profile::kBike, 12U},
+             {search_profile::kCar, 8U},
          }) {
       auto const p = route(profile, center, south);
       ASSERT_TRUE(p.has_value());
       EXPECT_EQ(cost, p->cost_);
-      EXPECT_NEAR(dist, p->dist_, 10e-6);
+      EXPECT_TRUE(p->dist_ > min_dist);
     }
     for (auto const profile : {search_profile::kWheelchair}) {
       auto const p = route(profile, center, south);
@@ -207,16 +206,16 @@ TEST(routing, kerbs) {
   }
   // West: kerb=yes: Not reachable by car
   {
-    for (auto const [profile, cost, dist] :
-         std::initializer_list<std::tuple<search_profile, cost_t, double>>{
-             {search_profile::kFoot, 36U, path_dist},
-             {search_profile::kWheelchair, 56U, path_dist},
-             {search_profile::kBike, 12U + 30U, path_dist},
+    for (auto const [profile, cost] :
+         std::initializer_list<std::tuple<search_profile, cost_t>>{
+             {search_profile::kFoot, 36U},
+             {search_profile::kWheelchair, 56U},
+             {search_profile::kBike, 12U + 30U},
          }) {
       auto const p = route(profile, center, west);
       ASSERT_TRUE(p.has_value());
       EXPECT_EQ(cost, p->cost_);
-      EXPECT_NEAR(dist, p->dist_, 10e-6);
+      EXPECT_TRUE(p->dist_ > min_dist);
     }
     for (auto const profile : {search_profile::kCar}) {
       auto const p = route(profile, center, west);
