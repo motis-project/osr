@@ -241,17 +241,6 @@ TEST(routing, kerbs) {
   auto w = osr::ways{dir, cista::mmap::protection::READ};
   auto l = osr::lookup{w, dir, cista::mmap::protection::READ};
 
-  auto const route = [&](search_profile const profile, geo::latlng const& from,
-                         geo::latlng const& to) {
-    // Use small matching distance to ensure only complete paths are found
-    auto const max_matching_distance = 10.0;
-    auto const max_cost = 900;
-    return osr::route(get_parameters(profile), w, l, profile,
-                      location{.pos_ = from, .lvl_ = kNoLevel},
-                      {location{.pos_ = to, .lvl_ = kNoLevel}}, max_cost,
-                      osr::direction::kForward, max_matching_distance, nullptr,
-                      nullptr, nullptr, osr::routing_algorithm::kDijkstra);
-  };
   auto const center = geo::latlng{.lat_ = 0.0, .lng_ = 0.0};
   auto const north = geo::latlng{.lat_ = 0.0004, .lng_ = 0.0};
   auto const east = geo::latlng{.lat_ = 0.0, .lng_ = 0.0004};
@@ -262,6 +251,18 @@ TEST(routing, kerbs) {
   auto const south_west = geo::latlng{.lat_ = -0.0004, .lng_ = -0.0004};
   auto const north_west = geo::latlng{.lat_ = 0.0004, .lng_ = -0.0004};
   auto const min_dist = 44.0;
+
+  auto const route = [&](search_profile const profile,
+                         geo::latlng const& from) {
+    // Use small matching distance to ensure only complete paths are found
+    auto const max_matching_distance = 10.0;
+    auto const max_cost = 900;
+    return osr::route(get_parameters(profile), w, l, profile,
+                      location{.pos_ = from, .lvl_ = kNoLevel},
+                      {location{.pos_ = center, .lvl_ = kNoLevel}}, max_cost,
+                      osr::direction::kForward, max_matching_distance, nullptr,
+                      nullptr, nullptr, osr::routing_algorithm::kDijkstra);
+  };
 
   // North: kerb=lowered: Reachable by all
   {
@@ -274,7 +275,7 @@ TEST(routing, kerbs) {
              {search_profile::kBus, 12U},
              {search_profile::kHgv, 8U},
          }) {
-      auto const p = route(profile, center, north);
+      auto const p = route(profile, north);
       ASSERT_TRUE(p.has_value());
       EXPECT_EQ(cost, p->cost_);
       EXPECT_TRUE(p->dist_ > min_dist);
@@ -287,14 +288,14 @@ TEST(routing, kerbs) {
              {search_profile::kFoot, 36U},
              {search_profile::kBike, 12U + 30U},
          }) {
-      auto const p = route(profile, center, east);
+      auto const p = route(profile, east);
       ASSERT_TRUE(p.has_value());
       EXPECT_EQ(cost, p->cost_);
       EXPECT_TRUE(p->dist_ > min_dist);
     }
     for (auto const profile :
          {search_profile::kWheelchair, search_profile::kCar}) {
-      auto const p = route(profile, center, east);
+      auto const p = route(profile, east);
       ASSERT_FALSE(p.has_value());
     }
   }
@@ -306,13 +307,13 @@ TEST(routing, kerbs) {
              {search_profile::kBike, 12U},
              {search_profile::kCar, 8U},
          }) {
-      auto const p = route(profile, center, south);
+      auto const p = route(profile, south);
       ASSERT_TRUE(p.has_value());
       EXPECT_EQ(cost, p->cost_);
       EXPECT_TRUE(p->dist_ > min_dist);
     }
     for (auto const profile : {search_profile::kWheelchair}) {
-      auto const p = route(profile, center, south);
+      auto const p = route(profile, south);
       ASSERT_FALSE(p.has_value());
     }
   }
@@ -324,13 +325,13 @@ TEST(routing, kerbs) {
              {search_profile::kWheelchair, 56U},
              {search_profile::kBike, 12U + 30U},
          }) {
-      auto const p = route(profile, center, west);
+      auto const p = route(profile, west);
       ASSERT_TRUE(p.has_value());
       EXPECT_EQ(cost, p->cost_);
       EXPECT_TRUE(p->dist_ > min_dist);
     }
     for (auto const profile : {search_profile::kCar}) {
-      auto const p = route(profile, center, west);
+      auto const p = route(profile, west);
       ASSERT_FALSE(p.has_value());
     }
   }
@@ -342,7 +343,7 @@ TEST(routing, kerbs) {
              {search_profile::kWheelchair, 79U},
              {search_profile::kBike, 16U + 30U},
          }) {
-      auto const p = route(profile, center, north_east);
+      auto const p = route(profile, north_east);
       ASSERT_TRUE(p.has_value());
       EXPECT_EQ(cost, p->cost_);
       EXPECT_TRUE(p->dist_ > min_dist);
@@ -356,7 +357,7 @@ TEST(routing, kerbs) {
              {search_profile::kWheelchair, 79U},
              {search_profile::kBike, 16U + 30U},
          }) {
-      auto const p = route(profile, center, south_east);
+      auto const p = route(profile, south_east);
       ASSERT_TRUE(p.has_value());
       EXPECT_EQ(cost, p->cost_);
       EXPECT_TRUE(p->dist_ > min_dist);
@@ -369,13 +370,13 @@ TEST(routing, kerbs) {
              {search_profile::kFoot, 51U},
              {search_profile::kBike, 16U},
          }) {
-      auto const p = route(profile, center, south_west);
+      auto const p = route(profile, south_west);
       ASSERT_TRUE(p.has_value());
       EXPECT_EQ(cost, p->cost_);
       EXPECT_TRUE(p->dist_ > min_dist);
     }
     for (auto const profile : {search_profile::kWheelchair}) {
-      auto const p = route(profile, center, south_west);
+      auto const p = route(profile, south_west);
       ASSERT_FALSE(p.has_value());
     }
   }
@@ -387,7 +388,7 @@ TEST(routing, kerbs) {
              {search_profile::kWheelchair, 79U},
              {search_profile::kBike, 16U + 30U},
          }) {
-      auto const p = route(profile, center, north_west);
+      auto const p = route(profile, north_west);
       ASSERT_TRUE(p.has_value());
       EXPECT_EQ(cost, p->cost_);
       EXPECT_TRUE(p->dist_ > min_dist);
