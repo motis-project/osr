@@ -446,10 +446,8 @@ bool is_steps(tags const& t, osm_obj_type const type) {
     case osr::osm_obj_type::kWay: return t.highway_ == "steps"sv;
     case osr::osm_obj_type::kNode:
       return !t.kerb_.empty() && (t.kerb_ == "yes"sv || t.kerb_ == "raised"sv);
-    case osm_obj_type::kRelation:
-      utl::fail("is_steps should be unreachable for kRelation");
+    default: return false;
   }
-  std::unreachable();
 }
 
 struct foot_profile {
