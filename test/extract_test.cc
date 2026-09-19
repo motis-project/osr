@@ -245,13 +245,13 @@ TEST(extract, bus_only_on_highway) {
   ASSERT_TRUE(wp.is_foot_accessible());
 }
 
-TEST(extract, accept_node_with_many_ways) {
+TEST(extract, ignores_ways_exceeding_max_ways_per_node) {
   auto const p = fs::temp_directory_path() / "osr_24_way_node_test";
   auto ec = std::error_code{};
   fs::remove_all(p, ec);
   fs::create_directories(p, ec);
 
-  extract(false, "test/24-way-node.osm.pbf", p, {});
+  extract(false, "test/39-way-node.osm.pbf", p, {});
 
   auto w = ways{p, cista::mmap::protection::READ};
   for (auto n = node_idx_t{0U}; n != w.n_nodes(); ++n) {
