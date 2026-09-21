@@ -307,14 +307,25 @@ void ways::connect_ways() {
     pt->status("Connect ways / transpose").in_high(n_ways).out_bounds(71, 74);
 
     // Reserve node_ways_ / node_in_way_idx_ for each node.
+    auto max_deg = std::size_t{0U};
+    auto max_deg_node = std::size_t{0U};
+    auto n_over = std::size_t{0U};
     for (auto n = std::size_t{0U}; n != n_nodes; ++n) {
       auto const size = count[n].exchange(0U, std::memory_order_relaxed);
-      utl::verify(size <= kMaxWaysPerNode,
-                  "node {} (osm={}) has {} ways, maximum is {}", n,
-                  node_to_osm_[node_idx_t{n}], size, kMaxWaysPerNode);
+      if (size > max_deg) {
+        max_deg = size;
+        max_deg_node = n;
+      }
+      if (size > kMaxWaysPerNode) {
+        ++n_over;
+      }
       r_->node_ways_.add_back_sized(size);
       r_->node_in_way_idx_.add_back_sized(size);
     }
+    utl::verify(max_deg <= kMaxWaysPerNode,
+                "max ways per node is {} (osm={}), limit {}, {} nodes over",
+                max_deg, node_to_osm_[node_idx_t{max_deg_node}],
+                kMaxWaysPerNode, n_over);
 
     // Fill node_ways_ / node_in_way_idx_ = transpose of way_nodes_.
     // Threads claims their write slot via the atomic per-node cursor.
