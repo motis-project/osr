@@ -6,8 +6,6 @@
 #include <utility>
 #include <vector>
 
-#include "utl/verify.h"
-
 #include "cista/hash.h"
 
 #include "osmium/osm/object.hpp"
