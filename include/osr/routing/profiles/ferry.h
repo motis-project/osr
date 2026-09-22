@@ -141,6 +141,7 @@ struct ferry {
                                level_t,
                                route_end,
                                endpoint_role,
+                               bool const,
                                Fn&& f) {
     resolve_all(w, n, std::forward<Fn>(f));
   }

@@ -208,6 +208,7 @@ struct railway {
                                level_t,
                                route_end,
                                endpoint_role const role,
+                               bool const,
                                Fn&& f) {
     resolve_way_aware_endpoint<railway>(w, way, n, role, std::forward<Fn>(f));
   }
