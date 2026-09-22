@@ -2,6 +2,7 @@ cmake_minimum_required(VERSION 3.10)
 project(osr LANGUAGES C CXX ASM)
 
 cmake_policy(SET CMP0079 NEW)
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 if (MSVC)
     # PDB debug information is not supported by buildcache.
