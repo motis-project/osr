@@ -166,6 +166,18 @@ TEST(way_cost_foot, combinations) {
                     .is_bike_accessible_ = true,
                     .is_sidewalk_separate_ = true,
                 }));
+
+  // railway tracks must never be walkable, even if bike-accessible
+  EXPECT_EQ(osr::kInfeasible, cost({
+                                  .is_foot_accessible_ = false,
+                                  .is_bike_accessible_ = true,
+                                  .is_railway_accessible_ = true,
+                              }));
+  EXPECT_EQ(osr::kInfeasible, cost({
+                                  .is_foot_accessible_ = false,
+                                  .is_bike_accessible_ = true,
+                                  .is_railway_accessible_with_penalty_ = true,
+                              }));
 }
 
 TEST(way_cost_hgv, hgv_access_values_change_cost) {

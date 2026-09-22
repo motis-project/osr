@@ -378,7 +378,9 @@ struct foot {
     if (IsWheelchair && e.is_steps()) {
       return infeasible_cost_and_duration();
     }
-    if (!e.is_foot_accessible() && !e.is_bike_accessible()) {
+    if (!e.is_foot_accessible() &&
+        (!e.is_bike_accessible() || e.is_railway_accessible() ||
+         e.is_railway_accessible_with_penalty())) {
       return infeasible_cost_and_duration();
     }
     auto const duration = duration_from_cost(static_cast<cost_t>(std::round(
