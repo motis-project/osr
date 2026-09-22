@@ -1,5 +1,6 @@
 #include "osr/backend/http_server.h"
 
+#include <chrono>
 #include <utility>
 
 #include "boost/algorithm/string.hpp"
@@ -128,8 +129,8 @@ struct http_server::impl {
     auto const from = parse_location(q.at("start"));
     auto const to = parse_location(q.at("destination"));
     auto const max_it = q.find("max");
-    auto const max = static_cast<cost_t>(
-        max_it == q.end() ? 3600 : max_it->value().as_int64());
+    auto const max = std::chrono::seconds{
+        max_it == q.end() ? 3600 : max_it->value().as_int64()};
     auto const foot_speed_result =
         q.try_at("footSpeed")->try_to_number<float>();
     auto const params =

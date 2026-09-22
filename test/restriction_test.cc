@@ -4,6 +4,7 @@
 
 #include "gtest/gtest.h"
 
+#include <chrono>
 #include <filesystem>
 
 #include "cista/mmap.h"
@@ -48,19 +49,19 @@ TEST(extract, wa) {
   ASSERT_TRUE(n_dst.has_value());
   auto const from = location{w.get_node_pos(*n), kNoLevel};
   auto const to = location{w.get_node_pos(*n_dst), kNoLevel};
-  constexpr auto const kMaxCost = cost_t{3600};
+  constexpr auto const kMaxDuration = std::chrono::seconds{3600};
   constexpr auto const kMaxMatchDistance = 100;
   constexpr auto const kParamsNoCosts =
       bike<bike_costing::kSafe, kElevationNoCost>::parameters{};
   constexpr auto const kParamsHighCosts =
       bike<bike_costing::kSafe, kElevationHighCost>::parameters{};
   auto const route_no_costs =
-      route(kParamsNoCosts, w, l, search_profile::kBike, from, to, kMaxCost,
+      route(kParamsNoCosts, w, l, search_profile::kBike, from, to, kMaxDuration,
             direction::kForward, kMaxMatchDistance, nullptr, nullptr,
             elevations.get());
   auto const route_high_costs =
       route(kParamsHighCosts, w, l, search_profile::kBikeElevationHigh, from,
-            to, kMaxCost, direction::kForward, kMaxMatchDistance, nullptr,
+            to, kMaxDuration, direction::kForward, kMaxMatchDistance, nullptr,
             nullptr, elevations.get());
 
   auto const is_restricted = w.r_->is_restricted<osr::direction::kForward>(

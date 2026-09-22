@@ -12,6 +12,7 @@
 #include "osr/routing/entry_storage_arena.h"
 #include "osr/routing/mode.h"
 #include "osr/routing/path.h"
+#include "osr/routing/profile.h"
 #include "osr/routing/profiles/common.h"
 #include "osr/ways.h"
 
@@ -129,21 +130,19 @@ struct ferry {
   }
 
   template <typename Fn>
-  static void resolve_start_node(ways::routing const&,
-                                 way_idx_t const,
-                                 node_idx_t const n,
-                                 level_t,
-                                 direction,
-                                 Fn&& f) {
+  static void resolve_all(ways::routing const&, node_idx_t const n, Fn&& f) {
     f(node{n});
   }
 
   template <typename Fn>
-  static void resolve_all(ways::routing const&,
-                          node_idx_t const n,
-                          level_t,
-                          Fn&& f) {
-    f(node{n});
+  static void resolve_endpoint(ways::routing const& w,
+                               way_idx_t,
+                               node_idx_t const n,
+                               level_t,
+                               route_end,
+                               endpoint_role,
+                               Fn&& f) {
+    resolve_all(w, n, std::forward<Fn>(f));
   }
 
   template <direction SearchDir, bool WithBlocked, typename Fn>
@@ -159,15 +158,18 @@ struct ferry {
                        Fn&& fn) {
     if (additional != nullptr) {
       for_each_additional_edge<ferry>(
-          params, w, timezones, n, additional,
+          params, w, timezones, n, additional, start_time, current_duration,
+          SearchDir,
           [&](additional_edge const& ae, cost_and_duration const edge_cost,
               direction const) {
             auto const target = node{ae.to_};
             auto total = edge_cost;
 
-            if (!additional->is_additional_node(ae.to_)) {
-              total = clamp_add(total,
-                                node_cost(params, w.node_properties_[ae.to_]));
+            auto const cost_node =
+                SearchDir == direction::kForward ? ae.to_ : n.n_;
+            if (!additional->is_additional_node(cost_node)) {
+              total = clamp_add(
+                  total, node_cost(params, w.node_properties_[cost_node]));
             }
 
             fn(target, total.cost_, total.duration_, ae.distance_,
@@ -185,14 +187,16 @@ struct ferry {
                               std::uint16_t const to) {
         // NOLINTNEXTLINE(clang-analyzer-core.CallAndMessage)
         auto const target_node = w.way_nodes_[way][to];
+        auto const cost_node =
+            SearchDir == direction::kForward ? target_node : n.n_;
         if constexpr (WithBlocked) {
-          if (blocked->test(target_node)) {
+          if (blocked->test(cost_node)) {
             return;
           }
         }
 
-        auto const target_node_prop = w.node_properties_[target_node];
-        if (node_cost(params, target_node_prop).cost_ == kInfeasible) {
+        auto const cost_node_prop = w.node_properties_[cost_node];
+        if (node_cost(params, cost_node_prop).cost_ == kInfeasible) {
           return;
         }
 
@@ -208,7 +212,7 @@ struct ferry {
         auto const step = clamp_add(
             way_cost(params, w, timezones, way, target_way_prop, way_dir, dist,
                      start_time, current_duration, SearchDir),
-            node_cost(params, target_node_prop));
+            node_cost(params, cost_node_prop));
         fn(target, step.cost_, step.duration_, dist, way, from, to,
            elevation_storage::elevation{}, false);
       };
@@ -257,6 +261,51 @@ struct ferry {
     } else {
       return infeasible_cost_and_duration();
     }
+  }
+
+  static constexpr cost_and_duration endpoint_way_cost(
+      parameters const& params,
+      ways::routing const& w,
+      timezone_cache_t const& timezones,
+      node const,
+      way_idx_t const way,
+      way_properties const& properties,
+      direction const way_dir,
+      distance_t const distance,
+      std::optional<routing_time_t> const start_time,
+      duration_t const current_duration,
+      direction const search_dir) {
+    return way_cost(params, w, timezones, way, properties, way_dir, distance,
+                    start_time, current_duration, search_dir);
+  }
+
+  static constexpr bool endpoint_root_allowed(parameters const&,
+                                              node const,
+                                              direction) {
+    return true;
+  }
+
+  static constexpr cost_and_duration endpoint_transition_cost(
+      parameters const&,
+      ways::routing const&,
+      timezone_cache_t const&,
+      node const,
+      way_idx_t,
+      direction,
+      direction,
+      std::optional<routing_time_t>,
+      duration_t) {
+    return {};
+  }
+
+  static constexpr cost_and_duration endpoint_node_cost(
+      parameters const& params, node const, node_properties const& n) {
+    return node_cost(params, n);
+  }
+
+  static bool endpoint_way_feasible(parameters const& params,
+                                    endpoint_way_query const& q) {
+    return q.template feasible<typename parameters::profile_t>(params);
   }
 
   static constexpr cost_and_duration node_cost(parameters const&,
