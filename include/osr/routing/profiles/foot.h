@@ -396,6 +396,11 @@ struct foot {
 
   static constexpr cost_and_duration node_cost(parameters const&,
                                                node_properties const n) {
+    if constexpr (IsWheelchair) {
+      if (!n.is_wheelchair_accessible()) {
+        return infeasible_cost_and_duration();
+      }
+    }
     return n.is_walk_accessible()
                ? cost_and_duration_from_cost(n.is_elevator() ? 90U : 0U)
                : infeasible_cost_and_duration();
