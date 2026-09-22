@@ -168,10 +168,10 @@ std::tuple<typename P::node, cost_t, duration_t> get_adjacent_additional_node(
 
   auto const target = typename P::node{
       ae.to_, additional->get_way_pos(w, ae.to_, ae.underlying_way_), edge_dir};
-  auto total = clamp_add(edge_cost, turn_cost);
+  auto total = clamp_add(edge_cost, turn_cost, duration_t{0});
 
   if (is_u_turn) {
-    total = clamp_add(total, uturn_penalty);
+    total = clamp_add(total, uturn_penalty, duration_t{0});
   }
 
   if (!additional->is_additional_node(ae.to_)) {
@@ -266,9 +266,9 @@ void for_each_adjacent_node(typename P::parameters const& params,
         return;
       }
 
-      auto total = clamp_add(clamp_add(wc, nc), turn_cost);
+      auto total = clamp_add(clamp_add(wc, nc), turn_cost, duration_t{0});
       if (is_u_turn) {
-        total = clamp_add(total, uturn_penalty);
+        total = clamp_add(total, uturn_penalty, duration_t{0});
       }
       fn(target, total.cost_, total.duration_, dist, way, from, to,
          elevation_storage::elevation{}, false);
