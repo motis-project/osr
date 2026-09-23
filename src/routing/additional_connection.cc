@@ -133,23 +133,6 @@ geo::polyline get_additional_connection_offset_points(
       false, location{start_point.as_latlng(), kNoLevel});
 }
 
-ways::routing::additional_connection::offset to_offset(
-    way_candidate const& wc) {
-  auto offset = ways::routing::additional_connection::offset{
-      .left_ = {.node_ = wc.left_.node_, .dist_ = 0U},
-      .right_ = {.node_ = wc.right_.node_, .dist_ = 0U},
-      .way_ = wc.way_};
-
-  if (wc.left_.node_ != node_idx_t::invalid()) {
-    offset.left_.dist_ = wc.left_.dist_to_node_;
-  }
-  if (wc.right_.node_ != node_idx_t::invalid()) {
-    offset.right_.dist_ = wc.right_.dist_to_node_;
-  }
-
-  return offset;
-}
-
 void for_each_addional_connection(
     ways::routing const& r,
     node_idx_t const node_idx,

@@ -120,10 +120,9 @@ TEST(car_parking, monaco_fwd) {
       // Path to parking site and back
       {43.7306, 7.41387},
       {43.7306, 7.4139},
-      {43.7306, 7.4139},  // TODO Duplicate
       {43.7306, 7.41387},
       // Path to closest point on footpath way
-      {43.7306, 7.41387},
+      {43.7306, 7.41387},  // TODO Duplicate
       {43.7305, 7.41358},
       {43.7305, 7.41350},
       {43.7305, 7.41341},
