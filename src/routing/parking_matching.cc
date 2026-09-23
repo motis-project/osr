@@ -1,0 +1,338 @@
+#include "osr/routing/parking_matching.h"
+
+#include <concepts>
+#include <functional>
+#include <iterator>
+#include <limits>
+#include <optional>
+#include <ranges>
+
+#include "osr/routing/additional_connection.h"
+#include "utl/erase_if.h"
+
+#include "osr/location.h"
+#include "osr/lookup.h"
+#include "osr/routing/profile.h"
+#include "osr/routing/profiles/car.h"
+#include "osr/routing/profiles/car_parking.h"
+#include "osr/routing/profiles/foot.h"
+#include "osr/types.h"
+#include "osr/ways.h"
+
+namespace osr {
+
+namespace {
+
+using offset = ways::routing::additional_connection::offset;
+
+using matching_result_t = std::pair<offset, point>;
+
+vec_map<component_idx_t, std::size_t> compute_component_sizes(
+    ways const& w, unsigned const n_components) {
+  auto component_sizes =
+      vec_map<component_idx_t, std::size_t>(n_components, std::size_t{0U});
+  for (auto i = 0U; i != w.n_ways(); ++i) {
+    auto const component = w.r_->way_component_[way_idx_t{i}];
+    utl::verify(static_cast<std::size_t>(component.v_) < n_components,
+                "Invalid component index {} (>= {})", component, n_components);
+    ++component_sizes[component];
+  }
+  return component_sizes;
+}
+
+std::tuple<geo::latlng, double, component_idx_t> analyze_surroundings(
+    ways const& w,
+    lookup const& l,
+    way_idx_t const way_idx,
+    vec_map<component_idx_t, std::size_t> const& component_sizes) {
+  // Compute bounding box
+  auto const get_bounding_box = [&]() {
+    constexpr auto const kExtensionDistance = 20.0;
+    auto bbox = geo::box{};
+    for (auto const pos : w.way_polylines_[way_idx]) {
+      bbox.extend(pos);
+    }
+    bbox.extend(kExtensionDistance);
+    return bbox;
+  };
+  // Identify component_idx of largest nearby component
+  auto const get_largest_component_idx = [&](geo::box const& bbox) {
+    auto largest_componet = component_idx_t::invalid();
+    auto largest_size = 0UL;
+    l.find(bbox, [&](way_idx_t const candidate) {
+      auto const component = w.r_->way_component_[candidate];
+      auto const size = component_sizes[component];
+      if (size > largest_size) {
+        largest_size = size;
+        largest_componet = component;
+      }
+    });
+    return largest_componet;
+  };
+
+  auto const bbox = get_bounding_box();
+  auto const center = bbox.centroid();
+  return {center, geo::approx_distance_lng_degrees(center),
+          get_largest_component_idx(bbox)};
+}
+
+// TODO: MK - Use car_parking + ::footp
+template <Profile P>
+std::optional<matching_result_t> find_closest(
+    ways const& w,
+    lookup const& l,
+    location const& loc,
+    direction const dir,
+    component_idx_t const matching_component,
+    [[maybe_unused]] way_idx_t const debug_way_idx,
+    std::function<double(double, way_idx_t)> const& score) {
+  auto const params = typename P::parameters{};
+
+  auto best = std::optional<matching_result_t>{};
+  auto matches = match_result{};
+  l.match<P>(params, loc, false, dir, 250.0, nullptr, matches, std::nullopt);
+  auto best_score = std::numeric_limits<double>::lowest();
+  auto best_dir = direction::kForward;
+
+  for (auto i = match_idx_t{0U}; i < match_idx_t{matches.size()}; ++i) {
+    auto const match = matches[i];
+    for (auto j = 0U; j < match.size(); ++j) {
+      auto const way_idx = match.way_[j];
+      if (w.r_->way_component_[way_idx] != matching_component) {
+        continue;
+      }
+      auto const left = match.left(j);
+      auto const right = match.right(j);
+      utl::verify(left.way_dir_ == opposite(right.way_dir_),
+                  "Opposite directions expected");
+      auto const wc = offset{
+          .left_ = {.node_ = left.node_,
+                    .dist_ = static_cast<std::uint16_t>(left.dist_to_node_)},
+          .right_ = {.node_ = right.node_,
+                     .dist_ = static_cast<std::uint16_t>(right.dist_to_node_)},
+          .way_ = way_idx};
+      auto const s = score(match.dist_to_way_[j], match.way_[j]);
+      if (s > best_score) {
+        best = {wc, point::from_latlng(loc.pos_)};
+        best_score = s;
+        best_dir = left.way_dir_;
+      }
+    }
+  }
+  if (best.has_value()) {
+    auto& best0 = std::get<0>(*best);
+    auto const path = l.get_node_candidate_path(
+        best0.way_,
+        best0.left_.valid() ? best0.left_.node_ : best0.right_.node_,
+        best0.left_.valid() ? best_dir : opposite(best_dir), false, loc);
+    if (debug_way_idx == 1643) {
+      fmt::println("path: {}   loc: {}", path, loc.pos_);
+    }
+    utl::verify(!path.empty(), "Path should not be empty. way: {} query: {}",
+                best0.way_, loc.pos_);
+    std::get<1>(*best) = point::from_latlng(path.front());
+  }
+  // TODO: MK - Remove
+  if (debug_way_idx == 1643) {
+    auto const& best0 = std::get<0>(*best);
+    fmt::println("best0: left: {}  right: {}", best0.left_.node_,
+                 best0.right_.node_);
+  }
+  return best;
+}
+
+}  // namespace
+
+void connect_parking_ways(
+    ways& w,
+    lookup const& l,
+    vec_map<way_idx_t, way_extra_properties> const& way_extra,
+    unsigned const n_components) {
+  auto const component_sizes = compute_component_sizes(w, n_components);
+
+  auto const is_connected =
+      [&](way_idx_t const way_idx,
+          std::function<bool(way_properties const&)> const& pred) {
+        return utl::any_of(
+            w.r_->way_nodes_[way_idx], [&](node_idx_t const node_idx) {
+              return utl::any_of(
+                  w.r_->node_ways_[node_idx],
+                  [&](way_idx_t const connecting_way) {
+                    return connecting_way != way_idx &&
+                           pred(w.r_->way_properties_[connecting_way]);
+                  });
+            });
+      };
+
+  auto const is_car_accessible = [&](way_properties const& props) {
+    return props.is_car_accessible();
+  };
+  auto const is_foot_accessible = [&](way_properties const& props) {
+    return props.is_foot_accessible();
+  };
+
+  auto const score = [&](double const dist_to_way, bool const is_preferred) {
+    // Penalize not designated ways
+    // Add shift to find nearby preferred ways, like nearest footpath
+    // Lower penalty to not match with ways too far away
+    return -((1 + ((is_preferred ? 0.0 : 4.0) / (dist_to_way + 1.0))) *
+             (dist_to_way + 2.5));
+  };
+  auto const car_score = [&](double const dist_to_way,
+                             way_idx_t const way_idx) -> double {
+    return score(dist_to_way, way_extra[way_idx].is_parking_aisle());
+  };
+  auto const foot_score = [&](double const dist_to_way,
+                              way_idx_t const way_idx) -> double {
+    return score(dist_to_way, way_extra[way_idx].is_preferred_footpath());
+  };
+
+  auto const get_connected_way =
+      [&](way_idx_t const way_idx, geo::latlng const& center,
+          double const approx_distance_lng_degrees,
+          std::function<bool(way_properties const&)> const& pred)
+      -> std::optional<matching_result_t> {
+    auto node = node_idx_t::invalid();
+    auto min_dist = 0.0;
+    auto lvl = kNoLevel;
+    auto idx = 0U;
+    for (auto const [i, node_idx] : utl::enumerate(w.r_->way_nodes_[way_idx])) {
+      for (auto const connecting_way : w.r_->node_ways_[node_idx]) {
+        auto const props = w.r_->way_properties_[connecting_way];
+        if (connecting_way != way_idx && pred(props)) {
+          auto const dist = geo::approx_squared_distance(
+              center, w.r_->node_positions_[node_idx],
+              approx_distance_lng_degrees);
+          if (node == node_idx_t::invalid() || dist < min_dist) {
+            node = node_idx;
+            min_dist = dist;
+            lvl = props.from_level();
+            idx = static_cast<unsigned>(i);
+            break;
+          }
+        }
+      }
+    }
+    utl::verify(node != node_idx_t::invalid(),
+                "Connected way must have at least one connected node");
+    return std::optional<matching_result_t>{
+        {{.left_ = idx == 0 ? offset::side{.node_ = node, .dist_ = 0U}
+                            : offset::side{},
+          .right_ = idx != 0 ? offset::side{.node_ = node, .dist_ = 0U}
+                             : offset::side{},
+          .way_ = way_idx},
+         w.r_->node_positions_[node]}};
+  };
+
+  // TODO: MK - Duplicate?
+  auto const remove_duplicates =
+      [](vec<geo::latlng> const& points) -> vec<point> {
+    auto conn = vec<point>{};
+    auto previous = geo::latlng{};
+    for (auto const point : points) {
+      if (point != previous) {
+        conn.push_back(point::from_latlng(point));
+        previous = point;
+      }
+    }
+    return conn;
+  };
+  auto const make_connection =
+      [&](geo::latlng const& center, double const approx_distance_lng_degrees,
+          geo::latlng car_way_point, geo::latlng car_connection_point,
+          geo::latlng foot_connection_point,
+          geo::latlng foot_way_point) -> vec<point> {
+    auto const is_closer_than_center = [&](geo::latlng const& p,
+                                           geo::latlng const& candidate) {
+      return geo::approx_squared_distance(p, candidate,
+                                          approx_distance_lng_degrees) <
+             geo::approx_squared_distance(p, center,
+                                          approx_distance_lng_degrees);
+    };
+
+    auto conn = vec<geo::latlng>{};
+    conn.push_back(car_way_point);
+    if (is_closer_than_center(car_way_point, car_connection_point)) {
+      conn.push_back(car_connection_point);
+    }
+    if (is_closer_than_center(foot_way_point, foot_connection_point)) {
+      conn.push_back(foot_connection_point);
+    }
+    conn.push_back(foot_way_point);
+
+    return remove_duplicates(conn);
+  };
+
+  w.r_->has_additional_connections_.resize(w.n_nodes());
+
+  for (auto i = 0U; i != w.n_ways(); ++i) {
+    auto const way_idx = way_idx_t{i};
+    auto const p = w.r_->way_properties_[way_idx];
+
+    if (!p.is_parking()) {
+      continue;
+    }
+    auto const is_car_connected = is_connected(way_idx, is_car_accessible);
+    auto const is_foot_connected = is_connected(way_idx, is_foot_accessible);
+    if (is_car_connected && is_foot_connected) {
+      continue;
+    }
+
+    auto const [center, approx_distance_lng_degrees, matching_component] =
+        analyze_surroundings(w, l, way_idx, component_sizes);
+    if (matching_component == component_idx_t::invalid()) {
+      continue;
+    }
+
+    auto const is_same_component =
+        w.r_->way_component_[way_idx] == matching_component;
+
+    auto const loc = location{.pos_ = center, .lvl_ = kNoLevel};
+    auto const foot_offset2 =
+        (is_same_component && is_foot_connected)
+            ? get_connected_way(way_idx, center, approx_distance_lng_degrees,
+                                is_foot_accessible)
+            : find_closest<foot<false>>(w, l, loc, direction::kForward,
+                                        matching_component, way_idx,
+                                        foot_score);
+    auto const car_offset2 =
+        (is_same_component && is_car_connected)
+            ? get_connected_way(way_idx, center, approx_distance_lng_degrees,
+                                is_car_accessible)
+            : find_closest<car>(w, l, loc, direction::kBackward,
+                                matching_component, way_idx, car_score);
+    // TODO: MK - Log messages
+    if (!foot_offset2.has_value() || !car_offset2.has_value()) {
+      fmt::println(
+          "WARNING: No usable way candidate found for way {}"
+          " (osm: {}, centroid: {})",
+          way_idx, w.way_osm_idx_[way_idx], center);
+      continue;
+    }
+    auto [foot_offset, foot_way_point] = *foot_offset2;
+    auto [car_offset, car_way_point] = *car_offset2;
+    if (!foot_offset.left_.valid() && !foot_offset.right_.valid()) {
+      fmt::println("Connected footpath not usable! Way: {}  at: {}",
+                   foot_offset.way_, foot_way_point);
+      continue;
+    }
+    if (!car_offset.left_.valid() && !car_offset.right_.valid()) {
+      fmt::println("Connected carpath not usable! Way: {}  at: {}",
+                   car_offset.way_, car_way_point);
+      continue;
+    }
+
+    auto const car_entrance = geo::approx_squared_distance_to_polyline(
+        car_way_point, w.way_polylines_[way_idx], approx_distance_lng_degrees);
+    auto const foot_entrance = geo::approx_squared_distance_to_polyline(
+        foot_way_point, w.way_polylines_[way_idx], approx_distance_lng_degrees);
+    auto conn = make_connection(center, approx_distance_lng_degrees,
+                                car_way_point, car_entrance.best_,
+                                foot_entrance.best_, foot_way_point);
+    add_additional_connection(*w.r_, std::move(car_offset),
+                              std::move(foot_offset), std::move(conn), true);
+  }
+  utl::sort(w.r_->additional_node_connections_);
+}
+
+}  // namespace osr
