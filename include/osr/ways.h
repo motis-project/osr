@@ -533,6 +533,9 @@ struct ways {
       struct offset {
         struct side {
           CISTA_COMPARABLE()
+
+          bool valid() const { return node_ != node_idx_t::invalid(); }
+
           node_idx_t node_;
           std::uint16_t dist_;
         };
