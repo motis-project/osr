@@ -138,6 +138,13 @@ cost_and_duration get_endpoint_connection(
                            start_time, current_duration, search_dir);
   auto total =
       clamp_add(connection, endpoint.matching_penalty_, duration_t{0U});
+  // Node costs are charged when arriving at a node. For the origin, that is
+  // the connector from the query position.
+  if (end == route_end::kOrigin) {
+    total = clamp_add(
+        total, P::endpoint_node_cost(params, node,
+                                     w.r_->node_properties_[node.get_node()]));
+  }
   if (role == endpoint_role::kGoal) {
     total = clamp_add(
         total, P::endpoint_transition_cost(params, *w.r_, w.timezones_, node,
