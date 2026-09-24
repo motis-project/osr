@@ -74,8 +74,32 @@ struct endpoint_candidate {
   way_idx_t way_;
   candidate_node node_;
   double graph_distance_;  // projected point -> node
+  double connector_distance_;  // query -> projected point, if it counts
   cost_t matching_penalty_;
+
+  double distance() const { return connector_distance_ + graph_distance_; }
 };
+
+template <typename P>
+struct is_foot : std::false_type {};
+
+template <bool IsWheelchair, typename Tracking>
+struct is_foot<foot<IsWheelchair, Tracking>> : std::true_type {};
+
+// Connectors are always walked
+template <Profile P>
+duration_t connector_duration(typename P::parameters const& params,
+                              double const distance) {
+  auto const speed = [&]() {
+    if constexpr (is_foot<P>::value) {
+      return params.speed_meters_per_second_;
+    } else {
+      return foot<false>::parameters{}.speed_meters_per_second_;
+    }
+  }();
+  return duration_from_cost(
+      static_cast<cost_t>(std::round(distance / static_cast<double>(speed))));
+}
 
 template <Profile P>
 struct endpoint_root {
@@ -108,6 +132,7 @@ void for_each_endpoint_candidate(match_view_t const& matches,
             .node_ = node,
             .graph_distance_ =
                 std::max(0.0, node.dist_to_node_ - distance_to_way),
+            .connector_distance_ = matches.must_reach_ ? distance_to_way : 0.0,
             .matching_penalty_ = matching_penalty(
                 distance_to_way, matches.penalty_ref_, penalty_factor)});
       }
@@ -137,7 +162,8 @@ cost_and_duration get_endpoint_connection(
                            static_cast<distance_t>(endpoint.graph_distance_),
                            start_time, current_duration, search_dir);
   auto total =
-      clamp_add(connection, endpoint.matching_penalty_, duration_t{0U});
+      clamp_add(connection, endpoint.matching_penalty_,
+                connector_duration<P>(params, endpoint.connector_distance_));
   // Node costs are charged when arriving at a node. For the origin, that is
   // the connector from the query position.
   if (end == route_end::kOrigin) {
@@ -166,9 +192,13 @@ path::segment make_endpoint_segment(lookup const& l,
   auto const graph_node_at_from = role == endpoint_role::kRoot
                                       ? dir == direction::kBackward
                                       : dir == direction::kForward;
-  return {.polyline_ = l.get_node_candidate_path(
-              endpoint.way_, endpoint.node_.node_, endpoint.node_.way_dir_,
-              reverse, location),
+  auto polyline =
+      l.get_node_candidate_path(endpoint.way_, endpoint.node_.node_,
+                                endpoint.node_.way_dir_, reverse, location);
+  if (endpoint.connector_distance_ > 0.0) {
+    polyline.insert(reverse ? end(polyline) : begin(polyline), location.pos_);
+  }
+  return {.polyline_ = std::move(polyline),
           .from_level_ = endpoint.node_.lvl_,
           .to_level_ = endpoint.node_.lvl_,
           .from_ = graph_node_at_from ? graph_node : node_idx_t::invalid(),
@@ -176,7 +206,7 @@ path::segment make_endpoint_segment(lookup const& l,
           .way_ = way_idx_t::invalid(),
           .cost_ = connection.cost_,
           .duration_ = connection.duration_,
-          .dist_ = static_cast<distance_t>(endpoint.graph_distance_),
+          .dist_ = static_cast<distance_t>(endpoint.distance()),
           .mode_ = mode};
 }
 
@@ -289,8 +319,8 @@ path reconstruct_bi(typename P::parameters const& params,
   forward_segments.insert(forward_segments.end(), backward_segments.begin(),
                           backward_segments.end());
 
-  auto total_dist = start.endpoint_.graph_distance_ + forward_dist +
-                    backward_dist + destination.endpoint_.graph_distance_;
+  auto total_dist = start.endpoint_.distance() + forward_dist + backward_dist +
+                    destination.endpoint_.distance();
 
   auto path_elevation = elevation_storage::elevation{};
   for (auto const& segment : forward_segments) {
@@ -361,12 +391,12 @@ path reconstruct(typename P::parameters const& params,
   for (auto const& segment : segments) {
     path_elevation += segment.elevation_;
   }
-  auto p = path{.cost_ = total.cost_,
-                .duration_ = total.duration_,
-                .dist_ = start.endpoint_.graph_distance_ + dist +
-                         destination.graph_distance_,
-                .elevation_ = path_elevation,
-                .segments_ = segments};
+  auto p =
+      path{.cost_ = total.cost_,
+           .duration_ = total.duration_,
+           .dist_ = start.endpoint_.distance() + dist + destination.distance(),
+           .elevation_ = path_elevation,
+           .segments_ = segments};
   search.cost_.at(dest_node.get_key()).write(dest_node, p);
   return p;
 }
