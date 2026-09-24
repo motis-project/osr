@@ -88,11 +88,12 @@ TEST_F(endpoint_matching_test,
       to, std::chrono::seconds{3600}, direction::kForward, 50.0);
 
   ASSERT_TRUE(result.has_value());
-  ASSERT_GE(result->segments_.size(), 2U);
-  auto const& start = result->segments_.front();
-  auto const& destination = result->segments_.back();
-  EXPECT_GT(start.cost_, start.duration_.count());
-  EXPECT_GT(destination.cost_, destination.duration_.count());
+  // Both ends are on the same stretch of way 1100 (access=destination): the
+  // direct piece carries the access penalty in its cost only.
+  ASSERT_EQ(1U, result->segments_.size());
+  auto const& piece = result->segments_.front();
+  EXPECT_GT(piece.cost_, piece.duration_.count());
+  EXPECT_NEAR(geo::distance(from.pos_, to.pos_), result->dist_, 1.0);
 
   auto total_duration = duration_t{0U};
   for (auto const& segment : result->segments_) {
