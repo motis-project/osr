@@ -3,7 +3,6 @@
 #include <algorithm>
 #include <vector>
 
-#include "geo/latlng.h"
 #include "utl/helpers/algorithm.h"
 
 #include "cista/strong.h"
@@ -40,11 +39,6 @@ elevation_profile::elevation_profile(ways const& w,
   baseline_ = it->elevation_.absolute_;
 
   auto const add = [&](node_idx_t a, node_idx_t b, elevation_absolute_t z) {
-    if (a == node_idx_t::invalid() || b == node_idx_t::invalid() ||
-        a >= w.n_nodes() || b >= w.n_nodes()) {
-      return;
-    }
-
     auto const a_pos = w.get_node_pos(a);
     auto const b_pos = w.get_node_pos(b);
 
@@ -63,14 +57,17 @@ elevation_profile::elevation_profile(ways const& w,
   while (++it != prev(end(segments), 2)) {
     dist_acc += it->dist_;
 
-    if (dist_acc < resolution) {
+    if (dist_acc < resolution ||
+        it->elevation_.absolute_ == elevation_absolute_t::invalid()) {
       continue;
     }
 
     add(it->from_, it->to_, it->elevation_.absolute_);
     dist_acc = 0;
   }
-  add(it->from_, it->to_, it->elevation_.absolute_);
+  if (it->elevation_.absolute_ != elevation_absolute_t::invalid()) {
+    add(it->from_, it->to_, it->elevation_.absolute_);
+  }
 }
 
 elevation_absolute_t elevation_profile::median() const {
