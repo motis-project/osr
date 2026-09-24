@@ -115,6 +115,7 @@ struct match_result {
     std::span<way_idx_t const> way_{};
     std::span<nodes const> nodes_{};
     level_t lvl_{kNoLevel};
+    bool must_reach_{false};
 
     // Distance the matching penalty is measured from.
     float penalty_ref_{0.0F};
@@ -126,6 +127,7 @@ struct match_result {
     begin_.clear();
     begin_.emplace_back(way_candidate_idx_t{0U});
     lvl_.clear();
+    must_reach_.clear();
     penalty_ref_.clear();
     dist_to_way_.clear();
     way_.clear();
@@ -136,8 +138,9 @@ struct match_result {
   bool empty() const { return lvl_.empty(); }
 
   // Appending a match: start() -> add()* -> finish().
-  void start(level_t const lvl) {
+  void start(level_t const lvl, bool const must_reach = false) {
     lvl_.emplace_back(lvl);
+    must_reach_.emplace_back(must_reach);
     penalty_ref_.emplace_back(-1.0F);
   }
 
@@ -160,7 +163,7 @@ struct match_result {
   // of precomputed matches into the contiguous form `route()` consumes.
   void append(match_result const& src, match_idx_t const i) {
     auto const v = src[i];
-    start(v.lvl_);
+    start(v.lvl_, v.must_reach_);
     for (auto j = std::size_t{0U}; j != v.size(); ++j) {
       add(v.dist_to_way_[j], v.way_[j], v.nodes_[j]);
     }
@@ -185,11 +188,13 @@ struct match_result {
                 .way_ = at(way_),
                 .nodes_ = at(nodes_),
                 .lvl_ = lvl_[i],
+                .must_reach_ = must_reach_[i],
                 .penalty_ref_ = penalty_ref_[i]};
   }
 
   vec_map<match_idx_t, way_candidate_idx_t> begin_{};  // size() + 1 entries
   vec_map<match_idx_t, level_t> lvl_{};
+  vec_map<match_idx_t, bool> must_reach_{};
   vec_map<match_idx_t, float> penalty_ref_{};
   vec_map<way_candidate_idx_t, float> dist_to_way_{};
   vec_map<way_candidate_idx_t, way_idx_t> way_{};
@@ -241,7 +246,7 @@ struct lookup {
                       std::optional<routing_time_t> const start_time,
                       std::span<raw_way_candidate const> raw_way_candidates,
                       match_result& out) const {
-    out.start(query.lvl_);
+    out.start(query.lvl_, query.must_reach_);
     auto doublings = 0U;
     auto const added =
         append_raw<P>(params, query, reverse, search_dir, max_match_distance,
@@ -382,7 +387,7 @@ struct lookup {
       bitvec<node_idx_t> const* blocked,
       match_result& out,
       std::optional<routing_time_t> const start_time = std::nullopt) const {
-    out.start(query.lvl_);
+    out.start(query.lvl_, query.must_reach_);
     auto found =
         get_way_candidates<P>(params, query, reverse, search_dir,
                               max_match_distance, blocked, out, start_time);
