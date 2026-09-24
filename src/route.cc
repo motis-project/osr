@@ -11,6 +11,7 @@
 #include <type_traits>
 #include <utility>
 
+#include "utl/helpers/algorithm.h"
 #include "utl/to_vec.h"
 #include "utl/verify.h"
 
@@ -499,6 +500,139 @@ std::optional<destination_candidate<P>> best_candidate(
   return best;
 }
 
+template <typename P>
+concept single_mode_profile = requires { P::node::get_mode(); };
+
+// Along way from the projection a to the projection b.
+geo::polyline stretch_polyline(ways const& w,
+                               way_idx_t const way,
+                               lookup::way_stretch const& a,
+                               lookup::way_stretch const& b) {
+  auto polyline = geo::polyline{a.projection_};
+  auto const way_polyline = w.way_polylines_[way];
+  if (b.offset_ >= a.offset_) {
+    for (auto k = a.segment_idx_ + 1U; k <= b.segment_idx_; ++k) {
+      polyline.push_back(way_polyline[k]);
+    }
+  } else {
+    for (auto k = a.segment_idx_; k > b.segment_idx_; --k) {
+      polyline.push_back(way_polyline[k]);
+    }
+  }
+  polyline.push_back(b.projection_);
+  return polyline;
+}
+
+cost_and_duration total_of(path const& p) {
+  return {.cost_ = p.cost_, .duration_ = p.duration_};
+}
+
+// With both ends between the same two routing nodes of a way, the search can
+// only connect them via one of these nodes. This returns the direct piece
+// (if below max).
+template <Profile P>
+std::optional<path> same_stretch_path(
+    typename P::parameters const& params,
+    ways const& w,
+    lookup const& l,
+    location const& from,
+    location const& to,
+    match_view_t const& from_match,
+    match_view_t const& to_match,
+    direction const dir,
+    std::optional<routing_time_t> const start_time,
+    double const penalty_factor,
+    cost_t const max) {
+  if constexpr (!single_mode_profile<P>) {
+    return std::nullopt;
+  } else {
+    auto const fwd = dir == direction::kForward;
+    auto const& origin = fwd ? from : to;
+    auto const& destination = fwd ? to : from;
+    auto const& origin_match = fwd ? from_match : to_match;
+    auto const& destination_match = fwd ? to_match : from_match;
+    auto const on_level = [](way_properties const& props, location const& x) {
+      return !x.lvl_.has_level() || is_on_level(props, x.lvl_);
+    };
+
+    auto best = std::optional<path>{};
+    for (auto i = std::size_t{0U}; i != origin_match.size(); ++i) {
+      auto const way = origin_match.way_[i];
+      auto const it = utl::find(destination_match.way_, way);
+      auto const props = w.r_->way_properties_[way];
+      if (it == end(destination_match.way_) || !on_level(props, origin) ||
+          !on_level(props, destination)) {
+        continue;
+      }
+      auto const a = l.get_way_stretch(way, origin.pos_);
+      auto const b = l.get_way_stretch(way, destination.pos_);
+      if (a.candidate_.left_.node_ != b.candidate_.left_.node_ ||
+          a.candidate_.right_.node_ != b.candidate_.right_.node_) {
+        continue;
+      }
+
+      auto const along = std::abs(b.offset_ - a.offset_);
+      auto const way_cost = P::way_cost(
+          params, *w.r_, w.timezones_, way, props,
+          b.offset_ >= a.offset_ ? direction::kForward : direction::kBackward,
+          static_cast<distance_t>(std::round(along)), start_time,
+          duration_t{0U}, dir);
+      auto const origin_dist =
+          static_cast<double>(origin_match.dist_to_way_[i]);
+      auto const destination_dist = static_cast<double>(
+          destination_match.dist_to_way_[static_cast<std::size_t>(
+              std::distance(begin(destination_match.way_), it))]);
+      auto const connectors =
+          (origin.must_reach_ ? origin_dist : 0.0) +
+          (destination.must_reach_ ? destination_dist : 0.0);
+      auto const total = clamp_add(
+          way_cost,
+          clamp_cost(
+              static_cast<std::uint64_t>(matching_penalty(
+                  origin_dist, origin_match.penalty_ref_, penalty_factor)) +
+              matching_penalty(destination_dist, destination_match.penalty_ref_,
+                               penalty_factor)),
+          connector_duration<P>(params, connectors));
+      if (!total.feasible() || total.cost_ >= max ||
+          (best.has_value() && total_of(*best) <= total)) {
+        continue;
+      }
+
+      auto polyline = stretch_polyline(w, way, a, b);
+      if (origin.must_reach_) {
+        polyline.insert(begin(polyline), origin.pos_);
+      }
+      if (destination.must_reach_) {
+        polyline.push_back(destination.pos_);
+      }
+      auto const dist = along + connectors;
+      best = path{.cost_ = total.cost_,
+                  .duration_ = total.duration_,
+                  .dist_ = dist,
+                  .segments_ = {path::segment{
+                      .polyline_ = std::move(polyline),
+                      .from_level_ = props.from_level(),
+                      .to_level_ = props.to_level(),
+                      .way_ = way,
+                      .cost_ = total.cost_,
+                      .duration_ = total.duration_,
+                      .dist_ = static_cast<distance_t>(std::round(dist)),
+                      .mode_ = P::node::get_mode()}}};
+    }
+    return best;
+  }
+}
+
+std::optional<path> cheaper(std::optional<path> a, std::optional<path> b) {
+  if (!a.has_value()) {
+    return b;
+  }
+  if (!b.has_value()) {
+    return a;
+  }
+  return total_of(*b) < total_of(*a) ? std::move(b) : std::move(a);
+}
+
 std::optional<path> try_direct(osr::location from,
                                osr::location to,
                                direction const dir) {
@@ -639,7 +773,8 @@ std::optional<path> route_dijkstra(
     bitvec<node_idx_t> const* blocked,
     sharing_data const* sharing,
     elevation_storage const* elevations,
-    route_options const& options) {
+    route_options const& options,
+    std::optional<path> stretch) {
   auto const search_max = std::max(kMinCostSettled, max);
   d.reset({.profile_ = params,
            .w_ = &w,
@@ -659,7 +794,7 @@ std::optional<path> route_dijkstra(
         d.add_start(std::forward<decltype(label)>(label), duration);
       });
   if (d.pq_.empty()) {
-    return std::nullopt;
+    return within_duration_limit(std::move(stretch), max_duration);
   }
   d.run();
   auto const find_candidate = [&]() {
@@ -667,11 +802,21 @@ std::optional<path> route_dijkstra(
                              options.matching_penalty_factor_);
   };
   auto candidate = find_candidate();
-  // Settle through the complete cost, including the destination connector:
-  // a cheaper route through an over-duration state may still beat this one.
-  if (candidate.has_value() && candidate->total_.duration_ <= max_duration &&
-      d.settle_up_to(candidate->total_.cost_)) {
+  // Settle through the complete cost of the candidate and the direct piece:
+  // a cheaper route through an over-duration state may still beat them.
+  auto settle_cost = cost_t{0U};
+  if (candidate.has_value() && candidate->total_.duration_ <= max_duration) {
+    settle_cost = candidate->total_.cost_;
+  }
+  if (stretch.has_value() && stretch->duration_ <= max_duration) {
+    settle_cost = std::max(settle_cost, stretch->cost_);
+  }
+  if (d.settle_up_to(settle_cost)) {
     candidate = find_candidate();
+  }
+  if (stretch.has_value() &&
+      (!candidate.has_value() || total_of(*stretch) < candidate->total_)) {
+    return within_duration_limit(std::move(stretch), max_duration);
   }
   if (!candidate.has_value() || candidate->total_.duration_ > max_duration) {
     return std::nullopt;
@@ -848,6 +993,7 @@ std::vector<std::optional<path>> route(
       std::vector<std::optional<destination_candidate<P>>>{};
   auto& candidates = state == nullptr ? local_candidates : state->candidates_;
   candidates.resize(result.size());
+  auto stretches = std::vector<std::optional<path>>(result.size());
   auto settle_cost = cost_t{0U};
   for (auto i = std::size_t{0U}; i != result.size(); ++i) {
     candidates[i] = find_candidate(i);
@@ -855,8 +1001,19 @@ std::vector<std::optional<path>> route(
         candidates[i]->total_.duration_ <= max_duration) {
       settle_cost = std::max(settle_cost, candidates[i]->total_.cost_);
     }
+    if (try_direct(from, to[i], dir).has_value()) {
+      continue;
+    }
+    stretches[i] = same_stretch_path<P>(
+        params, w, l, from, to[i], from_match,
+        to_match[match_idx_t{static_cast<match_idx_t::value_t>(i)}], dir,
+        start_time, options.matching_penalty_factor_, destination_limits[i]);
+    if (stretches[i].has_value() && stretches[i]->duration_ <= max_duration) {
+      settle_cost = std::max(settle_cost, stretches[i]->cost_);
+    }
   }
-  // Finalize all candidates before reconstructing paths from the shared search.
+  // Finalize all candidates (and settle up to the direct pieces) before
+  // reconstructing paths from the shared search.
   if (d.settle_up_to(settle_cost)) {
     for (auto i = std::size_t{0U}; i != result.size(); ++i) {
       candidates[i] = find_candidate(i);
@@ -869,6 +1026,13 @@ std::vector<std::optional<path>> route(
       continue;
     }
     auto const& candidate = candidates[i];
+    if (auto& stretch = stretches[i];
+        stretch.has_value() &&
+        (!candidate.has_value() || total_of(*stretch) < candidate->total_)) {
+      result[i] = within_duration_limit(std::move(stretch), max_duration);
+      candidates[i].reset();
+      continue;
+    }
     if (!candidate.has_value() || candidate->total_.duration_ > max_duration) {
       continue;
     }
@@ -1005,9 +1169,12 @@ std::optional<path> route_astar(profile_parameters const& params,
         matching_penalty_budget_slack<P>());
     auto a = astar<P>{};
     return within_duration_limit(
-        route_astar(pp, w, l, a, from, to, from_match, to_match, max, dir,
-                    start_time, blocked, sharing, elevations,
-                    options.matching_penalty_factor_),
+        cheaper(route_astar(pp, w, l, a, from, to, from_match, to_match, max,
+                            dir, start_time, blocked, sharing, elevations,
+                            options.matching_penalty_factor_),
+                same_stretch_path<P>(pp, w, l, from, to, from_match, to_match,
+                                     dir, start_time,
+                                     options.matching_penalty_factor_, max)),
         duration_limit);
   });
 }
@@ -1082,6 +1249,9 @@ std::optional<path> route(profile_parameters const& params,
         max_matching_penalty(from_match, options.matching_penalty_factor_),
         max_matching_penalty(to_match, options.matching_penalty_factor_),
         matching_penalty_budget_slack<P>());
+    auto stretch =
+        same_stretch_path<P>(pp, w, l, from, to, from_match, to_match, dir,
+                             start_time, options.matching_penalty_factor_, max);
     switch (algo) {
       case routing_algorithm::kAStarBi: {
         auto b = bidirectional<P>{};
@@ -1089,7 +1259,7 @@ std::optional<path> route(profile_parameters const& params,
             pp, w, l, b, from, to, from_match, to_match, max, dir, blocked,
             sharing, elevations, options.matching_penalty_factor_);
         if (result.has_value()) {
-          return result;
+          return cheaper(std::move(result), std::move(stretch));
         }
         [[fallthrough]];
       }
@@ -1097,7 +1267,7 @@ std::optional<path> route(profile_parameters const& params,
         auto d = dijkstra<P>{};
         return route_dijkstra(pp, w, l, d, from, to, from_match, to_match, max,
                               duration_limit, dir, start_time, blocked, sharing,
-                              elevations, options);
+                              elevations, options, std::move(stretch));
       }
     }
     throw utl::fail("not implemented");

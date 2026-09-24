@@ -609,6 +609,15 @@ struct lookup {
     return c;
   }
 
+  // Projection of pos onto way, between the routing nodes of candidate_.
+  struct way_stretch {
+    raw_way_candidate candidate_;
+    geo::latlng projection_;
+    std::size_t segment_idx_;
+    double offset_;  // distance along the way from candidate_.left_
+  };
+  way_stretch get_way_stretch(way_idx_t, geo::latlng const& pos) const;
+
 private:
   std::vector<raw_way_candidate> get_raw_way_candidates(
       location const& query, double const max_match_distance) const;

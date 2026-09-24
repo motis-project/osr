@@ -187,6 +187,24 @@ std::vector<raw_way_candidate> lookup::get_raw_way_candidates(
   return way_candidates;
 }
 
+lookup::way_stretch lookup::get_way_stretch(way_idx_t const way,
+                                            geo::latlng const& pos) const {
+  auto const approx_distance_lng_degrees =
+      geo::approx_distance_lng_degrees(pos);
+  auto const [squared_dist, best, segment_idx] =
+      geo::approx_squared_distance_to_polyline<
+          std::tuple<double, geo::latlng, size_t>>(
+          pos, ways_.way_polylines_[way], approx_distance_lng_degrees);
+  auto const wc = get_raw_way_candidate(
+      way, squared_dist, approx_distance_lng_degrees, best, segment_idx);
+  auto const offset =
+      static_cast<double>(wc.left_.dist_to_node_ - wc.dist_to_way_);
+  return {.candidate_ = wc,
+          .projection_ = best,
+          .segment_idx_ = segment_idx,
+          .offset_ = offset};
+}
+
 void lookup::filter_by_component(match_result& out,
                                  location const& query,
                                  component_classes const classes) const {
