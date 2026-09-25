@@ -64,9 +64,12 @@ TEST_F(sharing_routing_test, matching_penalty_is_in_cost_limit) {
   auto const params = bike_sharing::parameters{};
   auto const penalized_options =
       route_options{.matching_penalty_factor_ = 100.0};
+  // Without the component filter, which would only keep the closest candidate.
   auto from_matches = match_result{};
-  l.match<bike_sharing>(params, from, false, direction::kForward, 50.0, nullptr,
-                        from_matches);
+  from_matches.start(from.lvl_);
+  l.get_way_candidates<bike_sharing>(params, from, false, direction::kForward,
+                                     50.0, nullptr, from_matches);
+  from_matches.finish();
   auto to_matches = match_result{};
   l.match<bike_sharing>(params, to, true, direction::kForward, 50.0, nullptr,
                         to_matches);

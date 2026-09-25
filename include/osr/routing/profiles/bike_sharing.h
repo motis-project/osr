@@ -536,6 +536,11 @@ struct bike_sharing {
     return footp::node_cost(params.foot_, n);
   }
 
+  static constexpr component_classes endpoint_component_classes(
+      route_end) noexcept {
+    return {component_class::kFoot};
+  }
+
   template <typename Fn>
   static void resolve_endpoint(ways::routing const& w,
                                way_idx_t const way,

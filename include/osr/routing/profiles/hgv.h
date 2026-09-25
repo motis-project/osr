@@ -498,6 +498,11 @@ struct hgv {
     return node_cost(params, n);
   }
 
+  static constexpr component_classes endpoint_component_classes(
+      route_end) noexcept {
+    return {component_class::kCar};
+  }
+
   static bool endpoint_way_feasible(parameters const& params,
                                     endpoint_way_query const& q) {
     return q.feasible<hgv>(params);

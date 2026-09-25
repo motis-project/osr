@@ -14,6 +14,7 @@
 
 #include "conf/options_parser.h"
 
+#include "utl/helpers/algorithm.h"
 #include "utl/memory_usage_printer.h"
 #include "utl/timer.h"
 #include "utl/verify.h"
@@ -151,6 +152,17 @@ std::vector<typename car::label> set_end<car>(bidirectional<car>& b,
   return ends;
 }
 
+template <Profile P>
+bool in_same_component(ways const& w, way_idx_t const a, way_idx_t const b) {
+  auto const classes = P::endpoint_component_classes(route_end::kOrigin);
+  return classes.empty() ||
+         utl::any_of(kComponentClasses, [&](auto const& entry) {
+           auto const x = w.r_->get_class_components(entry.first).get(a);
+           return classes.contains(entry.first) && x.has_value() &&
+                  x == w.r_->get_class_components(entry.first).get(b);
+         });
+}
+
 int main(int argc, char const* argv[]) {
   auto opt = settings{};
   auto parser = conf::options_parser({&opt});
@@ -243,8 +255,8 @@ int main(int argc, char const* argv[]) {
                                                          middle_time)});
             }
           } else {
-            if (w.r_->way_component_[w.r_->node_ways_[start][0]] !=
-                w.r_->way_component_[w.r_->node_ways_[end][0]]) {
+            if (!in_same_component<P>(w, w.r_->node_ways_[start][0],
+                                      w.r_->node_ways_[end][0])) {
               std::cout << "skipping" << std::endl;
               continue;
             }

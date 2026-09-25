@@ -1,6 +1,7 @@
 #include "osr/ways.h"
 
 #include <algorithm>
+#include <limits>
 
 #include "date/tz.h"
 
@@ -49,6 +50,58 @@ quantized_angle_t get_next_bearing(Polyline const& polyline,
   return 0U;
 }
 
+constexpr auto const kNoComponent = std::numeric_limits<std::uint32_t>::max();
+
+class_components build_components(ways const& w, component_class const cls) {
+  auto const accessible = [&](way_idx_t const x) {
+    return is_accessible(cls, w.r_->way_properties_[x]);
+  };
+
+  auto comp = std::vector<std::uint32_t>(w.n_ways(), kNoComponent);
+  auto comp_size = std::vector<std::uint32_t>{};
+  auto q = std::vector<way_idx_t>{};
+  for (auto i = 0U; i != w.n_ways(); ++i) {
+    if (comp[i] != kNoComponent || !accessible(way_idx_t{i})) {
+      continue;
+    }
+    auto const id = static_cast<std::uint32_t>(comp_size.size());
+    auto& size = comp_size.emplace_back(1U);
+    comp[i] = id;
+    q.push_back(way_idx_t{i});
+    while (!q.empty()) {
+      auto const x = q.back();
+      q.pop_back();
+      for (auto const n : w.r_->way_nodes_[x]) {
+        for (auto const y : w.r_->node_ways_[n]) {
+          if (comp[to_idx(y)] == kNoComponent && accessible(y)) {
+            comp[to_idx(y)] = id;
+            ++size;
+            q.push_back(y);
+          }
+        }
+      }
+    }
+  }
+
+  auto out = class_components{};
+  if (comp_size.empty()) {
+    return out;
+  }
+  auto const giant = static_cast<std::uint32_t>(
+      std::distance(begin(comp_size), std::ranges::max_element(comp_size)));
+  out.in_giant_.resize(static_cast<std::uint32_t>(w.n_ways()));
+  for (auto i = 0U; i != w.n_ways(); ++i) {
+    auto const c = comp[i];
+    if (c == giant) {
+      out.in_giant_.set(way_idx_t{i}, true);
+    } else if (c != kNoComponent && comp_size[c] > 1U) {
+      out.exc_way_.emplace_back(way_idx_t{i});
+      out.exc_comp_.emplace_back(c + 1U);
+    }
+  }
+  return out;
+}
+
 }  // namespace
 
 ways::ways(std::filesystem::path p, cista::mmap::protection const mode)
@@ -73,39 +126,15 @@ ways::ways(std::filesystem::path p, cista::mmap::protection const mode)
           mm_vec<std::uint64_t>(mm("way_has_conditional_access_no"))},
       way_conditional_access_no_{mm("way_conditional_access_no")} {}
 
-void ways::build_components() {
-  auto q = hash_set<way_idx_t>{};
-  auto flood_fill = [&](way_idx_t const way_idx, component_idx_t const c) {
-    assert(q.empty());
-    q.insert(way_idx);
-    while (!q.empty()) {
-      auto const next = *q.begin();
-      q.erase(q.begin());
-      for (auto const n : r_->way_nodes_[next]) {
-        for (auto const w : r_->node_ways_[n]) {
-          auto& wc = r_->way_component_[w];
-          if (wc == component_idx_t::invalid()) {
-            wc = c;
-            q.insert(w);
-          }
-        }
-      }
-    }
-  };
-
+void ways::build_class_components() {
   auto pt = utl::get_active_progress_tracker_or_activate("osr");
-  pt->status("Build components").in_high(n_ways()).out_bounds(75, 90);
+  pt->status("Build components")
+      .in_high(kNumComponentClasses)
+      .out_bounds(75, 90);
 
-  auto next_component_idx = component_idx_t{0U};
-  r_->way_component_.resize(n_ways(), component_idx_t::invalid());
-  for (auto i = 0U; i != n_ways(); ++i) {
-    auto const way_idx = way_idx_t{i};
-    auto& c = r_->way_component_[way_idx];
-    if (c != component_idx_t::invalid()) {
-      continue;
-    }
-    c = next_component_idx++;
-    flood_fill(way_idx, c);
+  r_->class_components_.clear();
+  for (auto const& [c, name] : kComponentClasses) {
+    r_->class_components_.emplace_back(build_components(*this, c));
     pt->increment();
   }
 }

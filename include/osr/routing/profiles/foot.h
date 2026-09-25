@@ -475,6 +475,11 @@ struct foot {
     return node_cost(params, n);
   }
 
+  static constexpr component_classes endpoint_component_classes(
+      route_end) noexcept {
+    return {component_class::kFoot};
+  }
+
   static bool endpoint_way_feasible(parameters const& params,
                                     endpoint_way_query const& q) {
     return q.template feasible<typename parameters::profile_t>(params);

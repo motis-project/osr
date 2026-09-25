@@ -103,13 +103,13 @@ void for_each_endpoint_candidate(match_view_t const& matches,
       if (node.valid()) {
         auto const distance_to_way =
             static_cast<double>(matches.dist_to_way_[i]);
-        fn(endpoint_candidate{.way_ = matches.way_[i],
-                              .node_ = node,
-                              .graph_distance_ = std::max(
-                                  0.0, node.dist_to_node_ - distance_to_way),
-                              .matching_penalty_ = matching_penalty(
-                                  distance_to_way, matches.dist_to_way_.front(),
-                                  penalty_factor)});
+        fn(endpoint_candidate{
+            .way_ = matches.way_[i],
+            .node_ = node,
+            .graph_distance_ =
+                std::max(0.0, node.dist_to_node_ - distance_to_way),
+            .matching_penalty_ = matching_penalty(
+                distance_to_way, matches.penalty_ref_, penalty_factor)});
       }
     }
   }

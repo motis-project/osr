@@ -430,6 +430,13 @@ struct generic_car {
     return node_cost(params, n);
   }
 
+  static constexpr component_classes endpoint_component_classes(
+      route_end) noexcept {
+    // Bus can use some ways a car can't
+    return IsBus ? component_classes{}
+                 : component_classes{component_class::kCar};
+  }
+
   static bool endpoint_way_feasible(parameters const& params,
                                     endpoint_way_query const& q) {
     return q.feasible<generic_car>(params);
