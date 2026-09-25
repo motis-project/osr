@@ -50,13 +50,20 @@ struct bidirectional {
     best_transition_ = {};
   }
 
-  void reset(params_t const& p) {
+  // The heuristic may overestimate the connector to a match by up to
+  // start_slack / end_slack: the diameter is reduced by both, and keys may
+  // exceed the cost cap by half of them.
+  void reset(params_t const& p,
+             cost_t const start_slack = 0U,
+             cost_t const end_slack = 0U) {
     params_ = p;
     auto const max = params_.max_;
+    auto const slack_1 = static_cast<cost_t>((end_slack + 1U) / 2U);
+    auto const slack_2 = static_cast<cost_t>((start_slack + 1U) / 2U);
     pq1_.clear();
     pq2_.clear();
-    pq1_.n_buckets(max + 1U);
-    pq2_.n_buckets(max + 1U);
+    pq1_.n_buckets(max + slack_1 + 1U);
+    pq2_.n_buckets(max + slack_2 + 1U);
     cost1_.clear();
     cost2_.clear();
     arena_.reset();
@@ -66,11 +73,15 @@ struct bidirectional {
     distance_lon_degrees_ = geo::approx_distance_lng_degrees(
         std::abs(start_pos_.lat()) > std::abs(end_pos_.lat()) ? start_pos_
                                                               : end_pos_);
-    auto const diameter = P::lower_bound_heuristic(
-        params_.profile_, distapprox(start_pos_, end_pos_));
+    auto const diameter =
+        std::max(0.0, P::lower_bound_heuristic(
+                          params_.profile_, distapprox(start_pos_, end_pos_)) -
+                          start_slack - end_slack);
     search_bounds_valid_ =
-        diameter < max && max + std::max(diameter, kLongestNodeDistance * 2.0) <
-                              std::numeric_limits<cost_t>::max();
+        diameter < max &&
+        max + std::max(slack_1, slack_2) +
+                std::max(diameter, kLongestNodeDistance * 2.0) <
+            std::numeric_limits<cost_t>::max();
     radius_ = search_bounds_valid_ ? kLongestNodeDistance : max;
     draining_ = false;
     drain_key_1_ = kInfeasible;
@@ -235,7 +246,7 @@ struct bidirectional {
             return;
           }
           auto const updated = [&]() {
-            if (heur >= max) {
+            if (heur >= pq.n_buckets() - 1U) {
               return false;
             }
             auto next = label{neighbor, static_cast<cost_t>(heur)};

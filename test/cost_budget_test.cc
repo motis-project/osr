@@ -1,6 +1,7 @@
 #include "gtest/gtest.h"
 
 #include <chrono>
+#include <cmath>
 #include <algorithm>
 #include <filesystem>
 #include <memory>
@@ -328,6 +329,76 @@ TEST(cost_budget, bidirectional_competing_routes_asymmetric_roots) {
         }
       }
     }
+  }
+}
+
+// Wheelchair prices a meter at more than one cost unit, but the connector to a
+// match 600 m away only costs its matching penalty (600): without the slack,
+// the diameter check rejects a route within the cost cap.
+TEST(cost_budget, bidirectional_far_matches_need_connector_slack) {
+  using P = osr::foot<true, osr::elevator_tracking>;
+  auto const dir = fs::temp_directory_path() / "osr_bidir_connector_slack";
+  auto ec = std::error_code{};
+  fs::remove_all(dir, ec);
+  fs::create_directories(dir, ec);
+  osr::extract(false, osr::test::write_osm_pbf("osr_bidir_connector_slack", R"(
+<osm version="0.6">
+  <node id="1" lat="49" lon="8"/>
+  <node id="2" lat="49" lon="8.0014"/>
+  <node id="3" lat="49.001" lon="8"/>
+  <node id="4" lat="49.001" lon="8.0014"/>
+  <way id="1"><nd ref="1"/><nd ref="2"/><tag k="highway" v="footway"/></way>
+  <way id="2"><nd ref="1"/><nd ref="3"/><tag k="highway" v="footway"/></way>
+  <way id="3"><nd ref="2"/><nd ref="4"/><tag k="highway" v="footway"/></way>
+</osm>)"),
+               dir, {});
+  auto const w = osr::ways{dir, cista::mmap::protection::READ};
+  auto const params = P::parameters{};
+  auto const a =
+      P::node{w.get_node_idx(osr::osm_node_idx_t{1U}), osr::kNoLevel};
+  auto const z =
+      P::node{w.get_node_idx(osr::osm_node_idx_t{2U}), osr::kNoLevel};
+  constexpr auto const kConnector = 600.0;
+  constexpr auto const kConnectorCost = osr::cost_t{600U};
+  auto const lng_offset =
+      kConnector / geo::approx_distance_lng_degrees({49, 8});
+  auto const from = osr::location{geo::latlng{49, 8 - lng_offset}};
+  auto const to = osr::location{geo::latlng{49, 8.0014 + lng_offset}};
+  auto const slack = static_cast<osr::cost_t>(std::ceil(
+      P::lower_bound_heuristic(params, kConnector) - kConnector + 0.5));
+  for (auto const reverse : {false, true}) {
+    SCOPED_TRACE(testing::Message() << "reverse=" << reverse);
+    auto const direction =
+        reverse ? osr::direction::kBackward : osr::direction::kForward;
+    auto const start = reverse ? z : a;
+    auto const goal = reverse ? a : z;
+
+    auto d = osr::dijkstra<P, false>{};
+    auto sp =
+        osr::search_params<P::parameters>{.profile_ = params,
+                                          .w_ = &w,
+                                          .max_ = 60000U,
+                                          .dir_ = direction,
+                                          .start_loc_ = reverse ? to : from,
+                                          .end_loc_ = reverse ? from : to};
+    d.reset(sp);
+    d.add_start(P::label{start, kConnectorCost});
+    d.run();
+    auto const expected = d.get_cost(goal) + kConnectorCost;
+    ASSERT_LT(expected, P::lower_bound_heuristic(
+                            params, geo::distance(from.pos_, to.pos_)));
+
+    sp.max_ = expected + 1U;
+    auto b = osr::bidirectional<P>{};
+    b.reset(sp);
+    EXPECT_FALSE(b.search_bounds_valid_);
+
+    b.reset(sp, slack, slack);
+    ASSERT_TRUE(b.search_bounds_valid_);
+    b.add_start(P::label{start, kConnectorCost});
+    b.add_end(P::label{goal, kConnectorCost});
+    b.run();
+    EXPECT_EQ(expected, b.best_cost_);
   }
 }
 

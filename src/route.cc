@@ -699,6 +699,20 @@ std::optional<path> within_duration_limit(std::optional<path> p,
                                                        : std::nullopt;
 }
 
+// How much the bidirectional heuristic may overestimate the connector to a
+// match d meters away, which costs at least its matching penalty (>= d -
+// 0.5).
+template <Profile P>
+cost_t heuristic_connector_slack(typename P::parameters const& params,
+                                 match_view_t const& matches) {
+  auto slack = 0.0;
+  for (auto i = std::size_t{0U}; i != matches.size(); ++i) {
+    auto const d = static_cast<double>(matches.dist_to_way_[i]);
+    slack = std::max(slack, P::lower_bound_heuristic(params, d) - d + 0.5);
+  }
+  return clamp_cost(static_cast<std::uint64_t>(std::ceil(slack)));
+}
+
 template <Profile P>
 std::optional<path> route_bidirectional(typename P::parameters const& params,
                                         ways const& w,
@@ -723,7 +737,9 @@ std::optional<path> route_bidirectional(typename P::parameters const& params,
            .sharing_ = sharing,
            .elevations_ = elevations,
            .start_loc_ = from,
-           .end_loc_ = to});
+           .end_loc_ = to},
+          heuristic_connector_slack<P>(params, from_match),
+          heuristic_connector_slack<P>(params, to_match));
   if (!b.search_bounds_valid_) {
     return std::nullopt;
   }
