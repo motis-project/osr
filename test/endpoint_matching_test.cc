@@ -101,77 +101,76 @@ TEST_F(endpoint_matching_test,
   EXPECT_EQ(total_duration, result->duration_);
 }
 
-TEST_F(endpoint_matching_test, closer_match_wins_over_graph_shortcut) {
+// Way 901 is a shortcut to the destination, but in the same component as the
+// closer way 900: only 900 is matched, whatever the matching penalty.
+TEST_F(endpoint_matching_test,
+       closest_match_in_component_wins_over_graph_shortcut) {
   auto const& w = *ways_;
   auto const& l = *lookup_;
   auto const params = get_parameters(search_profile::kFoot);
   auto const from = location{{49.040000, 8.000000}, kNoLevel};
   auto const to = location{{49.040100, 8.004000}, kNoLevel};
 
-  auto const without_preference =
-      route(params, w, l, search_profile::kFoot, from, to,
-            std::chrono::seconds{3600}, direction::kForward, 50.0, nullptr,
-            nullptr, nullptr, routing_algorithm::kDijkstra, std::nullopt,
-            route_options{.matching_penalty_factor_ = 0.0});
-  ASSERT_TRUE(without_preference.has_value());
-  ASSERT_FALSE(without_preference->segments_.empty());
-  ASSERT_FALSE(without_preference->segments_.front().polyline_.empty());
-  EXPECT_EQ(project_to_osm_way(w, 901, from.pos_),
-            without_preference->segments_.front().polyline_.front());
+  auto from_matches = match_result{};
+  l.match<foot<false, elevator_tracking>>(
+      std::get<foot<false, elevator_tracking>::parameters>(params), from, false,
+      direction::kForward, 50.0, nullptr, from_matches);
+  auto const m = from_matches[match_idx_t{0U}];
+  ASSERT_EQ(1U, m.size());
+  EXPECT_EQ(std::optional<std::int64_t>{900}, w.get_osm_way(m.way_[0]));
 
-  auto const preferred =
-      route(params, w, l, search_profile::kFoot, from, to,
-            std::chrono::seconds{3600}, direction::kForward, 50.0);
-  ASSERT_TRUE(preferred.has_value());
-  ASSERT_FALSE(preferred->segments_.empty());
-  ASSERT_FALSE(preferred->segments_.front().polyline_.empty());
-  EXPECT_EQ(project_to_osm_way(w, 900, from.pos_),
-            preferred->segments_.front().polyline_.front());
+  for (auto const factor : {0.0, kDefaultMatchingPenaltyFactor}) {
+    auto const result =
+        route(params, w, l, search_profile::kFoot, from, to,
+              std::chrono::seconds{3600}, direction::kForward, 50.0, nullptr,
+              nullptr, nullptr, routing_algorithm::kDijkstra, std::nullopt,
+              route_options{.matching_penalty_factor_ = factor});
+    ASSERT_TRUE(result.has_value());
+    ASSERT_FALSE(result->segments_.empty());
+    ASSERT_FALSE(result->segments_.front().polyline_.empty());
+    EXPECT_EQ(project_to_osm_way(w, 900, from.pos_),
+              result->segments_.front().polyline_.front());
+  }
 }
 
 TEST_F(endpoint_matching_test,
-       closer_destination_match_wins_over_graph_shortcut) {
+       closest_destination_match_in_component_wins_over_graph_shortcut) {
   auto const& w = *ways_;
   auto const& l = *lookup_;
   auto const params = get_parameters(search_profile::kFoot);
   auto const from = location{{49.040100, 8.004000}, kNoLevel};
   auto const to = location{{49.040000, 8.000000}, kNoLevel};
 
-  auto const without_preference =
-      route(params, w, l, search_profile::kFoot, from, to,
-            std::chrono::seconds{3600}, direction::kForward, 50.0, nullptr,
-            nullptr, nullptr, routing_algorithm::kDijkstra, std::nullopt,
-            route_options{.matching_penalty_factor_ = 0.0});
-  ASSERT_TRUE(without_preference.has_value());
-  ASSERT_FALSE(without_preference->segments_.empty());
-  ASSERT_FALSE(without_preference->segments_.back().polyline_.empty());
-  EXPECT_EQ(project_to_osm_way(w, 901, to.pos_),
-            without_preference->segments_.back().polyline_.back());
-
-  auto const preferred =
-      route(params, w, l, search_profile::kFoot, from, to,
-            std::chrono::seconds{3600}, direction::kForward, 50.0);
-  ASSERT_TRUE(preferred.has_value());
-  ASSERT_FALSE(preferred->segments_.empty());
-  ASSERT_FALSE(preferred->segments_.back().polyline_.empty());
-  EXPECT_EQ(project_to_osm_way(w, 900, to.pos_),
-            preferred->segments_.back().polyline_.back());
+  for (auto const factor : {0.0, kDefaultMatchingPenaltyFactor}) {
+    auto const result =
+        route(params, w, l, search_profile::kFoot, from, to,
+              std::chrono::seconds{3600}, direction::kForward, 50.0, nullptr,
+              nullptr, nullptr, routing_algorithm::kDijkstra, std::nullopt,
+              route_options{.matching_penalty_factor_ = factor});
+    ASSERT_TRUE(result.has_value());
+    ASSERT_FALSE(result->segments_.empty());
+    ASSERT_FALSE(result->segments_.back().polyline_.empty());
+    EXPECT_EQ(project_to_osm_way(w, 900, to.pos_),
+              result->segments_.back().polyline_.back());
+  }
 }
 
+// The closest match 402 is on a car island {402, 403}: it does not shadow way
+// 300 in the network, but 403.
 TEST_F(endpoint_matching_test, unreachable_closest_match_uses_farther_match) {
   auto const& w = *ways_;
   auto const& l = *lookup_;
   auto const profile_params = car::parameters{};
   auto const params = profile_parameters{profile_params};
   auto const from = location{{49.010000, 8.000000}, kNoLevel};
-  auto const to = location{{49.010040, 8.002800}, kNoLevel};
+  auto const to = location{{49.010025, 8.001400}, kNoLevel};
 
   auto to_matches = match_result{};
   l.match<car>(profile_params, to, true, direction::kForward, 50.0, nullptr,
                to_matches);
   auto const matches = to_matches[match_idx_t{0U}];
-  ASSERT_GE(matches.size(), 2U);
-  EXPECT_EQ(std::optional<std::int64_t>{400}, w.get_osm_way(matches.way_[0]));
+  ASSERT_EQ(2U, matches.size());
+  EXPECT_EQ(std::optional<std::int64_t>{402}, w.get_osm_way(matches.way_[0]));
   EXPECT_EQ(std::optional<std::int64_t>{300}, w.get_osm_way(matches.way_[1]));
 
   auto const result =
@@ -179,8 +178,9 @@ TEST_F(endpoint_matching_test, unreachable_closest_match_uses_farther_match) {
             std::chrono::seconds{3600}, direction::kForward, 50.0);
   ASSERT_TRUE(result.has_value());
   ASSERT_FALSE(result->segments_.empty());
-  EXPECT_EQ(std::optional<std::int64_t>{31},
-            w.get_osm_node(result->segments_.back().from_));
+  ASSERT_FALSE(result->segments_.back().polyline_.empty());
+  EXPECT_EQ(project_to_osm_way(w, 300, to.pos_),
+            result->segments_.back().polyline_.back());
 }
 
 }  // namespace

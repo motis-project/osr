@@ -432,6 +432,12 @@ struct car_parking {
                            : footp::node_cost(params.foot_, props);
   }
 
+  static constexpr component_classes endpoint_component_classes(
+      route_end const end) noexcept {
+    return {end == route_end::kOrigin ? component_class::kCar
+                                      : component_class::kFoot};
+  }
+
   static bool endpoint_way_feasible(parameters const& params,
                                     endpoint_way_query const& q) {
     return q.end_ == route_end::kOrigin ? q.feasible<car>(params.car_)

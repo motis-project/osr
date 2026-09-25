@@ -541,6 +541,17 @@ inline void add_hgv_way_info_properties(boost::json::object& properties,
   }
 }
 
+// null: single-way component or a way the class cannot use.
+inline void add_class_component_properties(boost::json::object& properties,
+                                           ways::routing const& r,
+                                           way_idx_t const way) {
+  for (auto const& [c, name] : kComponentClasses) {
+    auto const id = r.get_class_components(c).get(way);
+    properties[std::string{"component_"} + name] =
+        id.has_value() ? boost::json::value{*id} : boost::json::value{nullptr};
+  }
+}
+
 struct geojson_writer {
   void write_platform(platform_idx_t const i) {
     for (auto const r : platforms_->platform_ref_[i]) {
@@ -579,7 +590,6 @@ struct geojson_writer {
           {"type", "edge"},
           {"osm_way_id", to_idx(w_.way_osm_idx_[i])},
           {"internal_id", to_idx(i)},
-          {"component", to_idx(w_.r_->way_component_[i])},
           {"distance", dist},
           {"car", p.is_car_accessible()},
           {"bike", p.is_bike_accessible()},
@@ -609,6 +619,7 @@ struct geojson_writer {
           {"is_detour", p.is_detour()}};
       add_hgv_way_info_properties(properties, *w_.r_, i, p);
       add_conditional_properties(properties, w_, i, p);
+      add_class_component_properties(properties, *w_.r_, i);
       features_.emplace_back(boost::json::value{
           {"type", "Feature"},
           {"properties", std::move(properties)},
@@ -620,7 +631,6 @@ struct geojson_writer {
         {"type", "geometry"},
         {"osm_way_id", to_idx(w_.way_osm_idx_[i])},
         {"internal_id", to_idx(i)},
-        {"component", to_idx(w_.r_->way_component_[i])},
         {"car", p.is_car_accessible()},
         {"bike", p.is_bike_accessible()},
         {"foot", p.is_foot_accessible()},
@@ -649,6 +659,7 @@ struct geojson_writer {
         {"is_detour", p.is_detour()}};
     add_hgv_way_info_properties(properties, *w_.r_, i, p);
     add_conditional_properties(properties, w_, i, p);
+    add_class_component_properties(properties, *w_.r_, i);
 
     features_.emplace_back(
         boost::json::value{{"type", "Feature"},

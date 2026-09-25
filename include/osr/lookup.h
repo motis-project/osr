@@ -115,6 +115,9 @@ struct match_result {
     std::span<way_idx_t const> way_{};
     std::span<nodes const> nodes_{};
     level_t lvl_{kNoLevel};
+
+    // Distance the matching penalty is measured from.
+    float penalty_ref_{0.0F};
   };
 
   match_result() { begin_.emplace_back(way_candidate_idx_t{0U}); }
@@ -123,6 +126,7 @@ struct match_result {
     begin_.clear();
     begin_.emplace_back(way_candidate_idx_t{0U});
     lvl_.clear();
+    penalty_ref_.clear();
     dist_to_way_.clear();
     way_.clear();
     nodes_.clear();
@@ -132,7 +136,10 @@ struct match_result {
   bool empty() const { return lvl_.empty(); }
 
   // Appending a match: start() -> add()* -> finish().
-  void start(level_t const lvl) { lvl_.emplace_back(lvl); }
+  void start(level_t const lvl) {
+    lvl_.emplace_back(lvl);
+    penalty_ref_.emplace_back(-1.0F);
+  }
 
   void add(float const dist_to_way, way_idx_t const w, nodes const& n) {
     dist_to_way_.emplace_back(dist_to_way);
@@ -140,7 +147,14 @@ struct match_result {
     nodes_.emplace_back(n);
   }
 
-  void finish() { begin_.emplace_back(way_candidate_idx_t{(way_.size())}); }
+  void finish() {
+    auto const from = begin_.back();
+    auto& ref = penalty_ref_.back();
+    if (ref < 0.0F) {
+      ref = to_idx(from) == way_.size() ? 0.0F : dist_to_way_[from];
+    }
+    begin_.emplace_back(way_candidate_idx_t{(way_.size())});
+  }
 
   // Appends a copy of one bucket of `src`. Used to gather a scattered subset
   // of precomputed matches into the contiguous form `route()` consumes.
@@ -150,6 +164,7 @@ struct match_result {
     for (auto j = std::size_t{0U}; j != v.size(); ++j) {
       add(v.dist_to_way_[j], v.way_[j], v.nodes_[j]);
     }
+    penalty_ref_.back() = v.penalty_ref_;
     finish();
   }
 
@@ -169,11 +184,13 @@ struct match_result {
     return view{.dist_to_way_ = at(dist_to_way_),
                 .way_ = at(way_),
                 .nodes_ = at(nodes_),
-                .lvl_ = lvl_[i]};
+                .lvl_ = lvl_[i],
+                .penalty_ref_ = penalty_ref_[i]};
   }
 
   vec_map<match_idx_t, way_candidate_idx_t> begin_{};  // size() + 1 entries
   vec_map<match_idx_t, level_t> lvl_{};
+  vec_map<match_idx_t, float> penalty_ref_{};
   vec_map<way_candidate_idx_t, float> dist_to_way_{};
   vec_map<way_candidate_idx_t, way_idx_t> way_{};
   vec_map<way_candidate_idx_t, nodes> nodes_{};
@@ -241,7 +258,7 @@ struct lookup {
                                       blocked, out, start_time);
       }
     }
-    out.finish();
+    finish_match<P>(out, query, reverse, search_dir);
   }
 
   // Converts raw (geometric, profile independent) candidates into profile
@@ -376,8 +393,31 @@ struct lookup {
           get_way_candidates<P>(params, query, reverse, search_dir,
                                 max_match_distance, blocked, out, start_time);
     }
+    finish_match<P>(out, query, reverse, search_dir);
+  }
+
+  template <Profile P>
+  void finish_match(match_result& out,
+                    location const& query,
+                    bool const reverse,
+                    direction const search_dir) const {
+    auto const end = route_end_of(reverse ? opposite(search_dir) : search_dir);
+    filter_by_component(out, query, P::endpoint_component_classes(end));
+    set_penalty_reference(out, query.lvl_);
     out.finish();
   }
+
+  // Keeps only the closest candidate (and near-ties) per connected component
+  // of each class.
+  void filter_by_component(match_result&,
+                           location const& query,
+                           component_classes) const;
+
+  // Without a query level, measures the matching penalty from the closest
+  // candidate on the ground: the filter also keeps candidates on other levels
+  // (e.g. in an underground station below the query), which would otherwise
+  // make every candidate on the street look far away.
+  void set_penalty_reference(match_result&, level_t query_lvl) const;
 
   template <typename Fn>
   void find(geo::box const& b, Fn&& fn) const {
@@ -567,6 +607,12 @@ struct lookup {
 private:
   std::vector<raw_way_candidate> get_raw_way_candidates(
       location const& query, double const max_match_distance) const;
+
+  raw_way_candidate get_raw_way_candidate(way_idx_t,
+                                          double squared_dist,
+                                          double approx_distance_lng_degrees,
+                                          geo::latlng best,
+                                          std::size_t segment_idx) const;
 
   raw_node_candidate find_raw_next_node(raw_way_candidate const&,
                                         direction const,

@@ -14,6 +14,9 @@
   <node id="34" lat="49.010000" lon="8.003000"/>
   <node id="41" lat="49.010040" lon="8.002700"/>
   <node id="42" lat="49.010040" lon="8.002900"/>
+  <node id="43" lat="49.010030" lon="8.001300"/>
+  <node id="44" lat="49.010030" lon="8.001500"/>
+  <node id="45" lat="49.010030" lon="8.001700"/>
   <node id="51" lat="49.009500" lon="8.000000"/>
   <node id="61" lat="49.020000" lon="8.000000"/>
   <node id="62" lat="49.020000" lon="8.001000"/>
@@ -108,6 +111,18 @@
     <nd ref="31"/>
     <tag k="highway" v="cycleway"/>
     <tag k="foot" v="no"/>
+  </way>
+
+  <way id="402">
+    <nd ref="43"/>
+    <nd ref="44"/>
+    <tag k="highway" v="residential"/>
+  </way>
+
+  <way id="403">
+    <nd ref="44"/>
+    <nd ref="45"/>
+    <tag k="highway" v="residential"/>
   </way>
 
   <way id="401">

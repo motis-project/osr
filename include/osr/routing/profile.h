@@ -142,6 +142,9 @@ concept Profile =
       {
         P::resolve_endpoint(r, w, node_idx, lvl, end, role, f)
       } -> std::same_as<void>;
+      {
+        P::endpoint_component_classes(end)
+      } -> std::same_as<component_classes>;
     } &&
     requires(typename P::parameters const& params,
              typename P::node const node,
