@@ -245,6 +245,31 @@ TEST(extract, bus_only_on_highway) {
   ASSERT_TRUE(wp.is_foot_accessible());
 }
 
+TEST(extract, ignores_ways_exceeding_max_ways_per_node) {
+  auto const p = fs::temp_directory_path() / "osr_24_way_node_test";
+  auto ec = std::error_code{};
+  fs::remove_all(p, ec);
+  fs::create_directories(p, ec);
+
+  extract(false, "test/39-way-node.osm.pbf", p, {});
+
+  auto w = ways{p, cista::mmap::protection::READ};
+  for (auto n = node_idx_t{0U}; n != w.n_nodes(); ++n) {
+    auto const ways = w.r_->node_ways_[n];
+    auto const in_way_idx = w.r_->node_in_way_idx_[n];
+    EXPECT_LE(ways.size(), kMaxWaysPerNode);
+    ASSERT_EQ(ways.size(), in_way_idx.size());
+    for (auto i = std::size_t{0U}; i != ways.size(); ++i) {
+      auto const way = ways[i];
+      ASSERT_LT(to_idx(way), w.r_->way_nodes_.size()) << "dangling way index";
+      ASSERT_LT(in_way_idx[i], w.r_->way_nodes_[way].size())
+          << "dangling node-in-way index";
+      EXPECT_EQ(n, w.r_->way_nodes_[way][in_way_idx[i]])
+          << "node_ways_/node_in_way_idx_ does not point back to this node";
+    }
+  }
+}
+
 TEST(extract, standalone_ramp) {
   auto p = fs::temp_directory_path() / "osr_standalone_ramp_test";
   auto ec = std::error_code{};
