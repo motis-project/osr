@@ -2,6 +2,7 @@
 
 #include <concepts>
 #include <functional>
+#include <iostream>
 #include <iterator>
 #include <limits>
 #include <optional>
@@ -67,6 +68,8 @@ std::tuple<geo::latlng, double, component_idx_t> analyze_surroundings(
         largest_componet = component;
       }
     });
+    utl::verify(largest_componet != component_idx_t::invalid(),
+                "Isolated parking space, way_idx: {}", way_idx);
     return largest_componet;
   };
 
@@ -104,7 +107,7 @@ std::optional<matching_result_t> find_closest(
       auto const left = match.left(j);
       auto const right = match.right(j);
       utl::verify(left.way_dir_ == opposite(right.way_dir_),
-                  "Opposite directions expected");
+                  "matching nodes need to have opposite directions");
       auto const wc = offset{
           .left_ = {.node_ = left.node_,
                     .dist_ = static_cast<std::uint16_t>(left.dist_to_node_)},
@@ -121,6 +124,8 @@ std::optional<matching_result_t> find_closest(
   }
   if (best.has_value()) {
     auto& best0 = std::get<0>(*best);
+    utl::verify(best0.left_.valid() || best0.right_.valid(),
+                "match returned without valid nodes");
     auto const path = l.get_node_candidate_path(
         best0.way_,
         best0.left_.valid() ? best0.left_.node_ : best0.right_.node_,
@@ -275,42 +280,44 @@ void connect_parking_ways(
     auto const is_car_connected = is_connected(way_idx, is_car_accessible);
     auto const is_foot_connected = is_connected(way_idx, is_foot_accessible);
     if (is_car_connected && is_foot_connected) {
+      // Already connected => Nothing to do
       continue;
     }
 
     auto const [center, approx_distance_lng_degrees, matching_component] =
         analyze_surroundings(w, l, way_idx, component_sizes);
-    if (matching_component == component_idx_t::invalid()) {
-      continue;
-    }
 
     auto const is_same_component =
         w.r_->way_component_[way_idx] == matching_component;
 
     auto const loc = location{.pos_ = center, .lvl_ = kNoLevel};
-    auto const foot_offset2 =
+
+    auto const car_matching =
+        (is_same_component && is_car_connected)
+            ? get_connected_way(way_idx, center, approx_distance_lng_degrees,
+                                is_car_accessible)
+            : find_closest<car>(w, l, loc, direction::kBackward,
+                                matching_component, way_idx, car_score);
+    if (!car_matching.has_value()) {
+      std::clog << "osr: parking space matching failed for car offset on way "
+                << *w.get_osm_way(way_idx) << '\n';
+      continue;
+    }
+    auto const foot_matching =
         (is_same_component && is_foot_connected)
             ? get_connected_way(way_idx, center, approx_distance_lng_degrees,
                                 is_foot_accessible)
             : find_closest<foot<false>>(w, l, loc, direction::kForward,
                                         matching_component, way_idx,
                                         foot_score);
-    auto const car_offset2 =
-        (is_same_component && is_car_connected)
-            ? get_connected_way(way_idx, center, approx_distance_lng_degrees,
-                                is_car_accessible)
-            : find_closest<car>(w, l, loc, direction::kBackward,
-                                matching_component, way_idx, car_score);
-    // TODO: MK - Log messages
-    if (!foot_offset2.has_value() || !car_offset2.has_value()) {
-      fmt::println(
-          "WARNING: No usable way candidate found for way {}"
-          " (osm: {}, centroid: {})",
-          way_idx, w.way_osm_idx_[way_idx], center);
+    if (!foot_matching.has_value()) {
+      std::clog << "osr: parking space matching failed for foot offset on way "
+                << *w.get_osm_way(way_idx) << '\n';
       continue;
     }
-    auto [foot_offset, foot_way_point] = *foot_offset2;
-    auto [car_offset, car_way_point] = *car_offset2;
+
+    auto [foot_offset, foot_way_point] = *foot_matching;
+    auto [car_offset, car_way_point] = *car_matching;
     if (!foot_offset.left_.valid() && !foot_offset.right_.valid()) {
       fmt::println("Connected footpath not usable! Way: {}  at: {}",
                    foot_offset.way_, foot_way_point);
