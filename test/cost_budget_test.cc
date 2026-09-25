@@ -250,7 +250,6 @@ TEST(cost_budget, internal_edge_longer_than_bidirectional_radius) {
   EXPECT_EQ(dijkstra->cost_, astar_bi->cost_);
 }
 
-// Exercise the engine directly: public routing may fall back to Dijkstra.
 TEST(cost_budget, bidirectional_competing_routes_asymmetric_roots) {
   using P = osr::foot<false, osr::elevator_tracking>;
   auto const dir = fs::temp_directory_path() / "osr_bidir_competing_routes";

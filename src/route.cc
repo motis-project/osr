@@ -1271,13 +1271,11 @@ std::optional<path> route(profile_parameters const& params,
     switch (algo) {
       case routing_algorithm::kAStarBi: {
         auto b = bidirectional<P>{};
-        auto result = route_bidirectional(
-            pp, w, l, b, from, to, from_match, to_match, max, dir, blocked,
-            sharing, elevations, options.matching_penalty_factor_);
-        if (result.has_value()) {
-          return cheaper(std::move(result), std::move(stretch));
-        }
-        [[fallthrough]];
+        return cheaper(
+            route_bidirectional(pp, w, l, b, from, to, from_match, to_match,
+                                max, dir, blocked, sharing, elevations,
+                                options.matching_penalty_factor_),
+            std::move(stretch));
       }
       case routing_algorithm::kDijkstra: {
         auto d = dijkstra<P>{};

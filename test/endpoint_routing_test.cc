@@ -114,8 +114,9 @@ TEST_F(endpoint_routing, elevator_tracking_includes_both_halves_and_roots) {
   }
 }
 
-TEST_F(endpoint_routing,
-       bidirectional_falls_back_when_endpoint_bound_is_too_large) {
+// Both ends are more than 500 m from the way, so the bidirectional heuristic
+// (measured from the query positions) overestimates the endpoint connectors.
+TEST_F(endpoint_routing, far_matches_agree_between_algorithms) {
   auto const params = get_parameters(search_profile::kWheelchair);
   auto const from = location{49.195, 8.00099};
   auto const to = location{49.205, 8.00099};
@@ -191,9 +192,6 @@ TEST_F(endpoint_routing, meeting_turn_is_in_segment_totals) {
     auto const from = location{49., 8.0005};
     auto const to = location{49.0005, 8.001};
     auto const bwd = dir == direction::kBackward;
-    // TODO: the bidirectional search falls back to Dijkstra when it finds
-    // nothing, and there is no way to observe which of the two produced the
-    // result, so this can only check that both agree.
     auto const p = route(get_parameters(search_profile::kBus), *w_, *l_,
                          search_profile::kBus, bwd ? to : from, bwd ? from : to,
                          std::chrono::seconds{3600}, dir, 2.0, nullptr, nullptr,
