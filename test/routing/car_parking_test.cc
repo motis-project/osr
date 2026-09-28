@@ -2,9 +2,9 @@
 #include "windows.h"
 #endif
 
-#include "gmock/gmock-more-matchers.h"
 #include "gtest/gtest.h"
 
+#include <cmath>
 #include <filesystem>
 
 #include "cista/mmap.h"
@@ -41,20 +41,20 @@ void load(string_view raw_data, std::string_view data_dir) {
   }
 }
 
-MATCHER(LatLngMatchesE5, "matches latlng") {
-  const auto& [actual, expected] = arg;
-
-  return testing::ExplainMatchResult(
-      testing::AllOf(
-          testing::Property("lat", &geo::latlng::lat,
-                            testing::DoubleNear(expected.lat(), 10e-5)),
-          testing::Property("lng", &geo::latlng::lng,
-                            testing::DoubleNear(expected.lng(), 10e-5))),
-      actual, result_listener);
+geo::polyline round(geo::polyline const& polyline) {
+  auto rounded = geo::polyline{};
+  rounded.reserve(polyline.size());
+  auto const round = [&](double const d) {
+    return std::round(d * 100'000) / 100'000.0;
+  };
+  for (auto& p : polyline) {
+    rounded.emplace_back(round(p.lat()), round(p.lng()));
+  }
+  return rounded;
 }
 }  // namespace
 
-TEST(car_parking, monaco_fwd) {
+TEST(car_parking, monaco) {
   auto const raw_data = "test/monaco.osm.pbf";
   auto const data_dir = "test/monaco";
   auto constexpr dir = direction::kForward;
@@ -67,69 +67,67 @@ TEST(car_parking, monaco_fwd) {
   auto const w = osr::ways{data_dir, cista::mmap::protection::READ};
   auto const l = osr::lookup{w, data_dir, cista::mmap::protection::READ};
 
-  auto const start = geo::latlng(43.728311, 7.417984);
-  auto const end = geo::latlng(43.730710, 7.414288);
-  auto const start_loc = location{.pos_ = start, .lvl_ = kNoLevel};
-  auto const end_loc = location{.pos_ = end, .lvl_ = kNoLevel};
-  auto const max_cost = cost_t{900};
-  auto const max_matching_dist = 250.0;
+  // Forward search, curved path to parking space
+  {
+    auto const start = geo::latlng{.lat_ = 43.729852, .lng_ = 7.413038};
+    auto const end = geo::latlng{.lat_ = 43.730710, .lng_ = 7.414288};
+    auto const start_loc = location{.pos_ = start, .lvl_ = kNoLevel};
+    auto const end_loc = location{.pos_ = end, .lvl_ = kNoLevel};
+    auto const max_cost = cost_t{900};
+    auto const max_matching_dist = 250.0;
 
-  using P = car_parking<false, true>;
-  // using P = car;
-  auto const res =
-      route(P::parameters{}, w, l, search_profile::kCarParking, start_loc,
-            end_loc, max_cost, direction::kForward, max_matching_dist, nullptr,
-            nullptr, nullptr, routing_algorithm::kDijkstra);
+    using P = car_parking<false, true>;
+    auto const res =
+        route(P::parameters{}, w, l, search_profile::kCarParking, start_loc,
+              end_loc, max_cost, direction::kForward, max_matching_dist,
+              nullptr, nullptr, nullptr, routing_algorithm::kDijkstra);
 
-  ASSERT_TRUE(res.has_value());
-  EXPECT_NEAR(res->dist_, 2'261, 0.5);
-  EXPECT_EQ(res->duration_, duration_t{587});
-  ASSERT_EQ(res->segments_.size(), 42);
-  auto const& parking_segment = res->segments_[40];
-  EXPECT_EQ(parking_segment.mode_, mode::kParking);
-  fmt::println("Polyline: >>{}<<", parking_segment.polyline_);
-  auto const expected_polyline = geo::polyline{
-      // Path to closest point on road way
-      {43.7301, 7.41293},
-      {43.7301, 7.41291},
-      {43.7301, 7.41289},
-      {43.7301, 7.41289},
-      {43.7302, 7.41289},
-      {43.7302, 7.41292},
-      {43.7302, 7.41294},
-      {43.7302, 7.41297},
-      {43.7302, 7.41303},
-      {43.7302, 7.41308},
-      {43.7302, 7.41316},
-      {43.7304, 7.41369},
-      {43.7305, 7.41391},
-      {43.7305, 7.41401},
-      {43.7305, 7.41417},
-      {43.7306, 7.41425},
-      {43.7306, 7.41432},
-      {43.7306, 7.41435},
-      {43.7307, 7.41436},
-      {43.7307, 7.41436},
-      {43.7307, 7.41436},
-      {43.7307, 7.41434},
-      {43.7307, 7.41431},
-      {43.7308, 7.41427},
-      {43.7308, 7.41422},
-      {43.7308, 7.41416},
-      {43.7306, 7.41387},  // TODO Duplicate
-      // Path to parking site and back
-      {43.7306, 7.41387},
-      {43.7306, 7.4139},
-      {43.7306, 7.41387},
-      // Path to closest point on footpath way
-      {43.7306, 7.41387},  // TODO Duplicate
-      {43.7305, 7.41358},
-      {43.7305, 7.41350},
-      {43.7305, 7.41341},
-      {43.7304, 7.41315},
-      {43.7304, 7.41311},
-  };
-  EXPECT_EQ(parking_segment.polyline_.size(), expected_polyline.size());
-  EXPECT_THAT(parking_segment.polyline_,
-              testing::Pointwise(LatLngMatchesE5(), expected_polyline));
+    ASSERT_TRUE(res.has_value());
+    EXPECT_NEAR(res->dist_, 772, 0.5);
+    EXPECT_EQ(res->duration_, duration_t{455});
+    ASSERT_EQ(res->segments_.size(), 10);
+    auto const& parking_segment = res->segments_[8];
+    EXPECT_EQ(parking_segment.mode_, mode::kParking);
+    fmt::println("Polyline: >>{}<<", parking_segment.polyline_);
+    auto const expected_polyline = geo::polyline{
+        // Path to closest point on road way
+        {43.73008, 7.41293},
+        {43.73009, 7.41291},
+        {43.73011, 7.41289},
+        {43.73014, 7.41289},
+        {43.73016, 7.41289},
+        {43.73019, 7.41292},
+        {43.73020, 7.41294},
+        {43.73021, 7.41297},
+        {43.73022, 7.41303},
+        {43.73022, 7.41308},
+        {43.73023, 7.41316},
+        {43.73041, 7.41369},
+        {43.73049, 7.41391},
+        {43.73051, 7.41401},
+        {43.73054, 7.41417},
+        {43.73057, 7.41425},
+        {43.73060, 7.41432},
+        {43.73063, 7.41435},
+        {43.73066, 7.41436},
+        {43.73069, 7.41436},
+        {43.73071, 7.41436},
+        {43.73073, 7.41434},
+        {43.73075, 7.41431},
+        {43.73076, 7.41427},
+        {43.73077, 7.41422},
+        {43.73076, 7.41416},
+        // Path to parking site and back
+        {43.73064, 7.41387},
+        {43.73061, 7.4139},
+        {43.73064, 7.41387},
+        // Path to closest point on footpath way
+        {43.73053, 7.41358},
+        {43.73051, 7.41350},
+        {43.73049, 7.41341},
+        {43.73043, 7.41315},
+        {43.73042, 7.41311},
+    };
+    EXPECT_EQ(round(parking_segment.polyline_), expected_polyline);
+  }
 }

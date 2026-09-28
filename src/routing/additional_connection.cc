@@ -98,10 +98,15 @@ geo::polyline get_additional_connection_polyline(
     node_idx_t from,
     node_idx_t to) {
   auto polyline = geo::polyline{};
+  auto previous = geo::latlng{};
   auto const append_to_polyline = [&](geo::polyline const& line) {
     polyline.reserve(polyline.size() + line.size());
     for (auto const& p : line) {
-      polyline.push_back(p);
+      auto const rounded = point::from_latlng(p).as_latlng();
+      if (rounded != previous) {
+        polyline.push_back(rounded);
+        previous = rounded;
+      }
     }
   };
   append_to_polyline(reverse(get_additional_connection_offset_points(
