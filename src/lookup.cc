@@ -46,7 +46,7 @@ std::array<double, 2> get_travel_heading(ways const& w,
       geo::approx_squared_distance_to_polyline<
           std::tuple<double, geo::latlng, size_t>>(
           pos, polyline, geo::approx_distance_lng_degrees(pos));
-  auto const i = std::min(segment_idx, polyline.size() - 2U);
+  auto const i = std::min<std::size_t>(segment_idx, polyline.size() - 2U);
   geo::latlng const a = polyline[i];
   geo::latlng const b = polyline[i + 1U];
   auto const sign = props.is_oneway_reverse() ? -1.0 : 1.0;
