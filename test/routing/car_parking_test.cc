@@ -67,20 +67,20 @@ TEST(car_parking, monaco) {
   auto const w = osr::ways{data_dir, cista::mmap::protection::READ};
   auto const l = osr::lookup{w, data_dir, cista::mmap::protection::READ};
 
+  auto const params = car_parking<false, true>::parameters{};
+  auto const max_cost = cost_t{900};
+  auto const max_matching_dist = 250.0;
+
   // Forward search, curved path to parking space
   {
-    auto const start = geo::latlng{.lat_ = 43.729852, .lng_ = 7.413038};
-    auto const end = geo::latlng{.lat_ = 43.730710, .lng_ = 7.414288};
-    auto const start_loc = location{.pos_ = start, .lvl_ = kNoLevel};
-    auto const end_loc = location{.pos_ = end, .lvl_ = kNoLevel};
-    auto const max_cost = cost_t{900};
-    auto const max_matching_dist = 250.0;
+    auto const from = geo::latlng{.lat_ = 43.729852, .lng_ = 7.413038};
+    auto const to = geo::latlng{.lat_ = 43.730710, .lng_ = 7.414288};
 
-    using P = car_parking<false, true>;
-    auto const res =
-        route(P::parameters{}, w, l, search_profile::kCarParking, start_loc,
-              end_loc, max_cost, direction::kForward, max_matching_dist,
-              nullptr, nullptr, nullptr, routing_algorithm::kDijkstra);
+    auto const res = route(params, w, l, search_profile::kCarParking,
+                           location{.pos_ = from, .lvl_ = kNoLevel},
+                           location{.pos_ = to, .lvl_ = kNoLevel}, max_cost,
+                           direction::kForward, max_matching_dist, nullptr,
+                           nullptr, nullptr, routing_algorithm::kDijkstra);
 
     ASSERT_TRUE(res.has_value());
     EXPECT_NEAR(res->dist_, 772, 0.5);
@@ -88,7 +88,7 @@ TEST(car_parking, monaco) {
     ASSERT_EQ(res->segments_.size(), 10);
     auto const& parking_segment = res->segments_[8];
     EXPECT_EQ(parking_segment.mode_, mode::kParking);
-    fmt::println("Polyline: >>{}<<", parking_segment.polyline_);
+
     auto const expected_polyline = geo::polyline{
         // Path to closest point on road way
         {43.7301, 7.41293},
@@ -129,5 +129,33 @@ TEST(car_parking, monaco) {
         {43.7304, 7.41311},
     };
     EXPECT_EQ(round(parking_segment.polyline_), expected_polyline);
+  }
+  // Forward and backward search with parking space on oneway
+  {
+    auto const from = geo::latlng{.lat_ = 43.734271, .lng_ = 7.419387};
+    auto const to = geo::latlng{.lat_ = 43.735249, .lng_ = 7.419859};
+
+    auto const results =
+        vec{route(params, w, l, search_profile::kCarParking,
+                  location{.pos_ = from, .lvl_ = kNoLevel},
+                  location{.pos_ = to, .lvl_ = kNoLevel}, max_cost,
+                  direction::kForward, max_matching_dist, nullptr, nullptr,
+                  nullptr, routing_algorithm::kDijkstra),
+            route(params, w, l, search_profile::kCarParking,
+                  location{.pos_ = to, .lvl_ = kNoLevel},
+                  location{.pos_ = from, .lvl_ = kNoLevel}, max_cost,
+                  direction::kBackward, max_matching_dist, nullptr, nullptr,
+                  nullptr, routing_algorithm::kDijkstra)};
+
+    for (auto const& res : results) {
+      ASSERT_TRUE(res.has_value());
+      EXPECT_NEAR(res->dist_, 786, 0.5);
+      EXPECT_EQ(res->duration_, duration_t{350});
+      ASSERT_EQ(res->segments_.size(), 27);
+      EXPECT_EQ(res->segments_[23].mode_, mode::kParking);
+      // Ensure path passes node north east of parking edge
+      EXPECT_EQ(res->segments_[20].polyline_.front(),
+                (geo::latlng{43.7353926, 7.4195648}));
+    }
   }
 }
