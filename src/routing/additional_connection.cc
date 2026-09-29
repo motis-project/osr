@@ -1,11 +1,10 @@
 #include "osr/routing/additional_connection.h"
 
-#include <ranges>
+#include <cstdint>
 
 #include "osr/location.h"
 #include "osr/point.h"
 #include "osr/types.h"
-#include "utl/pipes/transform.h"
 #include "utl/to_vec.h"
 
 #include "osr/lookup.h"
@@ -86,9 +85,9 @@ way_idx_t add_additional_connection(
       add_node(side.node_);
     }
   }
-  r.additional_connections_.emplace_back(std::move(connection), std::move(from),
-                                         std::move(to),
-                                         geo::length(to_polyline(connection)));
+  r.additional_connections_.emplace_back(
+      std::move(connection), std::move(from), std::move(to),
+      static_cast<std::uint16_t>(geo::length(to_polyline(connection))));
   return to_way_idx(r, conn_idx);
 }
 

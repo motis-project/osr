@@ -59,7 +59,7 @@ std::tuple<geo::latlng, double, component_idx_t> analyze_surroundings(
   // Identify component_idx of largest nearby component
   auto const get_largest_component_idx = [&](geo::box const& bbox) {
     auto largest_componet = component_idx_t::invalid();
-    auto largest_size = 0UL;
+    auto largest_size = std::size_t{0UL};
     l.find(bbox, [&](way_idx_t const candidate) {
       auto const component = w.r_->way_component_[candidate];
       auto const size = component_sizes[component];
