@@ -158,4 +158,66 @@ TEST(car_parking, monaco) {
                 (geo::latlng{43.7353926, 7.4195648}));
     }
   }
+  // Parking space with looping oneway with highway=service
+  {
+    auto const from_coordinates = geo::polyline{
+        {.lat_ = 43.725555, .lng_ = 7.418432},
+        {.lat_ = 43.725466, .lng_ = 7.418558},
+        {.lat_ = 43.725396, .lng_ = 7.418808},
+        {.lat_ = 43.725442, .lng_ = 7.418684},
+        {.lat_ = 43.725320, .lng_ = 7.418700},
+        {.lat_ = 43.725425, .lng_ = 7.418853},
+    };
+    auto const to = geo::latlng{.lat_ = 43.725731, .lng_ = 7.418250};
+    // Node on connected way, that should never be used
+    auto const not_used_car_parking_node =
+        geo::latlng{.lat_ = 43.7257018, .lng_ = 7.4190091};
+
+    for (auto const& from : from_coordinates) {
+      auto const results =
+          vec{route(params, w, l, search_profile::kCarParking,
+                    location{.pos_ = from, .lvl_ = kNoLevel},
+                    location{.pos_ = to, .lvl_ = kNoLevel}, max_cost,
+                    direction::kForward, max_matching_dist, nullptr, nullptr,
+                    nullptr, routing_algorithm::kDijkstra),
+              route(params, w, l, search_profile::kCarParking,
+                    location{.pos_ = to, .lvl_ = kNoLevel},
+                    location{.pos_ = from, .lvl_ = kNoLevel}, max_cost,
+                    direction::kBackward, max_matching_dist, nullptr, nullptr,
+                    nullptr, routing_algorithm::kDijkstra)};
+
+      for (auto const& res : results) {
+        ASSERT_TRUE(res.has_value());
+        ASSERT_TRUE(res->segments_.size() > 5);
+        auto const parking_segment = res->segments_.size() - 5;
+        for (auto const& [idx, segment] : utl::enumerate(res->segments_)) {
+          EXPECT_EQ(segment.mode_, idx < parking_segment    ? mode::kCar
+                                   : idx == parking_segment ? mode::kParking
+                                                            : mode::kFoot);
+          // Ensure node further away on oneway service way is never reached
+          EXPECT_TRUE(utl::all_of(segment.polyline_, [&](geo::latlng const& p) {
+            return geo::distance(p, not_used_car_parking_node) > 1.0;
+          }));
+        }
+      }
+    }
+    // Check that tested node is actual node on car usable way
+    // Note (Corner case): With forward search, nodes on the car parking segment
+    // might match with the left node. In that case, no loop is required. With
+    // backward search, a loop is always required.
+    {
+      auto const res =
+          route(params, w, l, search_profile::kCarParking,
+                location{.pos_ = not_used_car_parking_node, .lvl_ = kNoLevel},
+                location{.pos_ = to, .lvl_ = kNoLevel}, max_cost,
+                direction::kForward, max_matching_dist, nullptr, nullptr,
+                nullptr, routing_algorithm::kDijkstra);
+
+      ASSERT_TRUE(res.has_value());
+      ASSERT_EQ(res->segments_.size(), 12);
+      EXPECT_EQ(res->segments_[7].mode_, mode::kParking);
+      EXPECT_TRUE(geo::distance(res->segments_[0].polyline_.front(),
+                                not_used_car_parking_node) < 1e-6);
+    }
+  }
 }
