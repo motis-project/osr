@@ -18,7 +18,6 @@
 namespace fs = std::filesystem;
 
 namespace osr {
-namespace {
 
 // Query position of the matching tests.
 constexpr auto const kQuery = geo::latlng{49.000000, 8.000000};
@@ -483,5 +482,4 @@ TEST_F(tie_tolerance_test, tolerance_grows_with_the_distance) {
             matched_ways(location{{49.000480, 8.001000}, kNoLevel}, 150.0));
 }
 
-}  // namespace
 }  // namespace osr

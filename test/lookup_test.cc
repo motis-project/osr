@@ -15,7 +15,6 @@
 namespace fs = std::filesystem;
 
 namespace osr {
-namespace {
 
 struct lookup_test : public ::testing::Test {
   static void SetUpTestSuite() {
@@ -60,5 +59,4 @@ TEST_F(lookup_test, unlevelled_foot_way_is_only_ground_level_fallback) {
   EXPECT_TRUE(level_one_matches[match_idx_t{0U}].empty());
 }
 
-}  // namespace
 }  // namespace osr

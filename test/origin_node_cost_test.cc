@@ -18,7 +18,6 @@
 namespace fs = std::filesystem;
 
 namespace osr {
-namespace {
 
 // An elevator (levels -3, -2, -1): way 1 on level -1, way 2 on level -2.
 constexpr auto const kElevatorOsm = R"(
@@ -136,5 +135,4 @@ TEST_F(origin_node_cost_test, gate_next_to_the_origin_is_charged) {
       });
 }
 
-}  // namespace
 }  // namespace osr

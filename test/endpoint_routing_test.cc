@@ -19,7 +19,6 @@
 #include "xml_to_pbf.h"
 
 namespace osr {
-namespace {
 
 struct endpoint_routing : testing::Test {
   void SetUp() override {
@@ -620,5 +619,4 @@ TEST_F(endpoint_routing, explicit_bidirectional_uses_supported_profile_policy) {
   }
 }
 
-}  // namespace
 }  // namespace osr

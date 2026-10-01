@@ -8,7 +8,6 @@
 #include "osr/ways.h"
 
 namespace osr {
-namespace {
 
 template <typename P>
 struct endpoint_level_transition : testing::Test {};
@@ -124,5 +123,4 @@ TEST(endpoint_transition, skips_restricted_duplicate_way_occurrence) {
   EXPECT_EQ(params.uturn_penalty_, transition.cost_);
 }
 
-}  // namespace
 }  // namespace osr
