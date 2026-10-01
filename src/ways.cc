@@ -133,7 +133,7 @@ void ways::build_class_components() {
       .out_bounds(75, 90);
 
   r_->class_components_.clear();
-  for (auto const& [c, name] : kComponentClasses) {
+  for (auto const c : kAllComponentClasses) {
     r_->class_components_.emplace_back(build_components(*this, c));
     pt->increment();
   }

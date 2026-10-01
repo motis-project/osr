@@ -545,9 +545,9 @@ inline void add_hgv_way_info_properties(boost::json::object& properties,
 inline void add_class_component_properties(boost::json::object& properties,
                                            ways::routing const& r,
                                            way_idx_t const way) {
-  for (auto const& [c, name] : kComponentClasses) {
+  for (auto const c : kAllComponentClasses) {
     auto const id = r.get_class_components(c).get(way);
-    properties[std::string{"component_"} + name] =
+    properties[std::string{"component_"} + to_str(c)] =
         id.has_value() ? boost::json::value{*id} : boost::json::value{nullptr};
   }
 }

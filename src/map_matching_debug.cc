@@ -189,10 +189,10 @@ boost::json::object build_map_match_debug_json(
         {"isRamp", p.is_ramp()},
         {"inRoute", p.in_route()}};
     auto components = boost::json::object{};
-    for (auto const& [c, name] : kComponentClasses) {
+    for (auto const c : kAllComponentClasses) {
       auto const id = w.r_->get_class_components(c).get(way_idx);
-      components[name] = id.has_value() ? boost::json::value{*id}
-                                        : boost::json::value{nullptr};
+      components[to_str(c)] = id.has_value() ? boost::json::value{*id}
+                                             : boost::json::value{nullptr};
     }
     way_obj["properties"].as_object()["components"] = std::move(components);
   };
