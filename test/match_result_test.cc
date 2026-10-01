@@ -19,7 +19,7 @@ match_result::nodes some_nodes(node_idx_t::value_t const n) {
 TEST(match_result, empty_match_trailing) {
   auto m = match_result{};
   m.start(level_t{0.F});
-  m.add(1.0F, way_idx_t{7U}, some_nodes(1U));
+  m.add(1.0F, way_idx_t{7U}, some_nodes(1U), {});
   m.finish();
   m.start(level_t{0.F});  // empty, and last -> from == size()
   m.finish();
@@ -42,7 +42,7 @@ TEST(match_result, empty_match_between) {
   m.start(level_t{0.F});
   m.finish();  // empty, middle
   m.start(level_t{0.F});
-  m.add(2.0F, way_idx_t{9U}, some_nodes(5U));
+  m.add(2.0F, way_idx_t{9U}, some_nodes(5U), {});
   m.finish();
 
   ASSERT_EQ(3U, m.size());
@@ -79,7 +79,7 @@ TEST(match_result, append_and_clear) {
   src.start(level_t{0.F});
   src.finish();  // empty
   src.start(level_t{0.F});
-  src.add(1.5F, way_idx_t{3U}, some_nodes(11U));
+  src.add(1.5F, way_idx_t{3U}, some_nodes(11U), {});
   src.finish();
 
   auto dst = match_result{};

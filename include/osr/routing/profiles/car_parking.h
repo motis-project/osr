@@ -332,14 +332,14 @@ struct car_parking {
                                level_t const lvl,
                                route_end const end,
                                endpoint_role const role,
-                               bool const,
+                               endpoint_state_t,
                                Fn&& f) {
     if (end == route_end::kOrigin) {
-      car::resolve_endpoint(w, way, n, lvl, end, role, false,
+      car::resolve_endpoint(w, way, n, lvl, end, role, kNoEndpointState,
                             [&](car::node const cn) { f(to_node(cn)); });
     } else {
       footp::resolve_endpoint(
-          w, way, n, lvl, end, role, false,
+          w, way, n, lvl, end, role, kNoEndpointState,
           [&](typename footp::node const fn) { f(to_node(fn)); });
     }
   }
@@ -418,7 +418,7 @@ struct car_parking {
   }
 
   static constexpr component_classes endpoint_component_classes(
-      route_end const end, bool) noexcept {
+      route_end const end, endpoint_state_t) noexcept {
     return {end == route_end::kOrigin ? component_class::kCar
                                       : component_class::kFoot};
   }

@@ -208,7 +208,7 @@ struct railway {
                                level_t,
                                route_end,
                                endpoint_role const role,
-                               bool const,
+                               endpoint_state_t,
                                Fn&& f) {
     resolve_way_aware_endpoint<railway>(w, way, n, role, std::forward<Fn>(f));
   }
@@ -357,8 +357,8 @@ struct railway {
     return node_cost(params, n);
   }
 
-  static constexpr component_classes endpoint_component_classes(route_end,
-                                                                bool) noexcept {
+  static constexpr component_classes endpoint_component_classes(
+      route_end, endpoint_state_t) noexcept {
     return {};
   }
 
