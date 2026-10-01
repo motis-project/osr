@@ -133,7 +133,8 @@ path reconstruct_bi(typename P::parameters const& params,
 
        .way_ = way_idx_t::invalid(),
        .cost_ = start_node_candidate.cost_,
-       .duration_ = duration_from_cost(start_node_candidate.cost_),
+       // tracked duration of the matching piece: the root label's duration
+       .duration_ = b.cost1_.at(forward_n.get_key()).duration(forward_n),
        .dist_ = static_cast<distance_t>(start_node_candidate.dist_to_node_),
        .mode_ = forward_n.get_mode()});
 
@@ -177,7 +178,8 @@ path reconstruct_bi(typename P::parameters const& params,
                                           : node_idx_t::invalid(),
        .way_ = way_idx_t::invalid(),
        .cost_ = dest_node_candidate.cost_,
-       .duration_ = duration_from_cost(dest_node_candidate.cost_),
+       // tracked duration of the matching piece: the root label's duration
+       .duration_ = b.cost2_.at(backward_n.get_key()).duration(backward_n),
        .dist_ = static_cast<distance_t>(dest_node_candidate.dist_to_node_),
        .mode_ = backward_n.get_mode()});
 
@@ -224,10 +226,17 @@ path reconstruct(typename P::parameters const& params,
                  candidate_node const& dest_nc,
                  typename P::node const dest_node,
                  cost_t const cost,
+                 duration_t const duration,
                  direction const dir,
                  std::optional<routing_time_t> const start_time) {
 
+  // The matching pieces at both ends are laid out with the durations the
+  // search tracked for them (the costs may contain penalties that are not
+  // time): the destination piece is what the tracked path duration adds to
+  // the destination node, the start piece is the root label's duration.
   auto n = dest_node;
+  auto const dest_piece_duration = clamp_sub_duration(
+      duration, search.cost_.at(dest_node.get_key()).duration(dest_node));
   auto segments = std::vector<path::segment>{
       {.polyline_ =
            l.get_node_candidate_path(dest_way, dest_nc.node_, dest_nc.way_dir_,
@@ -240,7 +249,7 @@ path reconstruct(typename P::parameters const& params,
            dir == direction::kBackward ? n.get_node() : node_idx_t::invalid(),
        .way_ = way_idx_t::invalid(),
        .cost_ = dest_nc.cost_,
-       .duration_ = duration_from_cost(dest_nc.cost_),
+       .duration_ = dest_piece_duration,
        .dist_ = static_cast<distance_t>(dest_nc.dist_to_node_),
        .mode_ = dest_node.get_mode()}};
   auto dist = 0.0;
@@ -275,7 +284,7 @@ path reconstruct(typename P::parameters const& params,
        .to_ = dir == direction::kForward ? n.get_node() : node_idx_t::invalid(),
        .way_ = way_idx_t::invalid(),
        .cost_ = start_nc.cost_,
-       .duration_ = duration_from_cost(start_nc.cost_),
+       .duration_ = search.cost_.at(n.get_key()).duration(n),
        .dist_ = static_cast<distance_t>(start_nc.dist_to_node_),
        .mode_ = n.get_mode()});
   if (dir == direction::kForward) {
@@ -624,7 +633,7 @@ std::optional<path> route_dijkstra(
       auto const [nc, wc, node, p] = *c;
       return reconstruct<P>(params, w, l, blocked, sharing, elevations, d, from,
                             to, start_way, start_left, start_right, wc, nc,
-                            node, p.cost_, dir, start_time);
+                            node, p.cost_, p.duration_, dir, start_time);
     }
   }
 
@@ -755,7 +764,7 @@ std::optional<path> route_astar(typename P::parameters const& params,
       auto const [nc, wc, node, p] = *c;
       return reconstruct<P>(params, w, l, blocked, sharing, elevations, a, from,
                             to, start_way, start_left, start_right, wc, nc,
-                            node, p.cost_, dir, start_time);
+                            node, p.cost_, p.duration_, dir, start_time);
     }
   }
 
@@ -831,7 +840,8 @@ struct one_to_many_state_impl final : public one_to_many_state {
         sp.profile_, w, l, sp.blocked_, sharing, sp.elevations_, d_,
         sp.start_loc_, to_[k], from_match.way_[start_idx],
         from_match.left(start_idx), from_match.right(start_idx), c.dest_way_,
-        c.dest_nc_, c.dest_node_, results_[k]->cost_, sp.dir_, sp.start_time_);
+        c.dest_nc_, c.dest_node_, results_[k]->cost_, results_[k]->duration_,
+        sp.dir_, sp.start_time_);
   }
 
   std::optional<rental_duration_info> rental_durations(
@@ -880,8 +890,9 @@ struct one_to_many_state_impl final : public one_to_many_state {
           .before_min_ = before_min.value_or(duration_t{0U}),
           .after_max_ = after_max,
           .dest_node_ = dest,
-          // The matching piece is shown with its candidate cost as duration.
-          .dest_match_ = duration_from_cost(candidates_[k]->dest_nc_.cost_)};
+          // what the tracked path duration adds to the destination node: the
+          // final matching piece as reconstruct() lays it out
+          .dest_match_ = clamp_sub_duration(results_[k]->duration_, dest)};
     } else {
       return std::nullopt;
     }
@@ -995,7 +1006,7 @@ std::vector<std::optional<path>> route(
           if (do_reconstruct(p)) {
             p = reconstruct<P>(params, w, l, blocked, sharing, elevations, d,
                                from, t, start_way, start_left, start_right, wc,
-                               nc, n, p.cost_, dir, start_time);
+                               nc, n, p.cost_, p.duration_, dir, start_time);
             p.uses_elevator_ = true;
           }
           r = std::make_optional(p);

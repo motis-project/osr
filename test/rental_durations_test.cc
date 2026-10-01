@@ -189,6 +189,10 @@ outcome check(graph const& g,
     if (!p.has_value()) {
       continue;
     }
+    // The reconstructed path lasts as long as the search tracked: the
+    // matching pieces at both ends are laid out with their tracked durations,
+    // not with their costs.
+    EXPECT_EQ(r->duration_, p->duration_) << k;
     auto const ride = ride_from_segments(*p, ride_mode);
 
     // A ride is reported exactly when the path has one.
@@ -286,8 +290,15 @@ TEST(rental_durations, foot_has_no_ride) {
                                        kMax, direction::kForward);
   auto n_found = 0U;
   for (auto k = 0U; k != to.size(); ++k) {
-    n_found += state->results()[k].has_value() ? 1U : 0U;
+    auto const& r = state->results()[k];
     EXPECT_FALSE(state->rental_durations(k).has_value()) << k;
+    if (!r.has_value()) {
+      continue;
+    }
+    ++n_found;
+    auto const p = state->reconstruct(w, l, k, nullptr);
+    ASSERT_TRUE(p.has_value()) << k;
+    EXPECT_EQ(r->duration_, p->duration_) << k;
   }
   EXPECT_GT(n_found, 5U);
 }
