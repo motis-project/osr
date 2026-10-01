@@ -175,9 +175,9 @@ outcome check(graph const& g,
     return {};
   }
 
-  auto const state = route_one_to_many(params, w, l, profile, from, to,
-                                       from_match, to_m, kMax, dir, nullptr,
-                                       &sharing);
+  auto const state =
+      route_one_to_many(params, w, l, profile, from, to, from_match, to_m, kMax,
+                        dir, nullptr, &sharing);
 
   // Out of range and unreachable destinations: nullopt, no crash.
   EXPECT_FALSE(state->rental_costs(to.size()).has_value());
@@ -221,10 +221,10 @@ outcome check(graph const& g,
     // Ride start and end as the segments show them. Forward, the chain runs
     // in travel order; backward, it runs from the travel end, so positions
     // are measured from the far end.
-    auto const pickup = dir == direction::kForward ? rc->before_min_
-                                                   : total - rc->max_;
-    auto const drop_off = dir == direction::kForward ? rc->max_
-                                                     : total - rc->before_min_;
+    auto const pickup =
+        dir == direction::kForward ? rc->before_min_ : total - rc->max_;
+    auto const drop_off =
+        dir == direction::kForward ? rc->max_ : total - rc->before_min_;
     EXPECT_EQ(ride->pickup_, pickup) << k;
     EXPECT_EQ(ride->drop_off_, drop_off) << k;
   }
@@ -241,8 +241,8 @@ void check_both_directions(search_profile const profile,
   auto const g = graph{};
   for (auto const dir : {direction::kForward, direction::kBackward}) {
     SCOPED_TRACE(std::string{to_str(dir)});
-    auto const out = check(g, profile, params, ride_mode, additional_nodes,
-                           dir, seed, accessible);
+    auto const out = check(g, profile, params, ride_mode, additional_nodes, dir,
+                           seed, accessible);
     // Both cases have to occur for the checks above to mean anything.
     EXPECT_GT(out.n_rides_, 5U);
     EXPECT_GT(out.n_walks_, 5U);
@@ -288,9 +288,9 @@ TEST(rental_costs, foot_has_no_ride) {
     l.match(params, x, true, direction::kForward, kMaxMatchDistance, nullptr,
             search_profile::kFoot, {}, to_m);
   }
-  auto const state =
-      route_one_to_many(params, w, l, search_profile::kFoot, from, to,
-                        from_m[match_idx_t{0U}], to_m, kMax, direction::kForward);
+  auto const state = route_one_to_many(params, w, l, search_profile::kFoot,
+                                       from, to, from_m[match_idx_t{0U}], to_m,
+                                       kMax, direction::kForward);
   auto n_found = 0U;
   for (auto k = 0U; k != to.size(); ++k) {
     n_found += state->results()[k].has_value() ? 1U : 0U;
