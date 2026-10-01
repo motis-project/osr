@@ -213,6 +213,8 @@ struct cost_and_duration {
   cost_t cost_{0U};
   duration_t duration_{0U};
 
+  constexpr auto operator<=>(cost_and_duration const&) const noexcept = default;
+
   constexpr bool feasible() const noexcept { return cost_ != kInfeasible; }
 };
 
