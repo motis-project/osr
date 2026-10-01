@@ -1,11 +1,65 @@
 #include "gtest/gtest.h"
 
+#include "osr/routing/profiles/bike_sharing.h"
 #include "osr/routing/profiles/car.h"
+#include "osr/routing/profiles/car_parking.h"
+#include "osr/routing/profiles/car_sharing.h"
 #include "osr/routing/sharing_data.h"
 #include "osr/ways.h"
 
 namespace osr {
 namespace {
+
+template <typename P>
+struct endpoint_level_transition : testing::Test {};
+
+using foot_endpoint_profiles = testing::Types<foot<false>,
+                                              foot<true>,
+                                              bike_sharing,
+                                              car_sharing<>,
+                                              car_parking<false>,
+                                              car_parking<true>,
+                                              car_parking<false, false>,
+                                              car_parking<true, false>>;
+TYPED_TEST_SUITE(endpoint_level_transition, foot_endpoint_profiles);
+
+TYPED_TEST(endpoint_level_transition, rejects_incompatible_foot_levels) {
+  using P = TypeParam;
+  auto w = ways::routing{};
+  auto const way = way_idx_t{0U};
+  w.way_properties_.resize(1U);
+  w.way_properties_[way].from_level_ = to_idx(level_t{1.F});
+  w.way_properties_[way].to_level_ = to_idx(level_t{1.F});
+  w.node_properties_.resize(1U);
+  auto n = typename P::node{.n_ = node_idx_t{0U}};
+  auto const check = [&]() {
+    for (auto const lvl : {kNoLevel, level_t{0.F}, level_t{1.F}}) {
+      n.lvl_ = lvl;
+      for (auto const dir : {direction::kForward, direction::kBackward}) {
+        auto const transition = P::endpoint_transition_cost(
+            typename P::parameters{}, w, timezone_cache_t{}, n, way,
+            direction::kForward, dir, std::nullopt, duration_t{0U});
+        EXPECT_EQ(transition.feasible(), lvl != level_t{0.F});
+        if (transition.feasible()) {
+          EXPECT_EQ(transition.cost_, 0U);
+          EXPECT_EQ(transition.duration_, duration_t{0U});
+        }
+      }
+    }
+  };
+  if constexpr (requires { P::node_type::kInitialFoot; }) {
+    for (auto const type :
+         {P::node_type::kInitialFoot, P::node_type::kTrailingFoot}) {
+      n.type_ = type;
+      check();
+    }
+  } else {
+    if constexpr (requires { P::node_type::kFoot; }) {
+      n.type_ = P::node_type::kFoot;
+    }
+    check();
+  }
+}
 
 TEST(endpoint_transition, additional_edge_turn_uses_physical_travel_order) {
   auto w = ways::routing{};

@@ -189,20 +189,6 @@ struct bike {
     return {};
   }
 
-  static bool is_dest_reachable(parameters const& params,
-                                ways::routing const& w,
-                                timezone_cache_t const& timezones,
-                                node,
-                                way_idx_t const way,
-                                direction const way_dir,
-                                direction const search_dir,
-                                std::optional<routing_time_t> const start_time,
-                                duration_t const current_duration) {
-    return way_cost(params, w, timezones, way, w.way_properties_[way], way_dir,
-                    0U, start_time, current_duration, search_dir)
-               .cost_ != kInfeasible;
-  }
-
   template <direction SearchDir, bool WithBlocked, typename Fn>
   static void adjacent(parameters const& params,
                        ways::routing const& w,

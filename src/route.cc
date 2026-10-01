@@ -460,7 +460,6 @@ std::optional<destination_candidate<P>> best_candidate(
   for_each_endpoint_candidate(
       matches, penalty_factor, [&](endpoint_candidate const& endpoint) {
         auto const& candidate_node = endpoint.node_;
-        auto const way_dir = flip(travel_dir_of(end), candidate_node.way_dir_);
         auto const consider = [&](auto const node) {
           auto const target_cost = search.get_cost(node);
           if (target_cost == kInfeasible) {
@@ -468,12 +467,6 @@ std::optional<destination_candidate<P>> best_candidate(
           }
           auto const target_duration =
               search.cost_.at(node.get_key()).duration(node);
-          auto const reachable = P::is_dest_reachable(
-              params, *w.r_, w.timezones_, node, endpoint.way_, way_dir, dir,
-              start_time, target_duration);
-          if (!reachable) {
-            return;
-          }
           auto const connection = get_endpoint_connection<P>(
               params, w, endpoint, node, end, endpoint_role::kGoal, start_time,
               target_duration, dir);

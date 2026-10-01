@@ -226,25 +226,6 @@ struct ferry {
     }
   }
 
-  static bool is_dest_reachable(parameters const& params,
-                                ways::routing const& w,
-                                timezone_cache_t const& timezones,
-                                node const,
-                                way_idx_t const way,
-                                direction const way_dir,
-                                direction const search_dir,
-                                std::optional<routing_time_t> const start_time,
-                                duration_t const current_duration) {
-    auto const target_way_prop = w.way_properties_[way];
-    if (way_cost(params, w, timezones, way, target_way_prop, way_dir, 0U,
-                 start_time, current_duration, search_dir)
-            .cost_ == kInfeasible) {
-      return false;
-    }
-
-    return true;
-  }
-
   static constexpr cost_and_duration way_cost(
       parameters const&,
       ways::routing const&,

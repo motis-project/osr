@@ -292,29 +292,6 @@ struct foot {
     }
   }
 
-  static bool is_dest_reachable(parameters const& params,
-                                ways::routing const& w,
-                                timezone_cache_t const& timezones,
-                                node const n,
-                                way_idx_t const way,
-                                direction const way_dir,
-                                direction const search_dir,
-                                std::optional<routing_time_t> const start_time,
-                                duration_t const current_duration) {
-    auto const target_way_prop = w.way_properties_[way];
-    if (way_cost(params, w, timezones, way, target_way_prop, way_dir, 0U,
-                 start_time, current_duration, search_dir)
-            .cost_ == kInfeasible) {
-      return false;
-    }
-
-    if (!get_target_level(w, n.n_, n.lvl_, way).has_value()) {
-      return false;
-    }
-
-    return true;
-  }
-
   static std::optional<level_t> get_target_level(ways::routing const& w,
                                                  node_idx_t const from_node,
                                                  level_t const from_level,
@@ -457,17 +434,19 @@ struct foot {
     return true;
   }
 
-  static constexpr cost_and_duration endpoint_transition_cost(
+  static cost_and_duration endpoint_transition_cost(
       parameters const&,
-      ways::routing const&,
+      ways::routing const& w,
       timezone_cache_t const&,
-      node const,
-      way_idx_t,
+      node const n,
+      way_idx_t const way,
       direction,
       direction,
       std::optional<routing_time_t>,
       duration_t) {
-    return {};
+    return get_target_level(w, n.n_, n.lvl_, way).has_value()
+               ? cost_and_duration{}
+               : infeasible_cost_and_duration();
   }
 
   static constexpr cost_and_duration endpoint_node_cost(
