@@ -127,7 +127,7 @@ struct match_result {
     begin_.clear();
     begin_.emplace_back(way_candidate_idx_t{0U});
     lvl_.clear();
-    must_reach_.clear();
+    must_reach_.resize(0U);
     penalty_ref_.clear();
     dist_to_way_.clear();
     way_.clear();
@@ -140,7 +140,7 @@ struct match_result {
   // Appending a match: start() -> add()* -> finish().
   void start(level_t const lvl, bool const must_reach = false) {
     lvl_.emplace_back(lvl);
-    must_reach_.emplace_back(must_reach);
+    push_back(must_reach_, must_reach);
     penalty_ref_.emplace_back(-1.0F);
   }
 
@@ -194,7 +194,7 @@ struct match_result {
 
   vec_map<match_idx_t, way_candidate_idx_t> begin_{};  // size() + 1 entries
   vec_map<match_idx_t, level_t> lvl_{};
-  vec_map<match_idx_t, bool> must_reach_{};
+  bitvec<match_idx_t> must_reach_{};
   vec_map<match_idx_t, float> penalty_ref_{};
   vec_map<way_candidate_idx_t, float> dist_to_way_{};
   vec_map<way_candidate_idx_t, way_idx_t> way_{};
