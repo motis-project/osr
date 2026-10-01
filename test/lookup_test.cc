@@ -72,15 +72,13 @@ TEST_F(lookup_test, unlevelled_foot_way_is_only_ground_level_fallback) {
 
   auto ground_matches = match_result{};
   lookup_->match<foot_t>(params, location{pos, level_t{0.F}}, false,
-                         direction::kForward, 25.0, nullptr, false,
-                         ground_matches);
+                         direction::kForward, 25.0, nullptr, ground_matches);
   ASSERT_EQ(1U, ground_matches.size());
   EXPECT_FALSE(ground_matches[match_idx_t{0U}].empty());
 
   auto level_one_matches = match_result{};
   lookup_->match<foot_t>(params, location{pos, level_t{1.F}}, false,
-                         direction::kForward, 25.0, nullptr, false,
-                         level_one_matches);
+                         direction::kForward, 25.0, nullptr, level_one_matches);
   ASSERT_EQ(1U, level_one_matches.size());
   EXPECT_TRUE(level_one_matches[match_idx_t{0U}].empty());
 }
@@ -90,34 +88,58 @@ TEST_F(lookup_test, unlevelled_foot_way_is_only_ground_level_fallback) {
 // so whether the candidate survives depends entirely on the exact return flag.
 TEST_F(lookup_test, exact_return_decides_vehicle_only_match) {
   auto const params = bike_sharing::parameters{};
+  auto exact_params = params;
+  exact_params.vehicle_return_allowed_ = [](geo::latlng const&) {
+    return true;
+  };
   auto const query = location{geo::latlng{49.000000, 8.001500}, level_t{1.F}};
   auto const way = find_osm_way(*ways_, 100);
 
   auto without_exact_return = match_result{};
   lookup_->match<bike_sharing>(params, query, true, direction::kForward, 25.0,
-                               nullptr, false, without_exact_return);
+                               nullptr, without_exact_return);
   EXPECT_FALSE(matches_way(without_exact_return[match_idx_t{0U}], way));
 
   auto with_exact_return = match_result{};
-  lookup_->match<bike_sharing>(params, query, true, direction::kForward, 25.0,
-                               nullptr, true, with_exact_return);
+  lookup_->match<bike_sharing>(exact_params, query, true, direction::kForward,
+                               25.0, nullptr, with_exact_return);
   EXPECT_TRUE(matches_way(with_exact_return[match_idx_t{0U}], way));
 }
 
 TEST_F(lookup_test, exact_return_matches_car_only_way) {
   auto const params = car_sharing<>::parameters{};
+  auto exact_params = params;
+  exact_params.vehicle_return_allowed_ = [](geo::latlng const&) {
+    return true;
+  };
   auto const query = location{geo::latlng{49.070000, 8.001000}};
   auto const way = find_osm_way(*ways_, 1200);
 
   auto without_exact_return = match_result{};
   lookup_->match<car_sharing<>>(params, query, true, direction::kForward, 25.0,
-                                nullptr, false, without_exact_return);
+                                nullptr, without_exact_return);
   EXPECT_FALSE(matches_way(without_exact_return[match_idx_t{0U}], way));
 
   auto with_exact_return = match_result{};
-  lookup_->match<car_sharing<>>(params, query, true, direction::kForward, 25.0,
-                                nullptr, true, with_exact_return);
+  lookup_->match<car_sharing<>>(exact_params, query, true, direction::kForward,
+                                25.0, nullptr, with_exact_return);
   EXPECT_TRUE(matches_way(with_exact_return[match_idx_t{0U}], way));
+}
+
+// Both ways are in the same car component and the query is much closer to way
+// 1300, but the vehicle may only be returned on the car-only way 1302.
+TEST_F(lookup_test, exact_return_keeps_farther_return_candidate) {
+  auto params = car_sharing<>::parameters{};
+  params.vehicle_return_allowed_ = [](geo::latlng const& pos) {
+    return pos.lat() > 49.0802;
+  };
+  auto const query = location{geo::latlng{49.080050, 8.001000}};
+  auto const way = find_osm_way(*ways_, 1302);
+
+  auto out = match_result{};
+  lookup_->match<car_sharing<>>(params, query, true, direction::kForward, 50.0,
+                                nullptr, out);
+  EXPECT_TRUE(matches_way(out[match_idx_t{0U}], way));
 }
 
 }  // namespace osr

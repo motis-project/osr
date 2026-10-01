@@ -2,11 +2,14 @@
 
 #include <cassert>
 #include <array>
+#include <functional>
 #include <optional>
 #include <string_view>
 #include <type_traits>
 
 #include "boost/json.hpp"
+
+#include "geo/latlng.h"
 
 #include "utl/helpers/algorithm.h"
 
@@ -99,6 +102,7 @@ struct bike_sharing {
     using profile_t = bike_sharing;
     bikep::parameters bike_{};
     footp::parameters foot_{};
+    std::function<bool(geo::latlng const&)> vehicle_return_allowed_{};
   };
 
   struct key {
@@ -530,17 +534,29 @@ struct bike_sharing {
                             : footp::node_cost(params.foot_, properties);
   }
 
+  static constexpr auto const kVehicleReturn = endpoint_state_t{1U};
+
+  template <typename PosFn>
+  static endpoint_state_t get_endpoint_state(parameters const& params,
+                                             route_end const end,
+                                             PosFn&& matched_pos) {
+    return end == route_end::kDestination && params.vehicle_return_allowed_ &&
+                   params.vehicle_return_allowed_(matched_pos())
+               ? kVehicleReturn
+               : kNoEndpointState;
+  }
+
   static constexpr component_classes endpoint_component_classes(
-      route_end, bool const exact_return_allowed) noexcept {
-    return exact_return_allowed ? component_classes{component_class::kFoot,
-                                                    component_class::kBike}
-                                : component_classes{component_class::kFoot};
+      route_end, endpoint_state_t const state) noexcept {
+    return state == kVehicleReturn ? component_classes{component_class::kFoot,
+                                                       component_class::kBike}
+                                   : component_classes{component_class::kFoot};
   }
 
   static bool endpoint_way_feasible(parameters const& params,
                                     endpoint_way_query const& q) {
     return q.feasible<footp>(params.foot_) ||
-           (q.exact_return_allowed_ && q.feasible<bikep>(params.bike_));
+           (q.state_ == kVehicleReturn && q.feasible<bikep>(params.bike_));
   }
 
   template <typename Fn>
@@ -550,10 +566,11 @@ struct bike_sharing {
                                level_t const lvl,
                                route_end const end,
                                endpoint_role const role,
-                               bool const exact_return_allowed,
+                               endpoint_state_t const state,
                                Fn&& f) {
     footp::resolve_endpoint(
-        w, way, n, lvl, end, role, false, [&](footp::node const resolved) {
+        w, way, n, lvl, end, role, kNoEndpointState,
+        [&](footp::node const resolved) {
           if (role == endpoint_role::kRoot) {
             f(to_node(resolved, end == route_end::kOrigin
                                     ? node_type::kInitialFoot
@@ -563,9 +580,9 @@ struct bike_sharing {
             f(to_node(resolved, node_type::kTrailingFoot));
           }
         });
-    if (exact_return_allowed) {
+    if (state == kVehicleReturn) {
       bikep::resolve_endpoint(
-          w, way, n, kNoLevel, end, role, false,
+          w, way, n, kNoLevel, end, role, kNoEndpointState,
           [&](bikep::node const bike) { f(to_node(bike, kNoLevel)); });
     }
   }

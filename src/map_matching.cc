@@ -149,22 +149,22 @@ point_data<P> match_input_point(ways const& w,
                            .cost_ == kInfeasible};
         mw.fwd_out_ = l.find_next_node<P>(
             params, way, mw.dist_to_way_, loc, direction::kForward, loc.lvl_,
-            false, direction::kForward, blocked, false,
+            false, direction::kForward, blocked, kNoEndpointState,
             approx_distance_lng_degrees, best, segment_idx, std::nullopt,
             &mw.fwd_out_path_);
         mw.fwd_in_ = l.find_next_node<P>(
             params, way, mw.dist_to_way_, loc, direction::kBackward, loc.lvl_,
-            true, direction::kForward, blocked, false,
+            true, direction::kForward, blocked, kNoEndpointState,
             approx_distance_lng_degrees, best, segment_idx, std::nullopt,
             &mw.fwd_in_path_);
         mw.bwd_out_ = l.find_next_node<P>(
             params, way, mw.dist_to_way_, loc, direction::kBackward, loc.lvl_,
-            false, direction::kForward, blocked, false,
+            false, direction::kForward, blocked, kNoEndpointState,
             approx_distance_lng_degrees, best, segment_idx, std::nullopt,
             &mw.bwd_out_path_);
         mw.bwd_in_ = l.find_next_node<P>(
             params, way, mw.dist_to_way_, loc, direction::kForward, loc.lvl_,
-            false, direction::kBackward, blocked, false,
+            false, direction::kBackward, blocked, kNoEndpointState,
             approx_distance_lng_degrees, best, segment_idx, std::nullopt,
             &mw.bwd_in_path_);
         if (!mw.fwd_out_.valid() && !mw.fwd_in_.valid() &&

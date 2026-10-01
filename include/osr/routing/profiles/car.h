@@ -208,7 +208,7 @@ struct generic_car {
                                level_t,
                                route_end,
                                endpoint_role const role,
-                               bool const,
+                               endpoint_state_t,
                                Fn&& f) {
     resolve_way_aware_endpoint<generic_car>(w, way, n, role,
                                             std::forward<Fn>(f));
@@ -412,8 +412,8 @@ struct generic_car {
     return node_cost(params, n);
   }
 
-  static constexpr component_classes endpoint_component_classes(route_end,
-                                                                bool) noexcept {
+  static constexpr component_classes endpoint_component_classes(
+      route_end, endpoint_state_t) noexcept {
     // Bus can use some ways a car can't
     return IsBus ? component_classes{}
                  : component_classes{component_class::kCar};
