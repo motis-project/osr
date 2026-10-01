@@ -834,33 +834,37 @@ struct one_to_many_state_impl final : public one_to_many_state {
         c.dest_nc_, c.dest_node_, results_[k]->cost_, sp.dir_, sp.start_time_);
   }
 
-  std::optional<rental_cost_info> rental_costs(
+  std::optional<rental_duration_info> rental_durations(
       std::size_t const k) const override {
     if constexpr (requires(typename P::node n) { n.is_rental_node(); }) {
       if (k >= results_.size() || !results_[k].has_value() ||
           !candidates_[k].has_value()) {
         return std::nullopt;
       }
-      // Chain from the destination back to the search start: costs decrease.
-      auto const dest_cost = d_.get_cost(candidates_[k]->dest_node_);
-      auto min = std::optional<cost_t>{};
-      auto max = std::optional<cost_t>{};
-      auto before_min = std::optional<cost_t>{};
-      auto after_max = dest_cost;
-      auto prev_cost = dest_cost;  // label visited before (higher cost)
+      // Chain from the destination back to the search start: durations
+      // decrease.
+      auto const duration = [&](typename P::node const n) {
+        return d_.cost_.at(n.get_key()).duration(n);
+      };
+      auto const dest = duration(candidates_[k]->dest_node_);
+      auto min = std::optional<duration_t>{};
+      auto max = std::optional<duration_t>{};
+      auto before_min = std::optional<duration_t>{};
+      auto after_max = dest;
+      auto prev = dest;  // label visited before (later on the chain)
       auto n = candidates_[k]->dest_node_;
       while (true) {
-        auto const c = d_.get_cost(n);
+        auto const d = duration(n);
         if (n.is_rental_node()) {
           if (!max.has_value()) {
-            max = c;
-            after_max = prev_cost;
+            max = d;
+            after_max = prev;
           }
-          min = c;
+          min = d;
         } else if (min.has_value() && !before_min.has_value()) {
-          before_min = c;
+          before_min = d;
         }
-        prev_cost = c;
+        prev = d;
         auto const pred = d_.cost_.at(n.get_key()).pred(n);
         if (!pred.has_value()) {
           break;
@@ -870,12 +874,14 @@ struct one_to_many_state_impl final : public one_to_many_state {
       if (!min.has_value()) {
         return std::nullopt;
       }
-      return rental_cost_info{.min_ = *min,
-                              .max_ = *max,
-                              .before_min_ = before_min.value_or(0U),
-                              .after_max_ = after_max,
-                              .dest_node_ = dest_cost,
-                              .dest_match_ = candidates_[k]->dest_nc_.cost_};
+      return rental_duration_info{
+          .min_ = *min,
+          .max_ = *max,
+          .before_min_ = before_min.value_or(duration_t{0U}),
+          .after_max_ = after_max,
+          .dest_node_ = dest,
+          // The matching piece is shown with its candidate cost as duration.
+          .dest_match_ = duration_from_cost(candidates_[k]->dest_nc_.cost_)};
     } else {
       return std::nullopt;
     }

@@ -40,20 +40,24 @@ struct one_to_many_state {
                                           std::size_t dest_idx,
                                           sharing_data const*) = 0;
 
-  // Sharing profiles: search costs (from the search start) of the first and
-  // the last rental label on the path to destination `dest_idx`, and of the
-  // destination's node (the path cost without the final matching). Walks
-  // the predecessor chain only, no geometry. nullopt if the path uses no
-  // vehicle (or the profile has none).
-  struct rental_cost_info {
-    cost_t min_;  // rental label closest to the search start
-    cost_t max_;  // rental label farthest from the search start
-    cost_t before_min_;  // non-rental label preceding min_ (search order)
-    cost_t after_max_;  // non-rental label following max_ (search order)
-    cost_t dest_node_;  // destination node
-    cost_t dest_match_;  // final matching piece as reconstruct() shows it
+  // Sharing profiles: where the ride is on the path to destination
+  // `dest_idx`, as tracked durations from the search start: the first and the
+  // last rental label, the foot labels around them, and the destination's
+  // node (the path without the final matching). These are the times
+  // reconstruct() lays out in the segments, so a caller can place the ride on
+  // the timeline the path is shown with (GTFS-Flex pickup and drop-off
+  // windows apply to the ride, not to the walks around it). Walks the
+  // predecessor chain only, no geometry. nullopt if the path uses no vehicle
+  // (or the profile has none).
+  struct rental_duration_info {
+    duration_t min_;  // rental label closest to the search start
+    duration_t max_;  // rental label farthest from the search start
+    duration_t before_min_;  // non-rental label preceding min_ (search order)
+    duration_t after_max_;  // non-rental label following max_ (search order)
+    duration_t dest_node_;  // destination node
+    duration_t dest_match_;  // final matching piece as reconstruct() shows it
   };
-  virtual std::optional<rental_cost_info> rental_costs(
+  virtual std::optional<rental_duration_info> rental_durations(
       std::size_t /* dest_idx */) const {
     return std::nullopt;
   }

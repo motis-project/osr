@@ -13,12 +13,13 @@
 #include "osr/routing/profiles/foot.h"
 #include "osr/routing/route.h"
 #include "osr/routing/sharing_data.h"
+#include "osr/types.h"
 #include "osr/ways.h"
 
 namespace fs = std::filesystem;
 using namespace osr;
 
-// one_to_many_state::rental_costs() reports where the ride is on a sharing
+// one_to_many_state::rental_durations() reports where the ride is on a sharing
 // path from the search chain alone. It has to agree with what reconstruct()
 // lays out: the ride starts where the first segment with the vehicle's mode
 // starts and ends where the last one ends, measured in cost from the start of
@@ -33,7 +34,7 @@ constexpr auto const kNumVehicles = 30U;
 
 struct graph {
   graph() {
-    dir_ = fs::temp_directory_path() / "osr_rental_costs_test";
+    dir_ = fs::temp_directory_path() / "osr_rental_durations_test";
     auto ec = std::error_code{};
     fs::remove_all(dir_, ec);
     fs::create_directories(dir_, ec);
@@ -106,31 +107,23 @@ struct vehicles {
 // Cost from the start of the path (travel order) to the start of the first
 // and to the end of the last segment travelled with `ride_mode`.
 struct ride_position {
-  cost_t pickup_, drop_off_;
+  duration_t pickup_, drop_off_;
 };
 
 std::optional<ride_position> ride_from_segments(path const& p,
                                                 mode const ride_mode) {
   auto pos = std::optional<ride_position>{};
-  auto at = cost_t{0U};
+  auto at = duration_t{0U};
   for (auto const& s : p.segments_) {
     if (s.mode_ == ride_mode) {
       if (!pos.has_value()) {
         pos = ride_position{.pickup_ = at, .drop_off_ = at};
       }
-      pos->drop_off_ = at + s.cost_;
+      pos->drop_off_ = at + s.duration_;
     }
-    at += s.cost_;
+    at += s.duration_;
   }
   return pos;
-}
-
-cost_t segment_cost_sum(path const& p) {
-  auto sum = cost_t{0U};
-  for (auto const& s : p.segments_) {
-    sum += s.cost_;
-  }
-  return sum;
 }
 
 struct outcome {
@@ -138,7 +131,7 @@ struct outcome {
 };
 
 // Routes from a random position to random destinations and checks every
-// reached destination's rental_costs() against its reconstructed path.
+// reached destination's rental_durations() against its reconstructed path.
 template <typename Accessible>
 outcome check(graph const& g,
               search_profile const profile,
@@ -180,13 +173,13 @@ outcome check(graph const& g,
                         dir, nullptr, &sharing);
 
   // Out of range and unreachable destinations: nullopt, no crash.
-  EXPECT_FALSE(state->rental_costs(to.size()).has_value());
-  EXPECT_FALSE(state->rental_costs(to.size() + 7U).has_value());
+  EXPECT_FALSE(state->rental_durations(to.size()).has_value());
+  EXPECT_FALSE(state->rental_durations(to.size() + 7U).has_value());
 
   auto out = outcome{};
   for (auto k = 0U; k != to.size(); ++k) {
     auto const& r = state->results()[k];
-    auto const rc = state->rental_costs(k);
+    auto const rc = state->rental_durations(k);
     if (!r.has_value()) {
       EXPECT_FALSE(rc.has_value()) << k;
       continue;
@@ -206,17 +199,17 @@ outcome check(graph const& g,
     }
     ++out.n_rides_;
 
-    // Costs along the chain, in search order.
+    // Durations along the chain, in search order.
     EXPECT_LE(rc->before_min_, rc->min_) << k;
     EXPECT_LE(rc->min_, rc->max_) << k;
     EXPECT_LE(rc->max_, rc->after_max_) << k;
     EXPECT_LE(rc->after_max_, rc->dest_node_) << k;
-    EXPECT_LT(rc->before_min_, rc->min_) << k;  // the switch costs > 0
+    EXPECT_LT(rc->before_min_, rc->min_) << k;  // the switch takes time
 
     // The chain plus the final matching piece is the whole path as
     // reconstruct() shows it.
     auto const total = rc->dest_node_ + rc->dest_match_;
-    EXPECT_EQ(segment_cost_sum(*p), total) << k;
+    EXPECT_EQ(p->duration_, total) << k;
 
     // Ride start and end as the segments show them. Forward, the chain runs
     // in travel order; backward, it runs from the travel end, so positions
@@ -251,7 +244,7 @@ void check_both_directions(search_profile const profile,
 
 }  // namespace
 
-TEST(rental_costs, car_sharing) {
+TEST(rental_durations, car_sharing) {
   check_both_directions(
       search_profile::kCarSharing,
       profile_parameters{car_sharing<track_node_tracking>::parameters{}},
@@ -259,7 +252,7 @@ TEST(rental_costs, car_sharing) {
       [](node_properties const& p) { return p.is_car_accessible(); });
 }
 
-TEST(rental_costs, bike_sharing) {
+TEST(rental_durations, bike_sharing) {
   check_both_directions(
       search_profile::kBikeSharing,
       profile_parameters{bike_sharing::parameters{}}, mode::kBike, true, 2U,
@@ -267,7 +260,7 @@ TEST(rental_costs, bike_sharing) {
 }
 
 // Profiles without rental nodes never report a ride.
-TEST(rental_costs, foot_has_no_ride) {
+TEST(rental_durations, foot_has_no_ride) {
   auto const g = graph{};
   auto const& w = *g.w_;
   auto const& l = *g.l_;
@@ -294,7 +287,7 @@ TEST(rental_costs, foot_has_no_ride) {
   auto n_found = 0U;
   for (auto k = 0U; k != to.size(); ++k) {
     n_found += state->results()[k].has_value() ? 1U : 0U;
-    EXPECT_FALSE(state->rental_costs(k).has_value()) << k;
+    EXPECT_FALSE(state->rental_durations(k).has_value()) << k;
   }
   EXPECT_GT(n_found, 5U);
 }
