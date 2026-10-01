@@ -32,6 +32,10 @@ constexpr auto const kMax = cost_t{1800U};
 constexpr auto const kNumDestinations = 200U;
 constexpr auto const kNumVehicles = 30U;
 
+node_idx_t random_node(ways const& w, std::mt19937& prng) {
+  return node_idx_t{static_cast<std::uint32_t>(prng() % w.n_nodes())};
+}
+
 struct graph {
   graph() {
     dir_ = fs::temp_directory_path() / "osr_rental_durations_test";
@@ -67,11 +71,9 @@ struct vehicles {
     start_allowed_.zero_out();
     end_allowed_.one_out();
     through_allowed_.one_out();
-    auto distr =
-        std::uniform_int_distribution<std::uint32_t>{0, w.n_nodes() - 1};
     auto placed = 0U;
     while (placed != kNumVehicles) {
-      auto const n = node_idx_t{distr(prng)};
+      auto const n = random_node(w, prng);
       if (!accessible(w.r_->node_properties_[n])) {
         continue;
       }
@@ -147,11 +149,10 @@ outcome check(graph const& g,
   auto const veh = vehicles{w, prng, additional_nodes, accessible};
   auto const sharing = veh.view(w);
 
-  auto distr = std::uniform_int_distribution<std::uint32_t>{0, w.n_nodes() - 1};
-  auto const from = location{w.get_node_pos(node_idx_t{distr(prng)})};
+  auto const from = location{w.get_node_pos(random_node(w, prng))};
   auto to = std::vector<location>{};
   for (auto i = 0U; i != kNumDestinations; ++i) {
-    to.push_back(location{w.get_node_pos(node_idx_t{distr(prng)})});
+    to.push_back(location{w.get_node_pos(random_node(w, prng))});
   }
 
   auto from_m = match_result{};
@@ -271,11 +272,10 @@ TEST(rental_durations, foot_has_no_ride) {
   auto const params =
       profile_parameters{foot<false, elevator_tracking>::parameters{}};
   auto prng = std::mt19937{3U};
-  auto distr = std::uniform_int_distribution<std::uint32_t>{0, w.n_nodes() - 1};
-  auto const from = location{w.get_node_pos(node_idx_t{distr(prng)})};
+  auto const from = location{w.get_node_pos(random_node(w, prng))};
   auto to = std::vector<location>{};
   for (auto i = 0U; i != 50U; ++i) {
-    to.push_back(location{w.get_node_pos(node_idx_t{distr(prng)})});
+    to.push_back(location{w.get_node_pos(random_node(w, prng))});
   }
   auto from_m = match_result{};
   l.match(params, from, false, direction::kForward, kMaxMatchDistance, nullptr,
