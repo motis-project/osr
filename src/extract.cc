@@ -291,7 +291,7 @@ way_properties get_way_properties(
   p.is_oneway_bus_psv_ = t.oneway_ && !t.not_oneway_bus_psv_;
   p.is_oneway_reverse_ = t.oneway_reverse_;
   p.is_elevator_ = t.is_elevator_;
-  p.is_steps_ = (t.highway_ == "steps"sv);
+  p.is_steps_ = is_steps(t, obj_type);
   p.is_parking_ = t.is_parking_;
   p.speed_limit_ = get_speed_limit(t);
   p.from_level_ = to_idx(from);
@@ -320,6 +320,8 @@ std::pair<node_properties, level_bits_t> get_node_properties(tags const& t) {
   std::memset(&p, 0, sizeof(node_properties));
   p.from_level_ = to_idx(from);
   p.is_foot_accessible_ = is_accessible<foot_profile>(t, osm_obj_type::kNode);
+  p.is_wheelchair_accessible_ =
+      is_accessible<wheelchair_profile>(t, osm_obj_type::kNode);
   p.is_bike_accessible_ = is_accessible<bike_profile>(t, osm_obj_type::kNode);
   p.is_car_accessible_ = is_accessible<car_profile>(t, osm_obj_type::kNode);
   p.is_bus_accessible_ = is_accessible<bus_profile>(t, osm_obj_type::kNode);
@@ -327,6 +329,7 @@ std::pair<node_properties, level_bits_t> get_node_properties(tags const& t) {
   p.is_entrance_ = t.is_entrance_;
   p.is_multi_level_ = is_multi;
   p.is_parking_ = t.is_parking_;
+  p.is_steps_ = is_steps(t, osm_obj_type::kNode);
   p.to_level_ = to_idx(to);
   p.is_bus_accessible_with_penalty_ =
       is_accessible_with_penalty<bus_profile>(t, osm_obj_type::kNode);
@@ -779,6 +782,7 @@ void extract(bool const with_platforms,
             auto const accessible =
                 is_accessible<car_profile>(t, osm_obj_type::kNode) &&
                 is_accessible<bike_profile>(t, osm_obj_type::kNode) &&
+                is_accessible<wheelchair_profile>(t, osm_obj_type::kNode) &&
                 is_accessible<foot_profile>(t, osm_obj_type::kNode);
             if (!accessible || t.is_elevator_ || t.is_platform()) {
               ctx.blocking_nodes_.push_back(to_idx(to_osm_node_idx(id)));
