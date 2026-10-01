@@ -324,14 +324,20 @@ static_assert(sizeof(node_properties) == 3);
 
 enum class component_class : std::uint8_t { kFoot, kBike, kCar };
 
-constexpr auto kNumComponentClasses = std::size_t{3U};
-
 // In enum order
-constexpr auto kComponentClasses =
-    std::array<std::pair<component_class, char const*>, kNumComponentClasses>{
-        std::pair{component_class::kFoot, "foot"},
-        std::pair{component_class::kBike, "bike"},
-        std::pair{component_class::kCar, "car"}};
+constexpr auto kAllComponentClasses = std::array{
+    component_class::kFoot, component_class::kBike, component_class::kCar};
+
+constexpr auto kNumComponentClasses = kAllComponentClasses.size();
+
+constexpr char const* to_str(component_class const c) {
+  switch (c) {
+    case component_class::kFoot: return "foot";
+    case component_class::kBike: return "bike";
+    case component_class::kCar: return "car";
+  }
+  std::unreachable();
+}
 
 constexpr bool is_accessible(component_class const c, way_properties const& p) {
   switch (c) {

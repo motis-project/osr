@@ -77,14 +77,14 @@ std::optional<kept_candidate> keep_candidate(
                               : touches_ground(props),
       .min_level_ = std::min(props.from_level(), props.to_level()),
       .max_level_ = std::max(props.from_level(), props.to_level())};
-  if (utl::any_of(kComponentClasses, [&](auto const& e) {
-        return classes.contains(e.first) && is_oneway(e.first, props);
+  if (utl::any_of(kAllComponentClasses, [&](auto const c) {
+        return classes.contains(c) && is_oneway(c, props);
       })) {
     k.heading_ = get_travel_heading(w, way, props, query.pos_);
   }
 
   auto voted = false;
-  for (auto const& [c, name] : kComponentClasses) {
+  for (auto const c : kAllComponentClasses) {
     if (!classes.contains(c) || !is_accessible(c, props)) {
       continue;
     }

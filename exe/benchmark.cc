@@ -156,10 +156,10 @@ template <Profile P>
 bool in_same_component(ways const& w, way_idx_t const a, way_idx_t const b) {
   auto const classes = P::endpoint_component_classes(route_end::kOrigin);
   return classes.empty() ||
-         utl::any_of(kComponentClasses, [&](auto const& entry) {
-           auto const x = w.r_->get_class_components(entry.first).get(a);
-           return classes.contains(entry.first) && x.has_value() &&
-                  x == w.r_->get_class_components(entry.first).get(b);
+         utl::any_of(kAllComponentClasses, [&](auto const c) {
+           auto const x = w.r_->get_class_components(c).get(a);
+           return classes.contains(c) && x.has_value() &&
+                  x == w.r_->get_class_components(c).get(b);
          });
 }
 
