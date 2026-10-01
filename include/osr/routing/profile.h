@@ -156,10 +156,6 @@ concept Profile =
              way_properties const w_props,
              double const dist) {
       {
-        P::is_dest_reachable(params, r, timezones, node, w, dir, dir,
-                             start_time, current_duration)
-      } -> std::same_as<bool>;
-      {
         P::way_cost(params, r, timezones, w, w_props, dir,
                     std::declval<distance_t>(), start_time, current_duration,
                     dir)

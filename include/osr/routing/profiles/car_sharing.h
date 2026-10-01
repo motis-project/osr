@@ -577,20 +577,6 @@ struct car_sharing {
     }
   }
 
-  static bool is_dest_reachable(parameters const& params,
-                                ways::routing const& w,
-                                timezone_cache_t const& timezones,
-                                node const n,
-                                way_idx_t const way,
-                                direction const way_dir,
-                                direction const search_dir,
-                                std::optional<routing_time_t> const start_time,
-                                duration_t const current_duration) {
-    return footp::is_dest_reachable(params.foot_, w, timezones, to_foot(n), way,
-                                    way_dir, search_dir, start_time,
-                                    current_duration);
-  }
-
   static constexpr cost_and_duration way_cost(
       parameters const& params,
       ways::routing const& w,
@@ -659,17 +645,19 @@ struct car_sharing {
     return true;
   }
 
-  static constexpr cost_and_duration endpoint_transition_cost(
-      parameters const&,
-      ways::routing const&,
-      timezone_cache_t const&,
-      node const,
-      way_idx_t,
-      direction,
-      direction,
-      std::optional<routing_time_t>,
-      duration_t) {
-    return {};
+  static cost_and_duration endpoint_transition_cost(
+      parameters const& params,
+      ways::routing const& w,
+      timezone_cache_t const& timezones,
+      node const n,
+      way_idx_t const way,
+      direction const way_dir,
+      direction const search_dir,
+      std::optional<routing_time_t> const start_time,
+      duration_t const current_duration) {
+    return footp::endpoint_transition_cost(params.foot_, w, timezones,
+                                           to_foot(n), way, way_dir, search_dir,
+                                           start_time, current_duration);
   }
 
   static constexpr cost_and_duration endpoint_node_cost(
