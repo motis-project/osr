@@ -18,7 +18,6 @@
 namespace fs = std::filesystem;
 
 namespace osr {
-namespace {
 
 // A loop: way 1 from node 1 (8.000) to node 2 (8.002) along 49.000 (a oneway
 // for cars, west to east), back via nodes 4 and 3 south of it. A second loop
@@ -317,5 +316,4 @@ TEST_F(same_stretch_detour_test, cheaper_route_over_the_limit_wins) {
   }
 }
 
-}  // namespace
 }  // namespace osr

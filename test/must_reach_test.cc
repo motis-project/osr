@@ -19,7 +19,6 @@
 namespace fs = std::filesystem;
 
 namespace osr {
-namespace {
 
 // A straight path along the latitude 49.0 (ways 1 and 2, joined at node 3)
 // and a detour south (way 3) so that nodes 1, 2 and 3 are routing nodes.
@@ -148,5 +147,4 @@ TEST_F(must_reach_test, connector_is_walked_after_a_bike_leg) {
       reached.duration_.count());
 }
 
-}  // namespace
 }  // namespace osr

@@ -12,7 +12,6 @@
 #include "sharing_routing_fixture.h"
 
 namespace osr {
-namespace {
 
 using endpoint_matching_test = test::sharing_routing_fixture;
 
@@ -184,5 +183,4 @@ TEST_F(endpoint_matching_test, unreachable_closest_match_uses_farther_match) {
             result->segments_.back().polyline_.back());
 }
 
-}  // namespace
 }  // namespace osr

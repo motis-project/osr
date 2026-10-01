@@ -4,7 +4,6 @@
 #include <algorithm>
 
 namespace osr {
-namespace {
 
 struct cost_policy {
   double factor_;
@@ -71,8 +70,6 @@ cost_policy policy(car_sharing<Tracking> const&,
                    typename car_sharing<Tracking>::parameters const& p) {
   return combine(policy(car{}, p.car_), policy(foot<false>{}, p.foot_));
 }
-
-}  // namespace
 
 cost_t cost_search_limit(profile_parameters const& params,
                          duration_t const duration) {

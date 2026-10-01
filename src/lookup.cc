@@ -20,8 +20,6 @@
 
 namespace osr {
 
-namespace {
-
 // Near-ties to the closest candidate of a component are kept as well.
 constexpr auto const kTieTolerance = 1.0F;  // meters
 constexpr auto const kTieFactor = 0.25F;  // of the closest distance
@@ -122,8 +120,6 @@ std::optional<kept_candidate> keep_candidate(
   }
   return !voted || !k.kept_by_.empty() ? std::optional{k} : std::nullopt;
 }
-
-}  // namespace
 
 lookup::lookup(ways const& ways,
                std::filesystem::path p,
