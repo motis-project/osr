@@ -135,17 +135,17 @@ TEST(car_parking, monaco) {
     auto const from = geo::latlng{.lat_ = 43.734271, .lng_ = 7.419387};
     auto const to = geo::latlng{.lat_ = 43.735249, .lng_ = 7.419859};
 
-    auto const results =
-        vec{route(params, w, l, search_profile::kCarParking,
-                  location{.pos_ = from, .lvl_ = kNoLevel},
-                  location{.pos_ = to, .lvl_ = kNoLevel}, max_cost,
-                  direction::kForward, max_matching_dist, nullptr, nullptr,
-                  nullptr, routing_algorithm::kDijkstra),
-            route(params, w, l, search_profile::kCarParking,
-                  location{.pos_ = to, .lvl_ = kNoLevel},
-                  location{.pos_ = from, .lvl_ = kNoLevel}, max_cost,
-                  direction::kBackward, max_matching_dist, nullptr, nullptr,
-                  nullptr, routing_algorithm::kDijkstra)};
+    auto const results = vec<std::optional<path>>{
+        route(params, w, l, search_profile::kCarParking,
+              location{.pos_ = from, .lvl_ = kNoLevel},
+              location{.pos_ = to, .lvl_ = kNoLevel}, max_cost,
+              direction::kForward, max_matching_dist, nullptr, nullptr, nullptr,
+              routing_algorithm::kDijkstra),
+        route(params, w, l, search_profile::kCarParking,
+              location{.pos_ = to, .lvl_ = kNoLevel},
+              location{.pos_ = from, .lvl_ = kNoLevel}, max_cost,
+              direction::kBackward, max_matching_dist, nullptr, nullptr,
+              nullptr, routing_algorithm::kDijkstra)};
 
     for (auto const& res : results) {
       ASSERT_TRUE(res.has_value());
@@ -174,17 +174,17 @@ TEST(car_parking, monaco) {
         geo::latlng{.lat_ = 43.7257018, .lng_ = 7.4190091};
 
     for (auto const& from : from_coordinates) {
-      auto const results =
-          vec{route(params, w, l, search_profile::kCarParking,
-                    location{.pos_ = from, .lvl_ = kNoLevel},
-                    location{.pos_ = to, .lvl_ = kNoLevel}, max_cost,
-                    direction::kForward, max_matching_dist, nullptr, nullptr,
-                    nullptr, routing_algorithm::kDijkstra),
-              route(params, w, l, search_profile::kCarParking,
-                    location{.pos_ = to, .lvl_ = kNoLevel},
-                    location{.pos_ = from, .lvl_ = kNoLevel}, max_cost,
-                    direction::kBackward, max_matching_dist, nullptr, nullptr,
-                    nullptr, routing_algorithm::kDijkstra)};
+      auto const results = vec<std::optional<path>>{
+          route(params, w, l, search_profile::kCarParking,
+                location{.pos_ = from, .lvl_ = kNoLevel},
+                location{.pos_ = to, .lvl_ = kNoLevel}, max_cost,
+                direction::kForward, max_matching_dist, nullptr, nullptr,
+                nullptr, routing_algorithm::kDijkstra),
+          route(params, w, l, search_profile::kCarParking,
+                location{.pos_ = to, .lvl_ = kNoLevel},
+                location{.pos_ = from, .lvl_ = kNoLevel}, max_cost,
+                direction::kBackward, max_matching_dist, nullptr, nullptr,
+                nullptr, routing_algorithm::kDijkstra)};
 
       for (auto const& res : results) {
         ASSERT_TRUE(res.has_value());
