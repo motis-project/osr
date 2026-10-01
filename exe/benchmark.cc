@@ -14,6 +14,7 @@
 
 #include "conf/options_parser.h"
 
+#include "utl/helpers/algorithm.h"
 #include "utl/memory_usage_printer.h"
 #include "utl/timer.h"
 #include "utl/verify.h"
@@ -151,6 +152,17 @@ std::vector<typename car::label> set_end<car>(bidirectional<car>& b,
   return ends;
 }
 
+template <Profile P>
+bool in_same_component(ways const& w, way_idx_t const a, way_idx_t const b) {
+  auto const classes = P::endpoint_component_classes(route_end::kOrigin);
+  return classes.empty() ||
+         utl::any_of(kComponentClasses, [&](auto const& entry) {
+           auto const x = w.r_->get_class_components(entry.first).get(a);
+           return classes.contains(entry.first) && x.has_value() &&
+                  x == w.r_->get_class_components(entry.first).get(b);
+         });
+}
+
 int main(int argc, char const* argv[]) {
   auto opt = settings{};
   auto parser = conf::options_parser({&opt});
@@ -213,15 +225,15 @@ int main(int argc, char const* argv[]) {
               location{w.get_node_pos(end).as_latlng(), level_t{0.F}};
           if (opt.from_coords_) {
             auto const start_time = std::chrono::steady_clock::now();
-            auto const d_res =
-                route(params, w, l, profile, start_loc, end_loc, opt.max_dist_,
-                      direction::kForward, 250, nullptr, nullptr, nullptr,
-                      routing_algorithm::kDijkstra);
+            auto const d_res = route(params, w, l, profile, start_loc, end_loc,
+                                     std::chrono::seconds{opt.max_dist_},
+                                     direction::kForward, 250, nullptr, nullptr,
+                                     nullptr, routing_algorithm::kDijkstra);
             auto const middle_time = std::chrono::steady_clock::now();
-            auto const b_res =
-                route(params, w, l, profile, start_loc, end_loc, opt.max_dist_,
-                      direction::kForward, 250, nullptr, nullptr, nullptr,
-                      routing_algorithm::kAStarBi);
+            auto const b_res = route(params, w, l, profile, start_loc, end_loc,
+                                     std::chrono::seconds{opt.max_dist_},
+                                     direction::kForward, 250, nullptr, nullptr,
+                                     nullptr, routing_algorithm::kAStarBi);
             auto const end_time = std::chrono::steady_clock::now();
 
             /*std::cout << "took "
@@ -243,8 +255,8 @@ int main(int argc, char const* argv[]) {
                                                          middle_time)});
             }
           } else {
-            if (w.r_->way_component_[w.r_->node_ways_[start][0]] !=
-                w.r_->way_component_[w.r_->node_ways_[end][0]]) {
+            if (!in_same_component<P>(w, w.r_->node_ways_[start][0],
+                                      w.r_->node_ways_[end][0])) {
               std::cout << "skipping" << std::endl;
               continue;
             }
@@ -274,8 +286,7 @@ int main(int argc, char const* argv[]) {
                       << std::chrono::duration_cast<std::chrono::milliseconds>(
                              end_time - middle_time)
                       << std::endl;*/
-            auto const b_res =
-                b.get_cost_to_mp(b.meet_point_1_, b.meet_point_2_);
+            auto const b_res = b.best_cost_;
             if (!utl::any_of(ends, [&](auto&& e) {
                   auto const it = d.cost_.find(e.get_node().get_key());
                   auto const d_res = d.get_cost(e.get_node());

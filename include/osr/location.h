@@ -19,6 +19,10 @@ struct location {
 
   geo::latlng pos_;
   level_t lvl_;
+
+  // The route has to reach pos_, not just a graph way - the connector
+  // is included (walked).
+  bool must_reach_{false};
 };
 
 }  // namespace osr

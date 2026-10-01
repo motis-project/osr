@@ -8,8 +8,13 @@
 #else
 #include <sys/mman.h>
 #endif
+#include <algorithm>
+#include <array>
 #include <filesystem>
+#include <initializer_list>
+#include <optional>
 #include <ranges>
+#include <utility>
 #include <vector>
 
 #include "fmt/ranges.h"
@@ -317,6 +322,104 @@ struct node_properties {
 
 static_assert(sizeof(node_properties) == 3);
 
+enum class component_class : std::uint8_t { kFoot, kBike, kCar };
+
+constexpr auto kNumComponentClasses = std::size_t{3U};
+
+// In enum order
+constexpr auto kComponentClasses =
+    std::array<std::pair<component_class, char const*>, kNumComponentClasses>{
+        std::pair{component_class::kFoot, "foot"},
+        std::pair{component_class::kBike, "bike"},
+        std::pair{component_class::kCar, "car"}};
+
+constexpr bool is_accessible(component_class const c, way_properties const& p) {
+  switch (c) {
+    case component_class::kFoot:
+      // Foot may also use bike ways (with a penalty).
+      return p.is_foot_accessible() ||
+             (p.is_bike_accessible() && !p.is_railway_accessible() &&
+              !p.is_railway_accessible_with_penalty());
+    case component_class::kBike: return p.is_bike_accessible();
+    case component_class::kCar: return p.is_car_accessible();
+  }
+  return false;
+}
+
+constexpr bool is_accessible_without_penalty(component_class const c,
+                                             way_properties const& p) {
+  return c == component_class::kFoot ? p.is_foot_accessible()
+                                     : is_accessible(c, p);
+}
+
+constexpr bool is_oneway(component_class const c, way_properties const& p) {
+  switch (c) {
+    case component_class::kFoot: return false;
+    case component_class::kBike: return p.is_oneway_bike();
+    case component_class::kCar: return p.is_oneway_car();
+  }
+  return false;
+}
+
+// Ways without a level count as level 0.
+constexpr bool touches_ground(way_properties const& p) {
+  auto const a = p.from_level().to_float();
+  auto const b = p.to_level().to_float();
+  return std::min(a, b) <= 0.0F && std::max(a, b) >= 0.0F;
+}
+
+constexpr bool is_on_level(way_properties const& p, level_t const lvl) {
+  return p.from_level() == lvl || p.to_level() == lvl ||
+         (lvl == level_t{0.F} && p.from_level() == kNoLevel &&
+          p.to_level() == kNoLevel);
+}
+
+struct component_classes {
+  constexpr component_classes() = default;
+  constexpr component_classes(std::initializer_list<component_class> const cs) {
+    for (auto const c : cs) {
+      insert(c);
+    }
+  }
+
+  constexpr void insert(component_class const c) { bits_ |= bit(c); }
+  constexpr bool empty() const { return bits_ == 0U; }
+  constexpr bool contains(component_class const c) const {
+    return (bits_ & bit(c)) != 0U;
+  }
+
+private:
+  static constexpr std::uint8_t bit(component_class const c) {
+    return static_cast<std::uint8_t>(1U << static_cast<unsigned>(c));
+  }
+
+  std::uint8_t bits_{0U};
+};
+
+struct class_components {
+  static constexpr auto kGiantComponent = std::uint32_t{0U};
+
+  // nullopt: single-way component or a way the class cannot use.
+  std::optional<std::uint32_t> get(way_idx_t const w) const {
+    if (to_idx(w) >= in_giant_.size()) {
+      return std::nullopt;
+    }
+    if (in_giant_.test(w)) {
+      return kGiantComponent;
+    }
+    auto const it = std::lower_bound(begin(exc_way_), end(exc_way_), w);
+    if (it == end(exc_way_) || *it != w) {
+      return std::nullopt;
+    }
+    return exc_comp_[static_cast<std::uint32_t>(
+        std::distance(begin(exc_way_), it))];
+  }
+
+  bitvec<way_idx_t> in_giant_{};
+  vec<way_idx_t> exc_way_{};  // sorted
+  vec<std::uint32_t> exc_comp_{};  // parallel to exc_way_, ids start at 1
+};
+
 struct ways {
   ways(std::filesystem::path, cista::mmap::protection);
 
@@ -324,7 +427,7 @@ struct ways {
   void compute_big_street_neighbors();
   void connect_ways();
   void compute_turn_bearings();
-  void build_components();
+  void build_class_components();
 
   std::optional<way_idx_t> find_way(osm_way_idx_t const i) {
     auto const it = std::lower_bound(
@@ -559,7 +662,12 @@ struct ways {
 
     vec<pair<node_idx_t, level_bits_t>> multi_level_elevators_;
 
-    vec_map<way_idx_t, component_idx_t> way_component_;
+    class_components const& get_class_components(
+        component_class const c) const {
+      return class_components_[static_cast<std::uint32_t>(c)];
+    }
+
+    vec<class_components> class_components_;
   };
 
   cista::wrapped<routing> r_;
