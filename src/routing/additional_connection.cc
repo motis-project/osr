@@ -1,6 +1,7 @@
 #include "osr/routing/additional_connection.h"
 
 #include <cstdint>
+#include <limits>
 
 #include "osr/location.h"
 #include "osr/point.h"
@@ -69,8 +70,8 @@ way_idx_t add_additional_connection(
     bool const is_parking) {
   utl::verify((from.left_.node_ != node_idx_t::invalid() ||
                from.right_.node_ != node_idx_t::invalid()) &&
-                  (from.left_.node_ != node_idx_t::invalid() ||
-                   from.right_.node_ != node_idx_t::invalid()),
+                  (to.left_.node_ != node_idx_t::invalid() ||
+                   to.right_.node_ != node_idx_t::invalid()),
               "Cannot add offset without valid node");
   auto const conn_idx = connection_idx_t{r.additional_connections_.size()};
   auto const add_node = [&](node_idx_t const node_idx) {
@@ -85,9 +86,12 @@ way_idx_t add_additional_connection(
       add_node(side.node_);
     }
   }
-  r.additional_connections_.emplace_back(
-      std::move(connection), std::move(from), std::move(to),
-      static_cast<std::uint16_t>(geo::length(to_polyline(connection))));
+  auto const length = geo::length(to_polyline(connection));
+  utl::verify(length < std::numeric_limits<std::uint16_t>::max(),
+              "Connecting path too long");
+  r.additional_connections_.emplace_back(std::move(connection), std::move(from),
+                                         std::move(to),
+                                         static_cast<std::uint16_t>(length));
   return to_way_idx(r, conn_idx);
 }
 

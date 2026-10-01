@@ -139,6 +139,9 @@ private:
         case cista::hash("sidewalk:both"):
         case cista::hash("sidewalk:left"): [[fallthrough]];
         case cista::hash("sidewalk:right"):
+          if (value == "yes"sv) {
+            sidewalk_ = true;
+          }
           if (value == "separate"sv) {
             sidewalk_separate_ = true;
           }

@@ -444,7 +444,7 @@ way_extra_properties::way_extra_properties(tags const& t)
     // https://wiki.openstreetmap.org/wiki/OSM_tags_for_routing/Access_restrictions#Worldwide
     : is_foot_usable_{static_cast<std::uint8_t>(
           t.highway_ == "trunk"sv || t.highway_ == "trunk_link"sv ||
-          t.highway_ == "primaray"sv || t.highway_ == "primary_link"sv ||
+          t.highway_ == "primary"sv || t.highway_ == "primary_link"sv ||
           t.highway_ == "secondary"sv || t.highway_ == "secondary_link"sv ||
           t.highway_ == "tertiary"sv || t.highway_ == "tertiary_link"sv ||
           t.highway_ == "unclassified"sv || t.highway_ == "residential"sv ||
@@ -454,7 +454,7 @@ way_extra_properties::way_extra_properties(tags const& t)
       is_car_usable_{static_cast<std::uint8_t>(
           t.highway_ == "motorway"sv || t.highway_ == "motorway_link"sv ||
           t.highway_ == "trunk"sv || t.highway_ == "trunk_link"sv ||
-          t.highway_ == "primaray"sv || t.highway_ == "primary_link"sv ||
+          t.highway_ == "primary"sv || t.highway_ == "primary_link"sv ||
           t.highway_ == "secondary"sv || t.highway_ == "secondary_link"sv ||
           t.highway_ == "tertiary"sv || t.highway_ == "tertiary_link"sv ||
           t.highway_ == "unclassified"sv || t.highway_ == "residential"sv ||
