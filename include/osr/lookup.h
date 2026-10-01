@@ -227,9 +227,11 @@ struct lookup {
         .right_ = {.node_ = wc.right_.node_,
                    .dist_to_node_ = wc.right_.dist_to_node_}};
     apply_node_cost<P>(params, wc.way_, n.left_, direction::kBackward, query,
-                       false, direction::kForward, nullptr, std::nullopt);
+                       false, direction::kForward, nullptr, false,
+                       std::nullopt);
     apply_node_cost<P>(params, wc.way_, n.right_, direction::kForward, query,
-                       false, direction::kForward, nullptr, std::nullopt);
+                       false, direction::kForward, nullptr, false,
+                       std::nullopt);
     return n.left_.valid() || n.right_.valid();
   }
 
@@ -243,27 +245,30 @@ struct lookup {
                       direction const search_dir,
                       double max_match_distance,
                       bitvec<node_idx_t> const* blocked,
+                      bool const exact_return_allowed,
                       std::optional<routing_time_t> const start_time,
                       std::span<raw_way_candidate const> raw_way_candidates,
                       match_result& out) const {
     out.start(query.lvl_, query.must_reach_);
     auto doublings = 0U;
-    auto const added =
-        append_raw<P>(params, query, reverse, search_dir, max_match_distance,
-                      blocked, start_time, raw_way_candidates, doublings, out);
+    auto const added = append_raw<P>(
+        params, query, reverse, search_dir, max_match_distance, blocked,
+        exact_return_allowed, start_time, raw_way_candidates, doublings, out);
     // Cold path: no precomputed candidate was usable, so run the full match.
     if (!added && doublings < 4U) {
       auto dist = max_match_distance;
-      auto found = get_way_candidates<P>(params, query, reverse, search_dir,
-                                         dist, blocked, out, start_time);
+      auto found =
+          get_way_candidates<P>(params, query, reverse, search_dir, dist,
+                                blocked, exact_return_allowed, out, start_time);
       auto i = 0U;
       while (!found && i++ < 4U) {
         dist *= 2U;
         found = get_way_candidates<P>(params, query, reverse, search_dir, dist,
-                                      blocked, out, start_time);
+                                      blocked, exact_return_allowed, out,
+                                      start_time);
       }
     }
-    finish_match<P>(out, query, reverse, search_dir);
+    finish_match<P>(out, query, reverse, search_dir, exact_return_allowed);
   }
 
   // Converts raw (geometric, profile independent) candidates into profile
@@ -276,6 +281,7 @@ struct lookup {
                   direction const search_dir,
                   double const max_match_distance,
                   bitvec<node_idx_t> const* blocked,
+                  bool const exact_return_allowed,
                   std::optional<routing_time_t> const start_time,
                   std::span<raw_way_candidate const> raw_way_candidates,
                   unsigned& doublings,
@@ -295,9 +301,11 @@ struct lookup {
           .right_ = {.node_ = raw_wc.right_.node_,
                      .dist_to_node_ = raw_wc.right_.dist_to_node_}};
       apply_node_cost<P>(params, raw_wc.way_, n.left_, direction::kBackward,
-                         query, reverse, search_dir, blocked, start_time);
+                         query, reverse, search_dir, blocked,
+                         exact_return_allowed, start_time);
       apply_node_cost<P>(params, raw_wc.way_, n.right_, direction::kForward,
-                         query, reverse, search_dir, blocked, start_time);
+                         query, reverse, search_dir, blocked,
+                         exact_return_allowed, start_time);
       if (n.left_.valid() || n.right_.valid()) {
         out.add(raw_wc.dist_to_way_, raw_wc.way_, n);
         added = true;
@@ -316,13 +324,14 @@ struct lookup {
                        bool const reverse,
                        direction const search_dir,
                        bitvec<node_idx_t> const* blocked,
+                       bool const exact_return_allowed,
                        std::optional<routing_time_t> const start_time) const {
     if (!nc.valid()) {
       return;
     }
-    auto const cost =
-        get_candidate_cost<P>(params, way, nc.node_, nc.dist_to_node_, way_dir,
-                              query, reverse, search_dir, start_time);
+    auto const cost = get_candidate_cost<P>(
+        params, way, nc.node_, nc.dist_to_node_, way_dir, query, reverse,
+        search_dir, exact_return_allowed, start_time);
     if (!cost.has_value() || (blocked != nullptr && blocked->test(nc.node_))) {
       nc.node_ = node_idx_t::invalid();
       return;
@@ -370,6 +379,7 @@ struct lookup {
              direction search_dir,
              double max_match_distance,
              bitvec<node_idx_t> const* blocked,
+             bool exact_return_allowed,
              search_profile,
              std::span<raw_way_candidate const> raw_way_candidates,
              match_result& out) const;
@@ -385,29 +395,32 @@ struct lookup {
       direction const search_dir,
       double max_match_distance,
       bitvec<node_idx_t> const* blocked,
+      bool const exact_return_allowed,
       match_result& out,
       std::optional<routing_time_t> const start_time = std::nullopt) const {
     out.start(query.lvl_, query.must_reach_);
-    auto found =
-        get_way_candidates<P>(params, query, reverse, search_dir,
-                              max_match_distance, blocked, out, start_time);
+    auto found = get_way_candidates<P>(params, query, reverse, search_dir,
+                                       max_match_distance, blocked,
+                                       exact_return_allowed, out, start_time);
     auto i = 0U;
     while (!found && i++ < 4U) {
       max_match_distance *= 2U;
-      found =
-          get_way_candidates<P>(params, query, reverse, search_dir,
-                                max_match_distance, blocked, out, start_time);
+      found = get_way_candidates<P>(params, query, reverse, search_dir,
+                                    max_match_distance, blocked,
+                                    exact_return_allowed, out, start_time);
     }
-    finish_match<P>(out, query, reverse, search_dir);
+    finish_match<P>(out, query, reverse, search_dir, exact_return_allowed);
   }
 
   template <Profile P>
   void finish_match(match_result& out,
                     location const& query,
                     bool const reverse,
-                    direction const search_dir) const {
+                    direction const search_dir,
+                    bool const exact_return_allowed) const {
     auto const end = route_end_of(reverse ? opposite(search_dir) : search_dir);
-    filter_by_component(out, query, P::endpoint_component_classes(end));
+    filter_by_component(
+        out, query, P::endpoint_component_classes(end, exact_return_allowed));
     set_penalty_reference(out, query.lvl_);
     out.finish();
   }
@@ -448,6 +461,7 @@ struct lookup {
       direction const search_dir,
       double const max_match_distance,
       bitvec<node_idx_t> const* blocked,
+      bool const exact_return_allowed,
       match_result& out,
       std::optional<routing_time_t> const start_time = std::nullopt) const {
     struct tmp_candidate {
@@ -469,12 +483,12 @@ struct lookup {
         auto const dist_to_way = std::sqrt(squared_dist);
         auto const left = find_next_node<P>(
             params, way, dist_to_way, query, direction::kBackward, query.lvl_,
-            reverse, search_dir, blocked, approx_distance_lng_degrees, best,
-            segment_idx, start_time);
+            reverse, search_dir, blocked, exact_return_allowed,
+            approx_distance_lng_degrees, best, segment_idx, start_time);
         auto const right = find_next_node<P>(
             params, way, dist_to_way, query, direction::kForward, query.lvl_,
-            reverse, search_dir, blocked, approx_distance_lng_degrees, best,
-            segment_idx, start_time);
+            reverse, search_dir, blocked, exact_return_allowed,
+            approx_distance_lng_degrees, best, segment_idx, start_time);
         if (left.valid() || right.valid()) {
           way_candidates.emplace_back(
               tmp_candidate{dist_to_way, way, left, right});
@@ -510,6 +524,7 @@ struct lookup {
       location const& query,
       bool const reverse,
       direction const search_dir,
+      bool const exact_return_allowed,
       std::optional<routing_time_t> const start_time) const {
     auto const node_prop = ways_.r_->node_properties_[node_idx];
     auto const way_prop = ways_.r_->way_properties_[way];
@@ -518,7 +533,7 @@ struct lookup {
     P::resolve_endpoint(
         *ways_.r_, way, node_idx, query.lvl_,
         route_end_of(reverse ? opposite(search_dir) : search_dir),
-        endpoint_role::kRoot, [&](auto const resolved) {
+        endpoint_role::kRoot, exact_return_allowed, [&](auto const resolved) {
           if (!P::endpoint_node_cost(params, resolved, node_prop).feasible()) {
             return;
           }
@@ -545,6 +560,7 @@ struct lookup {
       bool const reverse,
       direction const search_dir,
       bitvec<node_idx_t> const* blocked,
+      bool const exact_return_allowed,
       double approx_distance_lng_degrees,
       geo::latlng const best,
       size_t segment_idx,
@@ -561,6 +577,7 @@ struct lookup {
                                .search_dir_ = search_dir,
                                .end_ = route_end_of(
                                    reverse ? opposite(search_dir) : search_dir),
+                               .exact_return_allowed_ = exact_return_allowed,
                                .start_time_ = start_time})) {
       return candidate_node{};
     }
@@ -591,7 +608,7 @@ struct lookup {
                    if (way_node.has_value()) {
                      auto const cost = get_candidate_cost<P>(
                          params, way, *way_node, c.dist_to_node_, dir, query,
-                         reverse, search_dir, start_time);
+                         reverse, search_dir, exact_return_allowed, start_time);
                      if (cost.has_value() &&
                          (blocked == nullptr || !blocked->test(*way_node))) {
                        c.node_ = *way_node;

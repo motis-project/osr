@@ -238,6 +238,7 @@ struct hgv {
                                level_t,
                                route_end,
                                endpoint_role const role,
+                               bool const,
                                Fn&& f) {
     resolve_way_aware_endpoint<hgv>(w, way, n, role, std::forward<Fn>(f));
   }
@@ -498,8 +499,8 @@ struct hgv {
     return node_cost(params, n);
   }
 
-  static constexpr component_classes endpoint_component_classes(
-      route_end) noexcept {
+  static constexpr component_classes endpoint_component_classes(route_end,
+                                                                bool) noexcept {
     return {component_class::kCar};
   }
 

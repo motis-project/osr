@@ -115,7 +115,7 @@ TEST_F(endpoint_matching_test,
   auto from_matches = match_result{};
   l.match<foot<false, elevator_tracking>>(
       std::get<foot<false, elevator_tracking>::parameters>(params), from, false,
-      direction::kForward, 50.0, nullptr, from_matches);
+      direction::kForward, 50.0, nullptr, false, from_matches);
   auto const m = from_matches[match_idx_t{0U}];
   ASSERT_EQ(1U, m.size());
   EXPECT_EQ(std::optional<std::int64_t>{900}, w.get_osm_way(m.way_[0]));
@@ -168,7 +168,7 @@ TEST_F(endpoint_matching_test, unreachable_closest_match_uses_farther_match) {
 
   auto to_matches = match_result{};
   l.match<car>(profile_params, to, true, direction::kForward, 50.0, nullptr,
-               to_matches);
+               false, to_matches);
   auto const matches = to_matches[match_idx_t{0U}];
   ASSERT_EQ(2U, matches.size());
   EXPECT_EQ(std::optional<std::int64_t>{402}, w.get_osm_way(matches.way_[0]));
