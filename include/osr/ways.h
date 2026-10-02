@@ -14,6 +14,7 @@
 #include <initializer_list>
 #include <optional>
 #include <ranges>
+#include <span>
 #include <utility>
 #include <vector>
 
@@ -403,27 +404,33 @@ private:
 };
 
 struct class_components {
-  static constexpr auto kGiantComponent = std::uint32_t{0U};
+  static constexpr auto kNoComponent = std::uint8_t{0U};
+  static constexpr auto kException = std::uint8_t{255U};
+
+  static class_components build(std::span<std::uint32_t const>,
+                                std::span<std::uint32_t const>);
 
   // nullopt: single-way component or a way the class cannot use.
   std::optional<std::uint32_t> get(way_idx_t const w) const {
-    if (to_idx(w) >= in_giant_.size()) {
+    auto const code = way_component_[w];
+    if (code == kNoComponent) {
       return std::nullopt;
     }
-    if (in_giant_.test(w)) {
-      return kGiantComponent;
+    if (code != kException) {
+      return code;
     }
-    auto const it = std::lower_bound(begin(exc_way_), end(exc_way_), w);
-    if (it == end(exc_way_) || *it != w) {
+    auto const it =
+        std::lower_bound(begin(exception_way_), end(exception_way_), w);
+    if (it == end(exception_way_) || *it != w) {
       return std::nullopt;
     }
-    return exc_comp_[static_cast<std::uint32_t>(
-        std::distance(begin(exc_way_), it))];
+    return exception_component_[static_cast<std::uint32_t>(
+        std::distance(begin(exception_way_), it))];
   }
 
-  bitvec<way_idx_t> in_giant_{};
-  vec<way_idx_t> exc_way_{};  // sorted
-  vec<std::uint32_t> exc_comp_{};  // parallel to exc_way_, ids start at 1
+  vec_map<way_idx_t, std::uint8_t> way_component_{};
+  vec<way_idx_t> exception_way_{};  // sorted
+  vec<std::uint32_t> exception_component_{};  // parallel to exception_way_
 };
 
 struct ways {
