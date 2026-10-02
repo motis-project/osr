@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <limits>
 #include <numeric>
+#include <thread>
 
 #include "date/tz.h"
 
@@ -54,41 +55,77 @@ quantized_angle_t get_next_bearing(Polyline const& polyline,
 
 constexpr auto const kNoComponent = std::numeric_limits<std::uint32_t>::max();
 
-class_components build_components(ways const& w, component_class const cls) {
-  auto const accessible = [&](way_idx_t const x) {
-    return is_accessible(cls, w.r_->way_properties_[x]);
-  };
+std::uint32_t find_component_root(std::vector<std::uint32_t>& parent,
+                                  std::uint32_t way) {
+  while (parent[way] != way) {
+    parent[way] = parent[parent[way]];
+    way = parent[way];
+  }
+  return way;
+}
 
-  auto comp = std::vector<std::uint32_t>(w.n_ways(), kNoComponent);
-  auto comp_size = std::vector<std::uint32_t>{};
-  auto q = std::vector<way_idx_t>{};
-  for (auto i = 0U; i != w.n_ways(); ++i) {
-    if (comp[i] != kNoComponent || !accessible(way_idx_t{i})) {
-      continue;
+std::vector<std::uint32_t> build_component_forest(ways::routing const& r,
+                                                  component_class const cls) {
+  auto parent =
+      std::vector<std::uint32_t>(r.way_properties_.size(), kNoComponent);
+  for (auto i = 0U; i != parent.size(); ++i) {
+    if (is_accessible(cls, r.way_properties_[way_idx_t{i}])) {
+      parent[i] = i;
     }
-    auto const id = static_cast<std::uint32_t>(comp_size.size());
-    auto& size = comp_size.emplace_back(1U);
-    comp[i] = id;
-    q.push_back(way_idx_t{i});
-    while (!q.empty()) {
-      auto const x = q.back();
-      q.pop_back();
-      for (auto const n : w.r_->way_nodes_[x]) {
-        for (auto const y : w.r_->node_ways_[n]) {
-          if (comp[to_idx(y)] == kNoComponent && accessible(y)) {
-            comp[to_idx(y)] = id;
-            ++size;
-            q.push_back(y);
-          }
-        }
+  }
+  for (auto n = 0U; n != r.node_ways_.size(); ++n) {
+    auto anchor = kNoComponent;
+    for (auto const w : r.node_ways_[node_idx_t{n}]) {
+      if (parent[to_idx(w)] == kNoComponent) {
+        continue;
+      }
+      auto const root = find_component_root(parent, to_idx(w));
+      if (anchor == kNoComponent) {
+        anchor = root;
+      } else {
+        auto const a = find_component_root(parent, anchor);
+        anchor = std::min(a, root);
+        parent[std::max(a, root)] = anchor;
       }
     }
   }
+  return parent;
+}
 
-  return class_components::build(comp, comp_size);
+std::vector<std::uint32_t> number_component_roots(
+    std::vector<std::uint32_t>& parent) {
+  auto counts = std::vector<std::uint32_t>(parent.size(), 0U);
+  for (auto i = 0U; i != parent.size(); ++i) {
+    if (parent[i] != kNoComponent) {
+      parent[i] = find_component_root(parent, i);
+      ++counts[parent[i]];
+    }
+  }
+  auto sizes = std::vector<std::uint32_t>{};
+  for (auto i = 0U; i != counts.size(); ++i) {
+    if (counts[i] != 0U) {
+      auto const size = counts[i];
+      utl::verify(sizes.size() < kNoComponent, "too many components");
+      counts[i] = static_cast<std::uint32_t>(sizes.size());
+      sizes.push_back(size);
+    }
+  }
+  for (auto& c : parent) {
+    if (c != kNoComponent) {
+      c = counts[c];
+    }
+  }
+  return sizes;
 }
 
 }  // namespace
+
+class_components compute_class_components(ways::routing const& r,
+                                          component_class const cls) {
+  auto parent = build_component_forest(r, cls);
+  auto const sizes = number_component_roots(parent);
+  return class_components::build(parent, sizes);
+}
 
 class_components class_components::build(
     std::span<std::uint32_t const> const comp,
@@ -165,10 +202,19 @@ void ways::build_class_components() {
       .out_bounds(75, 90);
 
   r_->class_components_.clear();
-  for (auto const c : kAllComponentClasses) {
-    r_->class_components_.emplace_back(build_components(*this, c));
-    pt->increment();
-  }
+  r_->class_components_.resize(kNumComponentClasses);
+  auto const threads =
+      std::min(static_cast<unsigned>(kNumComponentClasses),
+               std::max(1U, std::thread::hardware_concurrency()));
+  utl::parallel_for_run(
+      kNumComponentClasses,
+      [&](std::size_t const i) {
+        r_->class_components_[static_cast<std::uint32_t>(i)] =
+            compute_class_components(*r_, kAllComponentClasses[i]);
+        pt->increment();
+      },
+      utl::noop_progress_update{}, utl::parallel_error_strategy::QUIT_EXEC,
+      threads);
 }
 
 void ways::add_restriction(std::vector<resolved_restriction>& rs) {

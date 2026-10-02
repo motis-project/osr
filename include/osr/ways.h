@@ -703,4 +703,7 @@ struct ways {
   multi_counter<> node_way_counter_;
 };
 
+class_components compute_class_components(ways::routing const&,
+                                          component_class);
+
 }  // namespace osr
