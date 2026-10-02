@@ -4,6 +4,7 @@
 
 #include "geo/polyline.h"
 
+#include "osr/extract/extra_properties.h"
 #include "osr/lookup.h"
 #include "osr/routing/profiles/car.h"
 #include "osr/routing/profiles/car_parking.h"
