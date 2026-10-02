@@ -528,33 +528,29 @@ struct ways {
     };
 
     struct additional_connection {
-      CISTA_COMPARABLE()
-
       struct offset {
         struct side {
-          CISTA_COMPARABLE()
-
           bool valid() const { return node_ != node_idx_t::invalid(); }
 
           node_idx_t node_;
           std::uint16_t dist_;
         };
-        CISTA_COMPARABLE()
 
         side left_;
         side right_;
         way_idx_t way_;
       };
 
+      // Currently only one property exists
+      bool is_parking() const { return true; }
+
       vec<point> connection_;
       offset from_;
       offset to_;
       std::uint16_t dist_;
 
-      // TODO: MK - Add bitfield to identify use cases
-      // std::uint8_t is_forward_ : 1 = 0U;  // Needed?
-      // std::uint8_t is_backward_ : 1 = 0U;  // Needed?
-      // std::uint8_t is_parking_ : 1 = 0U;
+      // TODO: MK - Add properties, to handle different use cases
+      // Examples: parking, forward_only, detour, ...
     };
 
     vec_map<node_idx_t, node_properties> node_properties_;

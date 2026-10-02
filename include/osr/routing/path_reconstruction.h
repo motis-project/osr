@@ -13,10 +13,8 @@
 
 #include "osr/elevation_storage.h"
 #include "osr/routing/additional_connection.h"
-#include "osr/routing/parking_matching.h"
 #include "osr/routing/path.h"
 #include "osr/routing/profile.h"
-#include "osr/routing/profiles/car_parking.h"  // TODO Debug only
 #include "osr/routing/sharing_data.h"
 #include "osr/types.h"
 #include "osr/util/infinite.h"
@@ -36,14 +34,7 @@ struct connecting_way {
   elevation_storage::elevation elevation_{};
 };
 
-template <Profile P>
-bool is_regular_way(ways::routing const&, way_idx_t const way) {
-  return way != way_idx_t::invalid();
-}
-
-template <Profile P>
-  requires(is_parking<P>() == true)
-bool is_regular_way(ways::routing const& r, way_idx_t const way) {
+inline bool is_regular_way(ways::routing const& r, way_idx_t const way) {
   return way != way_idx_t::invalid() && !is_additional_connection(r, way);
 }
 
@@ -69,8 +60,7 @@ inline connecting_way find_connecting_way(
           std::uint16_t const a_idx, std::uint16_t const b_idx,
           elevation_storage::elevation const elevation, bool) {
         if (target == to && cost == expected_cost) {
-          auto const is_loop = is_regular_way<P>(*w.r_, way) &&
-                               r.is_loop(way) &&
+          auto const is_loop = is_regular_way(*w.r_, way) && r.is_loop(way) &&
                                static_cast<unsigned>(std::abs(a_idx - b_idx)) ==
                                    r.way_nodes_[way].size() - 2U;
           conn = {way, a_idx, b_idx, is_loop, dist, elevation};
@@ -150,7 +140,7 @@ inline double add_path(typename P::parameters const& params,
   segment.elevation_ = elevation;
   segment.mode_ = to.get_mode();
 
-  if (is_regular_way<P>(*w.r_, way)) {
+  if (is_regular_way(*w.r_, way)) {
     auto const start_idx = dir == direction::kBackward ? to_idx : from_idx;
     auto const end_idx = dir == direction::kBackward ? from_idx : to_idx;
     auto const is_reverse = (start_idx > end_idx) ^ is_loop;
@@ -204,8 +194,7 @@ inline double add_path(typename P::parameters const& params,
     segment.to_ = dir == direction::kBackward ? from.get_node() : to.get_node();
     if (is_additional_connection(*w.r_, way)) {
       auto const conn = get_additional_connection(*w.r_, way);
-      // TODO: MK - Test conn.is_parking
-      if constexpr (is_parking<P>()) {
+      if (conn.is_parking()) {
         segment.mode_ = mode::kParking;
         segment.polyline_ = get_additional_connection_polyline(
             l, conn, segment.from_, segment.to_);
