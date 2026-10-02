@@ -2,11 +2,13 @@
 
 #include <algorithm>
 #include <limits>
+#include <numeric>
 
 #include "date/tz.h"
 
 #include "utl/parallel_for.h"
 #include "utl/to_vec.h"
+#include "utl/verify.h"
 
 #include "cista/io.h"
 
@@ -83,26 +85,56 @@ class_components build_components(ways const& w, component_class const cls) {
     }
   }
 
-  auto out = class_components{};
-  if (comp_size.empty()) {
-    return out;
+  return class_components::build(comp, comp_size);
+}
+
+}  // namespace
+
+class_components class_components::build(
+    std::span<std::uint32_t const> const comp,
+    std::span<std::uint32_t const> const sizes) {
+  utl::verify(comp.size() <= std::numeric_limits<std::uint32_t>::max() &&
+                  sizes.size() < std::numeric_limits<std::uint32_t>::max(),
+              "component graph exceeds index range");
+  auto ranked = std::vector<std::uint32_t>(sizes.size());
+  std::iota(begin(ranked), end(ranked), 0U);
+  std::erase_if(ranked, [&](auto const id) { return sizes[id] < 2U; });
+  std::sort(begin(ranked), end(ranked), [&](auto const a, auto const b) {
+    return sizes[a] != sizes[b] ? sizes[a] > sizes[b] : a < b;
+  });
+  auto ids = std::vector<std::uint32_t>(sizes.size(), 0U);
+  for (auto i = std::size_t{0U}; i != ranked.size(); ++i) {
+    ids[ranked[i]] = static_cast<std::uint32_t>(i + 1U);
   }
-  auto const giant = static_cast<std::uint32_t>(
-      std::distance(begin(comp_size), std::ranges::max_element(comp_size)));
-  out.in_giant_.resize(static_cast<std::uint32_t>(w.n_ways()));
-  for (auto i = 0U; i != w.n_ways(); ++i) {
+
+  auto out = class_components{};
+  out.way_component_.resize(static_cast<std::uint32_t>(comp.size()),
+                            kNoComponent);
+  auto exception_ways = std::uint64_t{0U};
+  for (auto i = std::size_t{kException - 1U}; i < ranked.size(); ++i) {
+    exception_ways += sizes[ranked[i]];
+  }
+  utl::verify(exception_ways <= comp.size(), "invalid component sizes");
+  out.exception_way_.reserve(static_cast<std::uint32_t>(exception_ways));
+  out.exception_component_.reserve(static_cast<std::uint32_t>(exception_ways));
+  for (auto i = std::size_t{0U}; i != comp.size(); ++i) {
     auto const c = comp[i];
-    if (c == giant) {
-      out.in_giant_.set(way_idx_t{i}, true);
-    } else if (c != kNoComponent && comp_size[c] > 1U) {
-      out.exc_way_.emplace_back(way_idx_t{i});
-      out.exc_comp_.emplace_back(c + 1U);
+    if (c == std::numeric_limits<std::uint32_t>::max()) {
+      continue;
+    }
+    utl::verify(c < sizes.size(), "invalid component id {}", c);
+    auto const id = ids[c];
+    auto const way = way_idx_t{static_cast<std::uint32_t>(i)};
+    if (id < kException) {
+      out.way_component_[way] = static_cast<std::uint8_t>(id);
+    } else {
+      out.way_component_[way] = kException;
+      out.exception_way_.push_back(way);
+      out.exception_component_.push_back(id);
     }
   }
   return out;
 }
-
-}  // namespace
 
 ways::ways(std::filesystem::path p, cista::mmap::protection const mode)
     : p_{std::move(p)},
