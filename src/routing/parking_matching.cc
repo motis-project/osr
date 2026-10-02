@@ -68,6 +68,7 @@ std::tuple<geo::latlng, double, component_idx_t> analyze_surroundings(
         largest_componet = component;
       }
     });
+    // TODO: MK - Can this actually happen?
     utl::verify(largest_componet != component_idx_t::invalid(),
                 "Isolated parking space, way_idx: {}", way_idx);
     return largest_componet;
@@ -137,12 +138,7 @@ std::optional<matching_result_t> find_closest(
                 best0.way_, loc.pos_);
     std::get<1>(*best) = point::from_latlng(path.front());
   }
-  // TODO: MK - Remove
-  if (debug_way_idx == 1643) {
-    auto const& best0 = std::get<0>(*best);
-    fmt::println("best0: left: {}  right: {}", best0.left_.node_,
-                 best0.right_.node_);
-  }
+
   return best;
 }
 

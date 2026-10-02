@@ -9,13 +9,6 @@ namespace osr {
 
 struct lookup;
 
-struct additional_connection_offset {
-  ways::routing::additional_connection::offset const& offset_;
-  node_idx_t node_;
-  std::uint16_t dist_;
-  direction dir_;
-};
-
 struct additional_connection {
   struct side {
     node_idx_t node_;
