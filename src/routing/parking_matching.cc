@@ -24,7 +24,7 @@ namespace osr {
 
 namespace {
 
-using offset = ways::routing::additional_connection::offset;
+using offset = ways::routing::full_additional_connection::offset;
 
 using matching_result_t = std::pair<offset, point>;
 

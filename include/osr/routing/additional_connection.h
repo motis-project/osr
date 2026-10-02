@@ -29,28 +29,28 @@ void for_each_connection(ways::routing const&,
 
 bool is_additional_connection(ways::routing const&, way_idx_t);
 
-ways::routing::additional_connection const& get_additional_connection(
+ways::routing::full_additional_connection const& get_additional_connection(
     ways::routing const&, way_idx_t);
 
 way_idx_t add_additional_connection(
     ways::routing&,
-    ways::routing::additional_connection::offset&& from,
-    ways::routing::additional_connection::offset&& to,
+    ways::routing::full_additional_connection::offset&& from,
+    ways::routing::full_additional_connection::offset&& to,
     vec<point>&& connection,
     bool const is_parking);
 
 geo::polyline get_additional_connection_polyline(
     lookup const&,
-    ways::routing::additional_connection const&,
+    ways::routing::full_additional_connection const&,
     node_idx_t from,
     node_idx_t to);
 
 geo::polyline get_additional_connection_points(
-    ways::routing::additional_connection const&);
+    ways::routing::full_additional_connection const&);
 
 geo::polyline get_additional_connection_offset_points(
     lookup const&,
-    ways::routing::additional_connection::offset const&,
+    ways::routing::full_additional_connection::offset const&,
     point const&,
     bool is_left);
 

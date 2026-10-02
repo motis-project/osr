@@ -312,7 +312,6 @@ way_properties get_way_properties(
   p.is_railway_accessible_with_penalty_ =
       is_accessible_with_penalty<railway_profile>(t, obj_type);
   p.is_detour_ = t.is_detour_route();
-  // p.is_parking_aisle_ = t.service_ == "parking_aisle"sv;
   return p;
 }
 

@@ -53,7 +53,7 @@ bool is_additional_connection(ways::routing const& r, way_idx_t const way_idx) {
   return way_idx != way_idx_t::invalid() && way_idx >= r.way_component_.size();
 }
 
-ways::routing::additional_connection const& get_additional_connection(
+ways::routing::full_additional_connection const& get_additional_connection(
     ways::routing const& r, way_idx_t const way_idx) {
   auto const conn_idx = to_connection_idx(r, way_idx);
   utl::verify(conn_idx < r.additional_connections_.size(),
@@ -64,8 +64,8 @@ ways::routing::additional_connection const& get_additional_connection(
 
 way_idx_t add_additional_connection(
     ways::routing& r,
-    ways::routing::additional_connection::offset&& from,
-    ways::routing::additional_connection::offset&& to,
+    ways::routing::full_additional_connection::offset&& from,
+    ways::routing::full_additional_connection::offset&& to,
     vec<point>&& connection,
     bool const is_parking) {
   utl::verify((from.left_.node_ != node_idx_t::invalid() ||
@@ -97,7 +97,7 @@ way_idx_t add_additional_connection(
 
 geo::polyline get_additional_connection_polyline(
     lookup const& l,
-    ways::routing::additional_connection const& conn,
+    ways::routing::full_additional_connection const& conn,
     node_idx_t from,
     node_idx_t to) {
   auto polyline = geo::polyline{};
@@ -123,13 +123,13 @@ geo::polyline get_additional_connection_polyline(
 }
 
 geo::polyline get_additional_connection_points(
-    ways::routing::additional_connection const& connection) {
+    ways::routing::full_additional_connection const& connection) {
   return to_polyline(connection.connection_);
 }
 
 geo::polyline get_additional_connection_offset_points(
     lookup const& l,
-    ways::routing::additional_connection::offset const& offset,
+    ways::routing::full_additional_connection::offset const& offset,
     point const& start_point,
     bool const is_left) {
   auto const& n = is_left ? offset.left_.node_ : offset.right_.node_;
@@ -148,32 +148,33 @@ void for_each_addional_connection(
     std::function<void(additional_connection)> const& f) {
   for_each_connection(r, node_idx, [&](connection_idx_t const connection_idx) {
     auto const& conn = r.additional_connections_[connection_idx];
-    auto const g = [&](ways::routing::additional_connection::offset const& from,
-                       ways::routing::additional_connection::offset const& to) {
-      for (auto const from_left : {true, false}) {
-        auto const start = from_left ? from.left_ : from.right_;
-        if (start.node_ != node_idx) {
-          continue;
-        }
-        for (auto const to_left : {true, false}) {
-          auto const target = to_left ? to.left_ : to.right_;
-          if (target.node_ != node_idx_t::invalid()) {
-            f({.from_ = {.node_ = node_idx,
-                         .way_ = from.way_,
-                         .dist_ = start.dist_,
-                         .dir_ = from_left ? direction::kForward
-                                           : direction::kBackward},
-               .to_ = {.node_ = target.node_,
-                       .way_ = to.way_,
-                       .dist_ = target.dist_,
-                       .dir_ = to_left ? direction::kBackward
-                                       : direction::kForward},
-               .connection_dist_ = conn.dist_,
-               .connection_way_ = to_way_idx(r, connection_idx)});
+    auto const g =
+        [&](ways::routing::full_additional_connection::offset const& from,
+            ways::routing::full_additional_connection::offset const& to) {
+          for (auto const from_left : {true, false}) {
+            auto const start = from_left ? from.left_ : from.right_;
+            if (start.node_ != node_idx) {
+              continue;
+            }
+            for (auto const to_left : {true, false}) {
+              auto const target = to_left ? to.left_ : to.right_;
+              if (target.node_ != node_idx_t::invalid()) {
+                f({.from_ = {.node_ = node_idx,
+                             .way_ = from.way_,
+                             .dist_ = start.dist_,
+                             .dir_ = from_left ? direction::kForward
+                                               : direction::kBackward},
+                   .to_ = {.node_ = target.node_,
+                           .way_ = to.way_,
+                           .dist_ = target.dist_,
+                           .dir_ = to_left ? direction::kBackward
+                                           : direction::kForward},
+                   .connection_dist_ = conn.dist_,
+                   .connection_way_ = to_way_idx(r, connection_idx)});
+              }
+            }
           }
-        }
-      }
-    };
+        };
     if (dir == direction::kForward) {
       g(conn.from_, conn.to_);
     }

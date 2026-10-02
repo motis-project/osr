@@ -527,7 +527,8 @@ struct ways {
       distance_t distance_{};
     };
 
-    struct additional_connection {
+    // TODO: MK - Make separate structure for dynamic updates
+    struct full_additional_connection {
       struct offset {
         struct side {
           bool valid() const { return node_ != node_idx_t::invalid(); }
@@ -592,7 +593,8 @@ struct ways {
 
     bitvec<node_idx_t> has_additional_connections_;
     vec<pair<node_idx_t, connection_idx_t>> additional_node_connections_;
-    vec_map<connection_idx_t, additional_connection> additional_connections_;
+    vec_map<connection_idx_t, full_additional_connection>
+        additional_connections_;
   };
 
   cista::wrapped<routing> r_;
