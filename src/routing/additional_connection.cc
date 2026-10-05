@@ -141,7 +141,7 @@ geo::polyline get_additional_connection_offset_points(
       false, location{start_point.as_latlng(), kNoLevel});
 }
 
-void for_each_addional_connection(
+void for_each_additional_connection(
     ways::routing const& r,
     node_idx_t const node_idx,
     direction const dir,
