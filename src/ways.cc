@@ -1,6 +1,7 @@
 #include "osr/ways.h"
 
 #include <algorithm>
+#include <tuple>
 
 #include "date/tz.h"
 
@@ -8,6 +9,8 @@
 #include "utl/to_vec.h"
 
 #include "cista/io.h"
+
+#include "osr/util/progress.h"
 
 namespace osr {
 
@@ -152,6 +155,8 @@ void ways::compute_big_street_neighbors() {
 
   auto pt = utl::get_active_progress_tracker();
 
+  auto const update_progress = sparse_update_fn(*pt);
+
   auto is_orig_big_street = std::vector<bool>(n_ways());
   for (auto const [i, p] : utl::enumerate(r_->way_properties_)) {
     is_orig_big_street[i] = p.is_big_street();
@@ -162,7 +167,7 @@ void ways::compute_big_street_neighbors() {
         auto const way = way_idx_t{i};
 
         if (is_orig_big_street[to_idx(way)]) {
-          pt->update_monotonic(i);
+          update_progress(i);
           return;
         }
 
@@ -189,7 +194,7 @@ void ways::compute_big_street_neighbors() {
 
         s.done_.emplace(way);
         expand(way, true, expand);
-        pt->update_monotonic(i);
+        update_progress(i);
       });
 }
 
@@ -205,8 +210,10 @@ void ways::connect_ways() {
     node_way_counter_.for_each_multi([&](std::uint64_t const b_idx) {
       auto const i = osm_node_idx_t{b_idx};
       node_to_osm_.push_back(i);
+      if (to_idx(node_idx) % kProgressUpdateInterval == 0U) {
+        pt->update(b_idx);
+      }
       ++node_idx;
-      pt->update(b_idx);
     });
     r_->node_is_restricted_.resize(to_idx(node_idx));
   }
@@ -219,13 +226,17 @@ void ways::connect_ways() {
     pt->status("Connect ways").in_high(n_ways).out_bounds(50, 71);
 
     // Phase 1: Count number of ways per node (if way visits *N -> counted *N).
-    // Phase 2: Reserve node_ways_ / node_in_way_idx_ and reset counts to 0.
-    // Phase 3: Fill node_ways_ / node_in_way_idx_ = transpose of way_nodes_.
+    // Phase 2: Reserve node_ways_ / node_in_way_idx_ / node_turn_bearings_
+    //          and reset counts to 0.
+    // Phase 3: Fill node_ways_ / node_in_way_idx_ / node_turn_bearings_ =
+    //          transpose of way_nodes_ / way_bearings.
     //          -> count becomes a fill cursor per node
     auto count = std::vector<std::atomic<std::uint32_t>>(n_nodes);
+    auto way_bearings = vecvec<way_idx_t, turn_bearing>{};
 
     struct way_edges {
       std::vector<node_idx_t> nodes_;
+      std::vector<turn_bearing> bearings_;
       std::vector<std::uint16_t> dists_;
       std::vector<routing::long_distance> long_dists_;
     };
@@ -247,8 +258,10 @@ void ways::connect_ways() {
             auto from = node_idx_t::invalid();
             auto distance = 0.0;
             auto i = std::uint16_t{0U};
-            for (auto const [osm_node_idx, pos] :
-                 utl::zip(way_osm_nodes_[way_idx], way_polylines_[way_idx])) {
+            auto const polyline = way_polylines_[way_idx];
+            for (auto const [poly_idx, osm_node_idx] :
+                 utl::enumerate(way_osm_nodes_[way_idx])) {
+              auto const pos = polyline[poly_idx];
               if (pred_pos.has_value()) {
                 distance += geo::distance(pos, *pred_pos);
               }
@@ -263,6 +276,9 @@ void ways::connect_ways() {
                 }
 
                 c.nodes_.push_back(to);
+                c.bearings_.push_back(
+                    {.to_prev_ = get_prev_bearing(polyline, poly_idx),
+                     .to_next_ = get_next_bearing(polyline, poly_idx)});
 
                 if (from != node_idx_t::invalid()) {
                   auto const dist =
@@ -300,6 +316,7 @@ void ways::connect_ways() {
         [&](std::size_t, std::vector<way_edges> const& chunk_out) {
           for (auto const& c : chunk_out) {
             r_->way_nodes_.emplace_back(c.nodes_);
+            way_bearings.emplace_back(c.bearings_);
             r_->way_node_dist_.emplace_back(c.dists_);
             for (auto const& x : c.long_dists_) {
               r_->long_way_node_dist_.push_back(x);
@@ -312,92 +329,72 @@ void ways::connect_ways() {
 
     pt->status("Connect ways / transpose").in_high(n_ways).out_bounds(71, 74);
 
-    // Reserve node_ways_ / node_in_way_idx_ for each node.
+    // Reserve node_ways_ / node_in_way_idx_ / node_turn_bearings_ per node.
     for (auto n = std::size_t{0U}; n != n_nodes; ++n) {
       auto const size =
           std::min(count[n].exchange(0U, std::memory_order_relaxed),
                    static_cast<std::uint32_t>(kMaxWaysPerNode));
       r_->node_ways_.add_back_sized(size);
       r_->node_in_way_idx_.add_back_sized(size);
+      r_->node_turn_bearings_.add_back_sized(size);
     }
 
-    // Fill node_ways_ / node_in_way_idx_ = transpose of way_nodes_.
+    // Fill node_ways_ / node_in_way_idx_ / node_turn_bearings_ = transpose of
+    // way_nodes_ / way_bearings.
     // Threads claims their write slot via the atomic per-node cursor.
     utl::parallel_for_run(
         n_ways,
         [&](std::size_t const way) {
           auto i = std::uint16_t{0U};
-          for (auto const n : r_->way_nodes_[way_idx_t{way}]) {
+          for (auto const [n, bearing] :
+               utl::zip(r_->way_nodes_[way_idx_t{way}],
+                        way_bearings[way_idx_t{way}])) {
             auto const pos =
                 count[to_idx(n)].fetch_add(1U, std::memory_order_relaxed);
             r_->node_ways_[n][pos] = way_idx_t{way};
             r_->node_in_way_idx_[n][pos] = i++;
+            r_->node_turn_bearings_[n][pos] = bearing;
           }
         },
-        pt->update_fn());
+        sparse_update_fn(*pt));
+    way_bearings = {};
 
-    // Sort node_ways_ / node_in_way_idx_ by way_idx for deterministic ordering.
+    // Sort node_ways_ / node_in_way_idx_ / node_turn_bearings_ by
+    // (way_idx, node_in_way_idx) for deterministic ordering.
+    struct node_way {
+      way_idx_t way_;
+      std::uint16_t in_way_idx_;
+      turn_bearing bearing_;
+    };
     pt->status("Connect ways / sort").in_high(n_nodes).out_bounds(74, 75);
-    utl::parallel_for_run_threadlocal<
-        std::vector<std::pair<way_idx_t, std::uint16_t>>>(
+    utl::parallel_for_run_threadlocal<std::vector<node_way>>(
         n_nodes,
-        [&](std::vector<std::pair<way_idx_t, std::uint16_t>>& scratch,
-            std::size_t const n) {
+        [&](std::vector<node_way>& scratch, std::size_t const n) {
           auto ways = r_->node_ways_[node_idx_t{n}];
           auto positions = r_->node_in_way_idx_[node_idx_t{n}];
+          auto bearings = r_->node_turn_bearings_[node_idx_t{n}];
 
           // Copy to scratch + sort.
           scratch.clear();
-          for (auto const [w, p] : utl::zip(ways, positions)) {
-            scratch.emplace_back(w, p);
+          for (auto const [w, p, b] : utl::zip(ways, positions, bearings)) {
+            scratch.push_back({w, p, b});
           }
-          utl::sort(scratch);
+          utl::sort(scratch, [](node_way const& a, node_way const& b) {
+            return std::tie(a.way_, a.in_way_idx_) <
+                   std::tie(b.way_, b.in_way_idx_);
+          });
 
           // Copy back from scratch.
           for (auto const [i, x] : utl::enumerate(scratch)) {
-            ways[i] = x.first;
-            positions[i] = x.second;
+            ways[i] = x.way_;
+            positions[i] = x.in_way_idx_;
+            bearings[i] = x.bearing_;
           }
         },
-        pt->update_fn());
+        sparse_update_fn(*pt));
   }
 
-  compute_turn_bearings();
-}
-
-std::size_t ways::get_polyline_node_idx(
-    way_idx_t const way, std::uint16_t const target_routing_idx) const {
-  auto const& routing_nodes = r_->way_nodes_[way];
-  auto const& polyline_osm_nodes = way_osm_nodes_[way];
-
-  auto current_routing_idx = 0U;
-  for (auto const [poly_idx, osm_node] : utl::enumerate(polyline_osm_nodes)) {
-    auto const expected_osm_node =
-        node_to_osm_[routing_nodes[current_routing_idx]];
-    if (osm_node == expected_osm_node) {
-      if (current_routing_idx == target_routing_idx) {
-        return poly_idx;
-      }
-      ++current_routing_idx;
-    }
-  }
-
-  throw utl::fail("polyline node index not found: way={} idx={}", to_idx(way),
-                  target_routing_idx);
-}
-
-void ways::compute_turn_bearings() {
-  for (auto i = node_idx_t{0U}; i != n_nodes(); ++i) {
-    auto bearings = r_->node_turn_bearings_.add_back_sized(0U);
-    for (auto const [way, node_in_way_idx] :
-         utl::zip(r_->node_ways_[i], r_->node_in_way_idx_[i])) {
-      auto const polyline = way_polylines_[way];
-      auto const polyline_idx = get_polyline_node_idx(way, node_in_way_idx);
-      bearings.push_back(
-          turn_bearing{.to_prev_ = get_prev_bearing(polyline, polyline_idx),
-                       .to_next_ = get_next_bearing(polyline, polyline_idx)});
-    }
-  }
+  node_way_counter_ = {};
 }
 
 void ways::sync() {

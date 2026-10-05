@@ -323,7 +323,6 @@ struct ways {
   void add_restriction(std::vector<resolved_restriction>&);
   void compute_big_street_neighbors();
   void connect_ways();
-  void compute_turn_bearings();
   void build_components();
 
   std::optional<way_idx_t> find_way(osm_way_idx_t const i) {
@@ -359,9 +358,6 @@ struct ways {
   point get_node_pos(node_idx_t const i) const {
     return r_->node_positions_.at(i);
   }
-
-  std::size_t get_polyline_node_idx(
-      way_idx_t const way, std::uint16_t const target_routing_idx) const;
 
   std::optional<std::int64_t> get_osm_node(node_idx_t const n) const {
     return n != node_idx_t::invalid() && n < n_nodes()
