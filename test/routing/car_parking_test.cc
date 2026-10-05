@@ -25,11 +25,6 @@ namespace fs = std::filesystem;
 using namespace osr;
 using std::string_view;
 
-constexpr auto const kUseMultithreading = true;
-constexpr auto const kPrintDebugGeojson = false;
-constexpr auto const kMaxMatchDistance = 100;
-constexpr auto const kMaxAllowedPathDifferenceRatio = 0.5;
-
 namespace {
 void load(string_view raw_data, std::string_view data_dir) {
   if (fs::exists(raw_data)) {
