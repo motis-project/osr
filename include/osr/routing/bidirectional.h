@@ -87,9 +87,9 @@ struct bidirectional {
     auto const heur =
         heuristic(params_.profile_, w, l.n_, dir, params_.sharing());
     if (l.cost() + heur < d.n_buckets() - 1U &&
-        cost_map[l.get_node().get_key()].update(l, l.get_node(), l.cost(),
-                                                node::invalid(), duration,
-                                                *w.r_, arena_)) {
+        cost_map[l.get_node().get_key()].update(
+            l, l.get_node(), {.cost_ = l.cost(), .duration_ = duration},
+            node::invalid(), *w.r_, arena_)) {
       auto const total = static_cast<cost_t>(l.cost() + heur);
       d.push(label{l.get_node(), total});
     }
@@ -209,8 +209,9 @@ struct bidirectional {
           }
           auto const total =
               clamp_cost(static_cast<std::uint64_t>(curr_cost) + cost);
-          auto const total_duration =
-              clamp_add_duration(curr_duration, duration);
+          auto const next_cd = cost_and_duration{
+              .cost_ = total,
+              .duration_ = clamp_add_duration(curr_duration, duration)};
           auto const heur =
               clamp_cost(static_cast<std::int64_t>(total) +
                          static_cast<std::int64_t>(heuristic(
@@ -229,9 +230,8 @@ struct bidirectional {
             }
             auto next = label{neighbor, static_cast<cost_t>(heur)};
             next.track(l, r, way, neighbor.get_node(), track);
-            if (!costs[neighbor.get_key()].update(
-                    next, neighbor, static_cast<cost_t>(total), curr,
-                    total_duration, r, arena_)) {
+            if (!costs[neighbor.get_key()].update(next, neighbor, next_cd, curr,
+                                                  r, arena_)) {
               return false;
             }
             pq.push(std::move(next));

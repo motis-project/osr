@@ -222,21 +222,23 @@ struct car_sharing {
     level_t lvl_;
     direction dir_;
     way_pos_t way_;
-#ifdef _MSC_VER
-    [[no_unique_address]] [[msvc::no_unique_address]] Tracking tracking_{};
-#else
-    [[no_unique_address]] Tracking tracking_{};
-#endif
+    OSR_NO_UNIQUE_ADDRESS Tracking tracking_{};
   };
 
   struct slot {
     node_idx_t pred_{node_idx_t::invalid()};
     cost_t cost_{kInfeasible};
     level_t pred_lvl_{kNoLevel};
-    node_type pred_type_{node_type::kInvalid};
-    way_pos_t pred_way_{0U};
-    bool pred_dir_{false};
+    std::uint8_t pred_way_ : 5 {0U};
+    std::uint8_t pred_dir_ : 1 {0U};
+    std::uint8_t pred_type_
+        : 2 {static_cast<std::uint8_t>(node_type::kInvalid)};
+    duration_t duration_{kMaxDuration};
     OSR_NO_UNIQUE_ADDRESS Tracking tracking_{};
+
+    constexpr cost_and_duration cd() const noexcept {
+      return {.cost_ = cost_, .duration_ = duration_};
+    }
   };
 
   struct entry {
@@ -250,36 +252,37 @@ struct car_sharing {
       auto const s = s_[get_index(n)];
       return s.pred_ == node_idx_t::invalid()
                  ? std::nullopt
-                 : std::optional{node{.n_ = s.pred_,
-                                      .type_ = s.pred_type_,
-                                      .lvl_ = s.pred_lvl_,
-                                      .dir_ = to_dir(s.pred_dir_),
-                                      .way_ = s.pred_way_}};
+                 : std::optional{
+                       node{.n_ = s.pred_,
+                            .type_ = static_cast<node_type>(s.pred_type_),
+                            .lvl_ = s.pred_lvl_,
+                            .dir_ = to_dir(s.pred_dir_),
+                            .way_ = s.pred_way_}};
     }
 
     cost_t cost(node const n) const noexcept { return s_[get_index(n)].cost_; }
 
-    constexpr duration_t duration(node const n) const noexcept {
-      return duration_from_cost(cost(n));
+    duration_t duration(node const n) const noexcept {
+      return s_[get_index(n)].duration_;
     }
 
     bool update(label const& l,
                 node const n,
-                cost_t const c,
+                cost_and_duration const c,
                 node const pred,
-                duration_t const,
                 ways::routing const& w,
                 entry_storage_arena& a) {
       auto& s = s_.slot(get_index(n), w, n.n_, a);
-      if (c >= s.cost_) {
+      if (c >= s.cd()) {
         return false;
       }
-      s.cost_ = c;
+      s.cost_ = c.cost_;
+      s.duration_ = c.duration_;
       s.pred_ = pred.n_;
       s.pred_lvl_ = pred.lvl_;
       s.pred_way_ = pred.way_;
       s.pred_dir_ = to_bool(pred.dir_);
-      s.pred_type_ = pred.type_;
+      s.pred_type_ = static_cast<std::uint8_t>(pred.type_);
       s.tracking_ = l.tracking_;
       return true;
     }

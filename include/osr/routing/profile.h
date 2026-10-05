@@ -66,14 +66,11 @@ concept IsEntry =
     } && requires(Entry entry,
                   Node const node,
                   Label const& label,
-                  cost_t const cost,
-                  duration_t const duration,
+                  cost_and_duration const cd,
                   ways::routing const& w,
                   entry_storage_arena& arena,
                   path& p) {
-      {
-        entry.update(label, node, cost, node, duration, w, arena)
-      } -> std::same_as<bool>;
+      { entry.update(label, node, cd, node, w, arena) } -> std::same_as<bool>;
     };
 
 template <typename Hash, typename NodeKey>
