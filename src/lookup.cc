@@ -52,10 +52,12 @@ std::array<double, 2> get_travel_heading(ways const& w,
   return {sign * (b.lng() - a.lng()) * cos_lat, sign * (b.lat() - a.lat())};
 }
 
-// Candidates arrive sorted by distance. Each class decides on its own and a
-// candidate is kept if any class keeps it (or no class can use its way). A
-// class drops a candidate if a kept candidate in the same component is
-// clearly closer and at least as good:
+// Candidates arrive sorted by distance. Each class of the profile that can use
+// the candidate's way decides on its own, and the candidate is kept if any of
+// them keeps it. Candidates on ways that none of the classes can use are not
+// filtered here, the profile decides about them later. A class drops a
+// candidate if a kept candidate in the same component is clearly closer and
+// at least as good:
 // - not penalised if this one is not (e.g. foot on a `foot=no` cycleway)
 // - on the target level (the query level, or the ground without one), or both
 //   are off it on overlapping levels
