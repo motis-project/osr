@@ -406,7 +406,7 @@ struct lookup {
                     location const& query,
                     bool const reverse,
                     direction const search_dir) const {
-    auto const end = route_end_of(reverse ? opposite(search_dir) : search_dir);
+    auto const end = route_end_of(reverse, search_dir);
     filter_by_component(out, query, P::endpoint_component_classes(end));
     set_penalty_reference(out, query.lvl_);
     out.finish();
@@ -516,8 +516,7 @@ struct lookup {
     auto const edge_dir = reverse ? opposite(way_dir) : way_dir;
     auto best = std::optional<cost_t>{};
     P::resolve_endpoint(
-        *ways_.r_, way, node_idx, query.lvl_,
-        route_end_of(reverse ? opposite(search_dir) : search_dir),
+        *ways_.r_, way, node_idx, query.lvl_, route_end_of(reverse, search_dir),
         endpoint_role::kRoot, [&](auto const resolved) {
           if (!P::endpoint_node_cost(params, resolved, node_prop).feasible()) {
             return;
@@ -559,8 +558,7 @@ struct lookup {
                                .props_ = ways_.r_->way_properties_[way],
                                .way_dir_ = flip(search_dir, edge_dir),
                                .search_dir_ = search_dir,
-                               .end_ = route_end_of(
-                                   reverse ? opposite(search_dir) : search_dir),
+                               .end_ = route_end_of(reverse, search_dir),
                                .start_time_ = start_time})) {
       return candidate_node{};
     }
