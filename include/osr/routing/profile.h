@@ -32,6 +32,11 @@ constexpr route_end route_end_of(direction const travel_dir) {
                                            : route_end::kDestination;
 }
 
+constexpr route_end route_end_of(bool const reverse,
+                                 direction const search_dir) {
+  return route_end_of(reverse ? opposite(search_dir) : search_dir);
+}
+
 constexpr direction travel_dir_of(route_end const end) {
   return end == route_end::kOrigin ? direction::kForward : direction::kBackward;
 }
