@@ -29,6 +29,7 @@
 #include "utl/zip.h"
 
 #include "osr/conditional.h"
+#include "osr/extract/tags.h"
 #include "osr/point.h"
 #include "osr/routing/turns.h"
 #include "osr/types.h"
@@ -324,7 +325,7 @@ struct ways {
   void compute_big_street_neighbors();
   void connect_ways();
   void compute_turn_bearings();
-  void build_components();
+  unsigned build_components();
 
   std::optional<way_idx_t> find_way(osm_way_idx_t const i) {
     auto const it = std::lower_bound(
@@ -458,6 +459,8 @@ struct ways {
     }
 
     bool is_loop(way_idx_t const w) const {
+      utl::verify(w < way_nodes_.size(), "invalid way_idx: {} > {}", w,
+                  way_nodes_.size());
       return way_nodes_[w].back() == way_nodes_[w].front();
     }
 
@@ -524,6 +527,33 @@ struct ways {
       distance_t distance_{};
     };
 
+    // TODO: MK - Make separate structure for dynamic updates
+    struct full_additional_connection {
+      struct offset {
+        struct side {
+          bool valid() const { return node_ != node_idx_t::invalid(); }
+
+          node_idx_t node_;
+          std::uint16_t dist_;
+        };
+
+        side left_;
+        side right_;
+        way_idx_t way_;
+      };
+
+      // Currently only one property exists
+      bool is_parking() const { return true; }
+
+      vec<point> connection_;
+      offset from_;
+      offset to_;
+      std::uint16_t dist_;
+
+      // TODO: MK - Add properties, to handle different use cases
+      // Examples: parking, forward_only, detour, ...
+    };
+
     vec_map<node_idx_t, node_properties> node_properties_;
     vec_map<way_idx_t, way_properties> way_properties_;
     vec<pair<way_idx_t, hgv_way_info>> way_hgv_info_;
@@ -560,6 +590,11 @@ struct ways {
     vec<pair<node_idx_t, level_bits_t>> multi_level_elevators_;
 
     vec_map<way_idx_t, component_idx_t> way_component_;
+
+    bitvec<node_idx_t> has_additional_connections_;
+    vec<pair<node_idx_t, connection_idx_t>> additional_node_connections_;
+    vec_map<connection_idx_t, full_additional_connection>
+        additional_connections_;
   };
 
   cista::wrapped<routing> r_;
