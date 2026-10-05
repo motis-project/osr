@@ -494,6 +494,8 @@ void ways::connect_ways() {
         },
         sparse_update_fn(*pt));
   }
+
+  node_way_counter_ = {};
 }
 
 void ways::sync() {
