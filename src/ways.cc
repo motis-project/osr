@@ -92,28 +92,22 @@ std::vector<std::uint32_t> build_component_forest(ways::routing const& r,
   return parent;
 }
 
+// Every non-root points to a smaller index, which is already renumbered.
 std::vector<std::uint32_t> number_component_roots(
     std::vector<std::uint32_t>& parent) {
-  auto counts = std::vector<std::uint32_t>(parent.size(), 0U);
-  for (auto i = 0U; i != parent.size(); ++i) {
-    if (parent[i] != kNoComponent) {
-      parent[i] = find_component_root(parent, i);
-      ++counts[parent[i]];
-    }
-  }
   auto sizes = std::vector<std::uint32_t>{};
-  for (auto i = 0U; i != counts.size(); ++i) {
-    if (counts[i] != 0U) {
-      auto const size = counts[i];
+  for (auto i = 0U; i != parent.size(); ++i) {
+    if (parent[i] == kNoComponent) {
+      continue;
+    }
+    if (parent[i] == i) {
       utl::verify(sizes.size() < kNoComponent, "too many components");
-      counts[i] = static_cast<std::uint32_t>(sizes.size());
-      sizes.push_back(size);
+      parent[i] = static_cast<std::uint32_t>(sizes.size());
+      sizes.push_back(0U);
+    } else {
+      parent[i] = parent[parent[i]];
     }
-  }
-  for (auto& c : parent) {
-    if (c != kNoComponent) {
-      c = counts[c];
-    }
+    ++sizes[parent[i]];
   }
   return sizes;
 }
