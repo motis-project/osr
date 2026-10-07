@@ -74,6 +74,7 @@ bool requires_dijkstra(search_profile const p) {
 struct endpoint_candidate {
   way_idx_t way_;
   candidate_node node_;
+  endpoint_state_t state_;
   double graph_distance_;  // projected point -> node
   double connector_distance_;  // query -> projected point, if it counts
   cost_t matching_penalty_;
@@ -131,6 +132,7 @@ void for_each_endpoint_candidate(match_view_t const& matches,
         fn(endpoint_candidate{
             .way_ = matches.way_[i],
             .node_ = node,
+            .state_ = matches.state_[i],
             .graph_distance_ =
                 std::max(0.0, node.dist_to_node_ - distance_to_way),
             .connector_distance_ = matches.must_reach_ ? distance_to_way : 0.0,
@@ -421,7 +423,7 @@ std::vector<endpoint_root<P>> add_endpoint_roots(
       matches, penalty_factor, [&](endpoint_candidate const& endpoint) {
         P::resolve_endpoint(
             *w.r_, endpoint.way_, endpoint.node_.node_, matches.lvl_, end,
-            endpoint_role::kRoot, [&](auto const node) {
+            endpoint_role::kRoot, endpoint.state_, [&](auto const node) {
               auto const connection = get_endpoint_connection<P>(
                   params, w, endpoint, node, end, endpoint_role::kRoot,
                   start_time, duration_t{0U}, dir);
@@ -488,7 +490,8 @@ std::optional<destination_candidate<P>> best_candidate(
           }
         };
         P::resolve_endpoint(*w.r_, endpoint.way_, candidate_node.node_,
-                            matches.lvl_, end, endpoint_role::kGoal, consider);
+                            matches.lvl_, end, endpoint_role::kGoal,
+                            endpoint.state_, consider);
       });
   return best;
 }
@@ -868,7 +871,7 @@ std::optional<path> route_astar(typename P::parameters const& params,
         auto const add = [&](auto const node) { a.add_destination(node); };
         P::resolve_endpoint(*w.r_, endpoint.way_, candidate_node.node_,
                             to_match.lvl_, route_end_of(opposite(dir)),
-                            endpoint_role::kGoal, add);
+                            endpoint_role::kGoal, endpoint.state_, add);
       });
   if (a.destinations_.empty()) {
     return std::nullopt;

@@ -1,8 +1,11 @@
 #include <chrono>
+#include <cmath>
 #include <filesystem>
+#include <functional>
 #include <iostream>
 #include <random>
 #include <sstream>
+#include <variant>
 
 #include "gtest/gtest.h"
 
@@ -382,6 +385,15 @@ TEST(symmetry, sharing_random_pairs_forward_backward_equivalence) {
           {osr::get_parameters(osr::search_profile::kCarSharing),
            osr::search_profile::kCarSharing}};
 
+  // Stripes of ~7 m: candidates of one endpoint get different answers.
+  auto const return_rules = std::vector<
+      std::pair<char const*, std::function<bool(geo::latlng const&)>>>{
+      {"none", {}},
+      {"anywhere", [](geo::latlng const&) { return true; }},
+      {"stripes", [](geo::latlng const& pos) {
+         return std::fmod(std::floor(pos.lng() * 1e4), 2.0) == 0.0;
+       }}};
+
   for (auto const& map : maps) {
     auto const map_dir =
         fs::temp_directory_path() / "osr-symmetry-sharing" / map;
@@ -410,22 +422,35 @@ TEST(symmetry, sharing_random_pairs_forward_backward_equivalence) {
         auto const from = rnd_loc();
         auto const to = rnd_loc();
         for (auto const& [params, profile] : profiles) {
-          auto const fwd = osr::route(
-              params, w, l, profile, from, to, std::chrono::seconds{3600},
-              osr::direction::kForward, 100.0, nullptr, &sharing);
-          auto const bwd = osr::route(
-              params, w, l, profile, to, from, std::chrono::seconds{3600},
-              osr::direction::kBackward, 100.0, nullptr, &sharing);
-          auto const ctx = [&]() {
-            auto ss = std::stringstream{};
-            ss << map << " " << osr::to_str(profile) << " cfg" << cfg
-               << " from=" << from.pos_ << " to=" << to.pos_;
-            return ss.str();
-          };
-          ASSERT_EQ(fwd.has_value(), bwd.has_value()) << ctx();
-          if (fwd.has_value()) {
-            EXPECT_EQ(fwd->cost_, bwd->cost_) << ctx();
-            EXPECT_EQ(fwd->duration_, bwd->duration_) << ctx();
+          for (auto const& [rule_name, rule] : return_rules) {
+            auto rule_params = params;
+            std::visit(
+                [&](auto& p) {
+                  if constexpr (requires { p.vehicle_return_allowed_; }) {
+                    p.vehicle_return_allowed_ = rule;
+                  }
+                },
+                rule_params);
+            auto const fwd = osr::route(
+                rule_params, w, l, profile, from, to,
+                std::chrono::seconds{3600}, osr::direction::kForward, 100.0,
+                nullptr, &sharing, nullptr, osr::routing_algorithm::kDijkstra);
+            auto const bwd = osr::route(
+                rule_params, w, l, profile, to, from,
+                std::chrono::seconds{3600}, osr::direction::kBackward, 100.0,
+                nullptr, &sharing, nullptr, osr::routing_algorithm::kDijkstra);
+            auto const ctx = [&]() {
+              auto ss = std::stringstream{};
+              ss << map << " " << osr::to_str(profile) << " cfg" << cfg
+                 << " return=" << rule_name << " from=" << from.pos_
+                 << " to=" << to.pos_;
+              return ss.str();
+            };
+            ASSERT_EQ(fwd.has_value(), bwd.has_value()) << ctx();
+            if (fwd.has_value()) {
+              EXPECT_EQ(fwd->cost_, bwd->cost_) << ctx();
+              EXPECT_EQ(fwd->duration_, bwd->duration_) << ctx();
+            }
           }
         }
       }

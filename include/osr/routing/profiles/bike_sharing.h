@@ -2,11 +2,14 @@
 
 #include <cassert>
 #include <array>
+#include <functional>
 #include <optional>
 #include <string_view>
 #include <type_traits>
 
 #include "boost/json.hpp"
+
+#include "geo/latlng.h"
 
 #include "utl/helpers/algorithm.h"
 
@@ -99,6 +102,7 @@ struct bike_sharing {
     using profile_t = bike_sharing;
     bikep::parameters bike_{};
     footp::parameters foot_{};
+    std::function<bool(geo::latlng const&)> vehicle_return_allowed_{};
   };
 
   struct key {
@@ -522,9 +526,37 @@ struct bike_sharing {
     return footp::node_cost(params.foot_, n);
   }
 
+  static constexpr cost_and_duration endpoint_node_cost(
+      parameters const& params,
+      node const n,
+      node_properties const properties) {
+    return n.is_bike_node() ? bikep::node_cost(params.bike_, properties)
+                            : footp::node_cost(params.foot_, properties);
+  }
+
+  static constexpr auto const kVehicleReturn = endpoint_state_t{1U};
+
+  template <typename PosFn>
+  static endpoint_state_t get_endpoint_state(parameters const& params,
+                                             route_end const end,
+                                             PosFn&& matched_pos) {
+    return end == route_end::kDestination && params.vehicle_return_allowed_ &&
+                   params.vehicle_return_allowed_(matched_pos())
+               ? kVehicleReturn
+               : kNoEndpointState;
+  }
+
   static constexpr component_classes endpoint_component_classes(
-      route_end) noexcept {
-    return {component_class::kFoot};
+      route_end, endpoint_state_t const state) noexcept {
+    return state == kVehicleReturn ? component_classes{component_class::kFoot,
+                                                       component_class::kBike}
+                                   : component_classes{component_class::kFoot};
+  }
+
+  static bool endpoint_way_feasible(parameters const& params,
+                                    endpoint_way_query const& q) {
+    return q.feasible<footp>(params.foot_) ||
+           (q.state_ == kVehicleReturn && q.feasible<bikep>(params.bike_));
   }
 
   template <typename Fn>
@@ -534,9 +566,11 @@ struct bike_sharing {
                                level_t const lvl,
                                route_end const end,
                                endpoint_role const role,
+                               endpoint_state_t const state,
                                Fn&& f) {
     footp::resolve_endpoint(
-        w, way, n, lvl, end, role, [&](footp::node const resolved) {
+        w, way, n, lvl, end, role, kNoEndpointState,
+        [&](footp::node const resolved) {
           if (role == endpoint_role::kRoot) {
             f(to_node(resolved, end == route_end::kOrigin
                                     ? node_type::kInitialFoot
@@ -546,13 +580,18 @@ struct bike_sharing {
             f(to_node(resolved, node_type::kTrailingFoot));
           }
         });
+    if (state == kVehicleReturn) {
+      bikep::resolve_endpoint(
+          w, way, n, kNoLevel, end, role, kNoEndpointState,
+          [&](bikep::node const bike) { f(to_node(bike, kNoLevel)); });
+    }
   }
 
   static cost_and_duration endpoint_way_cost(
       parameters const& params,
       ways::routing const& w,
       timezone_cache_t const& timezones,
-      node const,
+      node const n,
       way_idx_t const way,
       way_properties const& properties,
       direction const way_dir,
@@ -560,10 +599,17 @@ struct bike_sharing {
       std::optional<routing_time_t> const start_time,
       duration_t const current_duration,
       direction const search_dir) {
+    if (n.is_bike_node()) {
+      return clamp_add(
+          bikep::way_cost(params.bike_, w, timezones, way, properties, way_dir,
+                          distance, start_time, current_duration, search_dir),
+          kEndSwitchPenalty);
+    }
     return footp::way_cost(params.foot_, w, timezones, way, properties, way_dir,
                            distance, start_time, current_duration, search_dir);
   }
 
+  // Returning the bike is a transition at the node (see `adjacent`).
   static constexpr bool endpoint_root_allowed(parameters const&,
                                               node const,
                                               direction) {
@@ -580,19 +626,13 @@ struct bike_sharing {
       direction const search_dir,
       std::optional<routing_time_t> const start_time,
       duration_t const current_duration) {
-    return footp::endpoint_transition_cost(params.foot_, w, timezones,
-                                           to_foot(n), way, way_dir, search_dir,
-                                           start_time, current_duration);
-  }
-
-  static constexpr cost_and_duration endpoint_node_cost(
-      parameters const& params, node const, node_properties const& n) {
-    return node_cost(params, n);
-  }
-
-  static bool endpoint_way_feasible(parameters const& params,
-                                    endpoint_way_query const& q) {
-    return q.template feasible<typename parameters::profile_t>(params);
+    return n.is_bike_node()
+               ? bikep::endpoint_transition_cost(
+                     params.bike_, w, timezones, to_bike(n), way, way_dir,
+                     search_dir, start_time, current_duration)
+               : footp::endpoint_transition_cost(
+                     params.foot_, w, timezones, to_foot(n), way, way_dir,
+                     search_dir, start_time, current_duration);
   }
 
   static constexpr double lower_bound_heuristic(parameters const& params,

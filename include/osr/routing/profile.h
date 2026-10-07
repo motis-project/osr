@@ -41,6 +41,24 @@ constexpr direction travel_dir_of(route_end const end) {
   return end == route_end::kOrigin ? direction::kForward : direction::kBackward;
 }
 
+// Profile defined state of one endpoint candidate. lookup computes it once per
+// candidate (P::get_endpoint_state, optional) and passes it to the endpoint
+// hooks.
+using endpoint_state_t = std::uint8_t;
+
+constexpr auto const kNoEndpointState = endpoint_state_t{0U};
+
+template <typename P, typename PosFn>
+endpoint_state_t endpoint_state_of(typename P::parameters const& params,
+                                   route_end const end,
+                                   PosFn&& matched_pos) {
+  if constexpr (requires { P::get_endpoint_state(params, end, matched_pos); }) {
+    return P::get_endpoint_state(params, end, matched_pos);
+  } else {
+    return kNoEndpointState;
+  }
+}
+
 struct endpoint_way_query {
   template <typename M>
   bool feasible(typename M::parameters const& params) const {
@@ -56,6 +74,7 @@ struct endpoint_way_query {
   direction way_dir_;
   direction search_dir_;
   route_end end_;
+  endpoint_state_t state_;
   std::optional<routing_time_t> start_time_;
 };
 
@@ -142,12 +161,15 @@ concept Profile =
              level_t const lvl,
              route_end const end,
              endpoint_role const role,
+             endpoint_state_t const state,
              std::function<void(typename P::node const)>&& f) {
       { P::resolve_all(r, node_idx, f) } -> std::same_as<void>;
       {
-        P::resolve_endpoint(r, w, node_idx, lvl, end, role, f)
+        P::resolve_endpoint(r, w, node_idx, lvl, end, role, state, f)
       } -> std::same_as<void>;
-      { P::endpoint_component_classes(end) } -> std::same_as<component_classes>;
+      {
+        P::endpoint_component_classes(end, state)
+      } -> std::same_as<component_classes>;
     } &&
     requires(typename P::parameters const& params,
              typename P::node const node,

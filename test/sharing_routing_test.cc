@@ -1,5 +1,6 @@
 #include <chrono>
 #include <numeric>
+#include <type_traits>
 #include <vector>
 
 #include "gtest/gtest.h"
@@ -15,6 +16,8 @@ namespace osr {
 namespace {
 
 using sharing_routing_test = test::sharing_routing_fixture;
+
+constexpr auto kReturnAnywhere = [](geo::latlng const&) { return true; };
 
 struct test_sharing_data {
   explicit test_sharing_data(
@@ -53,6 +56,143 @@ struct test_sharing_data {
   std::vector<geo::latlng> additional_node_coordinates_{};
   hash_map<node_idx_t, std::vector<additional_edge>> additional_edges_{};
 };
+
+template <typename Profile>
+void verify_exact_coordinate_return(search_profile const profile,
+                                    mode const vehicle_mode) {
+  auto const& w = *sharing_routing_test::ways_;
+  auto const& l = *sharing_routing_test::lookup_;
+  auto const data = test_sharing_data{w};
+  auto const sharing = data.view(w);
+  auto const from = location{{49.000000, 8.000000}, kNoLevel};
+  auto const to = location{{49.000005, 8.002800}, kNoLevel};
+  auto const params = typename Profile::parameters{};
+  auto exact_params = params;
+  exact_params.vehicle_return_allowed_ = kReturnAnywhere;
+
+  auto const regular =
+      route(params, w, l, profile, from, to, std::chrono::seconds{3600},
+            direction::kForward, 50.0, nullptr, &sharing);
+  ASSERT_TRUE(regular.has_value());
+  ASSERT_FALSE(regular->segments_.empty());
+  EXPECT_EQ(mode::kFoot, regular->segments_.back().mode_);
+
+  auto const result =
+      route(exact_params, w, l, profile, from, to, std::chrono::seconds{3600},
+            direction::kForward, 50.0, nullptr, &sharing, nullptr,
+            routing_algorithm::kDijkstra);
+  ASSERT_TRUE(result.has_value());
+  ASSERT_FALSE(result->segments_.empty());
+  auto const& connector = result->segments_.back();
+  EXPECT_EQ(vehicle_mode, connector.mode_);
+  EXPECT_EQ(way_idx_t::invalid(), connector.way_);
+  EXPECT_GE(connector.cost_, Profile::kEndSwitchPenalty);
+  ASSERT_FALSE(connector.polyline_.empty());
+  EXPECT_NE(to.pos_, connector.polyline_.back());
+
+  auto const backward =
+      route(exact_params, w, l, profile, to, from, std::chrono::seconds{3600},
+            direction::kBackward, 50.0, nullptr, &sharing, nullptr,
+            routing_algorithm::kDijkstra);
+  ASSERT_TRUE(backward.has_value());
+  EXPECT_EQ(result->cost_, backward->cost_);
+  EXPECT_EQ(result->duration_, backward->duration_);
+}
+
+template <typename Profile>
+void verify_destination_match_fallback(search_profile const profile) {
+  auto const& w = *sharing_routing_test::ways_;
+  auto const& l = *sharing_routing_test::lookup_;
+  auto const data = test_sharing_data{w, osm_node_idx_t{61U}};
+  auto const sharing = data.view(w);
+  auto const from = location{{49.020000, 8.000000}, kNoLevel};
+  auto const to = location{{49.030000, 8.001000}, kNoLevel};
+  auto params = typename Profile::parameters{};
+  params.vehicle_return_allowed_ = kReturnAnywhere;
+
+  auto const result =
+      route(params, w, l, profile, from, to, std::chrono::seconds{3600},
+            direction::kForward, 50.0, nullptr, &sharing, nullptr,
+            routing_algorithm::kDijkstra);
+  ASSERT_TRUE(result.has_value());
+  ASSERT_FALSE(result->segments_.empty());
+  EXPECT_EQ(mode::kFoot, result->segments_.back().mode_);
+}
+
+TEST_F(sharing_routing_test, bike_can_return_at_exact_coordinate) {
+  verify_exact_coordinate_return<bike_sharing>(search_profile::kBikeSharing,
+                                               mode::kBike);
+}
+
+TEST_F(sharing_routing_test, car_can_return_at_exact_coordinate) {
+  verify_exact_coordinate_return<car_sharing<track_node_tracking>>(
+      search_profile::kCarSharing, mode::kCar);
+}
+
+TEST_F(sharing_routing_test, vehicle_return_is_decided_per_destination) {
+  auto const& w = *ways_;
+  auto const& l = *lookup_;
+  auto const data = test_sharing_data{w};
+  auto const sharing = data.view(w);
+  auto const from = location{{49.000000, 8.000000}, kNoLevel};
+  auto const to = std::vector<location>{{{49.000005, 8.002800}, kNoLevel},
+                                        {{49.000005, 8.002600}, kNoLevel}};
+  auto params = bike_sharing::parameters{};
+  params.vehicle_return_allowed_ = [](geo::latlng const& pos) {
+    return pos.lng() > 8.0027;
+  };
+
+  auto const result =
+      route(params, w, l, search_profile::kBikeSharing, from, to,
+            std::chrono::seconds{3600}, direction::kForward, 50.0, nullptr,
+            &sharing, nullptr, [](path const&) { return true; });
+  ASSERT_EQ(2U, result.size());
+  ASSERT_TRUE(result[0].has_value());
+  ASSERT_TRUE(result[1].has_value());
+  ASSERT_FALSE(result[0]->segments_.empty());
+  ASSERT_FALSE(result[1]->segments_.empty());
+  EXPECT_EQ(mode::kBike, result[0]->segments_.back().mode_);
+  EXPECT_EQ(mode::kFoot, result[1]->segments_.back().mode_);
+}
+
+TEST_F(sharing_routing_test,
+       exact_return_at_costly_node_is_symmetric_for_one_to_many) {
+  auto const& w = *ways_;
+  auto const& l = *lookup_;
+  auto const data = test_sharing_data{w, osm_node_idx_t{102U}};
+  auto const sharing = data.view(w);
+  auto const from = location{{49.050000, 7.999000}, kNoLevel};
+  auto const to = location{{49.050000, 8.006000}, kNoLevel};
+  auto params = bike_sharing::parameters{};
+  params.vehicle_return_allowed_ = kReturnAnywhere;
+
+  auto const forward =
+      route(params, w, l, search_profile::kBikeSharing, from, to,
+            std::chrono::seconds{3600}, direction::kForward, 50.0, nullptr,
+            &sharing, nullptr, routing_algorithm::kDijkstra);
+  ASSERT_TRUE(forward.has_value());
+  ASSERT_FALSE(forward->segments_.empty());
+  EXPECT_EQ(mode::kBike, forward->segments_.back().mode_);
+
+  auto const backward =
+      route(params, w, l, search_profile::kBikeSharing, to,
+            std::vector<location>{from}, std::chrono::seconds{3600},
+            direction::kBackward, 50.0, nullptr, &sharing, nullptr,
+            [](path const&) { return false; });
+  ASSERT_EQ(1U, backward.size());
+  ASSERT_TRUE(backward.front().has_value());
+  EXPECT_EQ(forward->cost_, backward.front()->cost_);
+  EXPECT_EQ(forward->duration_, backward.front()->duration_);
+}
+
+TEST_F(sharing_routing_test, bike_uses_reachable_destination_match) {
+  verify_destination_match_fallback<bike_sharing>(search_profile::kBikeSharing);
+}
+
+TEST_F(sharing_routing_test, car_uses_reachable_destination_match) {
+  verify_destination_match_fallback<car_sharing<track_node_tracking>>(
+      search_profile::kCarSharing);
+}
 
 TEST_F(sharing_routing_test, matching_penalty_is_in_cost_limit) {
   auto const& w = *ways_;

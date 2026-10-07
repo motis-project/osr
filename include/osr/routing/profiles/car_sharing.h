@@ -3,11 +3,14 @@
 #include <cassert>
 
 #include <array>
+#include <functional>
 #include <optional>
 #include <string_view>
 #include <type_traits>
 
 #include "boost/json.hpp"
+
+#include "geo/latlng.h"
 
 #include "osr/elevation_storage.h"
 #include "osr/routing/additional_edge.h"
@@ -99,6 +102,7 @@ struct car_sharing {
     using profile_t = car_sharing<Tracking>;
     car::parameters car_{};
     footp::parameters foot_{};
+    std::function<bool(geo::latlng const&)> vehicle_return_allowed_{};
   };
 
   struct key {
@@ -597,9 +601,37 @@ struct car_sharing {
     return footp::node_cost(params.foot_, n);
   }
 
+  static constexpr cost_and_duration endpoint_node_cost(
+      parameters const& params,
+      node const n,
+      node_properties const properties) {
+    return n.is_rental_node() ? car::node_cost(params.car_, properties)
+                              : footp::node_cost(params.foot_, properties);
+  }
+
+  static constexpr auto const kVehicleReturn = endpoint_state_t{1U};
+
+  template <typename PosFn>
+  static endpoint_state_t get_endpoint_state(parameters const& params,
+                                             route_end const end,
+                                             PosFn&& matched_pos) {
+    return end == route_end::kDestination && params.vehicle_return_allowed_ &&
+                   params.vehicle_return_allowed_(matched_pos())
+               ? kVehicleReturn
+               : kNoEndpointState;
+  }
+
   static constexpr component_classes endpoint_component_classes(
-      route_end) noexcept {
-    return {component_class::kFoot};
+      route_end, endpoint_state_t const state) noexcept {
+    return state == kVehicleReturn ? component_classes{component_class::kFoot,
+                                                       component_class::kCar}
+                                   : component_classes{component_class::kFoot};
+  }
+
+  static bool endpoint_way_feasible(parameters const& params,
+                                    endpoint_way_query const& q) {
+    return q.feasible<footp>(params.foot_) ||
+           (q.state_ == kVehicleReturn && q.feasible<car>(params.car_));
   }
 
   template <typename Fn>
@@ -609,9 +641,11 @@ struct car_sharing {
                                level_t const lvl,
                                route_end const end,
                                endpoint_role const role,
+                               endpoint_state_t const state,
                                Fn&& f) {
     footp::resolve_endpoint(
-        w, way, n, lvl, end, role, [&](footp::node const resolved) {
+        w, way, n, lvl, end, role, kNoEndpointState,
+        [&](footp::node const resolved) {
           if (role == endpoint_role::kRoot) {
             f(to_node(resolved, end == route_end::kOrigin
                                     ? node_type::kInitialFoot
@@ -621,28 +655,11 @@ struct car_sharing {
             f(to_node(resolved, node_type::kTrailingFoot));
           }
         });
-  }
-
-  static cost_and_duration endpoint_way_cost(
-      parameters const& params,
-      ways::routing const& w,
-      timezone_cache_t const& timezones,
-      node const,
-      way_idx_t const way,
-      way_properties const& properties,
-      direction const way_dir,
-      distance_t const distance,
-      std::optional<routing_time_t> const start_time,
-      duration_t const current_duration,
-      direction const search_dir) {
-    return footp::way_cost(params.foot_, w, timezones, way, properties, way_dir,
-                           distance, start_time, current_duration, search_dir);
-  }
-
-  static constexpr bool endpoint_root_allowed(parameters const&,
-                                              node const,
-                                              direction) {
-    return true;
+    if (state == kVehicleReturn) {
+      car::resolve_endpoint(
+          w, way, n, kNoLevel, end, role, kNoEndpointState,
+          [&](car::node const rental) { f(to_node(rental, kNoLevel)); });
+    }
   }
 
   static cost_and_duration endpoint_transition_cost(
@@ -655,19 +672,42 @@ struct car_sharing {
       direction const search_dir,
       std::optional<routing_time_t> const start_time,
       duration_t const current_duration) {
-    return footp::endpoint_transition_cost(params.foot_, w, timezones,
-                                           to_foot(n), way, way_dir, search_dir,
-                                           start_time, current_duration);
+    return n.is_rental_node()
+               ? car::endpoint_transition_cost(
+                     params.car_, w, timezones, to_rental(n), way, way_dir,
+                     search_dir, start_time, current_duration)
+               : footp::endpoint_transition_cost(
+                     params.foot_, w, timezones, to_foot(n), way, way_dir,
+                     search_dir, start_time, current_duration);
   }
 
-  static constexpr cost_and_duration endpoint_node_cost(
-      parameters const& params, node const, node_properties const& n) {
-    return node_cost(params, n);
+  static constexpr bool endpoint_root_allowed(parameters const& params,
+                                              node const n,
+                                              direction const way_dir) {
+    return !n.is_rental_node() ||
+           car::endpoint_root_allowed(params.car_, to_rental(n), way_dir);
   }
 
-  static bool endpoint_way_feasible(parameters const& params,
-                                    endpoint_way_query const& q) {
-    return q.template feasible<typename parameters::profile_t>(params);
+  static cost_and_duration endpoint_way_cost(
+      parameters const& params,
+      ways::routing const& w,
+      timezone_cache_t const& timezones,
+      node const n,
+      way_idx_t const way,
+      way_properties const& properties,
+      direction const way_dir,
+      distance_t const distance,
+      std::optional<routing_time_t> const start_time,
+      duration_t const current_duration,
+      direction const search_dir) {
+    if (n.is_rental_node()) {
+      return clamp_add(
+          car::way_cost(params.car_, w, timezones, way, properties, way_dir,
+                        distance, start_time, current_duration, search_dir),
+          kEndSwitchPenalty);
+    }
+    return footp::way_cost(params.foot_, w, timezones, way, properties, way_dir,
+                           distance, start_time, current_duration, search_dir);
   }
 
   static constexpr double lower_bound_heuristic(parameters const& params,
