@@ -1,5 +1,6 @@
 #include "gtest/gtest.h"
 
+#include <chrono>
 #include <filesystem>
 #include <memory>
 #include <random>
@@ -18,7 +19,7 @@ using namespace osr;
 namespace {
 
 constexpr auto const kMaxMatchDistance = 100.0;
-constexpr auto const kMax = cost_t{900U};
+constexpr auto const kMax = std::chrono::seconds{900};
 constexpr auto const kNumDestinations = 200U;
 
 struct graph {
@@ -58,9 +59,7 @@ void expect_contiguous(path const& p) {
   }
 }
 
-// Returns true if the paths are identical (cost, duration, distance,
-// segments). `uses_elevator_` is not compared: the legacy one-to-many
-// reconstruct forces it to true, the state keeps the tracked value.
+// Compare route totals and segment structure.
 bool same_path(path const& a, path const& b) {
   if (a.cost_ != b.cost_ || a.duration_ != b.duration_ || a.dist_ != b.dist_ ||
       a.segments_.size() != b.segments_.size()) {
@@ -78,11 +77,7 @@ bool same_path(path const& a, path const& b) {
   return true;
 }
 
-// Reconstructing from the retained one-to-many search has to give what
-// `route()` with `do_reconstruct` gives, in both directions. The only allowed
-// difference: `route()` reconstructs as soon as a destination is settled,
-// while later start candidates can still improve the search state, so the
-// deferred reconstruct may return a path that is at most as expensive.
+// Immediate and deferred reconstruction must agree in both directions.
 template <typename P>
 void check(graph const& g,
            search_profile const profile,
@@ -99,6 +94,9 @@ void check(graph const& g,
   for (auto i = 0U; i != kNumDestinations; ++i) {
     to.push_back(location{w.get_node_pos(node_idx_t{distr(prng)})});
   }
+
+  // Include a direct path in the deferred reconstruction checks.
+  to.push_back(from);
 
   auto const& pp = std::get<typename P::parameters>(params);
   auto from_m = match_result{};
@@ -132,9 +130,9 @@ void check(graph const& g,
     ++n_found;
     EXPECT_EQ(expected[k]->cost_, state->results()[k]->cost_) << k;
     EXPECT_EQ(expected[k]->cost_, reconstructed->cost_) << k;
-    // The rendered segments must not exceed the search cost (catches a wrong
-    // start candidate, e.g. the far side of a loop way); they can be cheaper
-    // when a later start candidate improved the path.
+    EXPECT_EQ(expected[k]->duration_, reconstructed->duration_) << k;
+    EXPECT_TRUE(same_path(*expected[k], *reconstructed)) << k;
+    // Catch a wrong start candidate, e.g. the far side of a loop way.
     EXPECT_LE(segment_cost_sum(*reconstructed), reconstructed->cost_) << k;
     expect_contiguous(*reconstructed);
     EXPECT_LE(segment_cost_sum(*reconstructed), segment_cost_sum(*expected[k]))

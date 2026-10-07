@@ -95,3 +95,26 @@ TEST(match_result, append_and_clear) {
   EXPECT_EQ(0U, dst.size());
   EXPECT_TRUE(dst.empty());
 }
+
+TEST(match_result, must_reach_survives_append_and_clear_across_bit_blocks) {
+  auto src = match_result{};
+  for (auto i = 0U; i != 130U; ++i) {
+    src.start(level_t{0.F}, i % 3U == 0U);
+    src.finish();
+  }
+
+  auto dst = match_result{};
+  for (auto i = 0U; i != 130U; ++i) {
+    auto const idx = match_idx_t{129U - i};
+    EXPECT_EQ(src[idx].must_reach_, (129U - i) % 3U == 0U);
+    dst.append(src, idx);
+    EXPECT_EQ(dst[match_idx_t{i}].must_reach_, src[idx].must_reach_);
+  }
+
+  dst.clear();
+  for (auto i = 0U; i != 130U; ++i) {
+    dst.start(level_t{0.F});
+    dst.finish();
+    EXPECT_FALSE(dst[match_idx_t{i}].must_reach_);
+  }
+}

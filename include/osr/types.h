@@ -45,6 +45,13 @@ using vec_map = cista::raw::vector_map<K, V>;
 template <typename K>
 using bitvec = cista::basic_bitvec<vec<std::uint64_t>, K>;
 
+template <typename K>
+void push_back(bitvec<K>& v, bool const val) {
+  auto const i = v.size();
+  v.resize(i + 1U);
+  v.set(K{static_cast<cista::base_t<K>>(i)}, val);
+}
+
 template <typename K, typename V>
 using mm_vec_map = cista::basic_mmap_vec<V, K>;
 
@@ -156,8 +163,6 @@ constexpr bool osm_id_less(OsmIdx const lhs, OsmIdx const rhs) {
 
 using way_idx_t = cista::strong<std::uint32_t, struct way_idx_>;
 using node_idx_t = cista::strong<std::uint32_t, struct node_idx_>;
-
-using component_idx_t = cista::strong<std::uint32_t, struct component_idx_>;
 
 using platform_idx_t = cista::strong<std::uint32_t, struct platform_idx_>;
 

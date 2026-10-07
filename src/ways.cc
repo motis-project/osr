@@ -1,11 +1,15 @@
 #include "osr/ways.h"
 
 #include <algorithm>
+#include <limits>
+#include <numeric>
+#include <thread>
 
 #include "date/tz.h"
 
 #include "utl/parallel_for.h"
 #include "utl/to_vec.h"
+#include "utl/verify.h"
 
 #include "cista/io.h"
 
@@ -49,7 +53,119 @@ quantized_angle_t get_next_bearing(Polyline const& polyline,
   return 0U;
 }
 
+constexpr auto const kNoComponent = std::numeric_limits<std::uint32_t>::max();
+
+std::uint32_t find_component_root(std::vector<std::uint32_t>& parent,
+                                  std::uint32_t way) {
+  while (parent[way] != way) {
+    parent[way] = parent[parent[way]];
+    way = parent[way];
+  }
+  return way;
+}
+
+std::vector<std::uint32_t> build_component_forest(ways::routing const& r,
+                                                  component_class const cls) {
+  auto parent =
+      std::vector<std::uint32_t>(r.way_properties_.size(), kNoComponent);
+  for (auto i = 0U; i != parent.size(); ++i) {
+    if (is_accessible(cls, r.way_properties_[way_idx_t{i}])) {
+      parent[i] = i;
+    }
+  }
+  for (auto n = 0U; n != r.node_ways_.size(); ++n) {
+    auto anchor = kNoComponent;
+    for (auto const w : r.node_ways_[node_idx_t{n}]) {
+      if (parent[to_idx(w)] == kNoComponent) {
+        continue;
+      }
+      auto const root = find_component_root(parent, to_idx(w));
+      if (anchor == kNoComponent) {
+        anchor = root;
+      } else {
+        auto const a = find_component_root(parent, anchor);
+        anchor = std::min(a, root);
+        parent[std::max(a, root)] = anchor;
+      }
+    }
+  }
+  return parent;
+}
+
+// Every non-root points to a smaller index, which is already renumbered.
+std::vector<std::uint32_t> number_component_roots(
+    std::vector<std::uint32_t>& parent) {
+  auto sizes = std::vector<std::uint32_t>{};
+  for (auto i = 0U; i != parent.size(); ++i) {
+    if (parent[i] == kNoComponent) {
+      continue;
+    }
+    if (parent[i] == i) {
+      utl::verify(sizes.size() < kNoComponent, "too many components");
+      parent[i] = static_cast<std::uint32_t>(sizes.size());
+      sizes.push_back(0U);
+    } else {
+      parent[i] = parent[parent[i]];
+    }
+    ++sizes[parent[i]];
+  }
+  return sizes;
+}
+
 }  // namespace
+
+class_components compute_class_components(ways::routing const& r,
+                                          component_class const cls) {
+  auto parent = build_component_forest(r, cls);
+  auto const sizes = number_component_roots(parent);
+  return class_components::build(parent, sizes);
+}
+
+class_components class_components::build(
+    std::span<std::uint32_t const> const comp,
+    std::span<std::uint32_t const> const sizes) {
+  utl::verify(comp.size() <= std::numeric_limits<std::uint32_t>::max() &&
+                  sizes.size() < std::numeric_limits<std::uint32_t>::max(),
+              "component graph exceeds index range");
+  auto ranked = std::vector<std::uint32_t>(sizes.size());
+  std::iota(begin(ranked), end(ranked), 0U);
+  std::erase_if(ranked, [&](auto const id) { return sizes[id] < 2U; });
+  std::sort(begin(ranked), end(ranked), [&](auto const a, auto const b) {
+    return sizes[a] != sizes[b] ? sizes[a] > sizes[b] : a < b;
+  });
+  auto ids = std::vector<std::uint32_t>(sizes.size(), 0U);
+  for (auto i = std::size_t{0U}; i != ranked.size(); ++i) {
+    ids[ranked[i]] = static_cast<std::uint32_t>(i + 1U);
+  }
+
+  auto out = class_components{};
+  out.way_component_.resize(static_cast<std::uint32_t>(comp.size()),
+                            kNoComponent);
+  auto exception_ways = std::uint64_t{0U};
+  for (auto i = std::size_t{kException - 1U}; i < ranked.size(); ++i) {
+    exception_ways += sizes[ranked[i]];
+  }
+  utl::verify(exception_ways <= comp.size(), "invalid component sizes");
+  out.exception_way_.reserve(static_cast<std::uint32_t>(exception_ways));
+  out.exception_component_.reserve(static_cast<std::uint32_t>(exception_ways));
+  for (auto i = std::size_t{0U}; i != comp.size(); ++i) {
+    auto const c = comp[i];
+    if (c == std::numeric_limits<std::uint32_t>::max()) {
+      continue;
+    }
+    utl::verify(c < sizes.size(), "invalid component id {}", c);
+    auto const id = ids[c];
+    auto const way = way_idx_t{static_cast<std::uint32_t>(i)};
+    if (id < kException) {
+      out.way_component_[way] = static_cast<std::uint8_t>(id);
+    } else {
+      out.way_component_[way] = kException;
+      out.exception_way_.push_back(way);
+      out.exception_component_.push_back(id);
+    }
+  }
+  return out;
+}
 
 ways::ways(std::filesystem::path p, cista::mmap::protection const mode)
     : p_{std::move(p)},
@@ -73,41 +189,26 @@ ways::ways(std::filesystem::path p, cista::mmap::protection const mode)
           mm_vec<std::uint64_t>(mm("way_has_conditional_access_no"))},
       way_conditional_access_no_{mm("way_conditional_access_no")} {}
 
-void ways::build_components() {
-  auto q = hash_set<way_idx_t>{};
-  auto flood_fill = [&](way_idx_t const way_idx, component_idx_t const c) {
-    assert(q.empty());
-    q.insert(way_idx);
-    while (!q.empty()) {
-      auto const next = *q.begin();
-      q.erase(q.begin());
-      for (auto const n : r_->way_nodes_[next]) {
-        for (auto const w : r_->node_ways_[n]) {
-          auto& wc = r_->way_component_[w];
-          if (wc == component_idx_t::invalid()) {
-            wc = c;
-            q.insert(w);
-          }
-        }
-      }
-    }
-  };
-
+void ways::build_class_components() {
   auto pt = utl::get_active_progress_tracker_or_activate("osr");
-  pt->status("Build components").in_high(n_ways()).out_bounds(75, 90);
+  pt->status("Build components")
+      .in_high(kNumComponentClasses)
+      .out_bounds(75, 90);
 
-  auto next_component_idx = component_idx_t{0U};
-  r_->way_component_.resize(n_ways(), component_idx_t::invalid());
-  for (auto i = 0U; i != n_ways(); ++i) {
-    auto const way_idx = way_idx_t{i};
-    auto& c = r_->way_component_[way_idx];
-    if (c != component_idx_t::invalid()) {
-      continue;
-    }
-    c = next_component_idx++;
-    flood_fill(way_idx, c);
-    pt->increment();
-  }
+  r_->class_components_.clear();
+  r_->class_components_.resize(kNumComponentClasses);
+  auto const threads =
+      std::min(static_cast<unsigned>(kNumComponentClasses),
+               std::max(1U, std::thread::hardware_concurrency()));
+  utl::parallel_for_run(
+      kNumComponentClasses,
+      [&](std::size_t const i) {
+        r_->class_components_[static_cast<std::uint32_t>(i)] =
+            compute_class_components(*r_, kAllComponentClasses[i]);
+        pt->increment();
+      },
+      utl::noop_progress_update{}, utl::parallel_error_strategy::QUIT_EXEC,
+      threads);
 }
 
 void ways::add_restriction(std::vector<resolved_restriction>& rs) {
