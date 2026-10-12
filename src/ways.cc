@@ -387,17 +387,51 @@ std::size_t ways::get_polyline_node_idx(
 }
 
 void ways::compute_turn_bearings() {
-  for (auto i = node_idx_t{0U}; i != n_nodes(); ++i) {
-    auto bearings = r_->node_turn_bearings_.add_back_sized(0U);
-    for (auto const [way, node_in_way_idx] :
-         utl::zip(r_->node_ways_[i], r_->node_in_way_idx_[i])) {
-      auto const polyline = way_polylines_[way];
-      auto const polyline_idx = get_polyline_node_idx(way, node_in_way_idx);
-      bearings.push_back(
-          turn_bearing{.to_prev_ = get_prev_bearing(polyline, polyline_idx),
-                       .to_next_ = get_next_bearing(polyline, polyline_idx)});
-    }
-  }
+  auto pt = utl::get_active_progress_tracker_or_activate("osr");
+  pt->status("Turn bearings").in_high(n_nodes()).out_bounds(75, 75);
+
+  // One bearing pair per (node, way), in node_ways_ order. Nodes are
+  // independent of each other: compute them in parallel in chunks and append
+  // the chunks in node order as they complete.
+  struct chunk_bearings {
+    std::vector<turn_bearing> bearings_;
+    std::vector<std::uint32_t> sizes_;  // per node
+  };
+
+  constexpr auto const kChunkSize = std::size_t{4096U};
+  auto const n = std::size_t{n_nodes()};
+  utl::parallel_ordered_collect_threadlocal<char>(
+      (n + kChunkSize - 1U) / kChunkSize,
+      [&](char&, std::size_t const chunk) {
+        auto const chunk_begin = chunk * kChunkSize;
+        auto const chunk_end = std::min(chunk_begin + kChunkSize, n);
+        auto out = chunk_bearings{};
+        out.sizes_.reserve(chunk_end - chunk_begin);
+        for (auto node = chunk_begin; node != chunk_end; ++node) {
+          auto const i = node_idx_t{node};
+          out.sizes_.push_back(
+              static_cast<std::uint32_t>(r_->node_ways_[i].size()));
+          for (auto const [way, node_in_way_idx] :
+               utl::zip(r_->node_ways_[i], r_->node_in_way_idx_[i])) {
+            auto const polyline = way_polylines_[way];
+            auto const polyline_idx =
+                get_polyline_node_idx(way, node_in_way_idx);
+            out.bearings_.push_back(turn_bearing{
+                .to_prev_ = get_prev_bearing(polyline, polyline_idx),
+                .to_next_ = get_next_bearing(polyline, polyline_idx)});
+          }
+        }
+        return out;
+      },
+      [&](std::size_t, chunk_bearings&& out) {
+        auto offset = std::size_t{0U};
+        for (auto const size : out.sizes_) {
+          r_->node_turn_bearings_.emplace_back(
+              std::span{out.bearings_.data() + offset, size});
+          offset += size;
+        }
+        pt->increment(out.sizes_.size());
+      });
 }
 
 void ways::sync() {
