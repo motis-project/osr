@@ -39,6 +39,10 @@ struct bidirectional {
       geo::kEarthRadiusMeters * geo::kPI / 180;
   constexpr static auto const kLongestNodeDistance = cost_t{1800};
 
+  // Edge costs and lengths are rounded, so an edge can be slightly cheaper than
+  // the heuristic assumes. The stopping criterion allows for that.
+  constexpr static auto const kStopSlack = cost_t{10};
+
   struct get_bucket {
     cost_t operator()(label const& l) { return l.cost(); }
   };
@@ -82,7 +86,6 @@ struct bidirectional {
         max + std::max(slack_1, slack_2) +
                 std::max(diameter, kLongestNodeDistance * 2.0) <
             std::numeric_limits<cost_t>::max();
-    radius_ = search_bounds_valid_ ? kLongestNodeDistance : max;
     draining_ = false;
     drain_key_1_ = kInfeasible;
     drain_key_2_ = kInfeasible;
@@ -94,7 +97,6 @@ struct bidirectional {
            dial<label, get_bucket>& d,
            duration_t const duration) {
     auto const& w = params_.w();
-    radius_ = std::max(radius_, l.cost());
     auto const heur =
         heuristic(params_.profile_, w, l.n_, dir, params_.sharing());
     if (l.cost() + heur < d.n_buckets() - 1U &&
@@ -359,7 +361,7 @@ struct bidirectional {
                        : pq2_.buckets_[pq2_.get_next_bucket()].back().cost();
       if (static_cast<std::uint64_t>(top_f) + top_r >
           static_cast<std::uint64_t>(best_cost_) +
-              static_cast<std::uint64_t>(radius_)) {
+              static_cast<std::uint64_t>(kStopSlack)) {
         // Re-evaluate equal-cost meeting states with shorter durations before
         // stopping: their labels may still be in either queue's current bucket.
         if (!draining_) {
@@ -371,7 +373,7 @@ struct bidirectional {
             bucket_drained(pq2_, drain_key_2_)) {
           if (kDebug) {
             std::cout << "stopping criterion met " << top_f << " " << top_r
-                      << " " << best_cost_ << " " << radius_ << std::endl;
+                      << " " << best_cost_ << " " << kStopSlack << std::endl;
           }
           return false;
         }
@@ -431,7 +433,6 @@ struct bidirectional {
   ankerl::unordered_dense::map<key, entry, hash> cost1_;
   ankerl::unordered_dense::map<key, entry, hash> cost2_;
   entry_storage_arena arena_;
-  cost_t radius_;
   geo::latlng start_pos_;
   geo::latlng end_pos_;
   double distance_lon_degrees_;
