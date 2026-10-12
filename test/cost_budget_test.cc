@@ -59,6 +59,36 @@ constexpr auto const kLongEdgeOsm = R"(
 </osm>
 )";
 
+// A 10 km footway between two routing nodes whose ends are close together, so
+// the edge alone costs more than half of the limit.
+constexpr auto const kUShapeOsm = R"(
+<osm version="0.6">
+  <node id="1" lat="49.000000" lon="8.001000"/>
+  <node id="2" lat="49.045000" lon="8.001000"/>
+  <node id="3" lat="49.045000" lon="8.004000"/>
+  <node id="4" lat="49.000000" lon="8.004000"/>
+  <node id="10" lat="49.000000" lon="8.000000"/>
+  <node id="11" lat="49.000000" lon="8.005000"/>
+  <way id="1">
+    <nd ref="10"/>
+    <nd ref="1"/>
+    <tag k="highway" v="footway"/>
+  </way>
+  <way id="2">
+    <nd ref="1"/>
+    <nd ref="2"/>
+    <nd ref="3"/>
+    <nd ref="4"/>
+    <tag k="highway" v="footway"/>
+  </way>
+  <way id="3">
+    <nd ref="4"/>
+    <nd ref="11"/>
+    <tag k="highway" v="footway"/>
+  </way>
+</osm>
+)";
+
 struct graph {
   graph() {
     dir_ = fs::temp_directory_path() / "osr_cost_budget_test";
@@ -244,6 +274,36 @@ TEST(cost_budget, internal_edge_longer_than_bidirectional_radius) {
   auto const dijkstra = route_with(osr::routing_algorithm::kDijkstra);
   ASSERT_TRUE(dijkstra.has_value());
   ASSERT_LE(dijkstra->duration_.count(), kLimit.count());
+
+  auto const astar_bi = route_with(osr::routing_algorithm::kAStarBi);
+  ASSERT_TRUE(astar_bi.has_value());
+  EXPECT_EQ(dijkstra->cost_, astar_bi->cost_);
+}
+
+TEST(cost_budget, internal_edge_longer_than_half_the_limit) {
+  auto const dir = fs::temp_directory_path() / "osr_bidirectional_u_shape_test";
+  auto ec = std::error_code{};
+  fs::remove_all(dir, ec);
+  fs::create_directories(dir, ec);
+  osr::extract(
+      false, osr::test::write_osm_pbf("osr_bidirectional_u_shape", kUShapeOsm),
+      dir, {});
+
+  auto const w = osr::ways{dir, cista::mmap::protection::READ};
+  auto const l = osr::lookup{w, dir, cista::mmap::protection::READ};
+  auto const params = osr::foot<false, osr::elevator_tracking>::parameters{};
+  auto const from = osr::location{49.000050, 8.000300};
+  auto const to = osr::location{49.000050, 8.004700};
+  auto constexpr kLimit = std::chrono::seconds{9000};
+  auto const route_with = [&](osr::routing_algorithm const algo) {
+    return osr::route(params, w, l, osr::search_profile::kFoot, from, to,
+                      kLimit, osr::direction::kForward,
+                      /*max_match_distance=*/25.0, nullptr, nullptr, nullptr,
+                      algo);
+  };
+
+  auto const dijkstra = route_with(osr::routing_algorithm::kDijkstra);
+  ASSERT_TRUE(dijkstra.has_value());
 
   auto const astar_bi = route_with(osr::routing_algorithm::kAStarBi);
   ASSERT_TRUE(astar_bi.has_value());
