@@ -65,7 +65,7 @@ TEST_F(endpoint_matching_test,
   auto const result = route_dijkstra(
       get_parameters(search_profile::kFoot), w, l, search_profile::kFoot, from,
       to, std::chrono::seconds{3600}, direction::kForward, 50.0, nullptr,
-      nullptr, nullptr, std::nullopt, route_options{});
+      nullptr, nullptr, std::nullopt);
 
   ASSERT_TRUE(result.has_value());
   auto segment_duration = duration_t{0U};
@@ -102,7 +102,7 @@ TEST_F(endpoint_matching_test,
 }
 
 // Way 901 is a shortcut to the destination, but in the same component as the
-// closer way 900: only 900 is matched, whatever the matching penalty.
+// closer way 900: only 900 is matched.
 TEST_F(endpoint_matching_test,
        closest_match_in_component_wins_over_graph_shortcut) {
   auto const& w = *ways_;
@@ -119,18 +119,15 @@ TEST_F(endpoint_matching_test,
   ASSERT_EQ(1U, m.size());
   EXPECT_EQ(std::optional<std::int64_t>{900}, w.get_osm_way(m.way_[0]));
 
-  for (auto const factor : {0.0, kDefaultMatchingPenaltyFactor}) {
-    auto const result =
-        route(params, w, l, search_profile::kFoot, from, to,
-              std::chrono::seconds{3600}, direction::kForward, 50.0, nullptr,
-              nullptr, nullptr, routing_algorithm::kDijkstra, std::nullopt,
-              route_options{.matching_penalty_factor_ = factor});
-    ASSERT_TRUE(result.has_value());
-    ASSERT_FALSE(result->segments_.empty());
-    ASSERT_FALSE(result->segments_.front().polyline_.empty());
-    EXPECT_EQ(project_to_osm_way(w, 900, from.pos_),
-              result->segments_.front().polyline_.front());
-  }
+  auto const result =
+      route(params, w, l, search_profile::kFoot, from, to,
+            std::chrono::seconds{3600}, direction::kForward, 50.0, nullptr,
+            nullptr, nullptr, routing_algorithm::kDijkstra);
+  ASSERT_TRUE(result.has_value());
+  ASSERT_FALSE(result->segments_.empty());
+  ASSERT_FALSE(result->segments_.front().polyline_.empty());
+  EXPECT_EQ(project_to_osm_way(w, 900, from.pos_),
+            result->segments_.front().polyline_.front());
 }
 
 TEST_F(endpoint_matching_test,
@@ -141,18 +138,15 @@ TEST_F(endpoint_matching_test,
   auto const from = location{{49.040100, 8.004000}, kNoLevel};
   auto const to = location{{49.040000, 8.000000}, kNoLevel};
 
-  for (auto const factor : {0.0, kDefaultMatchingPenaltyFactor}) {
-    auto const result =
-        route(params, w, l, search_profile::kFoot, from, to,
-              std::chrono::seconds{3600}, direction::kForward, 50.0, nullptr,
-              nullptr, nullptr, routing_algorithm::kDijkstra, std::nullopt,
-              route_options{.matching_penalty_factor_ = factor});
-    ASSERT_TRUE(result.has_value());
-    ASSERT_FALSE(result->segments_.empty());
-    ASSERT_FALSE(result->segments_.back().polyline_.empty());
-    EXPECT_EQ(project_to_osm_way(w, 900, to.pos_),
-              result->segments_.back().polyline_.back());
-  }
+  auto const result =
+      route(params, w, l, search_profile::kFoot, from, to,
+            std::chrono::seconds{3600}, direction::kForward, 50.0, nullptr,
+            nullptr, nullptr, routing_algorithm::kDijkstra);
+  ASSERT_TRUE(result.has_value());
+  ASSERT_FALSE(result->segments_.empty());
+  ASSERT_FALSE(result->segments_.back().polyline_.empty());
+  EXPECT_EQ(project_to_osm_way(w, 900, to.pos_),
+            result->segments_.back().polyline_.back());
 }
 
 // The closest match 402 is on a car island {402, 403}: it does not shadow way

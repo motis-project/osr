@@ -54,6 +54,8 @@ struct test_sharing_data {
   hash_map<node_idx_t, std::vector<additional_edge>> additional_edges_{};
 };
 
+// The closest candidate is unusable, so the route starts at a farther one and
+// pays the matching penalty for the additional distance.
 TEST_F(sharing_routing_test, matching_penalty_is_in_cost_limit) {
   auto const& w = *ways_;
   auto const& l = *lookup_;
@@ -62,8 +64,6 @@ TEST_F(sharing_routing_test, matching_penalty_is_in_cost_limit) {
   auto const from = location{{49.020045, 8.000200}, kNoLevel};
   auto const to = location{{49.020000, 8.002800}, kNoLevel};
   auto const params = bike_sharing::parameters{};
-  auto const penalized_options =
-      route_options{.matching_penalty_factor_ = 100.0};
   // Without the component filter, which would only keep the closest candidate.
   auto from_matches = match_result{};
   from_matches.start(from.lvl_);
@@ -78,19 +78,26 @@ TEST_F(sharing_routing_test, matching_penalty_is_in_cost_limit) {
   closest.left_.node_ = node_idx_t::invalid();
   closest.right_.node_ = node_idx_t::invalid();
 
-  auto const baseline = route(
-      profile_parameters{params}, w, l, search_profile::kBikeSharing, from, to,
-      from_matches[match_idx_t{0U}], to_matches[match_idx_t{0U}],
-      std::chrono::seconds{3600}, direction::kForward, nullptr, &sharing,
-      nullptr, routing_algorithm::kDijkstra, std::nullopt,
-      route_options{.matching_penalty_factor_ = 0.0});
+  // Without the unusable candidate, the penalty is measured from the next one,
+  // so its additional distance is free.
+  auto const all = from_matches[match_idx_t{0U}];
+  auto without_closest = match_result{};
+  without_closest.start(all.lvl_);
+  for (auto i = std::size_t{1U}; i != all.size(); ++i) {
+    without_closest.add(all.dist_to_way_[i], all.way_[i], all.nodes_[i]);
+  }
+  without_closest.finish();
+
+  auto const route_with = [&](match_view_t const& matches) {
+    return route(profile_parameters{params}, w, l, search_profile::kBikeSharing,
+                 from, to, matches, to_matches[match_idx_t{0U}],
+                 std::chrono::seconds{3600}, direction::kForward, nullptr,
+                 &sharing, nullptr, routing_algorithm::kDijkstra);
+  };
+  auto const baseline = route_with(without_closest[match_idx_t{0U}]);
   ASSERT_TRUE(baseline.has_value());
 
-  auto const penalized = route(
-      profile_parameters{params}, w, l, search_profile::kBikeSharing, from, to,
-      from_matches[match_idx_t{0U}], to_matches[match_idx_t{0U}],
-      std::chrono::seconds{3600}, direction::kForward, nullptr, &sharing,
-      nullptr, routing_algorithm::kDijkstra, std::nullopt, penalized_options);
+  auto const penalized = route_with(all);
   ASSERT_TRUE(penalized.has_value());
   EXPECT_GT(penalized->cost_, baseline->cost_);
   EXPECT_EQ(

@@ -33,12 +33,6 @@ struct bidirectional;
 
 struct sharing_data;
 
-inline constexpr auto kDefaultMatchingPenaltyFactor = 20.0;
-
-struct route_options {
-  double matching_penalty_factor_{kDefaultMatchingPenaltyFactor};
-};
-
 struct one_to_many_state {
   virtual ~one_to_many_state() = default;
   virtual std::vector<std::optional<path>> const& results() const = 0;
@@ -64,8 +58,7 @@ std::unique_ptr<one_to_many_state> route_one_to_many(
     elevation_storage const* = nullptr,
     std::function<bool(path const&)> const& do_reconstruct =
         [](path const&) { return false; },
-    std::optional<routing_time_t> = std::nullopt,
-    route_options const& = {});
+    std::optional<routing_time_t> = std::nullopt);
 
 std::vector<std::optional<path>> route(
     profile_parameters const&,
@@ -82,8 +75,7 @@ std::vector<std::optional<path>> route(
     elevation_storage const* = nullptr,
     std::function<bool(path const&)> const& do_reconstruct =
         [](path const&) { return false; },
-    std::optional<routing_time_t> = std::nullopt,
-    route_options const& = {});
+    std::optional<routing_time_t> = std::nullopt);
 
 std::optional<path> route(profile_parameters const&,
                           ways const&,
@@ -98,8 +90,7 @@ std::optional<path> route(profile_parameters const&,
                           sharing_data const* sharing = nullptr,
                           elevation_storage const* = nullptr,
                           routing_algorithm = routing_algorithm::kDijkstra,
-                          std::optional<routing_time_t> = std::nullopt,
-                          route_options const& = {});
+                          std::optional<routing_time_t> = std::nullopt);
 
 std::optional<path> route_bidirectional(
     profile_parameters const&,
@@ -113,23 +104,22 @@ std::optional<path> route_bidirectional(
     double max_match_distance,
     bitvec<node_idx_t> const* blocked = nullptr,
     sharing_data const* sharing = nullptr,
-    elevation_storage const* = nullptr,
-    route_options const& = {});
+    elevation_storage const* = nullptr);
 
-std::optional<path> route_dijkstra(profile_parameters const&,
-                                   ways const&,
-                                   lookup const&,
-                                   search_profile,
-                                   location const& from,
-                                   location const& to,
-                                   std::chrono::seconds max_duration,
-                                   direction,
-                                   double max_match_distance,
-                                   bitvec<node_idx_t> const* blocked = nullptr,
-                                   sharing_data const* sharing = nullptr,
-                                   elevation_storage const* = nullptr,
-                                   std::optional<routing_time_t> = std::nullopt,
-                                   route_options const& = {});
+std::optional<path> route_dijkstra(
+    profile_parameters const&,
+    ways const&,
+    lookup const&,
+    search_profile,
+    location const& from,
+    location const& to,
+    std::chrono::seconds max_duration,
+    direction,
+    double max_match_distance,
+    bitvec<node_idx_t> const* blocked = nullptr,
+    sharing_data const* sharing = nullptr,
+    elevation_storage const* = nullptr,
+    std::optional<routing_time_t> = std::nullopt);
 
 std::optional<path> route_astar(profile_parameters const&,
                                 ways const&,
@@ -143,8 +133,7 @@ std::optional<path> route_astar(profile_parameters const&,
                                 bitvec<node_idx_t> const* blocked = nullptr,
                                 sharing_data const* sharing = nullptr,
                                 elevation_storage const* = nullptr,
-                                std::optional<routing_time_t> = std::nullopt,
-                                route_options const& = {});
+                                std::optional<routing_time_t> = std::nullopt);
 
 std::optional<path> route(profile_parameters const&,
                           ways const& w,
@@ -160,7 +149,6 @@ std::optional<path> route(profile_parameters const&,
                           sharing_data const* sharing = nullptr,
                           elevation_storage const* = nullptr,
                           routing_algorithm = routing_algorithm::kDijkstra,
-                          std::optional<routing_time_t> = std::nullopt,
-                          route_options const& = {});
+                          std::optional<routing_time_t> = std::nullopt);
 
 }  // namespace osr
