@@ -106,7 +106,7 @@ path reconstruct_bi(typename P::parameters const& params,
       auto const expected_cost = static_cast<cost_t>(
           e.cost(forward_n) - b.template get_cost<direction::kForward>(*pred));
       forward_dist +=
-          add_path<P>(params, w, *w.r_, blocked, sharing, elevations, *pred,
+          add_path<P>(params, w, l, *w.r_, blocked, sharing, elevations, *pred,
                       forward_n, pred_duration, {}, expected_cost,
                       clamp_sub_duration(e.duration(forward_n), pred_duration),
                       forward_segments, dir);
@@ -153,7 +153,7 @@ path reconstruct_bi(typename P::parameters const& params,
       auto const expected_duration =
           clamp_sub_duration(curr_duration, pred_duration);
       backward_dist +=
-          add_path<P>(params, w, *w.r_, blocked, sharing, elevations, *pred,
+          add_path<P>(params, w, l, *w.r_, blocked, sharing, elevations, *pred,
                       backward_n, pred_duration, {}, expected_cost,
                       expected_duration, backward_segments, opposite(dir));
     } else {
@@ -252,8 +252,8 @@ path reconstruct(typename P::parameters const& params,
           search.cost_.at(pred->get_key()).duration(*pred);
       auto const expected_cost =
           static_cast<cost_t>(e.cost(n) - search.get_cost(*pred));
-      dist += add_path<P>(params, w, *w.r_, blocked, sharing, elevations, *pred,
-                          n, pred_duration, start_time, expected_cost,
+      dist += add_path<P>(params, w, l, *w.r_, blocked, sharing, elevations,
+                          *pred, n, pred_duration, start_time, expected_cost,
                           clamp_sub_duration(e.duration(n), pred_duration),
                           segments, dir);
     } else {
