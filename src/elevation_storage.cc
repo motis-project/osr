@@ -155,7 +155,7 @@ node_point_map calculate_points(path_vec& paths,
           points[node_idx] = w.get_node_pos(node_idx);
         }
       },
-      pt->sparse_update_fn());
+      pt->update_fn());
 
   return points;
 }
@@ -256,7 +256,7 @@ encoding_result_t calculate_way_encodings(
           result.encodings_.emplace_back(elevations);
         }
       },
-      pt->sparse_update_fn());
+      pt->update_fn());
 
   return result;
 }

@@ -153,7 +153,7 @@ void ways::compute_big_street_neighbors() {
 
   auto pt = utl::get_active_progress_tracker();
 
-  auto const update_progress = pt->sparse_update_fn();
+  auto const update_progress = pt->update_fn();
 
   auto is_orig_big_street = std::vector<bool>(n_ways());
   for (auto const [i, p] : utl::enumerate(r_->way_properties_)) {
@@ -208,11 +208,8 @@ void ways::connect_ways() {
     node_way_counter_.for_each_multi([&](std::uint64_t const b_idx) {
       auto const i = osm_node_idx_t{b_idx};
       node_to_osm_.push_back(i);
-      if (to_idx(node_idx) % utl::progress_tracker::kSparseUpdateInterval ==
-          0U) {
-        pt->update(b_idx);
-      }
       ++node_idx;
+      pt->update(b_idx);
     });
     r_->node_is_restricted_.resize(to_idx(node_idx));
   }
@@ -355,7 +352,7 @@ void ways::connect_ways() {
             r_->node_turn_bearings_[n][pos] = bearing;
           }
         },
-        pt->sparse_update_fn());
+        pt->update_fn());
     way_bearings = {};
 
     // Sort node_ways_ / node_in_way_idx_ / node_turn_bearings_ by
@@ -390,7 +387,7 @@ void ways::connect_ways() {
             bearings[i] = x.bearing_;
           }
         },
-        pt->sparse_update_fn());
+        pt->update_fn());
   }
 
   node_way_counter_ = {};
