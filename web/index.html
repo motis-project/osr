@@ -164,12 +164,9 @@
     const meta = document.getElementById('journey-info');
 
     const updateRoute = async () => {
-        try {
-            const route = await getRoute();
-            if (!route.error) {
-                map.getSource('path').setData(route);
-            }
-        } catch (e) {
+        const route = await getRoute();
+        if (!route.error) {
+            map.getSource('path')?.setData(route);
         }
     }
 
@@ -230,6 +227,12 @@
         return table;
     }
 
+    const emptyFeatureCollection = () => ({
+        "type": "FeatureCollection",
+        "metadata": {},
+        "features": []
+    });
+
     const getRoute = async () => {
         const response = await fetch(`${window.origin}/api/route`, {
             method: 'POST',
@@ -254,6 +257,10 @@
                 footSpeed: parseFloat(query.footSpeed)
             })
         });
+        if (!response.ok) {
+            meta.innerHTML = `no route: ${await response.text()}`;
+            return emptyFeatureCollection();
+        }
         try {
             const r = await response.json();
             const min = Math.floor(r.metadata.duration / 60);
@@ -264,11 +271,7 @@
             return r;
         } catch (e) {
             console.log(e);
-            return {
-                "type": "FeatureCollection",
-                "metadata": {},
-                "features": []
-            };
+            return emptyFeatureCollection();
         }
     };
 
@@ -301,7 +304,7 @@
                 waypoints: bounds.toArray().flat()
             })
         });
-        return await response.json();
+        return response.ok ? await response.json() : emptyFeatureCollection();
     };
 
     const getLevels = async (bounds) => {
@@ -407,20 +410,27 @@
     });
 
     const updateGraph = async () => {
+        const removeGraph = () => {
+            ['graph-geometry', 'graph-edge', 'graph-node', 'platform-node',
+                'platform-edge'].forEach((l) => {
+                if (map.getLayer(l)) {
+                    map.removeLayer(l);
+                }
+            });
+            ['graph', 'platform'].forEach((s) => {
+                if (map.getSource(s)) {
+                    map.removeSource(s);
+                }
+            });
+        };
         if (!graphActive && graph) {
             graph = false;
-            try {
-                graphToggle.classList.remove('active');
-                map.removeLayer('graph-geometry');
-                map.removeLayer('graph-edge');
-                map.removeLayer('graph-node');
-                map.removeSource('graph');
-            } catch (e) {
-                // ignore, already removed
-            }
+            graphToggle.classList.remove('active');
+            removeGraph();
         } else if (graphActive && !graph) {
             graph = true;
             graphToggle.classList.add('active');
+            removeGraph();
             map.addSource('graph', {
                 type: 'geojson',
                 data: await getGraph(map.getBounds())
