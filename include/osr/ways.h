@@ -68,14 +68,18 @@ struct restriction {
   template <typename Ctx>
   friend void deserialize(Ctx const&, restriction*) {}
 
-  way_pos_t from_ : 4;
-  way_pos_t to_ : 4;
+  static_assert(kMaxWaysPerNode <= 32U, "from_ / to_ hold a way position");
+
+  way_pos_t from_ : 5;
+  way_pos_t to_ : 5;
   way_pos_t applies_to_default_ : 1;
   way_pos_t applies_to_bus_ : 1;
   way_pos_t applies_to_hgv_ : 1;
   conditional_condition_set_idx_t condition_set_{
       conditional_condition_set_idx_t::invalid()};
 };
+
+static_assert(sizeof(restriction) == 8U);
 
 enum class hgv_info_field : std::uint16_t {
   kAccessFwd = 1U << 0U,

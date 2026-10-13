@@ -21,6 +21,8 @@ struct car_parking_slot {
   node_idx_t pred_{node_idx_t::invalid()};
   cost_t cost_{kInfeasible};
   level_t pred_lvl_{kNoLevel};
+  static_assert(kMaxWaysPerNode <= 32U, "pred_way_ holds a way position");
+
   std::uint8_t pred_way_ : 5 {0U};
   std::uint8_t pred_dir_ : 1 {0U};
   std::uint8_t pred_type_ : 1 {0U};
