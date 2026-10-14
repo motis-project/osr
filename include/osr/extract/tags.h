@@ -134,10 +134,15 @@ private:
         case cista::hash("sidewalk:both"):
         case cista::hash("sidewalk:left"): [[fallthrough]];
         case cista::hash("sidewalk:right"):
-          if (value == "separate"sv) {
-            sidewalk_separate_ = true;
+          switch (cista::hash(std::string_view{value})) {
+            case cista::hash("separate"): sidewalk_separate_ = true; break;
+            case cista::hash("yes"):
+            case cista::hash("both"):
+            case cista::hash("left"): [[fallthrough]];
+            case cista::hash("right"): sidewalk_ = true; break;
           }
           break;
+        case cista::hash("motorroad"): motorroad_ = value == "yes"sv; break;
         case cista::hash("cycleway"): cycleway_ = value; break;
         case cista::hash("motorcar"):
           motorcar_ = value;
@@ -242,6 +247,10 @@ private:
 public:
   bool is_platform() const { return is_platform_ && !is_construction_; }
 
+  bool is_trunk() const {
+    return highway_ == "trunk" || highway_ == "trunk_link";
+  }
+
   // Gate that may have to be opened: no access tags say it is open.
   bool is_gate() const {
     switch (cista::hash(barrier_)) {
@@ -340,6 +349,10 @@ public:
 
   // https://wiki.openstreetmap.org/wiki/Key:sidewalk
   bool sidewalk_separate_{false};
+  bool sidewalk_{false};
+
+  // https://wiki.openstreetmap.org/wiki/Key:motorroad
+  bool motorroad_{false};
 
   // https://wiki.openstreetmap.org/wiki/Key:cycleway
   std::string_view cycleway_;
@@ -469,6 +482,10 @@ struct foot_profile {
       case cista::hash("designated"): return override::kWhitelist;
     }
 
+    if (t.motorroad_) {
+      return override::kBlacklist;
+    }
+
     if (t.is_platform_ || t.is_parking_) {
       return override::kWhitelist;
     }
@@ -505,6 +522,8 @@ struct foot_profile {
         case cista::hash("corridor"):
         case cista::hash("footway"): [[fallthrough]];
         case cista::hash("pier"): return true;
+        case cista::hash("trunk"): [[fallthrough]];
+        case cista::hash("trunk_link"): return t.sidewalk_;
         default: return false;
       }
     } else {
@@ -512,8 +531,10 @@ struct foot_profile {
     }
   }
 
-  static bool access_with_penalty(tags const&, osm_obj_type const) {
-    return false;
+  // Trunk roads without sidewalk or foot tags: walkable, but avoided.
+  static bool access_with_penalty(tags const& t, osm_obj_type const type) {
+    return type == osm_obj_type::kWay && t.is_trunk() && !t.sidewalk_ &&
+           access_override(t, type) == override::kNone;
   }
 };
 

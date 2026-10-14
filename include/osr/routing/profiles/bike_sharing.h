@@ -66,7 +66,8 @@ struct bike_sharing {
                      .has_conditionals_ = false,
                      .is_in_low_emission_zone_ = false,
                      .is_detour_ = false,
-                     .is_oneway_reverse_ = false};
+                     .is_oneway_reverse_ = false,
+                     .is_foot_accessible_with_penalty_ = false};
 
   static constexpr auto const kAdditionalNodeProperties =
       node_properties{.from_level_ = 0,
