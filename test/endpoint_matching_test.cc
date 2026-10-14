@@ -56,6 +56,20 @@ TEST_F(endpoint_matching_test, endpoint_matches_work_with_all_algorithms) {
   EXPECT_EQ(dijkstra->duration_, bidirectional->duration_);
 }
 
+// Nothing within 1 m: the lookup widens the search, but the match keeps the
+// requested distance.
+TEST_F(endpoint_matching_test, match_keeps_requested_distance) {
+  using profile_t = foot<false, elevator_tracking>;
+  auto m = match_result{};
+  lookup_->match<profile_t>(profile_t::parameters{},
+                            location{{49.010100, 8.000500}, kNoLevel}, false,
+                            direction::kForward, 1.0, nullptr, m);
+  auto const v = m[match_idx_t{0U}];
+  ASSERT_FALSE(v.empty());
+  EXPECT_GT(v.dist_to_way_[0], 1.0F);
+  EXPECT_EQ(1.0F, v.max_match_distance_);
+}
+
 TEST_F(endpoint_matching_test,
        reconstructed_duration_excludes_matching_penalty) {
   auto const& w = *ways_;
