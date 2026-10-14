@@ -233,8 +233,8 @@ struct car_sharing {
 
     std::uint8_t pred_way_ : 5 {0U};
     std::uint8_t pred_dir_ : 1 {0U};
-    std::uint8_t pred_type_ : 2 {
-        static_cast<std::uint8_t>(node_type::kInvalid)};
+    std::uint8_t pred_type_
+        : 2 {static_cast<std::uint8_t>(node_type::kInvalid)};
     duration_t duration_{kMaxDuration};
     OSR_NO_UNIQUE_ADDRESS Tracking tracking_{};
 
