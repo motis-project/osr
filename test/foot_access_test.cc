@@ -26,6 +26,7 @@ namespace osr {
 // - 500, 501: footway with an open gate (node 51)
 // - 600, 601: trunk, 610, 611: cycleway 10 m north of it, connected at both
 //   ends by the footways 620, 621
+// - 700, 701: trunk with maxspeed=50
 constexpr auto const kOsm = R"(
 <osm version="0.6" generator="osr-test">
   <node id="10" lat="49.000000" lon="8.000000"/>
@@ -117,6 +118,17 @@ constexpr auto const kOsm = R"(
   <way id="621">
     <nd ref="62"/><nd ref="65"/>
     <tag k="highway" v="footway"/>
+  </way>
+  <node id="70" lat="49.060000" lon="8.000000"/>
+  <node id="71" lat="49.060000" lon="8.003000"/>
+  <node id="72" lat="49.060000" lon="8.006000"/>
+  <way id="700">
+    <nd ref="70"/><nd ref="71"/>
+    <tag k="highway" v="trunk"/><tag k="maxspeed" v="50"/>
+  </way>
+  <way id="701">
+    <nd ref="71"/><nd ref="72"/>
+    <tag k="highway" v="trunk"/><tag k="maxspeed" v="50"/>
   </way>
 </osm>
 )";
@@ -230,6 +242,14 @@ TEST_F(foot_access_test, cycleway_does_not_shadow_trunk) {
   auto const trunk = *w_->find_way(osm_way_idx_t{600U});
   auto const ways = m[match_idx_t{0U}].way_;
   EXPECT_NE(end(ways), std::find(begin(ways), end(ways), trunk));
+}
+
+TEST_F(foot_access_test, slow_trunk_has_no_factor) {
+  auto const once = route(49.06, {.trunk_cost_factor_ = 1.0F});
+  auto const twice = route(49.06, {.trunk_cost_factor_ = 2.0F});
+  ASSERT_TRUE(once.has_value());
+  ASSERT_TRUE(twice.has_value());
+  EXPECT_EQ(once->cost_, twice->cost_);
 }
 
 }  // namespace osr
