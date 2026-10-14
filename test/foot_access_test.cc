@@ -1,6 +1,7 @@
 #include "gtest/gtest.h"
 
 #include <chrono>
+#include <algorithm>
 #include <filesystem>
 #include <memory>
 #include <optional>
@@ -17,11 +18,25 @@ namespace fs = std::filesystem;
 
 namespace osr {
 
-// Separate footways, 1.1 km apart, each of two ways meeting at 8.003:
-// - 400, 401: with a gate (node 41)
-// - 500, 501: with an open gate (node 51)
+// Separate roads, 1.1 km apart, each of two ways meeting at 8.003:
+// - 100, 101: trunk without foot tags
+// - 200, 201: trunk with sidewalk=both
+// - 300, 301: trunk with motorroad=yes
+// - 400, 401: footway with a gate (node 41)
+// - 500, 501: footway with an open gate (node 51)
+// - 600, 601: trunk, 610, 611: cycleway 10 m north of it, connected at both
+//   ends by the footways 620, 621
 constexpr auto const kOsm = R"(
 <osm version="0.6" generator="osr-test">
+  <node id="10" lat="49.000000" lon="8.000000"/>
+  <node id="11" lat="49.000000" lon="8.003000"/>
+  <node id="12" lat="49.000000" lon="8.006000"/>
+  <node id="20" lat="49.010000" lon="8.000000"/>
+  <node id="21" lat="49.010000" lon="8.003000"/>
+  <node id="22" lat="49.010000" lon="8.006000"/>
+  <node id="30" lat="49.020000" lon="8.000000"/>
+  <node id="31" lat="49.020000" lon="8.003000"/>
+  <node id="32" lat="49.020000" lon="8.006000"/>
   <node id="40" lat="49.030000" lon="8.000000"/>
   <node id="41" lat="49.030000" lon="8.003000">
     <tag k="barrier" v="gate"/>
@@ -33,6 +48,30 @@ constexpr auto const kOsm = R"(
     <tag k="access" v="yes"/>
   </node>
   <node id="52" lat="49.040000" lon="8.006000"/>
+  <way id="100">
+    <nd ref="10"/><nd ref="11"/>
+    <tag k="highway" v="trunk"/>
+  </way>
+  <way id="101">
+    <nd ref="11"/><nd ref="12"/>
+    <tag k="highway" v="trunk"/>
+  </way>
+  <way id="200">
+    <nd ref="20"/><nd ref="21"/>
+    <tag k="highway" v="trunk"/><tag k="sidewalk" v="both"/>
+  </way>
+  <way id="201">
+    <nd ref="21"/><nd ref="22"/>
+    <tag k="highway" v="trunk"/><tag k="sidewalk" v="both"/>
+  </way>
+  <way id="300">
+    <nd ref="30"/><nd ref="31"/>
+    <tag k="highway" v="trunk"/><tag k="motorroad" v="yes"/>
+  </way>
+  <way id="301">
+    <nd ref="31"/><nd ref="32"/>
+    <tag k="highway" v="trunk"/><tag k="motorroad" v="yes"/>
+  </way>
   <way id="400">
     <nd ref="40"/><nd ref="41"/>
     <tag k="highway" v="footway"/>
@@ -47,6 +86,36 @@ constexpr auto const kOsm = R"(
   </way>
   <way id="501">
     <nd ref="51"/><nd ref="52"/>
+    <tag k="highway" v="footway"/>
+  </way>
+  <node id="60" lat="49.050000" lon="8.000000"/>
+  <node id="61" lat="49.050000" lon="8.003000"/>
+  <node id="62" lat="49.050000" lon="8.006000"/>
+  <node id="63" lat="49.050090" lon="8.000000"/>
+  <node id="64" lat="49.050090" lon="8.003000"/>
+  <node id="65" lat="49.050090" lon="8.006000"/>
+  <way id="600">
+    <nd ref="60"/><nd ref="61"/>
+    <tag k="highway" v="trunk"/>
+  </way>
+  <way id="601">
+    <nd ref="61"/><nd ref="62"/>
+    <tag k="highway" v="trunk"/>
+  </way>
+  <way id="610">
+    <nd ref="63"/><nd ref="64"/>
+    <tag k="highway" v="cycleway"/>
+  </way>
+  <way id="611">
+    <nd ref="64"/><nd ref="65"/>
+    <tag k="highway" v="cycleway"/>
+  </way>
+  <way id="620">
+    <nd ref="60"/><nd ref="63"/>
+    <tag k="highway" v="footway"/>
+  </way>
+  <way id="621">
+    <nd ref="62"/><nd ref="65"/>
     <tag k="highway" v="footway"/>
   </way>
 </osm>
@@ -80,10 +149,48 @@ struct foot_access_test : ::testing::Test {
                       nullptr, nullptr, nullptr, routing_algorithm::kDijkstra);
   }
 
+  static way_properties props(osm_way_idx_t const id) {
+    return w_->r_->way_properties_[*w_->find_way(id)];
+  }
+
   static inline fs::path dir_;
   static inline std::unique_ptr<ways> w_;
   static inline std::unique_ptr<lookup> l_;
 };
+
+TEST_F(foot_access_test, trunk_is_walkable_with_penalty) {
+  auto const p = props(osm_way_idx_t{100U});
+  EXPECT_FALSE(p.is_foot_accessible());
+  EXPECT_TRUE(p.is_foot_accessible_with_penalty());
+  EXPECT_TRUE(is_accessible(component_class::kFoot, p));
+
+  auto const once = route(49.0, {.trunk_cost_factor_ = 1.0F});
+  auto const twice = route(49.0, {.trunk_cost_factor_ = 2.0F});
+  ASSERT_TRUE(once.has_value());
+  ASSERT_TRUE(twice.has_value());
+  EXPECT_NEAR(292.0, once->dist_, 2.0);
+  EXPECT_EQ(once->duration_, twice->duration_);
+  EXPECT_NEAR(2.0 * once->cost_, twice->cost_, 2.0);
+}
+
+TEST_F(foot_access_test, trunk_with_sidewalk_has_no_penalty) {
+  auto const p = props(osm_way_idx_t{200U});
+  EXPECT_TRUE(p.is_foot_accessible());
+  EXPECT_FALSE(p.is_foot_accessible_with_penalty());
+
+  auto const once = route(49.01, {.trunk_cost_factor_ = 1.0F});
+  auto const twice = route(49.01, {.trunk_cost_factor_ = 2.0F});
+  ASSERT_TRUE(once.has_value());
+  ASSERT_TRUE(twice.has_value());
+  EXPECT_EQ(once->cost_, twice->cost_);
+}
+
+TEST_F(foot_access_test, motorroad_is_not_walkable) {
+  auto const p = props(osm_way_idx_t{300U});
+  EXPECT_FALSE(p.is_foot_accessible());
+  EXPECT_FALSE(p.is_foot_accessible_with_penalty());
+  EXPECT_FALSE(route(49.02, {}).has_value());
+}
 
 TEST_F(foot_access_test, gate_costs) {
   auto const free = route(49.03, {.gate_cost_ = 0U});
@@ -98,6 +205,31 @@ TEST_F(foot_access_test, gate_costs) {
   ASSERT_TRUE(open_free.has_value());
   ASSERT_TRUE(open_gate.has_value());
   EXPECT_EQ(open_free->cost_, open_gate->cost_);
+}
+
+// A closer trunk candidate must not drop the cycleway (less penalised).
+TEST_F(foot_access_test, trunk_does_not_shadow_cycleway) {
+  using profile_t = foot<false, elevator_tracking>;
+  auto m = match_result{};
+  l_->match<profile_t>(profile_t::parameters{},
+                       location{{49.050030, 8.0015}, kNoLevel}, false,
+                       direction::kForward, 20.0, nullptr, m);
+  auto const cycleway = *w_->find_way(osm_way_idx_t{610U});
+  auto const ways = m[match_idx_t{0U}].way_;
+  EXPECT_NE(end(ways), std::find(begin(ways), end(ways), cycleway));
+}
+
+// Neither does a closer cycleway drop the trunk: both are penalised, but for
+// different reasons.
+TEST_F(foot_access_test, cycleway_does_not_shadow_trunk) {
+  using profile_t = foot<false, elevator_tracking>;
+  auto m = match_result{};
+  l_->match<profile_t>(profile_t::parameters{},
+                       location{{49.050080, 8.0015}, kNoLevel}, false,
+                       direction::kForward, 20.0, nullptr, m);
+  auto const trunk = *w_->find_way(osm_way_idx_t{600U});
+  auto const ways = m[match_idx_t{0U}].way_;
+  EXPECT_NE(end(ways), std::find(begin(ways), end(ways), trunk));
 }
 
 }  // namespace osr
