@@ -23,8 +23,8 @@ namespace osr {
 // - 100, 101: trunk without foot tags
 // - 200, 201: trunk with sidewalk=both
 // - 300, 301: trunk with motorroad=yes
-// - 400, 401: footway with a gate (node 41)
-// - 500, 501: footway with an open gate (node 51)
+// - 400, 401: path with a gate (node 41)
+// - 500, 501: path with an open gate (node 51)
 // - 600, 601: trunk, 610, 611: cycleway 10 m north of it, connected at both
 //   ends by the footways 620, 621
 // - 700, 701: trunk with maxspeed=50
@@ -76,19 +76,19 @@ constexpr auto const kOsm = R"(
   </way>
   <way id="400">
     <nd ref="40"/><nd ref="41"/>
-    <tag k="highway" v="footway"/>
+    <tag k="highway" v="path"/>
   </way>
   <way id="401">
     <nd ref="41"/><nd ref="42"/>
-    <tag k="highway" v="footway"/>
+    <tag k="highway" v="path"/>
   </way>
   <way id="500">
     <nd ref="50"/><nd ref="51"/>
-    <tag k="highway" v="footway"/>
+    <tag k="highway" v="path"/>
   </way>
   <way id="501">
     <nd ref="51"/><nd ref="52"/>
-    <tag k="highway" v="footway"/>
+    <tag k="highway" v="path"/>
   </way>
   <node id="60" lat="49.050000" lon="8.000000"/>
   <node id="61" lat="49.050000" lon="8.003000"/>
@@ -277,6 +277,14 @@ TEST_F(foot_access_test, bike_on_trunk) {
   EXPECT_EQ(once->duration_, twice->duration_);
   EXPECT_NEAR(2.0 * once->cost_, twice->cost_, 2.0);
   EXPECT_FALSE(bike_route(49.02, {}).has_value());
+}
+
+TEST_F(foot_access_test, bike_gate_costs) {
+  auto const free = bike_route(49.03, {.gate_cost_ = 0U});
+  auto const gate = bike_route(49.03, {.gate_cost_ = 60U});
+  ASSERT_TRUE(free.has_value());
+  ASSERT_TRUE(gate.has_value());
+  EXPECT_EQ(free->cost_ + 60U, gate->cost_);
 }
 
 }  // namespace osr
