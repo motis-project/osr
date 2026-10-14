@@ -81,7 +81,8 @@ struct bike_sharing {
                       .is_parking_ = false,
                       .is_steps_ = false,
                       .to_level_ = 0,
-                      .is_bus_accessible_with_penalty_ = false};
+                      .is_bus_accessible_with_penalty_ = false,
+                      .is_gate_ = false};
 
   enum class node_type : std::uint8_t {
     kInitialFoot,

@@ -67,6 +67,7 @@ private:
         case cista::hash("amenity"):
           is_parking_ |=
               (value == "parking"sv || value == "parking_entrance"sv);
+          is_ticket_validator_ = value == "ticket_validator"sv;
           break;
         case cista::hash("building"):
           is_parking_ |= value == "parking"sv;
@@ -243,6 +244,19 @@ private:
 public:
   bool is_platform() const { return is_platform_ && !is_construction_; }
 
+  // Gate that may have to be opened: no access tags say it is open.
+  bool is_gate() const {
+    switch (cista::hash(barrier_)) {
+      case cista::hash("gate"):
+      case cista::hash("swing_gate"):
+      case cista::hash("sliding_gate"): [[fallthrough]];
+      case cista::hash("hampshire_gate"):
+        return access_ == override::kNone && foot_.empty() &&
+               !is_ticket_validator_;
+      default: return false;
+    }
+  }
+
   bool is_public_transport_route() const {
     switch (cista::hash(route_type_)) {
       case cista::hash("bus"):
@@ -289,6 +303,9 @@ public:
 
   // https://wiki.openstreetmap.org/wiki/Key:kerb
   std::string_view kerb_;
+
+  // https://wiki.openstreetmap.org/wiki/Tag:amenity=ticket_validator
+  bool is_ticket_validator_{false};
 
   // https://wiki.openstreetmap.org/wiki/Key:motorcar
   std::string_view motorcar_;
