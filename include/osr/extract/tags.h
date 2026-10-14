@@ -111,6 +111,7 @@ private:
         case cista::hash("hazmat"): hazmat_ = value; break;
         case cista::hash("hazmat:water"): hazmat_water_ = value; break;
         case cista::hash("foot"): foot_ = value; break;
+        case cista::hash("wheelchair"): wheelchair_ = value; break;
         case cista::hash("bicycle"): bicycle_ = value; break;
         case cista::hash("highway"):
           highway_ = value;
@@ -143,6 +144,7 @@ private:
           is_destination_ |= motorcar_ == "destination";
           break;
         case cista::hash("barrier"): barrier_ = value; break;
+        case cista::hash("kerb"): kerb_ = value; break;
         case cista::hash("platform_edge"): is_platform_ = true; break;
         case cista::hash("public_transport"):
           switch (cista::hash(std::string_view{value})) {
@@ -285,6 +287,9 @@ public:
   // https://wiki.openstreetmap.org/wiki/Key:barrier
   std::string_view barrier_;
 
+  // https://wiki.openstreetmap.org/wiki/Key:kerb
+  std::string_view kerb_;
+
   // https://wiki.openstreetmap.org/wiki/Key:motorcar
   std::string_view motorcar_;
 
@@ -311,6 +316,9 @@ public:
 
   // https://wiki.openstreetmap.org/wiki/Key:foot
   std::string_view foot_;
+
+  // https://wiki.openstreetmap.org/wiki/Key:wheelchair
+  std::string_view wheelchair_;
 
   // https://wiki.openstreetmap.org/wiki/Key:bicycle
   std::string_view bicycle_;
@@ -430,6 +438,16 @@ bool is_accessible_with_penalty(tags const& o, osm_obj_type const type) {
   return T::access_with_penalty(o, type);
 }
 
+bool is_steps(tags const& t, osm_obj_type const type) {
+  using namespace std::string_view_literals;
+  switch (type) {
+    case osr::osm_obj_type::kWay: return t.highway_ == "steps"sv;
+    case osr::osm_obj_type::kNode:
+      return !t.kerb_.empty() && (t.kerb_ == "yes"sv || t.kerb_ == "raised"sv);
+    default: return false;
+  }
+}
+
 struct foot_profile {
   static override access_override(tags const& t, osm_obj_type) {
     if (t.is_route_ || t.sidewalk_separate_ || t.is_ferry_route_) {
@@ -497,6 +515,34 @@ struct foot_profile {
 
   static bool access_with_penalty(tags const&, osm_obj_type const) {
     return false;
+  }
+};
+
+struct wheelchair_profile {
+  static override access_override(tags const& t, osm_obj_type const type) {
+    switch (cista::hash(t.wheelchair_)) {
+      case cista::hash("yes"):
+      case cista::hash("limited"): [[fallthrough]];
+      case cista::hash("designated"): return override::kWhitelist;
+      case cista::hash("no"): return override::kBlacklist;
+    }
+    switch (cista::hash(t.kerb_)) {
+      case cista::hash("rolled"): return override::kBlacklist;
+      case cista::hash("raised"):
+        if (!t.is_platform()) {
+          return override::kBlacklist;
+        }
+    }
+
+    return foot_profile::access_override(t, type);
+  }
+
+  static bool default_access(tags const& t, osm_obj_type const type) {
+    return foot_profile::default_access(t, type);
+  }
+
+  static bool access_with_penalty(tags const& t, osm_obj_type const type) {
+    return foot_profile::access_with_penalty(t, type);
   }
 };
 
@@ -588,6 +634,11 @@ struct car_profile {
         case cista::hash("coupure"):
         case cista::hash("height_restrictor"): [[fallthrough]];
         case cista::hash("arch"): break;
+        case cista::hash("kerb"):
+          if (t.kerb_.empty() || is_steps(t, type)) {
+            return override::kBlacklist;
+          }
+          break;
         default: return override::kBlacklist;
       }
     }

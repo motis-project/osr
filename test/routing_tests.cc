@@ -36,7 +36,7 @@ std::string extract_and_route(
                             nullptr, osr::routing_algorithm::kDijkstra);
   utl::verify(p.has_value(), "{}: from={} to={} -> no route", path,
               fmt::streamed(from), fmt::streamed(to));
-  return osr::to_featurecollection(w, *p, false);
+  return osr::to_featurecollection(w, p, false);
 }
 
 TEST(routing, foot_island) {
