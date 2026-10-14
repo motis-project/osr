@@ -41,6 +41,7 @@ struct bike {
     using profile_t =
         bike<Costing, ElevationUpCost, ElevationExponentThousandth>;
     float speed_meters_per_second_{4.2F};
+    float trunk_cost_factor_{2.0F};
   };
 
   struct node {
@@ -290,14 +291,18 @@ struct bike {
       std::optional<routing_time_t> const,
       duration_t const,
       direction const) {
-    if (e.is_bike_accessible() && e.is_bike_direction_allowed(dir)) {
-      auto const cost = static_cast<cost_t>(
-          std::round(static_cast<double>(dist) /
-                     (params.speed_meters_per_second_ +
-                      (Costing == bike_costing::kFast
-                           ? 0
-                           : (e.is_big_street_ ? -0.7 : 0) +
-                                 (e.motor_vehicle_no_ ? 0.5 : 0.0)))));
+    auto const trunk =
+        !e.is_bike_accessible() && e.is_bike_accessible_with_penalty();
+    if ((e.is_bike_accessible() || trunk) && e.is_bike_direction_allowed(dir)) {
+      auto const ride = static_cast<double>(dist) /
+                        (params.speed_meters_per_second_ +
+                         (Costing == bike_costing::kFast
+                              ? 0
+                              : (e.is_big_street_ ? -0.7 : 0) +
+                                    (e.motor_vehicle_no_ ? 0.5 : 0.0)));
+      auto const cost = static_cast<cost_t>(std::round(
+          trunk ? ride * trunk_cost_factor(e, params.trunk_cost_factor_)
+                : ride));
       return {
           .cost_ = cost,
           .duration_ = duration_from_cost(static_cast<cost_t>(std::round(

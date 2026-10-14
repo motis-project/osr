@@ -283,6 +283,8 @@ way_properties get_way_properties(
   p.is_foot_accessible_ = is_accessible<foot_profile>(t, obj_type);
   p.is_foot_accessible_with_penalty_ =
       is_accessible_with_penalty<foot_profile>(t, obj_type);
+  p.is_bike_accessible_with_penalty_ =
+      is_accessible_with_penalty<bike_profile>(t, obj_type);
   p.is_bike_accessible_ = is_accessible<bike_profile>(t, obj_type);
   p.is_car_accessible_ = is_accessible<car_profile>(t, obj_type);
   p.is_bus_accessible_ = is_accessible<bus_profile>(t, obj_type);

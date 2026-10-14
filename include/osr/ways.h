@@ -171,12 +171,16 @@ struct way_properties {
   constexpr bool is_accessible() const {
     return is_car_accessible() || is_bike_accessible() ||
            is_foot_accessible() || is_foot_accessible_with_penalty() ||
-           is_bus_accessible() || is_bus_accessible_with_penalty() ||
-           is_railway_accessible() || is_railway_accessible_with_penalty() ||
-           is_ferry_accessible() || has_hgv_info() || has_conditionals();
+           is_bike_accessible_with_penalty() || is_bus_accessible() ||
+           is_bus_accessible_with_penalty() || is_railway_accessible() ||
+           is_railway_accessible_with_penalty() || is_ferry_accessible() ||
+           has_hgv_info() || has_conditionals();
   }
   constexpr bool is_car_accessible() const { return is_car_accessible_; }
   constexpr bool is_bike_accessible() const { return is_bike_accessible_; }
+  constexpr bool is_bike_accessible_with_penalty() const {
+    return is_bike_accessible_with_penalty_;
+  }
   constexpr bool is_foot_accessible() const { return is_foot_accessible_; }
   constexpr bool is_foot_accessible_with_penalty() const {
     return is_foot_accessible_with_penalty_;
@@ -282,6 +286,7 @@ struct way_properties {
   std::uint8_t is_detour_ : 1;
   std::uint8_t is_oneway_reverse_ : 1;
   std::uint8_t is_foot_accessible_with_penalty_ : 1;
+  std::uint8_t is_bike_accessible_with_penalty_ : 1;
 };
 
 static_assert(sizeof(way_properties) == 6);
@@ -357,7 +362,8 @@ constexpr bool is_accessible(component_class const c, way_properties const& p) {
       return p.is_foot_accessible() || p.is_foot_accessible_with_penalty() ||
              (p.is_bike_accessible() && !p.is_railway_accessible() &&
               !p.is_railway_accessible_with_penalty());
-    case component_class::kBike: return p.is_bike_accessible();
+    case component_class::kBike:
+      return p.is_bike_accessible() || p.is_bike_accessible_with_penalty();
     case component_class::kCar: return p.is_car_accessible();
   }
   return false;
@@ -365,13 +371,22 @@ constexpr bool is_accessible(component_class const c, way_properties const& p) {
 
 constexpr bool is_accessible_without_penalty(component_class const c,
                                              way_properties const& p) {
-  return c == component_class::kFoot ? p.is_foot_accessible()
-                                     : is_accessible(c, p);
+  switch (c) {
+    case component_class::kFoot: return p.is_foot_accessible();
+    case component_class::kBike: return p.is_bike_accessible();
+    case component_class::kCar: return p.is_car_accessible();
+  }
+  return false;
 }
 
 constexpr bool is_accessible_with_penalty(component_class const c,
                                           way_properties const& p) {
-  return c == component_class::kFoot && p.is_foot_accessible_with_penalty();
+  switch (c) {
+    case component_class::kFoot: return p.is_foot_accessible_with_penalty();
+    case component_class::kBike: return p.is_bike_accessible_with_penalty();
+    case component_class::kCar: return false;
+  }
+  return false;
 }
 
 // Trunk roads up to this speed limit (in towns) count like other big streets.

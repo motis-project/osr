@@ -8,6 +8,7 @@
 
 #include "osr/extract/extract.h"
 #include "osr/lookup.h"
+#include "osr/routing/profiles/bike.h"
 #include "osr/routing/profiles/foot.h"
 #include "osr/routing/route.h"
 #include "osr/ways.h"
@@ -161,6 +162,16 @@ struct foot_access_test : ::testing::Test {
                       nullptr, nullptr, nullptr, routing_algorithm::kDijkstra);
   }
 
+  static std::optional<path> bike_route(
+      double const lat,
+      bike<bike_costing::kSafe, kElevationNoCost>::parameters const& params) {
+    return osr::route(params, *w_, *l_, search_profile::kBike,
+                      location{{lat, 8.001}, kNoLevel},
+                      location{{lat, 8.005}, kNoLevel},
+                      std::chrono::seconds{3600}, direction::kForward, 20.0,
+                      nullptr, nullptr, nullptr, routing_algorithm::kDijkstra);
+  }
+
   static way_properties props(osm_way_idx_t const id) {
     return w_->r_->way_properties_[*w_->find_way(id)];
   }
@@ -250,6 +261,22 @@ TEST_F(foot_access_test, slow_trunk_has_no_factor) {
   ASSERT_TRUE(once.has_value());
   ASSERT_TRUE(twice.has_value());
   EXPECT_EQ(once->cost_, twice->cost_);
+}
+
+TEST_F(foot_access_test, bike_on_trunk) {
+  auto const p = props(osm_way_idx_t{100U});
+  EXPECT_FALSE(p.is_bike_accessible());
+  EXPECT_TRUE(p.is_bike_accessible_with_penalty());
+  EXPECT_TRUE(is_accessible(component_class::kBike, p));
+  EXPECT_FALSE(props(osm_way_idx_t{300U}).is_bike_accessible_with_penalty());
+
+  auto const once = bike_route(49.0, {.trunk_cost_factor_ = 1.0F});
+  auto const twice = bike_route(49.0, {.trunk_cost_factor_ = 2.0F});
+  ASSERT_TRUE(once.has_value());
+  ASSERT_TRUE(twice.has_value());
+  EXPECT_EQ(once->duration_, twice->duration_);
+  EXPECT_NEAR(2.0 * once->cost_, twice->cost_, 2.0);
+  EXPECT_FALSE(bike_route(49.02, {}).has_value());
 }
 
 }  // namespace osr
