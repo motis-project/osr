@@ -294,6 +294,7 @@ struct node_properties {
   constexpr bool is_multi_level() const { return is_multi_level_; }
   constexpr bool is_entrance() const { return is_entrance_; }
   constexpr bool is_parking() const { return is_parking_; }
+  constexpr bool is_gate() const { return is_gate_; }
 
   constexpr level_t from_level() const { return level_t{from_level_}; }
   constexpr level_t to_level() const { return level_t{to_level_}; }
@@ -323,6 +324,7 @@ struct node_properties {
 
   std::uint8_t to_level_ : 6;
   std::uint8_t is_bus_accessible_with_penalty_ : 1;
+  std::uint8_t is_gate_ : 1;
 };
 
 static_assert(sizeof(node_properties) == 3);

@@ -23,6 +23,7 @@ struct foot {
   struct parameters {
     using profile_t = foot<IsWheelchair, Tracking>;
     float speed_meters_per_second_{IsWheelchair ? 0.8F : 1.2F};
+    cost_t gate_cost_{60U};
   };
 
   struct node {
@@ -465,11 +466,16 @@ struct foot {
     return q.template feasible<typename parameters::profile_t>(params);
   }
 
-  static constexpr cost_and_duration node_cost(parameters const&,
+  static constexpr cost_and_duration node_cost(parameters const& params,
                                                node_properties const n) {
-    return n.is_walk_accessible()
-               ? cost_and_duration_from_cost(n.is_elevator() ? 90U : 0U)
-               : infeasible_cost_and_duration();
+    if (!n.is_walk_accessible()) {
+      return infeasible_cost_and_duration();
+    }
+    auto c = cost_and_duration_from_cost(n.is_elevator() ? 90U : 0U);
+    if (n.is_gate()) {
+      c.cost_ += params.gate_cost_;
+    }
+    return c;
   }
 
   static constexpr double lower_bound_heuristic(parameters const& params,

@@ -330,6 +330,7 @@ std::pair<node_properties, level_bits_t> get_node_properties(tags const& t) {
   p.to_level_ = to_idx(to);
   p.is_bus_accessible_with_penalty_ =
       is_accessible_with_penalty<bus_profile>(t, osm_obj_type::kNode);
+  p.is_gate_ = t.is_gate();
   return {p, t.level_bits_};
 }
 
@@ -780,7 +781,8 @@ void extract(bool const with_platforms,
                 is_accessible<car_profile>(t, osm_obj_type::kNode) &&
                 is_accessible<bike_profile>(t, osm_obj_type::kNode) &&
                 is_accessible<foot_profile>(t, osm_obj_type::kNode);
-            if (!accessible || t.is_elevator_ || t.is_platform()) {
+            if (!accessible || t.is_elevator_ || t.is_platform() ||
+                t.is_gate()) {
               ctx.blocking_nodes_.push_back(to_idx(to_osm_node_idx(id)));
             }
 
