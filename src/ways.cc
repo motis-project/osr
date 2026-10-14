@@ -135,11 +135,17 @@ class_components class_components::build(
     return sizes[a] != sizes[b] ? sizes[a] > sizes[b] : a < b;
   });
   auto ids = std::vector<std::uint32_t>(sizes.size(), 0U);
+  auto out = class_components{};
   for (auto i = std::size_t{0U}; i != ranked.size(); ++i) {
-    ids[ranked[i]] = static_cast<std::uint32_t>(i + 1U);
+    auto const id = static_cast<std::uint32_t>(i + 1U);
+    auto const size = sizes[ranked[i]];
+    ids[ranked[i]] = id;
+    if (out.size_run_size_.empty() || out.size_run_size_.back() != size) {
+      out.size_run_id_.push_back(id);
+      out.size_run_size_.push_back(size);
+    }
   }
 
-  auto out = class_components{};
   out.way_component_.resize(static_cast<std::uint32_t>(comp.size()),
                             kNoComponent);
   auto exception_ways = std::uint64_t{0U};
