@@ -25,6 +25,7 @@ struct foot {
     float speed_meters_per_second_{IsWheelchair ? 0.8F : 1.2F};
     float trunk_cost_factor_{IsWheelchair ? 4.0F : 2.0F};
     cost_t gate_cost_{60U};
+    cost_t private_barrier_cost_{600U};
   };
 
   struct node {
@@ -478,10 +479,13 @@ struct foot {
       }
     }
     if (!n.is_walk_accessible()) {
-      return infeasible_cost_and_duration();
+      return n.has_barrier_cost()
+                 ? cost_and_duration{.cost_ = params.private_barrier_cost_,
+                                     .duration_ = duration_t{0}}
+                 : infeasible_cost_and_duration();
     }
     auto c = cost_and_duration_from_cost(n.is_elevator() ? 90U : 0U);
-    if (n.is_gate()) {
+    if (n.has_barrier_cost()) {
       c.cost_ += params.gate_cost_;
     }
     return c;
