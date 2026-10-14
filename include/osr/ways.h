@@ -380,6 +380,14 @@ constexpr bool is_accessible_with_penalty(component_class const c,
   return c == component_class::kFoot && p.is_foot_accessible_with_penalty();
 }
 
+// Trunk roads up to this speed limit (in towns) count like other big streets.
+inline constexpr auto kSlowTrunkMaxSpeed = 50U;
+
+constexpr double trunk_cost_factor(way_properties const& p,
+                                   double const factor) {
+  return p.max_speed_km_per_h() > kSlowTrunkMaxSpeed ? factor : 1.0;
+}
+
 constexpr bool is_oneway(component_class const c, way_properties const& p) {
   switch (c) {
     case component_class::kFoot: return false;
