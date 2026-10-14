@@ -612,6 +612,10 @@ struct bike_profile {
       case cista::hash("designated"): return override::kWhitelist;
     }
 
+    if (t.motorroad_) {
+      return override::kBlacklist;
+    }
+
     if (t.access_ == override::kBlacklist) {
       return override::kBlacklist;
     }
@@ -643,8 +647,10 @@ struct bike_profile {
     }
   }
 
-  static bool access_with_penalty(tags const&, osm_obj_type const) {
-    return false;
+  // Trunk roads without bicycle tags: rideable, but avoided.
+  static bool access_with_penalty(tags const& t, osm_obj_type const type) {
+    return type == osm_obj_type::kWay && t.is_trunk() &&
+           access_override(t, type) == override::kNone;
   }
 };
 
