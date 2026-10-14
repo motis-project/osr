@@ -12,6 +12,7 @@
 #include <array>
 #include <filesystem>
 #include <initializer_list>
+#include <limits>
 #include <optional>
 #include <ranges>
 #include <span>
@@ -462,9 +463,32 @@ struct class_components {
         std::distance(begin(exception_way_), it))];
   }
 
+  std::uint32_t size(std::uint32_t const id) const {
+    auto const it =
+        std::upper_bound(begin(size_run_id_), end(size_run_id_), id);
+    utl::verify(it != begin(size_run_id_), "invalid component id {}", id);
+    return size_run_size_[static_cast<std::uint32_t>(
+        std::distance(begin(size_run_id_), it) - 1)];
+  }
+
+  std::uint32_t first_smaller_than(std::uint32_t const min_ways) const {
+    auto const it =
+        std::partition_point(begin(size_run_size_), end(size_run_size_),
+                             [&](auto const s) { return s >= min_ways; });
+    return it == end(size_run_size_)
+               ? std::numeric_limits<std::uint32_t>::max()
+               : size_run_id_[static_cast<std::uint32_t>(
+                     std::distance(begin(size_run_size_), it))];
+  }
+
   vec_map<way_idx_t, std::uint8_t> way_component_{};
   vec<way_idx_t> exception_way_{};  // sorted
   vec<std::uint32_t> exception_component_{};  // parallel to exception_way_
+
+  // Run length encoded sizes: ids from size_run_id_[i] on have
+  // size_run_size_[i] ways, until the next run.
+  vec<std::uint32_t> size_run_id_{};
+  vec<std::uint32_t> size_run_size_{};
 };
 
 struct ways {
