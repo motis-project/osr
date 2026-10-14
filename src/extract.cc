@@ -318,6 +318,22 @@ way_properties get_way_properties(
   return p;
 }
 
+// Blocked only by private access for foot and bike (where blocked at all):
+// passable at a high cost.
+bool is_private_barrier(tags const& t) {
+  auto const foot = is_accessible<foot_profile>(t, osm_obj_type::kNode);
+  auto const bike = is_accessible<bike_profile>(t, osm_obj_type::kNode);
+  if (foot && bike) {
+    return false;
+  }
+  auto open = t;
+  open.access_ = t.private_access_ ? override::kNone : t.access_;
+  open.foot_ = t.foot_ == "private" ? std::string_view{} : t.foot_;
+  open.bicycle_ = t.bicycle_ == "private" ? std::string_view{} : t.bicycle_;
+  return (foot || is_accessible<foot_profile>(open, osm_obj_type::kNode)) &&
+         (bike || is_accessible<bike_profile>(open, osm_obj_type::kNode));
+}
+
 std::pair<node_properties, level_bits_t> get_node_properties(tags const& t) {
   auto const [from, to, is_multi] = get_levels(t);
   auto p = node_properties{};
@@ -334,7 +350,7 @@ std::pair<node_properties, level_bits_t> get_node_properties(tags const& t) {
   p.to_level_ = to_idx(to);
   p.is_bus_accessible_with_penalty_ =
       is_accessible_with_penalty<bus_profile>(t, osm_obj_type::kNode);
-  p.is_gate_ = t.is_gate();
+  p.has_barrier_cost_ = t.is_gate() || is_private_barrier(t);
   return {p, t.level_bits_};
 }
 

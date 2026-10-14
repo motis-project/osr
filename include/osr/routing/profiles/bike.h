@@ -43,6 +43,7 @@ struct bike {
     float speed_meters_per_second_{4.2F};
     float trunk_cost_factor_{2.0F};
     cost_t gate_cost_{60U};
+    cost_t private_barrier_cost_{600U};
   };
 
   struct node {
@@ -366,10 +367,13 @@ struct bike {
   static constexpr cost_and_duration node_cost(parameters const& params,
                                                node_properties const n) {
     if (!n.is_bike_accessible()) {
-      return infeasible_cost_and_duration();
+      return n.has_barrier_cost()
+                 ? cost_and_duration{.cost_ = params.private_barrier_cost_,
+                                     .duration_ = duration_t{0}}
+                 : infeasible_cost_and_duration();
     }
     auto c = cost_and_duration_from_cost(0U);
-    if (n.is_gate()) {
+    if (n.has_barrier_cost()) {
       c.cost_ += params.gate_cost_;
     }
     return c;

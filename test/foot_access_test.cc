@@ -28,6 +28,8 @@ namespace osr {
 // - 600, 601: trunk, 610, 611: cycleway 10 m north of it, connected at both
 //   ends by the footways 620, 621
 // - 700, 701: trunk with maxspeed=50
+// - 800, 801: path with a private gate (node 81)
+// - 900, 901: path with a foot=no gate (node 91)
 constexpr auto const kOsm = R"(
 <osm version="0.6" generator="osr-test">
   <node id="10" lat="49.000000" lon="8.000000"/>
@@ -130,6 +132,35 @@ constexpr auto const kOsm = R"(
   <way id="701">
     <nd ref="71"/><nd ref="72"/>
     <tag k="highway" v="trunk"/><tag k="maxspeed" v="50"/>
+  </way>
+  <node id="80" lat="49.070000" lon="8.000000"/>
+  <node id="81" lat="49.070000" lon="8.003000">
+    <tag k="barrier" v="gate"/>
+    <tag k="access" v="private"/>
+  </node>
+  <node id="82" lat="49.070000" lon="8.006000"/>
+  <node id="90" lat="49.080000" lon="8.000000"/>
+  <node id="91" lat="49.080000" lon="8.003000">
+    <tag k="barrier" v="gate"/>
+    <tag k="foot" v="no"/>
+    <tag k="bicycle" v="no"/>
+  </node>
+  <node id="92" lat="49.080000" lon="8.006000"/>
+  <way id="800">
+    <nd ref="80"/><nd ref="81"/>
+    <tag k="highway" v="path"/>
+  </way>
+  <way id="801">
+    <nd ref="81"/><nd ref="82"/>
+    <tag k="highway" v="path"/>
+  </way>
+  <way id="900">
+    <nd ref="90"/><nd ref="91"/>
+    <tag k="highway" v="path"/>
+  </way>
+  <way id="901">
+    <nd ref="91"/><nd ref="92"/>
+    <tag k="highway" v="path"/>
   </way>
 </osm>
 )";
@@ -285,6 +316,19 @@ TEST_F(foot_access_test, bike_gate_costs) {
   ASSERT_TRUE(free.has_value());
   ASSERT_TRUE(gate.has_value());
   EXPECT_EQ(free->cost_ + 60U, gate->cost_);
+}
+
+TEST_F(foot_access_test, private_barrier_costs) {
+  auto const cheap = route(49.07, {.private_barrier_cost_ = 0U});
+  auto const expensive = route(49.07, {.private_barrier_cost_ = 600U});
+  ASSERT_TRUE(cheap.has_value());
+  ASSERT_TRUE(expensive.has_value());
+  EXPECT_EQ(cheap->cost_ + 600U, expensive->cost_);
+  EXPECT_EQ(cheap->duration_, expensive->duration_);
+  EXPECT_TRUE(bike_route(49.07, {}).has_value());
+
+  EXPECT_FALSE(route(49.08, {}).has_value());
+  EXPECT_FALSE(bike_route(49.08, {}).has_value());
 }
 
 }  // namespace osr
