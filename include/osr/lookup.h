@@ -120,8 +120,8 @@ struct match_result {
     std::span<endpoint_state_t const> state_{};
     level_t lvl_{kNoLevel};
 
-    // Distance the matching penalty is measured from.
-    float penalty_ref_{0.0F};
+    // Per candidate: distance its matching penalty is measured from.
+    std::span<float const> penalty_ref_{};
 
     // As requested: the lookup widens the search if nothing is within it.
     float max_match_distance_{std::numeric_limits<float>::infinity()};
@@ -149,7 +149,6 @@ struct match_result {
       level_t const lvl,
       float const max_match_distance = std::numeric_limits<float>::infinity()) {
     lvl_.emplace_back(lvl);
-    penalty_ref_.emplace_back(-1.0F);
     max_match_distance_.emplace_back(max_match_distance);
   }
 
@@ -163,12 +162,11 @@ struct match_result {
     state_.emplace_back(state);
   }
 
+  // Candidates without a penalty reference measure from the closest one.
   void finish() {
     auto const from = begin_.back();
-    auto& ref = penalty_ref_.back();
-    if (ref < 0.0F) {
-      ref = to_idx(from) == way_.size() ? 0.0F : dist_to_way_[from];
-    }
+    penalty_ref_.resize(
+        way_.size(), to_idx(from) == way_.size() ? 0.0F : dist_to_way_[from]);
     begin_.emplace_back(way_candidate_idx_t{(way_.size())});
   }
 
@@ -179,8 +177,8 @@ struct match_result {
     start(v.lvl_, v.max_match_distance_);
     for (auto j = std::size_t{0U}; j != v.size(); ++j) {
       add(v.dist_to_way_[j], v.way_[j], v.nodes_[j], v.state_[j]);
+      penalty_ref_.emplace_back(v.penalty_ref_[j]);
     }
-    penalty_ref_.back() = v.penalty_ref_;
     finish();
   }
 
@@ -202,15 +200,15 @@ struct match_result {
                 .nodes_ = at(nodes_),
                 .state_ = at(state_),
                 .lvl_ = lvl_[i],
-                .penalty_ref_ = penalty_ref_[i],
+                .penalty_ref_ = at(penalty_ref_),
                 .max_match_distance_ = max_match_distance_[i]};
   }
 
   vec_map<match_idx_t, way_candidate_idx_t> begin_{};  // size() + 1 entries
   vec_map<match_idx_t, level_t> lvl_{};
-  vec_map<match_idx_t, float> penalty_ref_{};
   vec_map<match_idx_t, float> max_match_distance_{};
   vec_map<way_candidate_idx_t, float> dist_to_way_{};
+  vec_map<way_candidate_idx_t, float> penalty_ref_{};
   vec_map<way_candidate_idx_t, way_idx_t> way_{};
   vec_map<way_candidate_idx_t, nodes> nodes_{};
   vec_map<way_candidate_idx_t, endpoint_state_t> state_{};

@@ -113,3 +113,25 @@ TEST(match_result, max_match_distance_survives_append) {
   EXPECT_EQ(std::numeric_limits<float>::infinity(),
             dst[match_idx_t{1U}].max_match_distance_);
 }
+
+TEST(match_result, penalty_ref_defaults_to_closest_and_survives_append) {
+  auto src = match_result{};
+  src.start(level_t{0.F});
+  src.add(1.5F, way_idx_t{3U}, some_nodes(11U), {});
+  src.add(4.0F, way_idx_t{4U}, some_nodes(13U), {});
+  src.finish();
+  src.start(level_t{0.F});
+  src.add(2.0F, way_idx_t{5U}, some_nodes(15U), {});
+  src.add(6.0F, way_idx_t{6U}, some_nodes(17U), {});
+  src.penalty_ref_.emplace_back(2.0F);
+  src.penalty_ref_.emplace_back(6.0F);
+  src.finish();
+
+  auto dst = match_result{};
+  dst.append(src, match_idx_t{1U});
+  dst.append(src, match_idx_t{0U});
+  EXPECT_EQ(2.0F, dst[match_idx_t{0U}].penalty_ref_[0]);
+  EXPECT_EQ(6.0F, dst[match_idx_t{0U}].penalty_ref_[1]);
+  EXPECT_EQ(1.5F, dst[match_idx_t{1U}].penalty_ref_[0]);
+  EXPECT_EQ(1.5F, dst[match_idx_t{1U}].penalty_ref_[1]);
+}

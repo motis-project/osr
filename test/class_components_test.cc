@@ -271,7 +271,7 @@ TEST_F(filter_rules_test, penalised_way_stays_penalty_reference) {
   auto const m = match(location{kQuery, kNoLevel});
   ASSERT_FALSE(m.empty());
   EXPECT_EQ(std::optional<std::int64_t>{4}, w_->get_osm_way(m.way_[0]));
-  EXPECT_FLOAT_EQ(m.dist_to_way_[0], m.penalty_ref_);
+  EXPECT_FLOAT_EQ(m.dist_to_way_[0], m.penalty_ref_[0]);
 }
 
 // Stacked ways around the query, all one foot component via steps ~73 m east
@@ -359,11 +359,11 @@ TEST_F(levels_test, with_level_only_that_level_matches) {
 TEST_F(levels_test, penalty_is_measured_from_closest_on_ground) {
   auto const no_level = match(location{kQuery, kNoLevel});
   ASSERT_EQ(3U, no_level.size());
-  EXPECT_FLOAT_EQ(no_level.dist_to_way_[2], no_level.penalty_ref_);
+  EXPECT_FLOAT_EQ(no_level.dist_to_way_[2], no_level.penalty_ref_[0]);
 
   auto const with_level = match(location{kQuery, level_t{-1.0F}});
   ASSERT_FALSE(with_level.empty());
-  EXPECT_FLOAT_EQ(with_level.dist_to_way_[0], with_level.penalty_ref_);
+  EXPECT_FLOAT_EQ(with_level.dist_to_way_[0], with_level.penalty_ref_[0]);
 }
 
 // A dual carriageway around the query, one component via two-way roads ~73 m

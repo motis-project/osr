@@ -104,7 +104,7 @@ void for_each_endpoint_candidate(match_view_t const& matches, Fn&& fn) {
                               .graph_distance_ = std::max(
                                   0.0, node.dist_to_node_ - distance_to_way),
                               .matching_penalty_ = matching_penalty(
-                                  distance_to_way, matches.penalty_ref_)});
+                                  distance_to_way, matches.penalty_ref_[i])});
       }
     }
   }
@@ -529,11 +529,12 @@ std::optional<path> same_stretch_path(
       }
 
       auto const along = std::abs(b.offset_ - a.offset_);
+      auto const j = static_cast<std::size_t>(
+          std::distance(begin(destination_match.way_), it));
       auto const origin_dist =
           static_cast<double>(origin_match.dist_to_way_[i]);
-      auto const destination_dist = static_cast<double>(
-          destination_match.dist_to_way_[static_cast<std::size_t>(
-              std::distance(begin(destination_match.way_), it))]);
+      auto const destination_dist =
+          static_cast<double>(destination_match.dist_to_way_[j]);
       auto const get_way_cost = [&](double const distance) {
         return P::way_cost(
             params, *w.r_, w.timezones_, way, props,
@@ -547,9 +548,9 @@ std::optional<path> same_stretch_path(
               .duration_ = get_way_cost(along + origin_dist + destination_dist)
                                .duration_},
           clamp_cost(static_cast<std::uint64_t>(matching_penalty(
-                         origin_dist, origin_match.penalty_ref_)) +
+                         origin_dist, origin_match.penalty_ref_[i])) +
                      matching_penalty(destination_dist,
-                                      destination_match.penalty_ref_)),
+                                      destination_match.penalty_ref_[j])),
           duration_t{0U});
       if (!total.feasible() || total.cost_ >= max ||
           (best.has_value() && total_of(*best) <= total)) {
