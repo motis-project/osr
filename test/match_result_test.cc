@@ -1,5 +1,7 @@
 #include "gtest/gtest.h"
 
+#include <limits>
+
 #include "osr/lookup.h"
 
 using namespace osr;
@@ -94,4 +96,20 @@ TEST(match_result, append_and_clear) {
   dst.clear();
   EXPECT_EQ(0U, dst.size());
   EXPECT_TRUE(dst.empty());
+}
+
+TEST(match_result, max_match_distance_survives_append) {
+  auto src = match_result{};
+  src.start(level_t{0.F}, 25.0F);
+  src.add(1.5F, way_idx_t{3U}, some_nodes(11U), {});
+  src.finish();
+  src.start(level_t{0.F});
+  src.finish();
+
+  auto dst = match_result{};
+  dst.append(src, match_idx_t{0U});
+  dst.append(src, match_idx_t{1U});
+  EXPECT_EQ(25.0F, dst[match_idx_t{0U}].max_match_distance_);
+  EXPECT_EQ(std::numeric_limits<float>::infinity(),
+            dst[match_idx_t{1U}].max_match_distance_);
 }
