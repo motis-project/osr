@@ -117,26 +117,6 @@ TEST_F(same_stretch_test, foot_walks_directly_along_the_stretch) {
   }
 }
 
-TEST_F(same_stretch_test, must_reach_includes_the_connector) {
-  auto const connector = geo::distance(kWest, {49.0, kWest.lng_});
-  for (auto const dir : {direction::kForward, direction::kBackward}) {
-    SCOPED_TRACE(::testing::Message() << "dir=" << dir);
-    auto const p =
-        route(foot<false, elevator_tracking>::parameters{}, *w_, *l_,
-              search_profile::kFoot, location{kWest, kNoLevel, true},
-              location{kEast, kNoLevel}, std::chrono::seconds{3600}, dir, 50.0,
-              nullptr, nullptr, nullptr, routing_algorithm::kDijkstra);
-    ASSERT_TRUE(p.has_value());
-    ASSERT_EQ(1U, p->segments_.size());
-    EXPECT_NEAR(73.0 + connector, p->dist_, 1.0);
-    auto const& polyline = p->segments_.front().polyline_;
-    EXPECT_NEAR(0.0,
-                std::min(geo::distance(kWest, polyline.front()),
-                         geo::distance(kWest, polyline.back())),
-                0.01);
-  }
-}
-
 TEST_F(same_stretch_test, car_respects_the_oneway) {
   for (auto const dir : {direction::kForward, direction::kBackward}) {
     SCOPED_TRACE(::testing::Message() << "dir=" << dir);

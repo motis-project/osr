@@ -71,32 +71,8 @@ struct endpoint_candidate {
   way_idx_t way_;
   candidate_node node_;
   double graph_distance_;  // projected point -> node
-  double connector_distance_;  // query -> projected point, if it counts
   cost_t matching_penalty_;
-
-  double distance() const { return connector_distance_ + graph_distance_; }
 };
-
-template <typename P>
-struct is_foot : std::false_type {};
-
-template <bool IsWheelchair, typename Tracking>
-struct is_foot<foot<IsWheelchair, Tracking>> : std::true_type {};
-
-// Connectors are always walked
-template <Profile P>
-duration_t connector_duration(typename P::parameters const& params,
-                              double const distance) {
-  auto const speed = [&]() {
-    if constexpr (is_foot<P>::value) {
-      return params.speed_meters_per_second_;
-    } else {
-      return foot<false>::parameters{}.speed_meters_per_second_;
-    }
-  }();
-  return duration_from_cost(
-      static_cast<cost_t>(std::round(distance / static_cast<double>(speed))));
-}
 
 template <Profile P>
 struct endpoint_root {
@@ -121,14 +97,12 @@ void for_each_endpoint_candidate(match_view_t const& matches, Fn&& fn) {
       if (node.valid()) {
         auto const distance_to_way =
             static_cast<double>(matches.dist_to_way_[i]);
-        fn(endpoint_candidate{
-            .way_ = matches.way_[i],
-            .node_ = node,
-            .graph_distance_ =
-                std::max(0.0, node.dist_to_node_ - distance_to_way),
-            .connector_distance_ = matches.must_reach_ ? distance_to_way : 0.0,
-            .matching_penalty_ =
-                matching_penalty(distance_to_way, matches.penalty_ref_)});
+        fn(endpoint_candidate{.way_ = matches.way_[i],
+                              .node_ = node,
+                              .graph_distance_ = std::max(
+                                  0.0, node.dist_to_node_ - distance_to_way),
+                              .matching_penalty_ = matching_penalty(
+                                  distance_to_way, matches.penalty_ref_)});
       }
     }
   }
@@ -156,8 +130,7 @@ cost_and_duration get_endpoint_connection(
                            static_cast<distance_t>(endpoint.graph_distance_),
                            start_time, current_duration, search_dir);
   auto total =
-      clamp_add(connection, endpoint.matching_penalty_,
-                connector_duration<P>(params, endpoint.connector_distance_));
+      clamp_add(connection, endpoint.matching_penalty_, duration_t{0U});
   // Node costs are charged when arriving at a node. For the origin, that is
   // the connector from the query position.
   if (end == route_end::kOrigin) {
@@ -186,13 +159,9 @@ path::segment make_endpoint_segment(lookup const& l,
   auto const graph_node_at_from = role == endpoint_role::kRoot
                                       ? dir == direction::kBackward
                                       : dir == direction::kForward;
-  auto polyline =
-      l.get_node_candidate_path(endpoint.way_, endpoint.node_.node_,
-                                endpoint.node_.way_dir_, reverse, location);
-  if (endpoint.connector_distance_ > 0.0) {
-    polyline.insert(reverse ? end(polyline) : begin(polyline), location.pos_);
-  }
-  return {.polyline_ = std::move(polyline),
+  return {.polyline_ = l.get_node_candidate_path(
+              endpoint.way_, endpoint.node_.node_, endpoint.node_.way_dir_,
+              reverse, location),
           .from_level_ = endpoint.node_.lvl_,
           .to_level_ = endpoint.node_.lvl_,
           .from_ = graph_node_at_from ? graph_node : node_idx_t::invalid(),
@@ -200,7 +169,7 @@ path::segment make_endpoint_segment(lookup const& l,
           .way_ = way_idx_t::invalid(),
           .cost_ = connection.cost_,
           .duration_ = connection.duration_,
-          .dist_ = static_cast<distance_t>(endpoint.distance()),
+          .dist_ = static_cast<distance_t>(endpoint.graph_distance_),
           .mode_ = mode};
 }
 
@@ -313,8 +282,8 @@ path reconstruct_bi(typename P::parameters const& params,
   forward_segments.insert(forward_segments.end(), backward_segments.begin(),
                           backward_segments.end());
 
-  auto total_dist = start.endpoint_.distance() + forward_dist + backward_dist +
-                    destination.endpoint_.distance();
+  auto total_dist = start.endpoint_.graph_distance_ + forward_dist +
+                    backward_dist + destination.endpoint_.graph_distance_;
 
   auto path_elevation = elevation_storage::elevation{};
   for (auto const& segment : forward_segments) {
@@ -385,12 +354,12 @@ path reconstruct(typename P::parameters const& params,
   for (auto const& segment : segments) {
     path_elevation += segment.elevation_;
   }
-  auto p =
-      path{.cost_ = total.cost_,
-           .duration_ = total.duration_,
-           .dist_ = start.endpoint_.distance() + dist + destination.distance(),
-           .elevation_ = path_elevation,
-           .segments_ = segments};
+  auto p = path{.cost_ = total.cost_,
+                .duration_ = total.duration_,
+                .dist_ = start.endpoint_.graph_distance_ + dist +
+                         destination.graph_distance_,
+                .elevation_ = path_elevation,
+                .segments_ = segments};
   search.cost_.at(dest_node.get_key()).write(dest_node, p);
   return p;
 }
@@ -562,40 +531,29 @@ std::optional<path> same_stretch_path(
       auto const destination_dist = static_cast<double>(
           destination_match.dist_to_way_[static_cast<std::size_t>(
               std::distance(begin(destination_match.way_), it))]);
-      auto const connectors =
-          (origin.must_reach_ ? origin_dist : 0.0) +
-          (destination.must_reach_ ? destination_dist : 0.0);
       auto const total = clamp_add(
           way_cost,
           clamp_cost(static_cast<std::uint64_t>(matching_penalty(
                          origin_dist, origin_match.penalty_ref_)) +
                      matching_penalty(destination_dist,
                                       destination_match.penalty_ref_)),
-          connector_duration<P>(params, connectors));
+          duration_t{0U});
       if (!total.feasible() || total.cost_ >= max ||
           (best.has_value() && total_of(*best) <= total)) {
         continue;
       }
 
-      auto polyline = stretch_polyline(w, way, a, b);
-      if (origin.must_reach_) {
-        polyline.insert(begin(polyline), origin.pos_);
-      }
-      if (destination.must_reach_) {
-        polyline.push_back(destination.pos_);
-      }
-      auto const dist = along + connectors;
       best = path{.cost_ = total.cost_,
                   .duration_ = total.duration_,
-                  .dist_ = dist,
+                  .dist_ = along,
                   .segments_ = {path::segment{
-                      .polyline_ = std::move(polyline),
+                      .polyline_ = stretch_polyline(w, way, a, b),
                       .from_level_ = props.from_level(),
                       .to_level_ = props.to_level(),
                       .way_ = way,
                       .cost_ = total.cost_,
                       .duration_ = total.duration_,
-                      .dist_ = static_cast<distance_t>(std::round(dist)),
+                      .dist_ = static_cast<distance_t>(std::round(along)),
                       .mode_ = P::node::get_mode()}}};
     }
     return best;
