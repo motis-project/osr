@@ -185,6 +185,12 @@ std::vector<raw_way_candidate> lookup::get_raw_way_candidates(
   return way_candidates;
 }
 
+geo::latlng lookup::project(way_idx_t const way, geo::latlng const& pos) const {
+  return std::get<1>(geo::approx_squared_distance_to_polyline<
+                     std::tuple<double, geo::latlng, size_t>>(
+      pos, ways_.way_polylines_[way], geo::approx_distance_lng_degrees(pos)));
+}
+
 lookup::way_stretch lookup::get_way_stretch(way_idx_t const way,
                                             geo::latlng const& pos) const {
   auto const approx_distance_lng_degrees =
@@ -203,14 +209,16 @@ lookup::way_stretch lookup::get_way_stretch(way_idx_t const way,
           .offset_ = offset};
 }
 
-void lookup::filter_by_component(match_result& out,
-                                 location const& query,
-                                 component_classes const classes) const {
+void lookup::filter_by_component(
+    match_result& out,
+    location const& query,
+    std::span<component_classes const> classes) const {
   using idx_t = match_result::way_candidate_idx_t;
 
   auto const from = to_idx(out.begin_.back());
   auto const to = static_cast<std::uint32_t>(out.way_.size());
-  if (classes.empty() || to - from < 2U) {
+  if (to - from < 2U ||
+      utl::all_of(classes, [](auto const c) { return c.empty(); })) {
     return;
   }
 
@@ -219,8 +227,8 @@ void lookup::filter_by_component(match_result& out,
   auto write = from;
   for (auto read = from; read != to; ++read) {
     auto const k =
-        keep_candidate(ways_, kept, classes, query, out.way_[idx_t{read}],
-                       out.dist_to_way_[idx_t{read}]);
+        keep_candidate(ways_, kept, classes[read - from], query,
+                       out.way_[idx_t{read}], out.dist_to_way_[idx_t{read}]);
     if (!k.has_value()) {
       continue;
     }
@@ -228,6 +236,7 @@ void lookup::filter_by_component(match_result& out,
       out.dist_to_way_[idx_t{write}] = out.dist_to_way_[idx_t{read}];
       out.way_[idx_t{write}] = out.way_[idx_t{read}];
       out.nodes_[idx_t{write}] = out.nodes_[idx_t{read}];
+      out.state_[idx_t{write}] = out.state_[idx_t{read}];
     }
     kept.emplace_back(*k);
     ++write;
@@ -236,6 +245,7 @@ void lookup::filter_by_component(match_result& out,
   out.dist_to_way_.resize(write);
   out.way_.resize(write);
   out.nodes_.resize(write);
+  out.state_.resize(write);
 }
 
 void lookup::set_penalty_reference(match_result& out,

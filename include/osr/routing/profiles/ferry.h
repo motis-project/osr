@@ -141,6 +141,7 @@ struct ferry {
                                level_t,
                                route_end,
                                endpoint_role,
+                               endpoint_state_t,
                                Fn&& f) {
     resolve_all(w, n, std::forward<Fn>(f));
   }
@@ -285,7 +286,7 @@ struct ferry {
   }
 
   static constexpr component_classes endpoint_component_classes(
-      route_end) noexcept {
+      route_end, endpoint_state_t) noexcept {
     return {};
   }
 

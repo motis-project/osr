@@ -48,18 +48,21 @@ struct match_fixture : ::testing::Test {
 
   template <Profile P = foot<false>>
   match_view_t match(location const& query,
-                     double const max_match_distance = 50.0) {
+                     double const max_match_distance = 50.0,
+                     typename P::parameters const& params = {}) {
     out_.clear();
-    l_->match<P>(typename P::parameters{}, query, true, direction::kForward,
-                 max_match_distance, nullptr, out_);
+    l_->match<P>(params, query, true, direction::kForward, max_match_distance,
+                 nullptr, out_);
     return out_[match_idx_t{0U}];
   }
 
   // OSM ids of the matched ways.
   template <Profile P = foot<false>>
   std::vector<std::int64_t> matched_ways(
-      location const& query, double const max_match_distance = 50.0) {
-    return utl::to_vec(match<P>(query, max_match_distance).way_,
+      location const& query,
+      double const max_match_distance = 50.0,
+      typename P::parameters const& params = {}) {
+    return utl::to_vec(match<P>(query, max_match_distance, params).way_,
                        [&](way_idx_t const x) { return *w_->get_osm_way(x); });
   }
 
@@ -195,6 +198,16 @@ TEST_F(sharing_components_test, bike_sharing_uses_foot_components) {
   EXPECT_EQ((std::vector<std::int64_t>{1, 3}), matched_ways(query));
   EXPECT_EQ((std::vector<std::int64_t>{1, 3}),
             matched_ways<bike_sharing>(query));
+}
+
+TEST_F(sharing_components_test,
+       exact_return_filters_foot_and_bike_independently) {
+  // Bike also filters: 3 again, but not the foot-only 2.
+  auto params = bike_sharing::parameters{};
+  params.vehicle_return_allowed_ = [](geo::latlng const&) { return true; };
+  EXPECT_EQ(
+      (std::vector<std::int64_t>{1, 3}),
+      matched_ways<bike_sharing>(location{kQuery, kNoLevel}, 50.0, params));
 }
 
 // One foot component around the query, joined by a connector ~73 m east
