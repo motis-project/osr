@@ -20,6 +20,7 @@
 #include "osr/routing/route.h"
 #include "osr/ways.h"
 
+#include "running_on_valgrind.h"
 #include "xml_to_pbf.h"
 
 namespace fs = std::filesystem;
@@ -484,13 +485,14 @@ TEST(cost_budget, duration_stop_matches_generous_search) {
   };
 
   constexpr auto const kGenerousLimit = std::chrono::seconds{30000};
+  auto const n_samples = osr::test::running_on_valgrind() ? 4U : 40U;
   auto n_found = 0U;
   auto n_too_slow = 0U;
   for (auto const profile :
        {osr::search_profile::kFoot, osr::search_profile::kBike,
         osr::search_profile::kCar}) {
     auto const params = osr::get_parameters(profile);
-    for (auto sample = 0U; sample != 40U; ++sample) {
+    for (auto sample = 0U; sample != n_samples; ++sample) {
       auto const from = random_location();
       auto to = std::vector<osr::location>(4U);
       std::generate(begin(to), end(to), random_location);
@@ -536,6 +538,6 @@ TEST(cost_budget, duration_stop_matches_generous_search) {
       }
     }
   }
-  EXPECT_GT(n_found, 100U);
-  EXPECT_GT(n_too_slow, 100U);
+  EXPECT_GT(n_found, n_samples * 5U / 2U);
+  EXPECT_GT(n_too_slow, n_samples * 5U / 2U);
 }

@@ -14,6 +14,8 @@
 #include "osr/routing/sharing_data.h"
 #include "osr/ways.h"
 
+#include "running_on_valgrind.h"
+
 namespace fs = std::filesystem;
 
 constexpr auto kSymmetryMaxDuration = std::chrono::seconds{60000};
@@ -235,6 +237,7 @@ TEST(symmetry, random_pairs_forward_backward_equivalence) {
           {osr::get_parameters(osr::search_profile::kCarDropOff),
            osr::search_profile::kCarDropOff},
       };
+  auto const n_pairs = osr::test::running_on_valgrind() ? 2U : 10U;
 
   for (auto const& map : maps) {
     auto const dir = fs::temp_directory_path() / "osr-symmetry-random" / map;
@@ -261,7 +264,7 @@ TEST(symmetry, random_pairs_forward_backward_equivalence) {
       return osr::location{{p.lat() + jitter(rng), p.lng() + jitter(rng)}, lvl};
     };
 
-    for (auto i = 0U; i != 60U; ++i) {
+    for (auto i = 0U; i != n_pairs; ++i) {
       auto const from = rnd_loc();
       auto const to = rnd_loc();
       for (auto const& [params, profile] : profiles) {
@@ -381,6 +384,7 @@ TEST(symmetry, sharing_random_pairs_forward_backward_equivalence) {
            osr::search_profile::kBikeSharing},
           {osr::get_parameters(osr::search_profile::kCarSharing),
            osr::search_profile::kCarSharing}};
+  auto const n_pairs = osr::test::running_on_valgrind() ? 3U : 30U;
 
   for (auto const& map : maps) {
     auto const map_dir =
@@ -406,7 +410,7 @@ TEST(symmetry, sharing_random_pairs_forward_backward_equivalence) {
                              osr::kNoLevel};
       };
 
-      for (auto i = 0U; i != 30U; ++i) {
+      for (auto i = 0U; i != n_pairs; ++i) {
         auto const from = rnd_loc();
         auto const to = rnd_loc();
         for (auto const& [params, profile] : profiles) {
