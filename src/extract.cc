@@ -281,6 +281,10 @@ way_properties get_way_properties(
   auto p = way_properties{};
   std::memset(&p, 0, sizeof(way_properties));
   p.is_foot_accessible_ = is_accessible<foot_profile>(t, obj_type);
+  p.is_foot_accessible_with_penalty_ =
+      is_accessible_with_penalty<foot_profile>(t, obj_type);
+  p.is_bike_accessible_with_penalty_ =
+      is_accessible_with_penalty<bike_profile>(t, obj_type);
   p.is_bike_accessible_ = is_accessible<bike_profile>(t, obj_type);
   p.is_car_accessible_ = is_accessible<car_profile>(t, obj_type);
   p.is_bus_accessible_ = is_accessible<bus_profile>(t, obj_type);
@@ -314,6 +318,22 @@ way_properties get_way_properties(
   return p;
 }
 
+// Blocked only by private access for foot and bike (where blocked at all):
+// passable at a high cost.
+bool is_private_barrier(tags const& t) {
+  auto const foot = is_accessible<foot_profile>(t, osm_obj_type::kNode);
+  auto const bike = is_accessible<bike_profile>(t, osm_obj_type::kNode);
+  if (foot && bike) {
+    return false;
+  }
+  auto open = t;
+  open.access_ = t.private_access_ ? override::kNone : t.access_;
+  open.foot_ = t.foot_ == "private" ? std::string_view{} : t.foot_;
+  open.bicycle_ = t.bicycle_ == "private" ? std::string_view{} : t.bicycle_;
+  return (foot || is_accessible<foot_profile>(open, osm_obj_type::kNode)) &&
+         (bike || is_accessible<bike_profile>(open, osm_obj_type::kNode));
+}
+
 std::pair<node_properties, level_bits_t> get_node_properties(tags const& t) {
   auto const [from, to, is_multi] = get_levels(t);
   auto p = node_properties{};
@@ -330,6 +350,7 @@ std::pair<node_properties, level_bits_t> get_node_properties(tags const& t) {
   p.to_level_ = to_idx(to);
   p.is_bus_accessible_with_penalty_ =
       is_accessible_with_penalty<bus_profile>(t, osm_obj_type::kNode);
+  p.has_barrier_cost_ = t.is_gate() || is_private_barrier(t);
   return {p, t.level_bits_};
 }
 
@@ -780,7 +801,8 @@ void extract(bool const with_platforms,
                 is_accessible<car_profile>(t, osm_obj_type::kNode) &&
                 is_accessible<bike_profile>(t, osm_obj_type::kNode) &&
                 is_accessible<foot_profile>(t, osm_obj_type::kNode);
-            if (!accessible || t.is_elevator_ || t.is_platform()) {
+            if (!accessible || t.is_elevator_ || t.is_platform() ||
+                t.is_gate()) {
               ctx.blocking_nodes_.push_back(to_idx(to_osm_node_idx(id)));
             }
 

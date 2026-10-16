@@ -66,7 +66,9 @@ struct car_sharing {
                      .has_conditionals_ = false,
                      .is_in_low_emission_zone_ = false,
                      .is_detour_ = false,
-                     .is_oneway_reverse_ = false};
+                     .is_oneway_reverse_ = false,
+                     .is_foot_accessible_with_penalty_ = false,
+                     .is_bike_accessible_with_penalty_ = false};
 
   static constexpr auto const kAdditionalNodeProperties =
       node_properties{.from_level_ = 0,
@@ -79,7 +81,8 @@ struct car_sharing {
                       .is_multi_level_ = false,
                       .is_parking_ = false,
                       .to_level_ = 0,
-                      .is_bus_accessible_with_penalty_ = false};
+                      .is_bus_accessible_with_penalty_ = false,
+                      .has_barrier_cost_ = false};
 
   enum class node_type : std::uint8_t {
     kInitialFoot,
