@@ -1,8 +1,11 @@
 #include "osr/ways.h"
 
 #include <algorithm>
+#include <iostream>
 #include <limits>
+#include <mutex>
 #include <numeric>
+#include <optional>
 #include <thread>
 
 #include "date/tz.h"
@@ -222,11 +225,25 @@ void ways::add_restriction(std::vector<resolved_restriction>& rs) {
         r_->node_is_restricted_.set(range.front().via_, true);
 
         for (auto const& x : range) {
+          // Skip a restriction whose way does not meet the via node:
+          // get_way_pos() would return 0, i.e. whichever way comes first at
+          // the node.
+          auto const pos = [&](way_idx_t const way) {
+            auto const ways = r_->node_ways_[x.via_];
+            auto const it = std::find(begin(ways), end(ways), way);
+            return it != end(ways)
+                       ? std::optional{static_cast<way_pos_t>(it - begin(ways))}
+                       : std::nullopt;
+          };
+          auto const from_pos = pos(x.from_);
+          auto const to_pos = pos(x.to_);
+          if (!from_pos.has_value() || !to_pos.has_value()) {
+            continue;
+          }
           if (x.type_ == resolved_restriction::type::kNo) {
             r_->node_restrictions_[x.via_].push_back(restriction{
-                r_->get_way_pos(x.via_, x.from_),
-                r_->get_way_pos(x.via_, x.to_), x.applies_to_default_,
-                x.applies_to_bus_, x.applies_to_hgv_, x.condition_set_});
+                *from_pos, *to_pos, x.applies_to_default_, x.applies_to_bus_,
+                x.applies_to_hgv_, x.condition_set_});
           } else /* kOnly */ {
             for (auto const [i, from] :
                  utl::enumerate(r_->node_ways_[x.via_])) {
@@ -325,6 +342,79 @@ void ways::connect_ways() {
     //          -> count becomes a fill cursor per node
     auto count = std::vector<std::atomic<std::uint32_t>>(n_nodes);
 
+    // At nodes visited more than kMaxWaysPerNode times, the visits of the ways
+    // with the lowest OSM ids (then by position in the way) keep their slot.
+    // Claiming the slots in the parallel loop below would make the graph
+    // depend on thread timing and on the way order.
+    utl::parallel_for_run(
+        n_ways,
+        [&](std::size_t const way) {
+          for (auto const osm_node_idx : way_osm_nodes_[way_idx_t{way}]) {
+            if (node_way_counter_.is_multi(to_idx(osm_node_idx))) {
+              count[to_idx(get_node_idx(osm_node_idx))].fetch_add(
+                  1U, std::memory_order_relaxed);
+            }
+          }
+        },
+        pt->update_fn());
+    auto overfull = hash_set<osm_node_idx_t>{};
+    for (auto n = std::size_t{0U}; n != n_nodes; ++n) {
+      if (count[n].exchange(0U, std::memory_order_relaxed) > kMaxWaysPerNode) {
+        overfull.emplace(node_to_osm_[node_idx_t{n}]);
+      }
+    }
+
+    auto allowed = std::vector<std::pair<way_idx_t, std::uint32_t>>{};
+    if (!overfull.empty()) {
+      struct visit {
+        osm_node_idx_t node_;
+        osm_way_idx_t osm_way_;
+        std::uint32_t pos_;
+        way_idx_t way_;
+      };
+      auto visits = std::vector<visit>{};
+      auto m = std::mutex{};
+      utl::parallel_for_run(n_ways, [&](std::size_t const way) {
+        auto const w = way_idx_t{way};
+        auto local = std::vector<visit>{};
+        for (auto const [pos, osm_node_idx] :
+             utl::enumerate(way_osm_nodes_[w])) {
+          if (overfull.contains(osm_node_idx)) {
+            local.push_back({osm_node_idx, way_osm_idx_[w],
+                             static_cast<std::uint32_t>(pos), w});
+          }
+        }
+        if (!local.empty()) {
+          auto const lock = std::scoped_lock{m};
+          visits.insert(end(visits), begin(local), end(local));
+        }
+      });
+      std::sort(begin(visits), end(visits), [](visit const& a, visit const& b) {
+        if (a.node_ != b.node_) {
+          return a.node_ < b.node_;
+        }
+        if (a.osm_way_ != b.osm_way_) {
+          return osm_id_less(a.osm_way_, b.osm_way_);
+        }
+        return a.pos_ < b.pos_;
+      });
+      for (auto i = std::size_t{0U}; i != visits.size();) {
+        auto j = i;
+        while (j != visits.size() && visits[j].node_ == visits[i].node_) {
+          ++j;
+        }
+        std::clog << "osr: node " << to_idx(visits[i].node_) << " has "
+                  << (j - i) << " way visits, keeping the "
+                  << static_cast<unsigned>(kMaxWaysPerNode)
+                  << " with the lowest OSM ids\n";
+        for (auto k = i; k != std::min(j, i + kMaxWaysPerNode); ++k) {
+          allowed.emplace_back(visits[k].way_, visits[k].pos_);
+        }
+        i = j;
+      }
+      utl::sort(allowed);
+    }
+
     struct way_edges {
       std::vector<node_idx_t> nodes_;
       std::vector<std::uint16_t> dists_;
@@ -348,13 +438,21 @@ void ways::connect_ways() {
             auto from = node_idx_t::invalid();
             auto distance = 0.0;
             auto i = std::uint16_t{0U};
+            auto visit_pos = std::uint32_t{0U};
             for (auto const [osm_node_idx, pos] :
                  utl::zip(way_osm_nodes_[way_idx], way_polylines_[way_idx])) {
+              auto const this_visit = std::pair{way_idx, visit_pos++};
               if (pred_pos.has_value()) {
                 distance += geo::distance(pos, *pred_pos);
               }
 
               if (node_way_counter_.is_multi(to_idx(osm_node_idx))) {
+                if (!allowed.empty() && overfull.contains(osm_node_idx) &&
+                    !std::binary_search(begin(allowed), end(allowed),
+                                        this_visit)) {
+                  pred_pos = pos;
+                  continue;
+                }
                 auto const to = get_node_idx(osm_node_idx);
                 auto const rank =
                     count[to_idx(to)].fetch_add(1U, std::memory_order_relaxed);
@@ -437,7 +535,9 @@ void ways::connect_ways() {
         },
         pt->update_fn());
 
-    // Sort node_ways_ / node_in_way_idx_ by way_idx for deterministic ordering.
+    // Sort node_ways_ / node_in_way_idx_ by OSM way id (then position) for
+    // deterministic ordering. Routing breaks equal-cost ties in this order,
+    // so it must not depend on the way numbering.
     pt->status("Connect ways / sort").in_high(n_nodes).out_bounds(74, 75);
     utl::parallel_for_run_threadlocal<
         std::vector<std::pair<way_idx_t, std::uint16_t>>>(
@@ -452,7 +552,11 @@ void ways::connect_ways() {
           for (auto const [w, p] : utl::zip(ways, positions)) {
             scratch.emplace_back(w, p);
           }
-          utl::sort(scratch);
+          utl::sort(scratch, [&](auto const& a, auto const& b) {
+            return a.first == b.first ? a.second < b.second
+                                      : osm_id_less(way_osm_idx_[a.first],
+                                                    way_osm_idx_[b.first]);
+          });
 
           // Copy back from scratch.
           for (auto const [i, x] : utl::enumerate(scratch)) {
