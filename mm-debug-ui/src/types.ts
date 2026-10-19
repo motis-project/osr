@@ -40,7 +40,7 @@ export interface WayProperties {
   isParking: boolean;
   isRamp: boolean;
   inRoute: boolean;
-  component: number;
+  components: Record<"foot" | "bike" | "car", number | null>;
 }
 
 export interface NodeProperties {
