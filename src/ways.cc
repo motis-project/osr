@@ -1,12 +1,15 @@
 #include "osr/ways.h"
 
 #include <algorithm>
+#include <atomic>
 #include <iostream>
 #include <limits>
 #include <mutex>
 #include <numeric>
 #include <optional>
 #include <thread>
+#include <utility>
+#include <vector>
 
 #include "date/tz.h"
 
@@ -180,7 +183,9 @@ ways::ways(std::filesystem::path p, cista::mmap::protection const mode)
           r_->timezones_,
           [](auto const& tz) { return date::locate_zone(tz.view()); })},
       node_to_osm_{mm("node_to_osm.bin")},
+      osm_node_order_{mm("osm_node_order.bin")},
       way_osm_idx_{mm("way_osm_idx.bin")},
+      osm_way_order_{mm("osm_way_order.bin")},
       way_polylines_{mm_vec<point>{mm("way_polylines_data.bin")},
                      mm_vec<std::uint64_t>{mm("way_polylines_index.bin")}},
       way_osm_nodes_{mm_vec<osm_node_idx_t>{mm("way_osm_nodes_data.bin")},
@@ -311,22 +316,86 @@ void ways::compute_big_street_neighbors() {
       });
 }
 
+void ways::init_ways(std::vector<std::uint32_t> const& n_nodes) {
+  auto const n = n_nodes.size();
+  way_osm_idx_.resize(n);
+  way_names_.resize(n);
+  r_->way_properties_.resize(n);
+  way_has_conditional_access_no_.resize(n);
+
+  auto const layout = [&](auto& v) {
+    v.bucket_starts_.resize(n + 1U);
+    auto offset = std::uint64_t{0U};
+    for (auto i = 0U; i != n; ++i) {
+      v.bucket_starts_[i] = offset;
+      offset += n_nodes[i];
+    }
+    v.bucket_starts_[n] = offset;
+    v.data_.resize(offset);
+  };
+  layout(way_polylines_);
+  layout(way_osm_nodes_);
+}
+
+void ways::build_osm_way_order() {
+  osm_way_order_.resize(n_ways());
+  for (auto i = 0U; i != n_ways(); ++i) {
+    osm_way_order_[i] = way_idx_t{i};
+  }
+  std::sort(osm_way_order_.begin(), osm_way_order_.end(),
+            [&](way_idx_t const a, way_idx_t const b) {
+              return osm_id_less(way_osm_idx_[a], way_osm_idx_[b]);
+            });
+}
+
 void ways::connect_ways() {
   auto pt = utl::get_active_progress_tracker_or_activate("osr");
 
-  {  // Assign graph node ids to every node with >1 way.
+  {  // Assign graph node ids to every node with >1 way, in Morton order of
+     // the node positions: nearby nodes get nearby ids, so a search touches
+     // fewer cache lines.
     pt->status("Create graph nodes")
-        .in_high(node_way_counter_.size())
+        .in_high(way_osm_nodes_.size())
         .out_bounds(40, 50);
 
-    auto node_idx = node_idx_t{0U};
+    auto osm_ids = std::vector<osm_node_idx_t>{};  // ascending
     node_way_counter_.for_each_multi([&](std::uint64_t const b_idx) {
-      auto const i = osm_node_idx_t{b_idx};
-      node_to_osm_.push_back(i);
-      ++node_idx;
-      pt->update(b_idx);
+      osm_ids.emplace_back(osm_node_idx_t{b_idx});
     });
-    r_->node_is_restricted_.resize(to_idx(node_idx));
+
+    auto keys = std::vector<std::uint64_t>(osm_ids.size());
+    utl::parallel_for_run(
+        way_osm_nodes_.size(),
+        [&](std::size_t const way) {
+          for (auto const [osm_node_idx, pos] :
+               utl::zip(way_osm_nodes_[way_idx_t{way}],
+                        way_polylines_[way_idx_t{way}])) {
+            if (node_way_counter_.is_multi(to_idx(osm_node_idx))) {
+              auto const i = static_cast<std::size_t>(
+                  std::lower_bound(begin(osm_ids), end(osm_ids), osm_node_idx) -
+                  begin(osm_ids));
+              std::atomic_ref{keys[i]}.store(geo::morton_encode(pos),
+                                             std::memory_order_relaxed);
+            }
+          }
+        },
+        pt->update_fn());
+
+    // (key, rank by OSM id): equal keys keep the OSM id order
+    auto order = std::vector<std::pair<std::uint64_t, std::uint32_t>>{};
+    order.reserve(osm_ids.size());
+    for (auto i = 0U; i != osm_ids.size(); ++i) {
+      order.emplace_back(keys[i], i);
+    }
+    keys = {};
+    std::sort(begin(order), end(order));
+
+    osm_node_order_.resize(osm_ids.size());
+    for (auto const& [_, rank] : order) {
+      osm_node_order_[rank] = node_idx_t{node_to_osm_.size()};
+      node_to_osm_.push_back(osm_ids[rank]);
+    }
+    r_->node_is_restricted_.resize(n_nodes());
   }
 
   // Build edges.
@@ -607,7 +676,9 @@ void ways::compute_turn_bearings() {
 
 void ways::sync() {
   node_to_osm_.mmap_.sync();
+  osm_node_order_.mmap_.sync();
   way_osm_idx_.mmap_.sync();
+  osm_way_order_.mmap_.sync();
   way_polylines_.data_.mmap_.sync();
   way_polylines_.bucket_starts_.mmap_.sync();
   way_osm_nodes_.data_.mmap_.sync();

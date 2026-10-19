@@ -333,6 +333,77 @@ std::pair<node_properties, level_bits_t> get_node_properties(tags const& t) {
   return {p, t.level_bits_};
 }
 
+// Whether a way is extracted, and what the decision depends on. The way
+// order pass and way_handler::way() have to agree on exactly the same set of
+// ways (the first lays out the storage the second fills), so both decide
+// here. The decision includes the conditional restrictions (a way accessible
+// only under conditions counts), so they are parsed into `conditional_builder`
+// here; the way order pass hands in a scratch routing as the sink.
+struct way_classification {
+  way_properties p_;
+  std::optional<hgv_way_info> hgv_info_;
+  rel_ways_t::const_iterator rel_;  // end() if the way is in no relation
+};
+
+std::optional<way_classification> classify_way(
+    tags const& t,
+    bool const is_loop,
+    rel_ways_t const& rel_ways,
+    osm_way_idx_t const osm_way_idx,
+    conditional_storage_builder& conditional_builder,
+    bool const log_unsupported) {
+  if (t.is_elevator_ && !is_loop) {
+    return std::nullopt;  // way elevators have to be loops
+  }
+
+  auto const it = rel_ways.find(osm_way_idx);
+  if (!t.is_elevator_ &&  // elevators tagged as building would be landuse
+      !t.is_parking_ &&
+      ((it == end(rel_ways) && t.highway_.empty() && t.railway_.empty() &&
+        !t.is_ferry_route_ && !t.is_platform()) ||
+       (t.highway_.empty() && !t.is_platform() && it != end(rel_ways) &&
+        t.landuse_))) {
+    return std::nullopt;
+  }
+
+  auto const in_route = it != end(rel_ways) && it->second.p_.in_route_;
+  auto const hgv_info = get_hgv_way_info(t);
+
+  auto p = (t.is_platform() || t.is_parking_ || !t.highway_.empty() ||
+            (!t.railway_.empty() && (in_route || it == end(rel_ways))) ||
+            t.is_ferry_route_)
+               ? get_way_properties(t)
+               : it->second.p_;
+  p.has_hgv_info_ = hgv_info.has_value();
+
+  if (!t.has_level_ && it != end(rel_ways)) {
+    p.from_level_ = it->second.p_.from_level_;
+    p.to_level_ = it->second.p_.to_level_;
+  }
+
+  if (in_route) {
+    p.in_route_ = true;
+  }
+  if (it != end(rel_ways) && it->second.p_.is_detour_) {
+    p.is_detour_ = true;
+  }
+
+  // Timezones are not known yet (areas are assembled in the same pass) -
+  // they are patched into the condition sets by osm_areas::annotate_ways().
+  for (auto const& [key, value] : t.conditional_tags_) {
+    if (!parse_conditional_restriction_tag(key, value, conditional_builder) &&
+        log_unsupported) {
+      std::clog << "osr: ignored unsupported conditional restriction on way "
+                << to_idx(osm_way_idx) << ": " << key << '=' << value << '\n';
+    }
+  }
+  p.has_conditionals_ = !conditional_builder.way_.empty();
+  if (!p.is_accessible()) {
+    return std::nullopt;
+  }
+  return way_classification{p, hgv_info, it};
+}
+
 struct way_handler : public osmium::handler::Handler {
   using is_transparent = void;
 
@@ -367,11 +438,13 @@ struct way_handler : public osmium::handler::Handler {
   way_handler(ways& w,
               platforms* platforms,
               rel_ways_t const& rel_ways,
-              hash_map<osm_node_idx_t, level_bits_t>& elevator_nodes)
+              hash_map<osm_node_idx_t, level_bits_t>& elevator_nodes,
+              std::vector<way_idx_t> const& way_order)
       : w_{w},
         platforms_{platforms},
         rel_ways_{rel_ways},
-        elevator_nodes_{elevator_nodes} {
+        elevator_nodes_{elevator_nodes},
+        way_order_{way_order} {
     strings_set_.hash_function().strings_ = &w_.strings_;
     strings_set_.key_eq().strings_ = &w_.strings_;
   }
@@ -382,47 +455,13 @@ struct way_handler : public osmium::handler::Handler {
     }
 
     auto const osm_way_idx = to_osm_way_idx(w.id());
-    auto const it = rel_ways_.find(osm_way_idx);
     auto t = tags{w};
+    auto const is_loop = w.nodes().front() == w.nodes().back();
 
-    if (t.is_elevator_) {
-      if (w.nodes().front() != w.nodes().back()) {
-        return;  // way elevators have to be loops
-      }
+    if (t.is_elevator_ && is_loop) {
       auto const first_node = to_osm_node_idx(w.nodes().front().ref());
       auto const l = std::scoped_lock{elevator_nodes_mutex_};
       elevator_nodes_.emplace(first_node, t.level_bits_);
-    }
-
-    if (!t.is_elevator_ &&  // elevators tagged as building would be landuse
-        !t.is_parking_ &&
-        ((it == end(rel_ways_) && t.highway_.empty() && t.railway_.empty() &&
-          !t.is_ferry_route_ && !t.is_platform()) ||
-         (t.highway_.empty() && !t.is_platform() && it != end(rel_ways_) &&
-          t.landuse_))) {
-      return;
-    }
-
-    auto const in_route = it != end(rel_ways_) && it->second.p_.in_route_;
-    auto const hgv_info = get_hgv_way_info(t);
-
-    auto p = (t.is_platform() || t.is_parking_ || !t.highway_.empty() ||
-              (!t.railway_.empty() && (in_route || it == end(rel_ways_))) ||
-              t.is_ferry_route_)
-                 ? get_way_properties(t)
-                 : it->second.p_;
-    p.has_hgv_info_ = hgv_info.has_value();
-
-    if (!t.has_level_ && it != end(rel_ways_)) {
-      p.from_level_ = it->second.p_.from_level_;
-      p.to_level_ = it->second.p_.to_level_;
-    }
-
-    if (in_route) {
-      p.in_route_ = true;
-    }
-    if (it != end(rel_ways_) && it->second.p_.is_detour_) {
-      p.is_detour_ = true;
     }
 
     auto const get_point = [](osmium::NodeRef const& n) {
@@ -449,21 +488,19 @@ struct way_handler : public osmium::handler::Handler {
     };
 
     auto l = std::scoped_lock{mutex_};
-    auto const way_idx = way_idx_t{w_.way_osm_idx_.size()};
-
-    // Timezones are not known yet (areas are assembled in the same pass) -
-    // they are patched into the condition sets by osm_areas::annotate_ways().
     auto conditional_builder = conditional_storage_builder{.routing_ = *w_.r_};
-    for (auto const& [key, value] : t.conditional_tags_) {
-      if (!parse_conditional_restriction_tag(key, value, conditional_builder)) {
-        std::clog << "osr: ignored unsupported conditional restriction on way "
-                  << to_idx(osm_way_idx) << ": " << key << '=' << value << '\n';
-      }
-    }
-    p.has_conditionals_ = !conditional_builder.way_.empty();
-    if (!p.is_accessible()) {
+    auto const c = classify_way(t, is_loop, rel_ways_, osm_way_idx,
+                                conditional_builder, true);
+    if (!c.has_value()) {
       return;
     }
+    auto const& p = c->p_;
+    auto const it = c->rel_;
+
+    // The way order pass assigned the index and laid out the storage.
+    utl::verify(next_way_ != way_order_.size(),
+                "way {} was not counted by the way order pass", w.id());
+    auto const way_idx = way_order_[next_way_++];
 
     if (platforms_ != nullptr &&
         (t.is_platform() || p.is_platform_ ||
@@ -475,28 +512,30 @@ struct way_handler : public osmium::handler::Handler {
       platforms_->platform_ref_[it->second.pl_].push_back(to_value(way_idx));
     }
 
-    w_.way_osm_idx_.push_back(to_osm_way_idx(w.id()));
-    w_.r_->way_properties_.emplace_back(p);
-    if (hgv_info.has_value()) {
-      w_.r_->way_hgv_info_.emplace_back(way_idx, *hgv_info);
+    w_.way_osm_idx_[way_idx] = osm_way_idx;
+    w_.r_->way_properties_[way_idx] = p;
+    // Appended in file order, sorted by way index after the pass.
+    if (c->hgv_info_.has_value()) {
+      w_.r_->way_hgv_info_.emplace_back(way_idx, *c->hgv_info_);
     }
     if (p.has_conditionals()) {
       w_.r_->way_conditionals_.emplace_back(way_idx, conditional_builder.way_);
     }
 
-    w_.way_polylines_.emplace_back(w.nodes() |
-                                   std::views::transform(get_point));
-    w_.way_osm_nodes_.emplace_back(w.nodes() |
-                                   std::views::transform(get_node_id));
-
-    auto const name = t.name_.empty() ? t.ref_ : t.name_;
-    if (!name.empty()) {
-      w_.way_names_.emplace_back(register_string(name));
-    } else {
-      w_.way_names_.emplace_back(string_idx_t::invalid());
+    auto polyline = w_.way_polylines_[way_idx];
+    auto osm_nodes = w_.way_osm_nodes_[way_idx];
+    utl::verify(polyline.size() == w.nodes().size(),
+                "way {}: {} nodes, the way order pass counted {}", w.id(),
+                w.nodes().size(), polyline.size());
+    for (auto const [i, n] : utl::enumerate(w.nodes())) {
+      polyline[i] = get_point(n);
+      osm_nodes[i] = get_node_id(n);
     }
 
-    w_.way_has_conditional_access_no_.resize(to_idx(way_idx) + 1U);
+    auto const name = t.name_.empty() ? t.ref_ : t.name_;
+    w_.way_names_[way_idx] =
+        name.empty() ? string_idx_t::invalid() : register_string(name);
+
     if (!t.access_conditional_no_.empty()) {
       w_.way_has_conditional_access_no_.set(way_idx, true);
       w_.way_conditional_access_no_.emplace_back(
@@ -514,6 +553,9 @@ struct way_handler : public osmium::handler::Handler {
 
   std::mutex elevator_nodes_mutex_;
   hash_map<osm_node_idx_t, level_bits_t>& elevator_nodes_;
+
+  std::vector<way_idx_t> const& way_order_;  // per extracted way, file order
+  std::size_t next_way_{0U};
 };
 
 // A turn-restriction relation with its way/node members already resolved,
@@ -842,11 +884,90 @@ void extract(bool const with_platforms,
     mp.index_relation_members();
   }
 
+  // Way order: every way that pass 2 will extract gets its index now, in
+  // Morton order of its middle node (equal keys keep the file order), and the
+  // per-way storage is laid out for it. Pass 2 then writes each way in place
+  // and nothing is renumbered afterwards. Both passes decide with
+  // classify_way(), so they agree on the set of ways.
+  auto way_order = std::vector<way_idx_t>{};  // per extracted way, file order
+  {
+    pt->status("Load OSM / Way Order")
+        .in_high(blocks.size())
+        .out_bounds(15, 20);
+
+    struct counted_way {
+      std::uint64_t key_;
+      std::uint32_t n_nodes_;
+    };
+    struct way_order_ctx {
+      ways::routing scratch_;  // sink for the condition sets of the decision
+      std::vector<std::int64_t> refs_;
+      std::vector<osm::way> mid_nodes_;  // one-node ways: the middle nodes
+      std::vector<counted_way> ways_;
+    };
+
+    auto counted = std::vector<counted_way>{};
+    osm::parse_osm_block_parallel_collect<way_order_ctx>(
+        blocks, osm::skip{},
+        [&](way_order_ctx& ctx, std::int64_t const id, auto&& refs,
+            auto&& tag_range) {
+          ctx.refs_.clear();
+          for (auto const ref : refs) {
+            ctx.refs_.push_back(ref);
+          }
+          if (ctx.refs_.size() < 2U) {
+            return;
+          }
+          auto const t = tags{osm_obj_type::kWay, tag_range};
+          auto builder = conditional_storage_builder{.routing_ = ctx.scratch_};
+          if (!classify_way(t, ctx.refs_.front() == ctx.refs_.back(), rel_ways,
+                            to_osm_way_idx(id), builder, false)
+                   .has_value()) {
+            return;
+          }
+          auto& mid = ctx.mid_nodes_.emplace_back();
+          mid.id = id;
+          mid.node_refs.emplace_back(
+              osm::node_ref{ctx.refs_[ctx.refs_.size() / 2U], {}});
+          ctx.ways_.push_back(
+              {0U, static_cast<std::uint32_t>(ctx.refs_.size())});
+        },
+        osm::skip{},
+        [&](way_order_ctx& ctx) {
+          osm::update_locations(node_idx, ctx.mid_nodes_);
+          for (auto i = 0U; i != ctx.ways_.size(); ++i) {
+            ctx.ways_[i].key_ =
+                geo::morton_encode(point::from_location(osm::to_osmium(
+                    ctx.mid_nodes_[i].node_refs.front().location())));
+          }
+        },
+        [&](std::size_t, way_order_ctx&& ctx) {
+          counted.insert(end(counted), begin(ctx.ways_), end(ctx.ways_));
+        },
+        pt->update_fn());
+
+    // (key, file position): equal keys keep the file order
+    auto order =
+        std::vector<std::pair<std::uint64_t, std::uint32_t>>(counted.size());
+    for (auto i = 0U; i != counted.size(); ++i) {
+      order[i] = {counted[i].key_, i};
+    }
+    std::sort(begin(order), end(order));
+
+    way_order.resize(counted.size());
+    auto n_nodes = std::vector<std::uint32_t>(counted.size());
+    for (auto i = 0U; i != order.size(); ++i) {
+      way_order[order[i].second] = way_idx_t{i};
+      n_nodes[i] = counted[order[i].second].n_nodes_;
+    }
+    w.init_ways(n_nodes);
+  }
+
   auto elevator_nodes = hash_map<osm_node_idx_t, level_bits_t>{};
   {  // Pass 2: extract streets, collect area member way geometries.
-    pt->status("Load OSM / Ways").in_high(blocks.size()).out_bounds(15, 38);
+    pt->status("Load OSM / Ways").in_high(blocks.size()).out_bounds(20, 38);
 
-    auto h = way_handler{w, pl.get(), rel_ways, elevator_nodes};
+    auto h = way_handler{w, pl.get(), rel_ways, elevator_nodes, way_order};
 
     struct pass2_ctx {
       osmium::memory::Buffer scratch_{1U << 12U,
@@ -888,6 +1009,21 @@ void extract(bool const with_platforms,
         },
         [&](std::size_t, pass2_ctx&& ctx) { osmium::apply(ctx.ways_, h); },
         pt->update_fn());
+
+    utl::verify(h.next_way_ == way_order.size(),
+                "pass 2 extracted {} of the {} ways counted by the way order",
+                h.next_way_, way_order.size());
+
+    // Appended in file order by pass 2, looked up by binary search later.
+    auto const by_way = [](auto const& a, auto const& b) {
+      return a.first < b.first;
+    };
+    std::sort(w.r_->way_hgv_info_.begin(), w.r_->way_hgv_info_.end(), by_way);
+    std::sort(w.r_->way_conditionals_.begin(), w.r_->way_conditionals_.end(),
+              by_way);
+    std::sort(w.way_conditional_access_no_.begin(),
+              w.way_conditional_access_no_.end(), by_way);
+    w.build_osm_way_order();
   }
 
   {  // Assemble timezone and low emission zone polygons.

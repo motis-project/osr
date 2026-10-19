@@ -446,13 +446,22 @@ struct ways {
   void compute_turn_bearings();
   void build_class_components();
 
-  std::optional<way_idx_t> find_way(osm_way_idx_t const i) {
-    auto const it = std::lower_bound(
-        begin(way_osm_idx_), end(way_osm_idx_), i,
-        [](auto const a, auto const b) { return osm_id_less(a, b); });
-    return it != end(way_osm_idx_) && *it == i
-               ? std::optional{way_idx_t{
-                     std::distance(begin(way_osm_idx_), it)}}
+  // Lays out the per-way storage for the ways counted by the way order pass
+  // of extract(): way i has n_nodes[i] nodes. Pass 2 then writes every way in
+  // place at its index.
+  void init_ways(std::vector<std::uint32_t> const& n_nodes);
+
+  // Builds osm_way_order_ from way_osm_idx_, once the ways are in place.
+  void build_osm_way_order();
+
+  std::optional<way_idx_t> find_way(osm_way_idx_t const i) const {
+    auto const it =
+        std::lower_bound(begin(osm_way_order_), end(osm_way_order_), i,
+                         [&](way_idx_t const a, osm_way_idx_t const b) {
+                           return osm_id_less(way_osm_idx_[a], b);
+                         });
+    return it != end(osm_way_order_) && way_osm_idx_[*it] == i
+               ? std::optional{*it}
                : std::nullopt;
   }
 
@@ -461,13 +470,15 @@ struct ways {
   }
 
   std::optional<node_idx_t> find_node_idx(osm_node_idx_t const i) const {
-    auto const it = std::lower_bound(begin(node_to_osm_), end(node_to_osm_), i,
-                                     [](auto&& a, auto&& b) { return a < b; });
-    if (it == end(node_to_osm_) || *it != i) {
+    auto const it =
+        std::lower_bound(begin(osm_node_order_), end(osm_node_order_), i,
+                         [&](node_idx_t const a, osm_node_idx_t const b) {
+                           return node_to_osm_[a] < b;
+                         });
+    if (it == end(osm_node_order_) || node_to_osm_[*it] != i) {
       return std::nullopt;
     }
-    return {node_idx_t{static_cast<node_idx_t::value_t>(
-        std::distance(begin(node_to_osm_), it))}};
+    return *it;
   }
 
   node_idx_t get_node_idx(osm_node_idx_t const i) const {
@@ -691,7 +702,9 @@ struct ways {
   timezone_cache_t timezones_;
 
   mm_vec_map<node_idx_t, osm_node_idx_t> node_to_osm_;
+  mm_vec<node_idx_t> osm_node_order_;  // node indices sorted by OSM id
   mm_vec_map<way_idx_t, osm_way_idx_t> way_osm_idx_;
+  mm_vec<way_idx_t> osm_way_order_;  // way indices sorted by OSM id
   mm_vecvec<way_idx_t, point, std::uint64_t> way_polylines_;
   mm_vecvec<way_idx_t, osm_node_idx_t, std::uint64_t> way_osm_nodes_;
   mm_vecvec<string_idx_t, char, std::uint64_t> strings_;

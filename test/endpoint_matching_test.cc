@@ -1,6 +1,4 @@
 #include <chrono>
-#include <algorithm>
-#include <iterator>
 #include <tuple>
 
 #include "gtest/gtest.h"
@@ -18,16 +16,13 @@ using endpoint_matching_test = test::sharing_routing_fixture;
 geo::latlng project_to_osm_way(ways const& w,
                                std::int64_t const osm_way,
                                geo::latlng const& pos) {
-  auto const way_it = std::lower_bound(
-      begin(w.way_osm_idx_), end(w.way_osm_idx_), to_osm_way_idx(osm_way));
-  utl::verify(
-      way_it != end(w.way_osm_idx_) && *way_it == to_osm_way_idx(osm_way),
-      "OSM way {} not found", osm_way);
-  auto const way = way_idx_t{static_cast<way_idx_t::value_t>(
-      std::distance(begin(w.way_osm_idx_), way_it))};
+  // Way indices follow the way order, not the OSM ids: look up through
+  // osm_way_order_.
+  auto const way = w.find_way(to_osm_way_idx(osm_way));
+  utl::verify(way.has_value(), "OSM way {} not found", osm_way);
   return std::get<1>(geo::approx_squared_distance_to_polyline<
                      std::tuple<double, geo::latlng, std::size_t>>(
-      pos, w.way_polylines_[way], geo::approx_distance_lng_degrees(pos)));
+      pos, w.way_polylines_[*way], geo::approx_distance_lng_degrees(pos)));
 }
 
 TEST_F(endpoint_matching_test, endpoint_matches_work_with_all_algorithms) {

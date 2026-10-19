@@ -1,16 +1,25 @@
 #include "gtest/gtest.h"
 
+#include <cstdint>
 #include <algorithm>
 #include <filesystem>
 #include <fstream>
 #include <memory>
+#include <string>
 #include <string_view>
+#include <variant>
+#include <vector>
 
 #include "cista/mmap.h"
+
+#include "fmt/core.h"
+
+#include "utl/overloaded.h"
 
 #include "osr/extract/extract.h"
 
 #include "osr/lookup.h"
+#include "osr/platforms.h"
 #include "osr/types.h"
 #include "osr/ways.h"
 #include "xml_to_pbf.h"
@@ -305,9 +314,12 @@ TEST(extract, supports_negative_custom_ids) {
 
   auto w = ways{dir, cista::mmap::protection::READ};
 
-  EXPECT_TRUE(std::is_sorted(
-      begin(w.way_osm_idx_), end(w.way_osm_idx_),
-      [](auto const lhs, auto const rhs) { return osm_id_less(lhs, rhs); }));
+  // Way indices follow the way order; osm_way_order_ lists them by OSM id.
+  EXPECT_TRUE(std::is_sorted(begin(w.osm_way_order_), end(w.osm_way_order_),
+                             [&](auto const lhs, auto const rhs) {
+                               return osm_id_less(w.way_osm_idx_[lhs],
+                                                  w.way_osm_idx_[rhs]);
+                             }));
 
   auto const earlier_negative_way = w.find_way(to_osm_way_idx(-11));
   auto const negative_way = w.find_way(to_osm_way_idx(-10));
@@ -399,4 +411,124 @@ TEST_F(crossing_node_access_test, way_access_is_unchanged) {
   auto const crossing = ways_->find_way(osm_way_idx_t{102});
   ASSERT_TRUE(crossing.has_value());
   EXPECT_FALSE(ways_->r_->way_properties_[*crossing].is_bike_accessible());
+}
+
+// The platform bit per way and the way references of the platforms must name
+// the ways by their final (way order) index. The spokes get their OSM ids from
+// east to west, so the way order (Morton code of the midpoint, here west to
+// east) reverses them.
+TEST(extract, platform_way_refs_follow_the_way_order) {
+  constexpr auto const kSpokes = 8U;
+  auto xml = std::string{R"(<osm version="0.6" generator="test">
+)"};
+  // Street nodes 10..19 along lat 48.0; spoke i hangs south of node 19 - i.
+  for (auto k = 0U; k != 10U; ++k) {
+    xml += fmt::format(R"(  <node id="{}" lat="48.0000" lon="{:.4f}"/>
+)",
+                       10U + k, 9.0 + 0.001 * k);
+  }
+  for (auto i = 1U; i <= kSpokes; ++i) {
+    xml += fmt::format(R"(  <node id="{}" lat="47.9995" lon="{:.4f}"/>
+)",
+                       20U + i, 9.0 + 0.001 * (9U - i));
+  }
+  // A platform node in the middle of spoke 4.
+  xml += R"(  <node id="30" lat="47.9998" lon="9.0050">
+    <tag k="public_transport" v="platform"/>
+    <tag k="name" v="Node platform"/>
+  </node>
+  <way id="100">
+    <nd ref="10"/><nd ref="11"/><nd ref="12"/><nd ref="13"/><nd ref="14"/>
+    <nd ref="15"/><nd ref="16"/><nd ref="17"/><nd ref="18"/><nd ref="19"/>
+    <tag k="highway" v="residential"/>
+  </way>
+)";
+  // Spokes 2, 5 and 7 are named platform ways, the others plain footways.
+  for (auto i = 1U; i <= kSpokes; ++i) {
+    auto const platform = i == 2U || i == 5U || i == 7U;
+    auto const tags =
+        platform ? fmt::format(R"(    <tag k="public_transport" v="platform"/>
+    <tag k="name" v="Platform {}"/>
+)",
+                               i)
+                 : std::string{R"(    <tag k="highway" v="footway"/>
+)"};
+    xml += fmt::format(R"(  <way id="{}">
+    <nd ref="{}"/>{}<nd ref="{}"/>
+{}  </way>
+)",
+                       i, 19U - i, i == 4U ? R"(<nd ref="30"/>)" : "", 20U + i,
+                       tags);
+  }
+  // A platform relation over the unnamed spokes 3 and 6: they get a reference
+  // in the relation's platform, but no platform bit of their own.
+  xml += R"(  <relation id="200">
+    <member type="way" ref="3" role=""/>
+    <member type="way" ref="6" role=""/>
+    <tag k="type" v="multipolygon"/>
+    <tag k="public_transport" v="platform"/>
+    <tag k="name" v="Relation platform"/>
+  </relation>
+</osm>)";
+
+  auto const dir = fs::temp_directory_path() / "osr_platform_way_order_dir";
+  auto ec = std::error_code{};
+  fs::remove_all(dir, ec);
+  fs::create_directories(dir, ec);
+  extract(
+      true,
+      osr::test::write_osm_pbf("osr_platform_way_order", xml).generic_string(),
+      dir, {});
+
+  auto w = ways{dir, cista::mmap::protection::READ};
+  auto pl = platforms{dir, cista::mmap::protection::READ};
+
+  // The test only shows something if the way order differs from the OSM id
+  // order.
+  ASSERT_FALSE(std::is_sorted(
+      begin(w.way_osm_idx_), end(w.way_osm_idx_),
+      [](auto const a, auto const b) { return osm_id_less(a, b); }));
+
+  auto const osm_way = [&](way_idx_t const x) {
+    return static_cast<std::int64_t>(cista::to_idx(w.way_osm_idx_[x]));
+  };
+  auto const osm_node = [&](node_idx_t const x) {
+    return static_cast<std::int64_t>(cista::to_idx(w.node_to_osm_[x]));
+  };
+
+  // The platform bits name the three named platform ways.
+  auto marked = std::vector<std::int64_t>{};
+  for (auto i = 0U; i != pl.way_is_platform_.size(); ++i) {
+    if (pl.way_is_platform_.test(way_idx_t{i})) {
+      marked.push_back(osm_way(way_idx_t{i}));
+    }
+  }
+  std::sort(begin(marked), end(marked));
+  EXPECT_EQ((std::vector<std::int64_t>{2, 5, 7}), marked);
+
+  // The references: one platform per named way, the relation's platform with
+  // its two member ways, and the node platform.
+  auto way_refs = std::vector<std::vector<std::int64_t>>{};
+  auto node_refs = std::vector<std::int64_t>{};
+  for (auto const refs : pl.platform_ref_) {
+    auto ways_of_platform = std::vector<std::int64_t>{};
+    for (auto const ref : refs) {
+      std::visit(utl::overloaded{[&](way_idx_t const x) {
+                                   ways_of_platform.push_back(osm_way(x));
+                                 },
+                                 [&](node_idx_t const x) {
+                                   EXPECT_TRUE(pl.node_is_platform_.test(x));
+                                   node_refs.push_back(osm_node(x));
+                                 }},
+                 to_ref(ref));
+    }
+    if (!ways_of_platform.empty()) {
+      std::sort(begin(ways_of_platform), end(ways_of_platform));
+      way_refs.push_back(ways_of_platform);
+    }
+  }
+  std::sort(begin(way_refs), end(way_refs));
+  EXPECT_EQ((std::vector<std::vector<std::int64_t>>{{2}, {3, 6}, {5}, {7}}),
+            way_refs);
+  EXPECT_EQ((std::vector<std::int64_t>{30}), node_refs);
 }
