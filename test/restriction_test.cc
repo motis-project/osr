@@ -7,8 +7,6 @@
 #include <chrono>
 #include <cmath>
 #include <filesystem>
-#include <optional>
-#include <utility>
 
 #include "cista/mmap.h"
 
@@ -86,77 +84,53 @@ TEST(extract, wa) {
   EXPECT_EQ(elevation_monotonic_t{4U + 0U}, route_high_costs->elevation_.down_);
 }
 
-// A turn restriction between ways at positions >= 16 of a node. Which ways
-// end up at those positions depends on the way order, so the star is
-// extracted twice: once to see which ways land at positions 18 and 19, then
-// with the restriction between them.
+// A turn restriction between ways at positions >= 16 of a node (node ways
+// are ordered by way index, i.e. by OSM id here).
 TEST(extract, restriction_at_high_way_position) {
   auto const p = fs::temp_directory_path() / "osr_restriction_high_way_pos";
   auto ec = std::error_code{};
+  fs::remove_all(p, ec);
 
   constexpr auto const kWays = 20U;
-  auto const make_xml =
-      [&](std::optional<std::pair<std::int64_t, std::int64_t>> const
-              restriction) {
-        auto xml = std::string{R"(<osm version="0.6" generator="test">
+  auto xml = std::string{R"(<osm version="0.6" generator="test">
   <node id="1" lat="48.0" lon="9.0"/>
 )"};
-        for (auto i = 0U; i != kWays; ++i) {
-          xml += fmt::format(R"(  <node id="{}" lat="{}" lon="{}"/>
+  for (auto i = 0U; i != kWays; ++i) {
+    xml += fmt::format(R"(  <node id="{}" lat="{}" lon="{}"/>
 )",
-                             i + 2U, 48.0 + 0.001 * std::cos(i * 6.28 / kWays),
-                             9.0 + 0.001 * std::sin(i * 6.28 / kWays));
-        }
-        for (auto i = 0U; i != kWays; ++i) {
-          xml += fmt::format(R"(  <way id="{}">
+                       i + 2U, 48.0 + 0.001 * std::cos(i * 6.28 / kWays),
+                       9.0 + 0.001 * std::sin(i * 6.28 / kWays));
+  }
+  for (auto i = 0U; i != kWays; ++i) {
+    xml += fmt::format(R"(  <way id="{}">
     <nd ref="1"/><nd ref="{}"/>
     <tag k="highway" v="residential"/>
   </way>
 )",
-                             i + 1U, i + 2U);
-        }
-        if (restriction.has_value()) {
-          xml += fmt::format(R"(  <relation id="1">
-    <member type="way" ref="{}" role="from"/>
+                       i + 1U, i + 2U);
+  }
+  xml += R"(  <relation id="1">
+    <member type="way" ref="18" role="from"/>
     <member type="node" ref="1" role="via"/>
-    <member type="way" ref="{}" role="to"/>
+    <member type="way" ref="19" role="to"/>
     <tag k="type" v="restriction"/>
     <tag k="restriction" v="no_left_turn"/>
   </relation>
-)",
-                             restriction->first, restriction->second);
-        }
-        xml += "</osm>";
-        return xml;
-      };
-  auto const extract = [&](std::string_view const name,
-                           std::string const& xml) {
-    fs::remove_all(p, ec);
-    osr::extract(false, osr::test::write_osm_pbf(name, xml), p, {});
-  };
+</osm>)";
 
-  extract("osr_restriction_high_way_pos_probe", make_xml(std::nullopt));
-  auto const [from_way, to_way] = [&] {
-    auto w = osr::ways{p, cista::mmap::protection::READ};
-    auto const center = w.get_node_idx(osr::to_osm_node_idx(1));
-    auto const osm_way = [&](way_pos_t const pos) {
-      return static_cast<std::int64_t>(
-          cista::to_idx(w.way_osm_idx_[w.r_->node_ways_[center][pos]]));
-    };
-    return std::pair{osm_way(18U), osm_way(19U)};
-  }();
+  osr::extract(false,
+               osr::test::write_osm_pbf("osr_restriction_high_way_pos", xml), p,
+               {});
 
-  extract("osr_restriction_high_way_pos",
-          make_xml(std::pair{from_way, to_way}));
   auto w = osr::ways{p, cista::mmap::protection::READ};
   auto const center = w.get_node_idx(osr::to_osm_node_idx(1));
   auto const pos = [&](std::int64_t const osm_way) {
     return w.r_->get_way_pos(center, *w.find_way(osr::to_osm_way_idx(osm_way)));
   };
-  ASSERT_GE(pos(from_way), 16U);
-  ASSERT_GE(pos(to_way), 16U);
-  EXPECT_TRUE(w.r_->is_restricted<osr::direction::kForward>(
-      center, pos(from_way), pos(to_way)));
+  ASSERT_GE(pos(18), 16U);
+  ASSERT_GE(pos(19), 16U);
+  EXPECT_TRUE(
+      w.r_->is_restricted<osr::direction::kForward>(center, pos(18), pos(19)));
   EXPECT_FALSE(w.r_->is_restricted<osr::direction::kForward>(
-      center, pos(from_way) - 16U, pos(to_way) - 16U));  // no wrap-around
+      center, pos(18) - 16U, pos(19) - 16U));  // no wrap-around
 }

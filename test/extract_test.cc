@@ -413,10 +413,10 @@ TEST_F(crossing_node_access_test, way_access_is_unchanged) {
   EXPECT_FALSE(ways_->r_->way_properties_[*crossing].is_bike_accessible());
 }
 
-// The platform bit per way and the way references of the platforms must name
-// the ways by their final (way order) index. The spokes get their OSM ids from
-// east to west, so the way order (Morton code of the midpoint, here west to
-// east) reverses them.
+// platforms::reorder_ways() has to follow ways::order_ways(): the platform bit
+// per way and the way references of the platforms must name the renumbered
+// ways. The spokes get their OSM ids from east to west, so the way order
+// (Morton code of the midpoint, here west to east) reverses them.
 TEST(extract, platform_way_refs_follow_the_way_order) {
   constexpr auto const kSpokes = 8U;
   auto xml = std::string{R"(<osm version="0.6" generator="test">

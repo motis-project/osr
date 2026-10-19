@@ -446,13 +446,11 @@ struct ways {
   void compute_turn_bearings();
   void build_class_components();
 
-  // Lays out the per-way storage for the ways counted by the way order pass
-  // of extract(): way i has n_nodes[i] nodes. Pass 2 then writes every way in
-  // place at its index.
-  void init_ways(std::vector<std::uint32_t> const& n_nodes);
-
-  // Builds osm_way_order_ from way_osm_idx_, once the ways are in place.
-  void build_osm_way_order();
+  // Renumbers the ways in Morton order of their middle point, so that nearby
+  // ways get nearby indices. Runs after pass 2 and before connect_ways(), so
+  // everything built later follows the new order. Returns the new index of
+  // every old index, to remap way references held elsewhere (platforms).
+  std::vector<way_idx_t> order_ways();
 
   std::optional<way_idx_t> find_way(osm_way_idx_t const i) const {
     auto const it =

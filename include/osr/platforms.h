@@ -1,5 +1,7 @@
 #pragma once
 
+#include <vector>
+
 #include "osmium/osm/node.hpp"
 #include "osmium/osm/relation.hpp"
 #include "osmium/osm/way.hpp"
@@ -74,6 +76,32 @@ struct platforms {
     way_is_platform_.set(w, true);
     platform_ref_.emplace_back(std::initializer_list<ref_value_t>{to_value(w)});
     return p;
+  }
+
+  // Remaps the way references after ways::order_ways().
+  void reorder_ways(std::vector<way_idx_t> const& new_idx) {
+    auto platform_ways = std::vector<way_idx_t>{};
+    auto size = std::uint64_t{0U};
+    for (auto i = 0U; i != way_is_platform_.size(); ++i) {
+      if (way_is_platform_.test(way_idx_t{i})) {
+        platform_ways.push_back(new_idx[i]);
+        size =
+            std::max(size, static_cast<std::uint64_t>(to_idx(new_idx[i]) + 1U));
+      }
+    }
+    // Same size as way() leaves it: one past the highest platform way.
+    way_is_platform_.resize(size);
+    way_is_platform_.zero_out();
+    for (auto const w : platform_ways) {
+      way_is_platform_.set(w, true);
+    }
+    for (auto i = 0U; i != platform_ref_.size(); ++i) {
+      for (auto& ref : platform_ref_[platform_idx_t{i}]) {
+        if (is_way(ref)) {
+          ref = to_idx(new_idx[ref]);
+        }
+      }
+    }
   }
 
   platform_idx_t node(node_idx_t const n, osmium::Node const& x) {

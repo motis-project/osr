@@ -316,36 +316,94 @@ void ways::compute_big_street_neighbors() {
       });
 }
 
-void ways::init_ways(std::vector<std::uint32_t> const& n_nodes) {
-  auto const n = n_nodes.size();
-  way_osm_idx_.resize(n);
-  way_names_.resize(n);
-  r_->way_properties_.resize(n);
-  way_has_conditional_access_no_.resize(n);
+std::vector<way_idx_t> ways::order_ways() {
+  auto pt = utl::get_active_progress_tracker_or_activate("osr");
+  pt->status("Order ways").in_high(n_ways()).out_bounds(40, 41);
 
-  auto const layout = [&](auto& v) {
-    v.bucket_starts_.resize(n + 1U);
-    auto offset = std::uint64_t{0U};
-    for (auto i = 0U; i != n; ++i) {
-      v.bucket_starts_[i] = offset;
-      offset += n_nodes[i];
-    }
-    v.bucket_starts_[n] = offset;
-    v.data_.resize(offset);
-  };
-  layout(way_polylines_);
-  layout(way_osm_nodes_);
-}
+  // (key, old index): equal keys keep the OSM id order
+  auto order = std::vector<std::pair<std::uint64_t, way_idx_t>>(n_ways());
+  utl::parallel_for_run(
+      n_ways(),
+      [&](std::size_t const i) {
+        auto const way = way_idx_t{i};
+        auto const polyline = way_polylines_[way];
+        order[i] = {geo::morton_encode(polyline[polyline.size() / 2U]), way};
+      },
+      pt->update_fn());
+  std::sort(begin(order), end(order));
 
-void ways::build_osm_way_order() {
-  osm_way_order_.resize(n_ways());
-  for (auto i = 0U; i != n_ways(); ++i) {
-    osm_way_order_[i] = way_idx_t{i};
+  auto new_idx = std::vector<way_idx_t>(n_ways());
+  for (auto i = 0U; i != order.size(); ++i) {
+    new_idx[to_idx(order[i].second)] = way_idx_t{i};
   }
-  std::sort(osm_way_order_.begin(), osm_way_order_.end(),
-            [&](way_idx_t const a, way_idx_t const b) {
-              return osm_id_less(way_osm_idx_[a], way_osm_idx_[b]);
-            });
+
+  // Ways were added in OSM id order: the old index is the rank by OSM id.
+  osm_way_order_.resize(n_ways());
+  for (auto i = 0U; i != new_idx.size(); ++i) {
+    osm_way_order_[i] = new_idx[i];
+  }
+
+  auto const permute = [&](auto& v) {
+    auto const old = std::vector(begin(v), end(v));
+    for (auto i = 0U; i != order.size(); ++i) {
+      v[way_idx_t{i}] = old[to_idx(order[i].second)];
+    }
+  };
+  permute(way_osm_idx_);
+  permute(way_names_);
+  permute(r_->way_properties_);
+
+  auto const permute_bits = [&](auto& v) {
+    auto old = std::vector<bool>(n_ways());
+    for (auto i = 0U; i != v.size(); ++i) {
+      old[i] = v.test(way_idx_t{i});
+    }
+    v.resize(n_ways());
+    for (auto i = 0U; i != order.size(); ++i) {
+      v.set(way_idx_t{i}, old[to_idx(order[i].second)]);
+    }
+  };
+  permute_bits(way_has_conditional_access_no_);
+
+  // (way, value) lists, looked up by binary search
+  auto const remap = [&](auto& v) {
+    for (auto& x : v) {
+      x.first = new_idx[to_idx(x.first)];
+    }
+    std::sort(begin(v), end(v),
+              [](auto const& a, auto const& b) { return a.first < b.first; });
+  };
+  remap(r_->way_hgv_info_);
+  remap(r_->way_conditionals_);
+  remap(way_conditional_access_no_);
+
+  // Rebuilt through temporary files: on Europe both are 8 GB.
+  auto const permute_buckets = [&](auto& v) {
+    {
+      auto tmp = std::decay_t<decltype(v)>{
+          decltype(v.data_){mm("order_ways_tmp_data.bin")},
+          decltype(v.bucket_starts_){mm("order_ways_tmp_index.bin")}};
+      for (auto const& [_, old] : order) {
+        tmp.emplace_back(v[old]);
+      }
+      v.data_.resize(0U);  // mmap_vec has no clear()
+      v.bucket_starts_.resize(0U);
+      for (auto const b : tmp) {
+        v.emplace_back(b);
+      }
+    }
+    // cista::mmap unmaps only the used part of the mapping; the rest keeps
+    // the file alive until exit. Truncate first so removing frees the space.
+    for (auto const* f :
+         {"order_ways_tmp_data.bin", "order_ways_tmp_index.bin"}) {
+      std::filesystem::resize_file(p_ / f, 0U);
+      std::filesystem::remove(p_ / f);
+    }
+  };
+  permute_buckets(way_polylines_);
+  permute_buckets(way_osm_nodes_);
+
+  return new_idx;
 }
 
 void ways::connect_ways() {
