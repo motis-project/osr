@@ -197,10 +197,10 @@ boost::json::object build_map_match_debug_json(
     way_obj["properties"].as_object()["components"] = std::move(components);
   };
 
-  std::function<void(boost::json::object&, node_idx_t, bool)>
-      populate_node_fields = [&](boost::json::object& node_obj,
-                                 node_idx_t const node_idx,
-                                 bool const include_way_indices) {
+  std::function<void(std::size_t, node_idx_t, bool)> populate_node_fields =
+      [&](std::size_t const arr_idx, node_idx_t const node_idx,
+          bool const include_way_indices) {
+        auto& node_obj = dbg_nodes[arr_idx];
         node_obj["osmId"] =
             static_cast<std::int64_t>(to_idx(w.node_to_osm_[node_idx]));
         auto const pos = w.get_node_pos(node_idx).as_latlng();
@@ -234,7 +234,7 @@ boost::json::object build_map_match_debug_json(
             way_indices.emplace_back(static_cast<std::int64_t>(
                 register_way(wi, false, std::nullopt, nullptr)));
           }
-          node_obj["wayIndices"] = std::move(way_indices);
+          dbg_nodes[arr_idx]["wayIndices"] = std::move(way_indices);
         }
       };
 
@@ -250,6 +250,7 @@ boost::json::object build_map_match_debug_json(
     }
     auto const idx = dbg_ways.size();
     way_to_array_idx[way_idx] = idx;
+    dbg_ways.emplace_back();
 
     auto way_obj = boost::json::object{};
     way_obj["idx"] = static_cast<std::int64_t>(idx);
@@ -306,7 +307,7 @@ boost::json::object build_map_match_debug_json(
       way_obj["geometry"] = std::move(geom);
     }
 
-    dbg_ways.emplace_back(std::move(way_obj));
+    dbg_ways[idx] = std::move(way_obj);
     return idx;
   };
 
@@ -318,27 +319,27 @@ boost::json::object build_map_match_debug_json(
     }
     if (auto const it = node_to_array_idx.find(node_idx);
         it != node_to_array_idx.end()) {
+      auto const i = it->second;
       if (!is_additional && include_way_indices &&
-          !dbg_nodes[it->second].if_contains("wayIndices")) {
-        populate_node_fields(dbg_nodes[it->second], node_idx, true);
+          !dbg_nodes[i].if_contains("wayIndices")) {
+        populate_node_fields(i, node_idx, true);
       }
-      return it->second;
+      return i;
     }
     auto const idx = dbg_nodes.size();
     node_to_array_idx[node_idx] = idx;
 
-    auto node_obj = boost::json::object{};
+    auto& node_obj = dbg_nodes.emplace_back();
     node_obj["idx"] = static_cast<std::int64_t>(idx);
     node_obj["internalId"] = static_cast<std::int64_t>(to_idx(node_idx));
     node_obj["isAdditionalNode"] = is_additional;
 
     if (!is_additional) {
-      populate_node_fields(node_obj, node_idx, include_way_indices);
+      populate_node_fields(idx, node_idx, include_way_indices);
     } else if (add_pos) {
       node_obj["pos"] = boost::json::array{add_pos->lng(), add_pos->lat()};
     }
 
-    dbg_nodes.emplace_back(std::move(node_obj));
     return idx;
   };
 
@@ -573,6 +574,7 @@ boost::json::object build_map_match_debug_json(
     for (auto const& [node_idx, edges] : seg.additional_edges_) {
       for (auto const& edge : edges) {
         auto const idx = dbg_ways.size();
+        dbg_ways.emplace_back();
         auto way_obj = boost::json::object{};
         way_obj["idx"] = static_cast<std::int64_t>(idx);
         if (edge.underlying_way_ != way_idx_t::invalid()) {
@@ -611,7 +613,7 @@ boost::json::object build_map_match_debug_json(
         }
         way_obj["geometry"] = std::move(geom);
 
-        dbg_ways.emplace_back(std::move(way_obj));
+        dbg_ways[idx] = std::move(way_obj);
         dbg_seg.additional_edge_ways_.push_back(idx);
       }
     }
