@@ -400,20 +400,20 @@ struct foot {
     if (IsWheelchair && e.is_steps()) {
       return infeasible_cost_and_duration();
     }
-    auto const trunk = e.is_foot_accessible_with_penalty();
-    auto const bike_way = !e.is_foot_accessible() && !trunk;
-    if (bike_way && (!e.is_bike_accessible() || e.is_railway_accessible() ||
-                     e.is_railway_accessible_with_penalty())) {
+    auto const is_trunk = e.is_foot_accessible_with_penalty();
+    auto const is_bike_way = !e.is_foot_accessible() && !is_trunk;
+    if (is_bike_way && (!e.is_bike_accessible() || e.is_railway_accessible() ||
+                        e.is_railway_accessible_with_penalty())) {
       return infeasible_cost_and_duration();
     }
     auto const factor =
-        trunk ? trunk_cost_factor(e, params.trunk_cost_factor_) : 1.0;
+        is_trunk ? trunk_cost_factor(e, params.trunk_cost_factor_) : 1.0;
     auto const duration = duration_from_cost(static_cast<cost_t>(std::round(
         static_cast<double>(dist) / params.speed_meters_per_second_)));
     auto const walk = dist / (params.speed_meters_per_second_ +
                               (e.is_big_street_ ? -0.2 : 0) +
                               (e.motor_vehicle_no_ ? 0.1 : 0.0));
-    auto const cost = (bike_way ? 90U : 0U) +
+    auto const cost = (is_bike_way ? 90U : 0U) +
                       (e.is_sidewalk_separate() ? 45U : 0U) +
                       static_cast<cost_t>(std::round(walk * factor));
     return {.cost_ = cost, .duration_ = duration};

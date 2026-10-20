@@ -293,9 +293,10 @@ struct bike {
       std::optional<routing_time_t> const,
       duration_t const,
       direction const) {
-    auto const trunk =
+    auto const is_trunk =
         !e.is_bike_accessible() && e.is_bike_accessible_with_penalty();
-    if ((e.is_bike_accessible() || trunk) && e.is_bike_direction_allowed(dir)) {
+    if ((e.is_bike_accessible() || is_trunk) &&
+        e.is_bike_direction_allowed(dir)) {
       auto const ride = static_cast<double>(dist) /
                         (params.speed_meters_per_second_ +
                          (Costing == bike_costing::kFast
@@ -303,8 +304,8 @@ struct bike {
                               : (e.is_big_street_ ? -0.7 : 0) +
                                     (e.motor_vehicle_no_ ? 0.5 : 0.0)));
       auto const cost = static_cast<cost_t>(std::round(
-          trunk ? ride * trunk_cost_factor(e, params.trunk_cost_factor_)
-                : ride));
+          is_trunk ? ride * trunk_cost_factor(e, params.trunk_cost_factor_)
+                   : ride));
       return {
           .cost_ = cost,
           .duration_ = duration_from_cost(static_cast<cost_t>(std::round(
