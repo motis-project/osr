@@ -92,7 +92,6 @@ struct match_result {
 
     node_idx_t node_{node_idx_t::invalid()};
     float dist_to_node_{0.0F};
-    cost_t cost_{0U};
   };
 
   struct nodes {
@@ -106,11 +105,17 @@ struct match_result {
 
     candidate_node left(std::size_t const j) const {
       auto const& n = nodes_[j].left_;
-      return {n.node_, n.dist_to_node_, n.cost_, direction::kBackward, lvl_};
+      return {.node_ = n.node_,
+              .dist_to_node_ = n.dist_to_node_,
+              .way_dir_ = direction::kBackward,
+              .lvl_ = lvl_};
     }
     candidate_node right(std::size_t const j) const {
       auto const& n = nodes_[j].right_;
-      return {n.node_, n.dist_to_node_, n.cost_, direction::kForward, lvl_};
+      return {.node_ = n.node_,
+              .dist_to_node_ = n.dist_to_node_,
+              .way_dir_ = direction::kForward,
+              .lvl_ = lvl_};
     }
 
     std::span<float const> dist_to_way_{};
@@ -234,12 +239,12 @@ struct lookup {
     auto const state =
         endpoint_state_of<P>(params, route_end_of(direction::kForward),
                              [&]() { return project(wc.way_, query.pos_); });
-    apply_node_cost<P>(params, wc.way_, n.left_, direction::kBackward, query,
-                       state, false, direction::kForward, nullptr,
-                       std::nullopt);
-    apply_node_cost<P>(params, wc.way_, n.right_, direction::kForward, query,
-                       state, false, direction::kForward, nullptr,
-                       std::nullopt);
+    drop_infeasible_node<P>(params, wc.way_, n.left_, direction::kBackward,
+                            query, state, false, direction::kForward, nullptr,
+                            std::nullopt);
+    drop_infeasible_node<P>(params, wc.way_, n.right_, direction::kForward,
+                            query, state, false, direction::kForward, nullptr,
+                            std::nullopt);
     return n.left_.valid() || n.right_.valid();
   }
 
@@ -307,12 +312,12 @@ struct lookup {
                      .dist_to_node_ = raw_wc.right_.dist_to_node_}};
       auto const state = endpoint_state_of<P>(
           params, end, [&]() { return project(raw_wc.way_, query.pos_); });
-      apply_node_cost<P>(params, raw_wc.way_, n.left_, direction::kBackward,
-                         query, state, reverse, search_dir, blocked,
-                         start_time);
-      apply_node_cost<P>(params, raw_wc.way_, n.right_, direction::kForward,
-                         query, state, reverse, search_dir, blocked,
-                         start_time);
+      drop_infeasible_node<P>(params, raw_wc.way_, n.left_,
+                              direction::kBackward, query, state, reverse,
+                              search_dir, blocked, start_time);
+      drop_infeasible_node<P>(params, raw_wc.way_, n.right_,
+                              direction::kForward, query, state, reverse,
+                              search_dir, blocked, start_time);
       if (n.left_.valid() || n.right_.valid()) {
         out.add(raw_wc.dist_to_way_, raw_wc.way_, n, state);
         added = true;
@@ -321,18 +326,19 @@ struct lookup {
     return added;
   }
 
-  // Applies profile feasibility and cost to a matched way node.
+  // Invalidates a matched way node the profile cannot use.
   template <Profile P>
-  void apply_node_cost(P::parameters const& params,
-                       way_idx_t const way,
-                       match_result::node& nc,
-                       direction const way_dir,
-                       location const& query,
-                       endpoint_state_t const state,
-                       bool const reverse,
-                       direction const search_dir,
-                       bitvec<node_idx_t> const* blocked,
-                       std::optional<routing_time_t> const start_time) const {
+  void drop_infeasible_node(
+      P::parameters const& params,
+      way_idx_t const way,
+      match_result::node& nc,
+      direction const way_dir,
+      location const& query,
+      endpoint_state_t const state,
+      bool const reverse,
+      direction const search_dir,
+      bitvec<node_idx_t> const* blocked,
+      std::optional<routing_time_t> const start_time) const {
     if (!nc.valid()) {
       return;
     }
@@ -341,9 +347,7 @@ struct lookup {
                               query, state, reverse, search_dir, start_time);
     if (!cost.has_value() || (blocked != nullptr && blocked->test(nc.node_))) {
       nc.node_ = node_idx_t::invalid();
-      return;
     }
-    nc.cost_ = *cost;
   }
 
   // Recomputes the geometry between the query position and the candidate
@@ -516,12 +520,10 @@ struct lookup {
               match_result::nodes{
                   .left_ = {.node_ = wc.left_.node_,
                             .dist_to_node_ =
-                                static_cast<float>(wc.left_.dist_to_node_),
-                            .cost_ = wc.left_.cost_},
+                                static_cast<float>(wc.left_.dist_to_node_)},
                   .right_ = {.node_ = wc.right_.node_,
                              .dist_to_node_ =
-                                 static_cast<float>(wc.right_.dist_to_node_),
-                             .cost_ = wc.right_.cost_}},
+                                 static_cast<float>(wc.right_.dist_to_node_)}},
               wc.state_);
     }
     return !way_candidates.empty();

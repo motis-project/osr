@@ -7,9 +7,8 @@ using namespace osr;
 namespace {
 
 match_result::nodes some_nodes(node_idx_t::value_t const n) {
-  return {.left_ = {.node_ = node_idx_t{n}, .dist_to_node_ = 1.0F, .cost_ = 2U},
-          .right_ = {
-              .node_ = node_idx_t{n + 1U}, .dist_to_node_ = 3.0F, .cost_ = 4U}};
+  return {.left_ = {.node_ = node_idx_t{n}, .dist_to_node_ = 1.0F},
+          .right_ = {.node_ = node_idx_t{n + 1U}, .dist_to_node_ = 3.0F}};
 }
 
 }  // namespace
