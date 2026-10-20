@@ -319,6 +319,14 @@ way_properties get_way_properties(
   return p;
 }
 
+tags without_private_access(tags const& t) {
+  auto open = t;
+  open.access_ = t.private_access_ ? override::kNone : t.access_;
+  open.foot_ = t.foot_ == "private" ? std::string_view{} : t.foot_;
+  open.bicycle_ = t.bicycle_ == "private" ? std::string_view{} : t.bicycle_;
+  return open;
+}
+
 // Blocked only by private access for foot and bike (where blocked at all):
 // passable at a high cost.
 bool is_private_barrier(tags const& t) {
@@ -327,10 +335,7 @@ bool is_private_barrier(tags const& t) {
   if (foot && bike) {
     return false;
   }
-  auto open = t;
-  open.access_ = t.private_access_ ? override::kNone : t.access_;
-  open.foot_ = t.foot_ == "private" ? std::string_view{} : t.foot_;
-  open.bicycle_ = t.bicycle_ == "private" ? std::string_view{} : t.bicycle_;
+  auto const open = without_private_access(t);
   return (foot || is_accessible<foot_profile>(open, osm_obj_type::kNode)) &&
          (bike || is_accessible<bike_profile>(open, osm_obj_type::kNode));
 }
@@ -341,8 +346,13 @@ std::pair<node_properties, level_bits_t> get_node_properties(tags const& t) {
   std::memset(&p, 0, sizeof(node_properties));
   p.from_level_ = to_idx(from);
   p.is_foot_accessible_ = is_accessible<foot_profile>(t, osm_obj_type::kNode);
+  // Wheelchairs pass private barriers at a high cost like foot, unless other
+  // tags (e.g. kerb=raised) block them.
+  auto const is_private = is_private_barrier(t);
   p.is_wheelchair_accessible_ =
-      is_accessible<wheelchair_profile>(t, osm_obj_type::kNode);
+      is_private ? is_accessible<wheelchair_profile>(without_private_access(t),
+                                                     osm_obj_type::kNode)
+                 : is_accessible<wheelchair_profile>(t, osm_obj_type::kNode);
   p.is_bike_accessible_ = is_accessible<bike_profile>(t, osm_obj_type::kNode);
   p.is_car_accessible_ = is_accessible<car_profile>(t, osm_obj_type::kNode);
   // An explicitly allowed bus passes a private gate without the penalty.
@@ -357,7 +367,7 @@ std::pair<node_properties, level_bits_t> get_node_properties(tags const& t) {
   p.is_parking_ = t.is_parking_;
   p.is_steps_ = is_steps(t, osm_obj_type::kNode);
   p.to_level_ = to_idx(to);
-  p.has_barrier_cost_ = t.is_gate() || is_private_barrier(t);
+  p.has_barrier_cost_ = t.is_gate() || is_private;
   return {p, t.level_bits_};
 }
 

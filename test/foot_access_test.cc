@@ -28,6 +28,7 @@ namespace osr {
 // - 800, 801: path with a private gate (node 81)
 // - 900, 901: path with a foot=no gate (node 91)
 // - 1000, 1001: trunk with foot=no
+// - 1100, 1101: path with a private gate and kerb=raised (node 111)
 constexpr auto const kOsm = R"(
 <osm version="0.6" generator="osr-test">
   <node id="10" lat="49.000000" lon="8.000000"/>
@@ -133,6 +134,21 @@ constexpr auto const kOsm = R"(
     <nd ref="101"/><nd ref="102"/>
     <tag k="highway" v="trunk"/><tag k="foot" v="no"/>
   </way>
+  <node id="110" lat="49.100000" lon="8.000000"/>
+  <node id="111" lat="49.100000" lon="8.003000">
+    <tag k="barrier" v="gate"/>
+    <tag k="access" v="private"/>
+    <tag k="kerb" v="raised"/>
+  </node>
+  <node id="112" lat="49.100000" lon="8.006000"/>
+  <way id="1100">
+    <nd ref="110"/><nd ref="111"/>
+    <tag k="highway" v="path"/>
+  </way>
+  <way id="1101">
+    <nd ref="111"/><nd ref="112"/>
+    <tag k="highway" v="path"/>
+  </way>
 </osm>
 )";
 
@@ -165,6 +181,15 @@ struct foot_access_test : ::testing::Test {
   static std::optional<path> bike_route(double const lat) {
     return osr::route(bike<bike_costing::kSafe, kElevationNoCost>::parameters{},
                       *w_, *l_, search_profile::kBike,
+                      location{{lat, 8.001}, kNoLevel},
+                      location{{lat, 8.005}, kNoLevel},
+                      std::chrono::seconds{3600}, direction::kForward, 20.0,
+                      nullptr, nullptr, nullptr, routing_algorithm::kDijkstra);
+  }
+
+  static std::optional<path> wheelchair_route(double const lat) {
+    return osr::route(foot<true, elevator_tracking>::parameters{}, *w_, *l_,
+                      search_profile::kWheelchair,
                       location{{lat, 8.001}, kNoLevel},
                       location{{lat, 8.005}, kNoLevel},
                       std::chrono::seconds{3600}, direction::kForward, 20.0,
@@ -254,9 +279,14 @@ TEST_F(foot_access_test, trunk_with_foot_no_is_not_walkable) {
 TEST_F(foot_access_test, private_barriers) {
   EXPECT_TRUE(route(49.07).has_value());
   EXPECT_TRUE(bike_route(49.07).has_value());
+  EXPECT_TRUE(wheelchair_route(49.07).has_value());
 
   EXPECT_FALSE(route(49.08).has_value());
   EXPECT_FALSE(bike_route(49.08).has_value());
+  EXPECT_FALSE(wheelchair_route(49.08).has_value());
+
+  EXPECT_TRUE(route(49.10).has_value());
+  EXPECT_FALSE(wheelchair_route(49.10).has_value());
 }
 
 }  // namespace osr
