@@ -8,8 +8,14 @@
 #else
 #include <sys/mman.h>
 #endif
+#include <algorithm>
+#include <array>
 #include <filesystem>
+#include <initializer_list>
+#include <optional>
 #include <ranges>
+#include <span>
+#include <utility>
 #include <vector>
 
 #include "fmt/ranges.h"
@@ -68,14 +74,18 @@ struct restriction {
   template <typename Ctx>
   friend void deserialize(Ctx const&, restriction*) {}
 
-  way_pos_t from_ : 4;
-  way_pos_t to_ : 4;
+  static_assert(kMaxWaysPerNode <= 32U, "from_ / to_ hold a way position");
+
+  way_pos_t from_ : 5;
+  way_pos_t to_ : 5;
   way_pos_t applies_to_default_ : 1;
   way_pos_t applies_to_bus_ : 1;
   way_pos_t applies_to_hgv_ : 1;
   conditional_condition_set_idx_t condition_set_{
       conditional_condition_set_idx_t::invalid()};
 };
+
+static_assert(sizeof(restriction) == 8U);
 
 enum class hgv_info_field : std::uint16_t {
   kAccessFwd = 1U << 0U,
@@ -276,6 +286,9 @@ struct node_properties {
   constexpr bool is_car_accessible() const { return is_car_accessible_; }
   constexpr bool is_bike_accessible() const { return is_bike_accessible_; }
   constexpr bool is_walk_accessible() const { return is_foot_accessible_; }
+  constexpr bool is_wheelchair_accessible() const {
+    return is_wheelchair_accessible_;
+  }
   constexpr bool is_bus_accessible() const { return is_bus_accessible_; }
   constexpr bool is_bus_accessible_with_penalty() const {
     return is_bus_accessible_with_penalty_;
@@ -284,6 +297,7 @@ struct node_properties {
   constexpr bool is_multi_level() const { return is_multi_level_; }
   constexpr bool is_entrance() const { return is_entrance_; }
   constexpr bool is_parking() const { return is_parking_; }
+  constexpr bool is_steps() const { return is_steps_; }
 
   constexpr level_t from_level() const { return level_t{from_level_}; }
   constexpr level_t to_level() const { return level_t{to_level_}; }
@@ -302,20 +316,132 @@ struct node_properties {
 
   std::uint8_t from_level_ : 6;
   std::uint8_t is_foot_accessible_ : 1;
-  std::uint8_t is_bike_accessible_ : 1;
+  std::uint8_t is_wheelchair_accessible_ : 1;
 
+  std::uint8_t is_bike_accessible_ : 1;
   std::uint8_t is_car_accessible_ : 1;
   std::uint8_t is_bus_accessible_ : 1;
   std::uint8_t is_elevator_ : 1;
   std::uint8_t is_entrance_ : 1;
   std::uint8_t is_multi_level_ : 1;
   std::uint8_t is_parking_ : 1;
+  std::uint8_t is_steps_ : 1;
 
   std::uint8_t to_level_ : 6;
   std::uint8_t is_bus_accessible_with_penalty_ : 1;
 };
 
 static_assert(sizeof(node_properties) == 3);
+
+enum class component_class : std::uint8_t { kFoot, kBike, kCar };
+
+// In enum order
+constexpr auto kAllComponentClasses = std::array{
+    component_class::kFoot, component_class::kBike, component_class::kCar};
+
+constexpr auto kNumComponentClasses = kAllComponentClasses.size();
+
+constexpr char const* to_str(component_class const c) {
+  switch (c) {
+    case component_class::kFoot: return "foot";
+    case component_class::kBike: return "bike";
+    case component_class::kCar: return "car";
+  }
+  std::unreachable();
+}
+
+constexpr bool is_accessible(component_class const c, way_properties const& p) {
+  switch (c) {
+    case component_class::kFoot:
+      // Foot may also use bike ways (with a penalty).
+      return p.is_foot_accessible() ||
+             (p.is_bike_accessible() && !p.is_railway_accessible() &&
+              !p.is_railway_accessible_with_penalty());
+    case component_class::kBike: return p.is_bike_accessible();
+    case component_class::kCar: return p.is_car_accessible();
+  }
+  return false;
+}
+
+constexpr bool is_accessible_without_penalty(component_class const c,
+                                             way_properties const& p) {
+  return c == component_class::kFoot ? p.is_foot_accessible()
+                                     : is_accessible(c, p);
+}
+
+constexpr bool is_oneway(component_class const c, way_properties const& p) {
+  switch (c) {
+    case component_class::kFoot: return false;
+    case component_class::kBike: return p.is_oneway_bike();
+    case component_class::kCar: return p.is_oneway_car();
+  }
+  return false;
+}
+
+// Ways without a level count as level 0.
+constexpr bool touches_ground(way_properties const& p) {
+  auto const a = p.from_level().to_float();
+  auto const b = p.to_level().to_float();
+  return std::min(a, b) <= 0.0F && std::max(a, b) >= 0.0F;
+}
+
+constexpr bool is_on_level(way_properties const& p, level_t const lvl) {
+  return p.from_level() == lvl || p.to_level() == lvl ||
+         (lvl == level_t{0.F} && p.from_level() == kNoLevel &&
+          p.to_level() == kNoLevel);
+}
+
+struct component_classes {
+  constexpr component_classes() = default;
+  constexpr component_classes(std::initializer_list<component_class> const cs) {
+    for (auto const c : cs) {
+      insert(c);
+    }
+  }
+
+  constexpr void insert(component_class const c) { bits_ |= bit(c); }
+  constexpr bool empty() const { return bits_ == 0U; }
+  constexpr bool contains(component_class const c) const {
+    return (bits_ & bit(c)) != 0U;
+  }
+
+private:
+  static constexpr std::uint8_t bit(component_class const c) {
+    return static_cast<std::uint8_t>(1U << static_cast<unsigned>(c));
+  }
+
+  std::uint8_t bits_{0U};
+};
+
+struct class_components {
+  static constexpr auto kNoComponent = std::uint8_t{0U};
+  static constexpr auto kException = std::uint8_t{255U};
+
+  static class_components build(std::span<std::uint32_t const>,
+                                std::span<std::uint32_t const>);
+
+  // nullopt: single-way component or a way the class cannot use.
+  std::optional<std::uint32_t> get(way_idx_t const w) const {
+    auto const code = way_component_[w];
+    if (code == kNoComponent) {
+      return std::nullopt;
+    }
+    if (code != kException) {
+      return code;
+    }
+    auto const it =
+        std::lower_bound(begin(exception_way_), end(exception_way_), w);
+    if (it == end(exception_way_) || *it != w) {
+      return std::nullopt;
+    }
+    return exception_component_[static_cast<std::uint32_t>(
+        std::distance(begin(exception_way_), it))];
+  }
+
+  vec_map<way_idx_t, std::uint8_t> way_component_{};
+  vec<way_idx_t> exception_way_{};  // sorted
+  vec<std::uint32_t> exception_component_{};  // parallel to exception_way_
+};
 
 struct ways {
   ways(std::filesystem::path, cista::mmap::protection);
@@ -324,7 +450,7 @@ struct ways {
   void compute_big_street_neighbors();
   void connect_ways();
   void compute_turn_bearings();
-  void build_components();
+  void build_class_components();
 
   std::optional<way_idx_t> find_way(osm_way_idx_t const i) {
     auto const it = std::lower_bound(
@@ -559,7 +685,12 @@ struct ways {
 
     vec<pair<node_idx_t, level_bits_t>> multi_level_elevators_;
 
-    vec_map<way_idx_t, component_idx_t> way_component_;
+    class_components const& get_class_components(
+        component_class const c) const {
+      return class_components_[static_cast<std::uint32_t>(c)];
+    }
+
+    vec<class_components> class_components_;
   };
 
   cista::wrapped<routing> r_;
@@ -577,5 +708,8 @@ struct ways {
 
   multi_counter<> node_way_counter_;
 };
+
+class_components compute_class_components(ways::routing const&,
+                                          component_class);
 
 }  // namespace osr

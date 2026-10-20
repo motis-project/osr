@@ -157,8 +157,6 @@ constexpr bool osm_id_less(OsmIdx const lhs, OsmIdx const rhs) {
 using way_idx_t = cista::strong<std::uint32_t, struct way_idx_>;
 using node_idx_t = cista::strong<std::uint32_t, struct node_idx_>;
 
-using component_idx_t = cista::strong<std::uint32_t, struct component_idx_>;
-
 using platform_idx_t = cista::strong<std::uint32_t, struct platform_idx_>;
 
 using multi_level_elevator_idx_t =

@@ -4,6 +4,7 @@
 
 #include "gtest/gtest.h"
 
+#include <chrono>
 #include <filesystem>
 #include <random>
 
@@ -46,7 +47,7 @@ void load(std::string_view raw_data, std::string_view data_dir) {
 void run(ways const& w,
          lookup const& l,
          unsigned const n_samples,
-         unsigned const max_cost,
+         std::chrono::seconds const max_duration,
          direction const dir) {
 
   auto const from_tos = [&]() {
@@ -75,22 +76,23 @@ void run(ways const& w,
 
     // Keeps only the candidates that touch `n`. Candidates cannot be erased
     // in place, so the survivors are appended to a fresh match.
-    auto const node_pinned_matches =
-        [&](location const& loc, node_idx_t const n, bool const reverse) {
-          auto all = match_result{};
-          l.match<car>(car::parameters{}, loc, reverse, dir, kMaxMatchDistance,
-                       nullptr, all);
-          auto const m = all[match_idx_t{0U}];
-          auto pinned = match_result{};
-          pinned.start(m.lvl_);
-          for (auto j = std::size_t{0U}; j != m.size(); ++j) {
-            if (m.nodes_[j].left_.node_ == n || m.nodes_[j].right_.node_ == n) {
-              pinned.add(m.dist_to_way_[j], m.way_[j], m.nodes_[j]);
-            }
-          }
-          pinned.finish();
-          return pinned;
-        };
+    auto const node_pinned_matches = [&](location const& loc,
+                                         node_idx_t const n,
+                                         bool const reverse) {
+      auto all = match_result{};
+      l.match<car>(car::parameters{}, loc, reverse, dir, kMaxMatchDistance,
+                   nullptr, all);
+      auto const m = all[match_idx_t{0U}];
+      auto pinned = match_result{};
+      pinned.start(m.lvl_);
+      for (auto j = std::size_t{0U}; j != m.size(); ++j) {
+        if (m.nodes_[j].left_.node_ == n || m.nodes_[j].right_.node_ == n) {
+          pinned.add(m.dist_to_way_[j], m.way_[j], m.nodes_[j], m.state_[j]);
+        }
+      }
+      pinned.finish();
+      return pinned;
+    };
     auto const from_matches = node_pinned_matches(from_loc, from_node, false);
     auto const to_matches = node_pinned_matches(to_loc, to_node, true);
     auto const from_matches_span = from_matches[match_idx_t{0U}];
@@ -103,8 +105,9 @@ void run(ways const& w,
     auto const reference = [&]() {
       try {
         return route(car::parameters{}, w, l, search_profile::kCar, from_loc,
-                     to_loc, from_matches_span, to_matches_span, max_cost, dir,
-                     nullptr, nullptr, nullptr, routing_algorithm::kDijkstra);
+                     to_loc, from_matches_span, to_matches_span, max_duration,
+                     dir, nullptr, nullptr, nullptr,
+                     routing_algorithm::kDijkstra);
       } catch (std::exception const& ex) {
         fmt::println("dijkstra exception: {}", ex.what());
         throw ex;
@@ -117,8 +120,9 @@ void run(ways const& w,
     auto const experiment = [&]() {
       try {
         return route(car::parameters{}, w, l, search_profile::kCar, from_loc,
-                     to_loc, from_matches_span, to_matches_span, max_cost, dir,
-                     nullptr, nullptr, nullptr, routing_algorithm::kAStarBi);
+                     to_loc, from_matches_span, to_matches_span, max_duration,
+                     dir, nullptr, nullptr, nullptr,
+                     routing_algorithm::kAStarBi);
       } catch (std::exception const& ex) {
         fmt::println("a* bidir exception: {}", ex.what());
         throw ex;
@@ -195,7 +199,7 @@ TEST(dijkstra_astarbidir, monaco_fwd) {
   auto const raw_data = "test/monaco.osm.pbf";
   auto const data_dir = "test/monaco";
   auto const num_samples = 10000U;
-  auto const max_cost = 2 * 3600U;
+  auto const max_duration = std::chrono::seconds{2 * 3600};
   auto constexpr dir = direction::kForward;
 
   if (!fs::exists(raw_data) && !fs::exists(data_dir)) {
@@ -206,14 +210,14 @@ TEST(dijkstra_astarbidir, monaco_fwd) {
   auto const w = osr::ways{data_dir, cista::mmap::protection::READ};
   auto const l = osr::lookup{w, data_dir, cista::mmap::protection::READ};
 
-  run(w, l, num_samples, max_cost, dir);
+  run(w, l, num_samples, max_duration, dir);
 }
 
 TEST(dijkstra_astarbidir, monaco_bwd) {
   auto const raw_data = "test/monaco.osm.pbf";
   auto const data_dir = "test/monaco";
   auto const num_samples = 10000U;
-  auto const max_cost = 2 * 3600U;
+  auto const max_duration = std::chrono::seconds{2 * 3600};
   auto constexpr dir = direction::kBackward;
 
   if (!fs::exists(raw_data) && !fs::exists(data_dir)) {
@@ -224,14 +228,14 @@ TEST(dijkstra_astarbidir, monaco_bwd) {
   auto const w = osr::ways{data_dir, cista::mmap::protection::READ};
   auto const l = osr::lookup{w, data_dir, cista::mmap::protection::READ};
 
-  run(w, l, num_samples, max_cost, dir);
+  run(w, l, num_samples, max_duration, dir);
 }
 
 TEST(dijkstra_astarbidir, hamburg) {
   auto const raw_data = "test/hamburg.osm.pbf";
   auto const data_dir = "test/hamburg";
   auto const num_samples = 5000U;
-  auto const max_cost = 3 * 3600U;
+  auto const max_duration = std::chrono::seconds{3 * 3600};
   auto constexpr dir = direction::kForward;
 
   if (!fs::exists(raw_data) && !fs::exists(data_dir)) {
@@ -242,14 +246,14 @@ TEST(dijkstra_astarbidir, hamburg) {
   auto const w = osr::ways{data_dir, cista::mmap::protection::READ};
   auto const l = osr::lookup{w, data_dir, cista::mmap::protection::READ};
 
-  run(w, l, num_samples, max_cost, dir);
+  run(w, l, num_samples, max_duration, dir);
 }
 
 TEST(dijkstra_astarbidir, switzerland) {
   auto const raw_data = "test/switzerland.osm.pbf";
   auto const data_dir = "test/switzerland";
   auto const num_samples = 1000U;
-  auto const max_cost = 5 * 3600U;
+  auto const max_duration = std::chrono::seconds{5 * 3600};
   auto constexpr dir = direction::kForward;
 
   if (!fs::exists(raw_data) && !fs::exists(data_dir)) {
@@ -260,14 +264,14 @@ TEST(dijkstra_astarbidir, switzerland) {
   auto const w = osr::ways{data_dir, cista::mmap::protection::READ};
   auto const l = osr::lookup{w, data_dir, cista::mmap::protection::READ};
 
-  run(w, l, num_samples, max_cost, dir);
+  run(w, l, num_samples, max_duration, dir);
 }
 
 TEST(dijkstra_astarbidir, DISABLED_germany) {
   auto const raw_data = "test/germany.osm.pbf";
   auto const data_dir = "test/germany";
   constexpr auto const num_samples = 50U;
-  constexpr auto const max_cost = 12 * 3600U;
+  auto const max_duration = std::chrono::seconds{12 * 3600};
   auto constexpr dir = direction::kForward;
 
   if (!fs::exists(raw_data) && !fs::exists(data_dir)) {
@@ -278,5 +282,5 @@ TEST(dijkstra_astarbidir, DISABLED_germany) {
   auto const w = osr::ways{data_dir, cista::mmap::protection::READ};
   auto const l = osr::lookup{w, data_dir, cista::mmap::protection::READ};
 
-  run(w, l, num_samples, max_cost, dir);
+  run(w, l, num_samples, max_duration, dir);
 }

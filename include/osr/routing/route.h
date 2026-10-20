@@ -1,5 +1,6 @@
 #pragma once
 
+#include <chrono>
 #include <memory>
 #include <optional>
 #include <string_view>
@@ -42,18 +43,26 @@ struct one_to_many_state {
 
   // Sharing profiles: where the ride is on the path to destination
   // `dest_idx`, as tracked durations from the search start: the first and the
-  // last rental label, the foot labels around them, and the destination's
-  // node (the path without the final matching). These are the times
-  // reconstruct() lays out in the segments, so a caller can place the ride on
-  // the timeline the path is shown with (GTFS-Flex pickup and drop-off
-  // windows apply to the ride, not to the walks around it). Walks the
-  // predecessor chain only, no geometry. nullopt if the path uses no vehicle
-  // (or the profile has none).
+  // last rental label, the non-rental labels around them, the destination's
+  // node and the final matching piece. These are the times reconstruct() lays
+  // out in the segments, so a caller can place the ride on the timeline the
+  // path is shown with (GTFS-Flex pickup and drop-off windows apply to the
+  // ride, not to the walks around it). In search order the ride spans
+  // [before_min_, max_]: like the segments' modes, the switch to the vehicle
+  // counts as riding, the return as walking. If the vehicle is returned at the
+  // destination coordinate, the matching piece at that end is ridden too and
+  // the ride reaches the end of the path (max_ = dest_node_ + dest_match_ when
+  // the destination node is the rental node; before_min_ = 0 when the search
+  // root is, in a backward search). Walks the predecessor chain only, no
+  // geometry. nullopt if the path uses no vehicle (or the profile has none).
   struct rental_duration_info {
     duration_t min_;  // rental label closest to the search start
-    duration_t max_;  // rental label farthest from the search start
-    duration_t before_min_;  // non-rental label preceding min_ (search order)
-    duration_t after_max_;  // non-rental label following max_ (search order)
+    duration_t max_;  // rental label farthest from the search start, or the
+                      // path end if the final matching piece is ridden
+    duration_t before_min_;  // non-rental label preceding min_ (search
+                             // order), 0 if there is none
+    duration_t after_max_;  // non-rental label following max_ (search order),
+                            // the path end if there is none
     duration_t dest_node_;  // destination node
     duration_t dest_match_;  // final matching piece as reconstruct() shows it
   };
@@ -72,7 +81,7 @@ std::unique_ptr<one_to_many_state> route_one_to_many(
     std::vector<location> const& to,
     match_view_t const& from_match,
     match_result const& to_match,
-    cost_t max,
+    std::chrono::seconds max_duration,
     direction,
     bitvec<node_idx_t> const* blocked = nullptr,
     sharing_data const* = nullptr,
@@ -88,7 +97,7 @@ std::vector<std::optional<path>> route(
     search_profile,
     location const& from,
     std::vector<location> const& to,
-    cost_t max,
+    std::chrono::seconds max_duration,
     direction,
     double max_match_distance,
     bitvec<node_idx_t> const* blocked = nullptr,
@@ -104,7 +113,7 @@ std::optional<path> route(profile_parameters const&,
                           search_profile,
                           location const& from,
                           location const& to,
-                          cost_t max,
+                          std::chrono::seconds max_duration,
                           direction,
                           double max_match_distance,
                           bitvec<node_idx_t> const* blocked = nullptr,
@@ -120,7 +129,7 @@ std::optional<path> route_bidirectional(
     search_profile,
     location const& from,
     location const& to,
-    cost_t max,
+    std::chrono::seconds max_duration,
     direction,
     double max_match_distance,
     bitvec<node_idx_t> const* blocked = nullptr,
@@ -134,7 +143,7 @@ std::optional<path> route_dijkstra(
     search_profile,
     location const& from,
     location const& to,
-    cost_t max,
+    std::chrono::seconds max_duration,
     direction,
     double max_match_distance,
     bitvec<node_idx_t> const* blocked = nullptr,
@@ -148,7 +157,7 @@ std::optional<path> route_astar(profile_parameters const&,
                                 search_profile,
                                 location const& from,
                                 location const& to,
-                                cost_t max,
+                                std::chrono::seconds max_duration,
                                 direction,
                                 double max_match_distance,
                                 bitvec<node_idx_t> const* blocked = nullptr,
@@ -164,7 +173,7 @@ std::optional<path> route(profile_parameters const&,
                           location const& to,
                           match_view_t const& from_match,
                           match_view_t const& to_match,
-                          cost_t const max,
+                          std::chrono::seconds max_duration,
                           direction const dir,
                           bitvec<node_idx_t> const* blocked = nullptr,
                           sharing_data const* sharing = nullptr,
