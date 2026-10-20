@@ -914,6 +914,13 @@ void extract(bool const with_platforms,
     pt->update(pt->in_high_);
   }
 
+  {  // Way order (before connect_ways numbers the graph nodes).
+    auto const new_idx = w.order_ways();
+    if (pl != nullptr) {
+      pl->reorder_ways(new_idx);
+    }
+  }
+
   w.r_->write(out);
   w.sync();
 
