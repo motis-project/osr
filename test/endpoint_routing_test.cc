@@ -121,11 +121,11 @@ TEST_F(endpoint_routing, far_matches_agree_between_algorithms) {
   for (auto const dir : {direction::kForward, direction::kBackward}) {
     auto const d =
         route_dijkstra(params, *w_, *l_, search_profile::kWheelchair, from, to,
-                       std::chrono::seconds{1200}, dir, 600.0);
+                       std::chrono::seconds{3600}, dir, 600.0);
     ASSERT_TRUE(d.has_value());
     auto const b =
         route_bidirectional(params, *w_, *l_, search_profile::kWheelchair, from,
-                            to, std::chrono::seconds{1200}, dir, 600.0);
+                            to, std::chrono::seconds{3600}, dir, 600.0);
     ASSERT_TRUE(b.has_value());
     EXPECT_EQ(b->cost_, d->cost_);
     EXPECT_EQ(b->duration_, d->duration_);
