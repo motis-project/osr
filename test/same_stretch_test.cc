@@ -111,7 +111,7 @@ TEST_F(same_stretch_test, foot_walks_directly_along_the_stretch) {
         // Not via node 1 or 2 and back (146 m).
         EXPECT_NEAR(73.0, p->dist_, 1.0);
         ASSERT_EQ(1U, p->segments_.size());
-        EXPECT_EQ(61, p->duration_.count());
+        EXPECT_EQ(77, p->duration_.count());
       }
     }
   }

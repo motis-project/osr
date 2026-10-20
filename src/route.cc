@@ -126,13 +126,18 @@ cost_and_duration get_endpoint_connection(
       !P::endpoint_root_allowed(params, node, way_dir)) {
     return infeasible_cost_and_duration();
   }
-  auto const connection =
-      P::endpoint_way_cost(params, *w.r_, w.timezones_, node, endpoint.way_,
-                           w.r_->way_properties_[endpoint.way_], way_dir,
-                           static_cast<distance_t>(endpoint.graph_distance_),
-                           start_time, current_duration, search_dir);
-  auto total =
-      clamp_add(connection, endpoint.matching_penalty_, duration_t{0U});
+  auto const get_way_cost = [&](double const distance) {
+    return P::endpoint_way_cost(params, *w.r_, w.timezones_, node,
+                                endpoint.way_,
+                                w.r_->way_properties_[endpoint.way_], way_dir,
+                                static_cast<distance_t>(distance), start_time,
+                                current_duration, search_dir);
+  };
+  auto total = clamp_add(
+      cost_and_duration{
+          .cost_ = get_way_cost(endpoint.graph_distance_).cost_,
+          .duration_ = get_way_cost(endpoint.node_.dist_to_node_).duration_},
+      endpoint.matching_penalty_, duration_t{0U});
   // Node costs are charged when arriving at a node. For the origin, that is
   // the connector from the query position.
   if (end == route_end::kOrigin) {
@@ -524,18 +529,23 @@ std::optional<path> same_stretch_path(
       }
 
       auto const along = std::abs(b.offset_ - a.offset_);
-      auto const way_cost = P::way_cost(
-          params, *w.r_, w.timezones_, way, props,
-          b.offset_ >= a.offset_ ? direction::kForward : direction::kBackward,
-          static_cast<distance_t>(std::round(along)), start_time,
-          duration_t{0U}, dir);
       auto const origin_dist =
           static_cast<double>(origin_match.dist_to_way_[i]);
       auto const destination_dist = static_cast<double>(
           destination_match.dist_to_way_[static_cast<std::size_t>(
               std::distance(begin(destination_match.way_), it))]);
+      auto const get_way_cost = [&](double const distance) {
+        return P::way_cost(
+            params, *w.r_, w.timezones_, way, props,
+            b.offset_ >= a.offset_ ? direction::kForward : direction::kBackward,
+            static_cast<distance_t>(std::round(distance)), start_time,
+            duration_t{0U}, dir);
+      };
       auto const total = clamp_add(
-          way_cost,
+          cost_and_duration{
+              .cost_ = get_way_cost(along).cost_,
+              .duration_ = get_way_cost(along + origin_dist + destination_dist)
+                               .duration_},
           clamp_cost(static_cast<std::uint64_t>(matching_penalty(
                          origin_dist, origin_match.penalty_ref_)) +
                      matching_penalty(destination_dist,

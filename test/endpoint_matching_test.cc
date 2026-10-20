@@ -60,7 +60,7 @@ TEST_F(endpoint_matching_test,
        reconstructed_duration_excludes_matching_penalty) {
   auto const& w = *ways_;
   auto const& l = *lookup_;
-  auto const from = location{{49.040000, 8.000000}, kNoLevel};
+  auto const from = location{{49.040000, 7.999700}, kNoLevel};
   auto const to = location{{49.040100, 8.004000}, kNoLevel};
   auto const result = route_dijkstra(
       get_parameters(search_profile::kFoot), w, l, search_profile::kFoot, from,
@@ -73,7 +73,8 @@ TEST_F(endpoint_matching_test,
     segment_duration = clamp_add_duration(segment_duration, segment.duration_);
   }
   EXPECT_EQ(segment_duration, result->duration_);
-  EXPECT_NE(duration_from_cost(result->cost_), result->duration_);
+  EXPECT_EQ(625U, result->cost_);
+  EXPECT_EQ(622, result->duration_.count());
 }
 
 TEST_F(endpoint_matching_test,
