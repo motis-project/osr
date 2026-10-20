@@ -1,6 +1,6 @@
 #pragma once
 
-#include <cassert>
+#include <span>
 
 #include "utl/helpers/algorithm.h"
 
@@ -12,8 +12,6 @@
 
 namespace osr {
 
-// The components contain every way `P` can use, but not the additional edges
-// of sharing data.
 template <Profile P>
 class_components const* reachability_components(ways const& w,
                                                 sharing_data const* sharing) {
@@ -24,42 +22,29 @@ class_components const* reachability_components(ways const& w,
 
 inline bool is_connected(class_components const& c,
                          way_idx_t const a,
-                         match_view_t const& m) {
-  return utl::any_of(m.way_,
+                         std::span<way_idx_t const> const other_ways) {
+  return utl::any_of(other_ways,
                      [&](way_idx_t const b) { return c.is_connected(a, b); });
 }
 
 inline bool is_connected(class_components const& c,
                          match_view_t const& a,
                          match_view_t const& b) {
-  return utl::any_of(a.way_,
-                     [&](way_idx_t const x) { return is_connected(c, x, b); });
+  return utl::any_of(
+      a.way_, [&](way_idx_t const x) { return is_connected(c, x, b.way_); });
 }
 
-// Returns false if no candidates of `from` and `to` are connected.
 template <Profile P>
-bool restrict_to_connected(ways const& w,
-                           sharing_data const* sharing,
-                           match_view_t& from,
-                           match_view_t& to,
-                           match_result& storage) {
-  assert(storage.empty());
+match_result connected_candidates(ways const& w,
+                                  sharing_data const* sharing,
+                                  match_view_t const& m,
+                                  std::span<way_idx_t const> const other_ways) {
   auto const* components = reachability_components<P>(w, sharing);
-  if (components == nullptr) {
-    return true;
-  }
-  if (!is_connected(*components, from, to)) {
-    return false;
-  }
-  storage.append(from, [&](way_idx_t const x) {
-    return is_connected(*components, x, to);
+  auto out = match_result{};
+  out.append(m, [&](way_idx_t const x) {
+    return components == nullptr || is_connected(*components, x, other_ways);
   });
-  storage.append(to, [&](way_idx_t const x) {
-    return is_connected(*components, x, from);
-  });
-  from = storage[match_idx_t{0U}];
-  to = storage[match_idx_t{1U}];
-  return true;
+  return out;
 }
 
 }  // namespace osr

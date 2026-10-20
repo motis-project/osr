@@ -5,6 +5,7 @@
 #include <chrono>
 #include <filesystem>
 #include <optional>
+#include <span>
 #include <vector>
 
 #include "osr/extract/extract.h"
@@ -174,7 +175,7 @@ TEST_F(component_pruning_test, is_connected) {
   EXPECT_FALSE(foot.is_connected(way(300U), way(100U)));
 }
 
-TEST_F(component_pruning_test, restrict_to_connected) {
+TEST_F(component_pruning_test, connected_candidates) {
   using P = foot<false>;
   auto mainland_a_m = match_result{};
   auto mainland_b_m = match_result{};
@@ -187,49 +188,31 @@ TEST_F(component_pruning_test, restrict_to_connected) {
   EXPECT_EQ(way(102U), mainland_b.way_[0]);
   EXPECT_EQ(way(400U), mainland_b.way_[1]);
 
-  {
-    auto from = mainland_a;
-    auto to = island;
-    auto storage = match_result{};
-    EXPECT_FALSE(restrict_to_connected<P>(*w_, nullptr, from, to, storage));
-  }
+  auto const connected = [](match_view_t const& m,
+                            std::span<way_idx_t const> other_ways,
+                            sharing_data const* sharing = nullptr) {
+    return connected_candidates<P>(*w_, sharing, m, other_ways);
+  };
 
-  {
-    auto from = mainland_a;
-    auto to = mainland_b;
-    auto storage = match_result{};
-    ASSERT_TRUE(restrict_to_connected<P>(*w_, nullptr, from, to, storage));
-    ASSERT_EQ(1U, from.size());
-    EXPECT_EQ(way(100U), from.way_[0]);
-    ASSERT_EQ(1U, to.size());
-    EXPECT_EQ(way(102U), to.way_[0]);
-    EXPECT_EQ(mainland_b.penalty_ref_, to.penalty_ref_);
-  }
+  EXPECT_TRUE(connected(mainland_a, island.way_)[match_idx_t{0U}].empty());
+  EXPECT_TRUE(connected(island, mainland_a.way_)[match_idx_t{0U}].empty());
 
-  {
-    auto from = mainland_b;
-    auto to = mainland_a;
-    auto storage = match_result{};
-    ASSERT_TRUE(restrict_to_connected<P>(*w_, nullptr, from, to, storage));
-    ASSERT_EQ(1U, from.size());
-    EXPECT_EQ(way(102U), from.way_[0]);
-    ASSERT_EQ(1U, to.size());
-    EXPECT_EQ(way(100U), to.way_[0]);
-  }
+  auto const a = connected(mainland_a, mainland_b.way_);
+  ASSERT_EQ(1U, a[match_idx_t{0U}].size());
+  EXPECT_EQ(way(100U), a[match_idx_t{0U}].way_[0]);
 
-  {
-    auto const coordinates = std::vector<geo::latlng>{};
-    auto const edges = hash_map<node_idx_t, std::vector<additional_edge>>{};
-    auto const sharing =
-        sharing_data{.additional_node_coordinates_ = coordinates,
-                     .additional_edges_ = edges};
-    auto from = mainland_a;
-    auto to = island;
-    auto storage = match_result{};
-    EXPECT_TRUE(restrict_to_connected<P>(*w_, &sharing, from, to, storage));
-    EXPECT_EQ(1U, from.size());
-    EXPECT_EQ(island.size(), to.size());
-  }
+  auto const b = connected(mainland_b, mainland_a.way_);
+  ASSERT_EQ(1U, b[match_idx_t{0U}].size());
+  EXPECT_EQ(way(102U), b[match_idx_t{0U}].way_[0]);
+  EXPECT_EQ(mainland_b.penalty_ref_, b[match_idx_t{0U}].penalty_ref_);
+
+  auto const coordinates = std::vector<geo::latlng>{};
+  auto const edges = hash_map<node_idx_t, std::vector<additional_edge>>{};
+  auto const sharing = sharing_data{.additional_node_coordinates_ = coordinates,
+                                    .additional_edges_ = edges};
+  EXPECT_EQ(
+      mainland_b.size(),
+      connected(mainland_b, island.way_, &sharing)[match_idx_t{0U}].size());
 }
 
 TEST_F(component_pruning_test, routes_only_within_components) {
