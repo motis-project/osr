@@ -400,10 +400,10 @@ struct foot {
     if (IsWheelchair && e.is_steps()) {
       return infeasible_cost_and_duration();
     }
-    auto const is_trunk = e.is_foot_accessible_with_penalty();
-    auto const is_bike_way = !e.is_foot_accessible() && !is_trunk;
-    if (is_bike_way && (!e.is_bike_accessible() || e.is_railway_accessible() ||
-                        e.is_railway_accessible_with_penalty())) {
+    auto const is_trunk = e.has_foot_penalty();
+    auto const is_bike_way = !e.is_foot_accessible();
+    if (is_bike_way && (!e.is_bike_accessible() || e.has_bike_penalty() ||
+                        e.is_railway_accessible())) {
       return infeasible_cost_and_duration();
     }
     auto const factor = is_trunk ? trunk_cost_factor(e, kTrunkCostFactor) : 1.0;

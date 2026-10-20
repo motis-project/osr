@@ -27,6 +27,7 @@ namespace osr {
 //   ends by the footways 620, 621
 // - 800, 801: path with a private gate (node 81)
 // - 900, 901: path with a foot=no gate (node 91)
+// - 1000, 1001: trunk with foot=no
 constexpr auto const kOsm = R"(
 <osm version="0.6" generator="osr-test">
   <node id="10" lat="49.000000" lon="8.000000"/>
@@ -121,6 +122,17 @@ constexpr auto const kOsm = R"(
     <nd ref="91"/><nd ref="92"/>
     <tag k="highway" v="path"/>
   </way>
+  <node id="100" lat="49.090000" lon="8.000000"/>
+  <node id="101" lat="49.090000" lon="8.003000"/>
+  <node id="102" lat="49.090000" lon="8.006000"/>
+  <way id="1000">
+    <nd ref="100"/><nd ref="101"/>
+    <tag k="highway" v="trunk"/><tag k="foot" v="no"/>
+  </way>
+  <way id="1001">
+    <nd ref="101"/><nd ref="102"/>
+    <tag k="highway" v="trunk"/><tag k="foot" v="no"/>
+  </way>
 </osm>
 )";
 
@@ -170,8 +182,8 @@ struct foot_access_test : ::testing::Test {
 
 TEST_F(foot_access_test, trunk_is_walkable_with_penalty) {
   auto const p = props(osm_way_idx_t{100U});
-  EXPECT_FALSE(p.is_foot_accessible());
-  EXPECT_TRUE(p.is_foot_accessible_with_penalty());
+  EXPECT_TRUE(p.is_foot_accessible());
+  EXPECT_TRUE(p.has_foot_penalty());
   EXPECT_TRUE(is_accessible(component_class::kFoot, p));
 
   auto const r = route(49.0);
@@ -182,13 +194,13 @@ TEST_F(foot_access_test, trunk_is_walkable_with_penalty) {
 TEST_F(foot_access_test, trunk_with_sidewalk_has_no_penalty) {
   auto const p = props(osm_way_idx_t{200U});
   EXPECT_TRUE(p.is_foot_accessible());
-  EXPECT_FALSE(p.is_foot_accessible_with_penalty());
+  EXPECT_FALSE(p.has_foot_penalty());
 }
 
 TEST_F(foot_access_test, motorroad_is_not_walkable) {
   auto const p = props(osm_way_idx_t{300U});
   EXPECT_FALSE(p.is_foot_accessible());
-  EXPECT_FALSE(p.is_foot_accessible_with_penalty());
+  EXPECT_FALSE(p.has_foot_penalty());
   EXPECT_FALSE(route(49.02).has_value());
 }
 
@@ -219,13 +231,24 @@ TEST_F(foot_access_test, cycleway_does_not_shadow_trunk) {
 
 TEST_F(foot_access_test, bike_on_trunk) {
   auto const p = props(osm_way_idx_t{100U});
-  EXPECT_FALSE(p.is_bike_accessible());
-  EXPECT_TRUE(p.is_bike_accessible_with_penalty());
+  EXPECT_TRUE(p.is_bike_accessible());
+  EXPECT_TRUE(p.has_bike_penalty());
   EXPECT_TRUE(is_accessible(component_class::kBike, p));
-  EXPECT_FALSE(props(osm_way_idx_t{300U}).is_bike_accessible_with_penalty());
+  EXPECT_FALSE(props(osm_way_idx_t{300U}).has_bike_penalty());
 
   EXPECT_TRUE(bike_route(49.0).has_value());
   EXPECT_FALSE(bike_route(49.02).has_value());
+}
+
+// A trunk is no bike way for foot, even though bikes may use it.
+TEST_F(foot_access_test, trunk_with_foot_no_is_not_walkable) {
+  auto const p = props(osm_way_idx_t{1000U});
+  EXPECT_FALSE(p.is_foot_accessible());
+  EXPECT_TRUE(p.is_bike_accessible());
+  EXPECT_TRUE(p.has_bike_penalty());
+  EXPECT_FALSE(is_accessible(component_class::kFoot, p));
+  EXPECT_FALSE(route(49.09).has_value());
+  EXPECT_TRUE(bike_route(49.09).has_value());
 }
 
 TEST_F(foot_access_test, private_barriers) {

@@ -303,12 +303,9 @@ struct railway {
       std::optional<routing_time_t> const,
       duration_t const,
       direction const) {
-    auto const accessible = e.is_railway_accessible();
-    auto const accessible_with_penalty = e.is_railway_accessible_with_penalty();
-    if ((accessible || accessible_with_penalty) &&
-        e.is_bus_psv_direction_allowed(dir)) {
+    if (e.is_railway_accessible() && e.is_bus_psv_direction_allowed(dir)) {
       auto cost = static_cast<cost_t>(dist);
-      if (accessible_with_penalty) {
+      if (e.has_railway_penalty()) {
         cost *= e.in_route() ? 2U : 4U;
       }
       return {.cost_ = cost,

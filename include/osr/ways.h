@@ -170,31 +170,21 @@ struct hgv_way_info {
 struct way_properties {
   constexpr bool is_accessible() const {
     return is_car_accessible() || is_bike_accessible() ||
-           is_foot_accessible() || is_foot_accessible_with_penalty() ||
-           is_bike_accessible_with_penalty() || is_bus_accessible() ||
-           is_bus_accessible_with_penalty() || is_railway_accessible() ||
-           is_railway_accessible_with_penalty() || is_ferry_accessible() ||
-           has_hgv_info() || has_conditionals();
+           is_foot_accessible() || is_bus_accessible() ||
+           is_railway_accessible() || is_ferry_accessible() || has_hgv_info() ||
+           has_conditionals();
   }
   constexpr bool is_car_accessible() const { return is_car_accessible_; }
   constexpr bool is_bike_accessible() const { return is_bike_accessible_; }
-  constexpr bool is_bike_accessible_with_penalty() const {
-    return is_bike_accessible_with_penalty_;
-  }
+  constexpr bool has_bike_penalty() const { return has_bike_penalty_; }
   constexpr bool is_foot_accessible() const { return is_foot_accessible_; }
-  constexpr bool is_foot_accessible_with_penalty() const {
-    return is_foot_accessible_with_penalty_;
-  }
+  constexpr bool has_foot_penalty() const { return has_foot_penalty_; }
   constexpr bool is_bus_accessible() const { return is_bus_accessible_; }
-  constexpr bool is_bus_accessible_with_penalty() const {
-    return is_bus_accessible_with_penalty_;
-  }
+  constexpr bool has_bus_penalty() const { return has_bus_penalty_; }
   constexpr bool is_railway_accessible() const {
     return is_railway_accessible_;
   }
-  constexpr bool is_railway_accessible_with_penalty() const {
-    return is_railway_accessible_with_penalty_;
-  }
+  constexpr bool has_railway_penalty() const { return has_railway_penalty_; }
   constexpr bool is_ferry_accessible() const { return is_ferry_accessible_; }
   constexpr bool is_big_street() const { return is_big_street_; }
   constexpr bool is_destination() const { return is_destination_; }
@@ -277,16 +267,16 @@ struct way_properties {
   std::uint8_t is_railway_accessible_ : 1;
   std::uint8_t is_oneway_bus_psv_ : 1;
   std::uint8_t is_incline_down_ : 1;
-  std::uint8_t is_bus_accessible_with_penalty_ : 1;
+  std::uint8_t has_bus_penalty_ : 1;
   std::uint8_t is_ferry_accessible_ : 1;
-  std::uint8_t is_railway_accessible_with_penalty_ : 1;
+  std::uint8_t has_railway_penalty_ : 1;
   std::uint8_t has_hgv_info_ : 1;
   std::uint8_t has_conditionals_ : 1;
   std::uint8_t is_in_low_emission_zone_ : 1;
   std::uint8_t is_detour_ : 1;
   std::uint8_t is_oneway_reverse_ : 1;
-  std::uint8_t is_foot_accessible_with_penalty_ : 1;
-  std::uint8_t is_bike_accessible_with_penalty_ : 1;
+  std::uint8_t has_foot_penalty_ : 1;
+  std::uint8_t has_bike_penalty_ : 1;
 };
 
 static_assert(sizeof(way_properties) == 6);
@@ -299,9 +289,7 @@ struct node_properties {
     return is_wheelchair_accessible_;
   }
   constexpr bool is_bus_accessible() const { return is_bus_accessible_; }
-  constexpr bool is_bus_accessible_with_penalty() const {
-    return is_bus_accessible_with_penalty_;
-  }
+  constexpr bool has_bus_penalty() const { return has_bus_penalty_; }
   constexpr bool is_elevator() const { return is_elevator_; }
   constexpr bool is_multi_level() const { return is_multi_level_; }
   constexpr bool is_entrance() const { return is_entrance_; }
@@ -317,7 +305,7 @@ struct node_properties {
   template <std::size_t NMaxTypes>
   friend constexpr auto static_type_hash(
       node_properties const*, cista::hash_data<NMaxTypes> h) noexcept {
-    return h.combine(cista::hash("node_properties v1"));
+    return h.combine(cista::hash("node_properties v2"));
   }
 
   template <typename Ctx>
@@ -340,7 +328,7 @@ struct node_properties {
   std::uint8_t is_steps_ : 1;
 
   std::uint8_t to_level_ : 6;
-  std::uint8_t is_bus_accessible_with_penalty_ : 1;
+  std::uint8_t has_bus_penalty_ : 1;
   std::uint8_t has_barrier_cost_ : 1;
 };
 
@@ -366,12 +354,11 @@ constexpr char const* to_str(component_class const c) {
 constexpr bool is_accessible(component_class const c, way_properties const& p) {
   switch (c) {
     case component_class::kFoot:
-      // Foot may also use trunk roads and bike ways (with a penalty).
-      return p.is_foot_accessible() || p.is_foot_accessible_with_penalty() ||
-             (p.is_bike_accessible() && !p.is_railway_accessible() &&
-              !p.is_railway_accessible_with_penalty());
-    case component_class::kBike:
-      return p.is_bike_accessible() || p.is_bike_accessible_with_penalty();
+      // Foot may also use bike ways (with a penalty).
+      return p.is_foot_accessible() ||
+             (p.is_bike_accessible() && !p.has_bike_penalty() &&
+              !p.is_railway_accessible());
+    case component_class::kBike: return p.is_bike_accessible();
     case component_class::kCar: return p.is_car_accessible();
   }
   return false;
@@ -380,18 +367,19 @@ constexpr bool is_accessible(component_class const c, way_properties const& p) {
 constexpr bool is_accessible_without_penalty(component_class const c,
                                              way_properties const& p) {
   switch (c) {
-    case component_class::kFoot: return p.is_foot_accessible();
-    case component_class::kBike: return p.is_bike_accessible();
+    case component_class::kFoot:
+      return p.is_foot_accessible() && !p.has_foot_penalty();
+    case component_class::kBike:
+      return p.is_bike_accessible() && !p.has_bike_penalty();
     case component_class::kCar: return p.is_car_accessible();
   }
   return false;
 }
 
-constexpr bool is_accessible_with_penalty(component_class const c,
-                                          way_properties const& p) {
+constexpr bool has_penalty(component_class const c, way_properties const& p) {
   switch (c) {
-    case component_class::kFoot: return p.is_foot_accessible_with_penalty();
-    case component_class::kBike: return p.is_bike_accessible_with_penalty();
+    case component_class::kFoot: return p.has_foot_penalty();
+    case component_class::kBike: return p.has_bike_penalty();
     case component_class::kCar: return false;
   }
   return false;

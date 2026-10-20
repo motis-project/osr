@@ -280,15 +280,20 @@ way_properties get_way_properties(
   auto const [from, to, _] = get_levels(t);
   auto p = way_properties{};
   std::memset(&p, 0, sizeof(way_properties));
-  p.is_foot_accessible_ = is_accessible<foot_profile>(t, obj_type);
-  p.is_foot_accessible_with_penalty_ =
-      is_accessible_with_penalty<foot_profile>(t, obj_type);
-  p.is_bike_accessible_with_penalty_ =
-      is_accessible_with_penalty<bike_profile>(t, obj_type);
-  p.is_bike_accessible_ = is_accessible<bike_profile>(t, obj_type);
+  p.has_foot_penalty_ = is_accessible_with_penalty<foot_profile>(t, obj_type);
+  p.is_foot_accessible_ =
+      p.has_foot_penalty_ || is_accessible<foot_profile>(t, obj_type);
+  p.has_bike_penalty_ = is_accessible_with_penalty<bike_profile>(t, obj_type);
+  p.is_bike_accessible_ =
+      p.has_bike_penalty_ || is_accessible<bike_profile>(t, obj_type);
   p.is_car_accessible_ = is_accessible<car_profile>(t, obj_type);
-  p.is_bus_accessible_ = is_accessible<bus_profile>(t, obj_type);
-  p.is_railway_accessible_ = is_accessible<railway_profile>(t, obj_type);
+  p.has_bus_penalty_ = is_accessible_with_penalty<bus_profile>(t, obj_type);
+  p.is_bus_accessible_ =
+      p.has_bus_penalty_ || is_accessible<bus_profile>(t, obj_type);
+  p.has_railway_penalty_ =
+      is_accessible_with_penalty<railway_profile>(t, obj_type);
+  p.is_railway_accessible_ =
+      p.has_railway_penalty_ || is_accessible<railway_profile>(t, obj_type);
   p.is_destination_ = t.is_destination_;
   p.is_oneway_car_ = t.oneway_;
   p.is_oneway_bike_ = t.oneway_ && !t.not_oneway_bike_;
@@ -309,11 +314,7 @@ way_properties get_way_properties(
   p.has_toll_ = t.toll_;
   p.is_big_street_ = is_big_street(t);
   p.in_route_ = t.is_route_ && t.is_public_transport_route();
-  p.is_bus_accessible_with_penalty_ =
-      is_accessible_with_penalty<bus_profile>(t, obj_type);
   p.is_ferry_accessible_ = is_accessible<ferry_profile>(t, obj_type);
-  p.is_railway_accessible_with_penalty_ =
-      is_accessible_with_penalty<railway_profile>(t, obj_type);
   p.is_detour_ = t.is_detour_route();
   return p;
 }
@@ -344,15 +345,18 @@ std::pair<node_properties, level_bits_t> get_node_properties(tags const& t) {
       is_accessible<wheelchair_profile>(t, osm_obj_type::kNode);
   p.is_bike_accessible_ = is_accessible<bike_profile>(t, osm_obj_type::kNode);
   p.is_car_accessible_ = is_accessible<car_profile>(t, osm_obj_type::kNode);
-  p.is_bus_accessible_ = is_accessible<bus_profile>(t, osm_obj_type::kNode);
+  // An explicitly allowed bus passes a private gate without the penalty.
+  auto const unpenalized = is_accessible<bus_profile>(t, osm_obj_type::kNode);
+  auto const with_penalty =
+      is_accessible_with_penalty<bus_profile>(t, osm_obj_type::kNode);
+  p.is_bus_accessible_ = unpenalized || with_penalty;
+  p.has_bus_penalty_ = !unpenalized && with_penalty;
   p.is_elevator_ = t.is_elevator_;
   p.is_entrance_ = t.is_entrance_;
   p.is_multi_level_ = is_multi;
   p.is_parking_ = t.is_parking_;
   p.is_steps_ = is_steps(t, osm_obj_type::kNode);
   p.to_level_ = to_idx(to);
-  p.is_bus_accessible_with_penalty_ =
-      is_accessible_with_penalty<bus_profile>(t, osm_obj_type::kNode);
   p.has_barrier_cost_ = t.is_gate() || is_private_barrier(t);
   return {p, t.level_bits_};
 }

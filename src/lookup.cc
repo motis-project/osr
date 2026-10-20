@@ -94,7 +94,7 @@ std::optional<kept_candidate> keep_candidate(
     auto const ci = static_cast<std::size_t>(c);
     auto const id = w.r_->get_class_components(c).get(way);
     auto const unpenalized = is_accessible_without_penalty(c, props);
-    auto const with_penalty = is_accessible_with_penalty(c, props);
+    auto const with_penalty = has_penalty(c, props);
     auto const oneway = is_oneway(c, props);
     auto const shadows = [&](kept_candidate const& x) {
       return x.kept_by_.contains(c) && x.component_[ci] == id &&

@@ -323,10 +323,7 @@ struct generic_car {
       duration_t const,
       direction const) {
     if constexpr (IsBus) {
-      auto const accessible = e.is_bus_accessible();
-      auto const accessible_with_penalty = e.is_bus_accessible_with_penalty();
-      if ((accessible || accessible_with_penalty) &&
-          e.is_bus_psv_direction_allowed(dir)) {
+      if (e.is_bus_accessible() && e.is_bus_psv_direction_allowed(dir)) {
         auto const in_route = e.in_route();
         auto const bus_only = !e.is_car_accessible();
         auto sl = static_cast<speed_limit>(e.speed_limit_);
@@ -342,7 +339,7 @@ struct generic_car {
         if (e.is_parking()) {
           cost *= 2U;
         }
-        if (accessible_with_penalty) {
+        if (e.has_bus_penalty()) {
           cost *= e.in_route() ? 2U : 4U;
         }
         return {.cost_ = cost, .duration_ = duration_from_cost(base_cost)};
@@ -382,13 +379,13 @@ struct generic_car {
   static constexpr cost_and_duration node_cost(parameters const& params,
                                                node_properties const& n) {
     if constexpr (IsBus) {
-      return n.is_bus_accessible()
-                 ? cost_and_duration_from_cost(0U)
-                 : (n.is_bus_accessible_with_penalty()
-                        ? cost_and_duration{.cost_ =
-                                                params.private_gate_penalty_,
-                                            .duration_ = duration_t{0}}
-                        : infeasible_cost_and_duration());
+      if (!n.is_bus_accessible()) {
+        return infeasible_cost_and_duration();
+      }
+      return n.has_bus_penalty()
+                 ? cost_and_duration{.cost_ = params.private_gate_penalty_,
+                                     .duration_ = duration_t{0}}
+                 : cost_and_duration_from_cost(0U);
     } else {
       return n.is_car_accessible() ? cost_and_duration_from_cost(0U)
                                    : infeasible_cost_and_duration();
