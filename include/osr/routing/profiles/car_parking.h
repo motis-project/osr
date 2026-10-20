@@ -425,6 +425,8 @@ struct car_parking {
                                       : component_class::kFoot};
   }
 
+  static constexpr auto kReachabilityClass = std::optional<component_class>{};
+
   static bool endpoint_way_feasible(parameters const& params,
                                     endpoint_way_query const& q) {
     return q.end_ == route_end::kOrigin ? q.feasible<car>(params.car_)

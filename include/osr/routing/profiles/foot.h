@@ -460,6 +460,9 @@ struct foot {
     return {component_class::kFoot};
   }
 
+  static constexpr auto kReachabilityClass =
+      std::optional{component_class::kFoot};
+
   static bool endpoint_way_feasible(parameters const& params,
                                     endpoint_way_query const& q) {
     return q.template feasible<typename parameters::profile_t>(params);

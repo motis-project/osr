@@ -167,10 +167,17 @@ struct match_result {
   // Appends a copy of one bucket of `src`. Used to gather a scattered subset
   // of precomputed matches into the contiguous form `route()` consumes.
   void append(match_result const& src, match_idx_t const i) {
-    auto const v = src[i];
+    append(src[i], [](way_idx_t) { return true; });
+  }
+
+  // Appends the candidates of `v` on ways `keep` accepts.
+  template <typename Fn>
+  void append(view const& v, Fn&& keep) {
     start(v.lvl_);
     for (auto j = std::size_t{0U}; j != v.size(); ++j) {
-      add(v.dist_to_way_[j], v.way_[j], v.nodes_[j], v.state_[j]);
+      if (keep(v.way_[j])) {
+        add(v.dist_to_way_[j], v.way_[j], v.nodes_[j], v.state_[j]);
+      }
     }
     penalty_ref_.back() = v.penalty_ref_;
     finish();

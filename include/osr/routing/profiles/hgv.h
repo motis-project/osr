@@ -485,6 +485,8 @@ struct hgv {
     return {component_class::kCar};
   }
 
+  static constexpr auto kReachabilityClass = std::optional<component_class>{};
+
   static bool endpoint_way_feasible(parameters const& params,
                                     endpoint_way_query const& q) {
     return q.feasible<hgv>(params);
