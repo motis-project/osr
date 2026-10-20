@@ -1,5 +1,6 @@
 #include "gtest/gtest.h"
 
+#include <chrono>
 #include <filesystem>
 #include <initializer_list>
 #include <system_error>
@@ -256,12 +257,13 @@ TEST(routing, kerbs) {
                          geo::latlng const& from) {
     // Use small matching distance to ensure only complete paths are found
     auto const max_matching_distance = 10.0;
-    auto const max_cost = 900;
+    auto const max_duration = std::chrono::seconds{900};
     return osr::route(get_parameters(profile), w, l, profile,
                       location{.pos_ = from, .lvl_ = kNoLevel},
-                      {location{.pos_ = center, .lvl_ = kNoLevel}}, max_cost,
-                      osr::direction::kForward, max_matching_distance, nullptr,
-                      nullptr, nullptr, osr::routing_algorithm::kDijkstra);
+                      {location{.pos_ = center, .lvl_ = kNoLevel}},
+                      max_duration, osr::direction::kForward,
+                      max_matching_distance, nullptr, nullptr, nullptr,
+                      osr::routing_algorithm::kDijkstra);
   };
 
   // North: kerb=lowered: Reachable by all
@@ -363,11 +365,16 @@ TEST(routing, kerbs) {
       EXPECT_TRUE(p->dist_ > min_dist);
     }
   }
+  // South-West and North-West arrive at the center via ways 3 and 4, where
+  // the destination match also offers the far node (71 / 81) as candidate.
+  // Its connector covers the last 15.7 m with the distance truncated to 15 m,
+  // one second cheaper than the rounded 16 m edge, so these come out one
+  // second below North-East / South-East.
   // South-West: kerb=no + wheelchair=no: Wheelchair disallowed
   {
     for (auto const [profile, cost] :
          std::initializer_list<std::tuple<search_profile, cost_t>>{
-             {search_profile::kFoot, 51U},
+             {search_profile::kFoot, 50U},
              {search_profile::kBike, 16U},
          }) {
       auto const p = route(profile, south_west);
@@ -384,8 +391,8 @@ TEST(routing, kerbs) {
   {
     for (auto const [profile, cost] :
          std::initializer_list<std::tuple<search_profile, cost_t>>{
-             {search_profile::kFoot, 51U},
-             {search_profile::kWheelchair, 79U},
+             {search_profile::kFoot, 50U},
+             {search_profile::kWheelchair, 78U},
              {search_profile::kBike, 16U + 30U},
          }) {
       auto const p = route(profile, north_west);
