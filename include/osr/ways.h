@@ -463,6 +463,13 @@ struct class_components {
         std::distance(begin(exception_way_), it))];
   }
 
+  // The component id, or for single-way components a key after all ids.
+  std::uint64_t key(way_idx_t const w) const {
+    auto const id = get(w);
+    return id.has_value() ? std::uint64_t{*id}
+                          : (std::uint64_t{1U} << 32U) | to_idx(w);
+  }
+
   std::uint32_t size(std::uint32_t const id) const {
     auto const it =
         std::upper_bound(begin(size_run_id_), end(size_run_id_), id);

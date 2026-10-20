@@ -165,7 +165,7 @@ TEST_F(endpoint_matching_test,
 }
 
 // The closest match 402 is on a car island {402, 403}: it does not shadow way
-// 300 in the network, but 403.
+// 300 in the network, but 403. The network has 3 ways, the island 2.
 TEST_F(endpoint_matching_test, unreachable_closest_match_uses_farther_match) {
   auto const& w = *ways_;
   auto const& l = *lookup_;
@@ -184,7 +184,9 @@ TEST_F(endpoint_matching_test, unreachable_closest_match_uses_farther_match) {
 
   auto const result =
       route(params, w, l, search_profile::kCar, from, to,
-            std::chrono::seconds{3600}, direction::kForward, 50.0);
+            std::chrono::seconds{3600}, direction::kForward, 50.0, nullptr,
+            nullptr, nullptr, routing_algorithm::kDijkstra, std::nullopt,
+            route_options{.tiny_component_ways_ = 3U});
   ASSERT_TRUE(result.has_value());
   ASSERT_FALSE(result->segments_.empty());
   ASSERT_FALSE(result->segments_.back().polyline_.empty());
