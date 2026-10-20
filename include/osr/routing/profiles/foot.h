@@ -19,13 +19,13 @@ struct sharing_data;
 template <bool IsWheelchair, typename Tracking = noop_tracking>
 struct foot {
   static constexpr auto const kMaxMatchDistance = 100U;
+  static constexpr auto const kTrunkCostFactor = IsWheelchair ? 4.0 : 2.0;
+  static constexpr auto const kGateCost = cost_t{60U};
+  static constexpr auto const kPrivateBarrierCost = cost_t{600U};
 
   struct parameters {
     using profile_t = foot<IsWheelchair, Tracking>;
     float speed_meters_per_second_{IsWheelchair ? 0.8F : 1.2F};
-    float trunk_cost_factor_{IsWheelchair ? 4.0F : 2.0F};
-    cost_t gate_cost_{60U};
-    cost_t private_barrier_cost_{600U};
   };
 
   struct node {
@@ -406,8 +406,7 @@ struct foot {
                         e.is_railway_accessible_with_penalty())) {
       return infeasible_cost_and_duration();
     }
-    auto const factor =
-        is_trunk ? trunk_cost_factor(e, params.trunk_cost_factor_) : 1.0;
+    auto const factor = is_trunk ? trunk_cost_factor(e, kTrunkCostFactor) : 1.0;
     auto const duration = duration_from_cost(static_cast<cost_t>(std::round(
         static_cast<double>(dist) / params.speed_meters_per_second_)));
     auto const walk = dist / (params.speed_meters_per_second_ +
@@ -471,7 +470,7 @@ struct foot {
     return q.template feasible<typename parameters::profile_t>(params);
   }
 
-  static constexpr cost_and_duration node_cost(parameters const& params,
+  static constexpr cost_and_duration node_cost(parameters const&,
                                                node_properties const n) {
     if constexpr (IsWheelchair) {
       if (!n.is_wheelchair_accessible()) {
@@ -480,13 +479,13 @@ struct foot {
     }
     if (!n.is_walk_accessible()) {
       return n.has_barrier_cost()
-                 ? cost_and_duration{.cost_ = params.private_barrier_cost_,
+                 ? cost_and_duration{.cost_ = kPrivateBarrierCost,
                                      .duration_ = duration_t{0}}
                  : infeasible_cost_and_duration();
     }
     auto c = cost_and_duration_from_cost(n.is_elevator() ? 90U : 0U);
     if (n.has_barrier_cost()) {
-      c.cost_ += params.gate_cost_;
+      c.cost_ += kGateCost;
     }
     return c;
   }

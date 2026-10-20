@@ -36,14 +36,14 @@ template <bike_costing Costing,
           unsigned int ElevationExponentThousandth = 2100U>
 struct bike {
   static constexpr auto const kMaxMatchDistance = 100U;
+  static constexpr auto const kTrunkCostFactor = 2.0;
+  static constexpr auto const kGateCost = cost_t{60U};
+  static constexpr auto const kPrivateBarrierCost = cost_t{600U};
 
   struct parameters {
     using profile_t =
         bike<Costing, ElevationUpCost, ElevationExponentThousandth>;
     float speed_meters_per_second_{4.2F};
-    float trunk_cost_factor_{2.0F};
-    cost_t gate_cost_{60U};
-    cost_t private_barrier_cost_{600U};
   };
 
   struct node {
@@ -304,8 +304,7 @@ struct bike {
                               : (e.is_big_street_ ? -0.7 : 0) +
                                     (e.motor_vehicle_no_ ? 0.5 : 0.0)));
       auto const cost = static_cast<cost_t>(std::round(
-          is_trunk ? ride * trunk_cost_factor(e, params.trunk_cost_factor_)
-                   : ride));
+          is_trunk ? ride * trunk_cost_factor(e, kTrunkCostFactor) : ride));
       return {
           .cost_ = cost,
           .duration_ = duration_from_cost(static_cast<cost_t>(std::round(
@@ -365,17 +364,17 @@ struct bike {
     return q.template feasible<typename parameters::profile_t>(params);
   }
 
-  static constexpr cost_and_duration node_cost(parameters const& params,
+  static constexpr cost_and_duration node_cost(parameters const&,
                                                node_properties const n) {
     if (!n.is_bike_accessible()) {
       return n.has_barrier_cost()
-                 ? cost_and_duration{.cost_ = params.private_barrier_cost_,
+                 ? cost_and_duration{.cost_ = kPrivateBarrierCost,
                                      .duration_ = duration_t{0}}
                  : infeasible_cost_and_duration();
     }
     auto c = cost_and_duration_from_cost(n.is_steps() ? 30U : 0U);
     if (n.has_barrier_cost()) {
-      c.cost_ += params.gate_cost_;
+      c.cost_ += kGateCost;
     }
     return c;
   }

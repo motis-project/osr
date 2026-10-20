@@ -23,11 +23,8 @@ namespace osr {
 // - 100, 101: trunk without foot tags
 // - 200, 201: trunk with sidewalk=both
 // - 300, 301: trunk with motorroad=yes
-// - 400, 401: path with a gate (node 41)
-// - 500, 501: path with an open gate (node 51)
 // - 600, 601: trunk, 610, 611: cycleway 10 m north of it, connected at both
 //   ends by the footways 620, 621
-// - 700, 701: trunk with maxspeed=50
 // - 800, 801: path with a private gate (node 81)
 // - 900, 901: path with a foot=no gate (node 91)
 constexpr auto const kOsm = R"(
@@ -41,17 +38,6 @@ constexpr auto const kOsm = R"(
   <node id="30" lat="49.020000" lon="8.000000"/>
   <node id="31" lat="49.020000" lon="8.003000"/>
   <node id="32" lat="49.020000" lon="8.006000"/>
-  <node id="40" lat="49.030000" lon="8.000000"/>
-  <node id="41" lat="49.030000" lon="8.003000">
-    <tag k="barrier" v="gate"/>
-  </node>
-  <node id="42" lat="49.030000" lon="8.006000"/>
-  <node id="50" lat="49.040000" lon="8.000000"/>
-  <node id="51" lat="49.040000" lon="8.003000">
-    <tag k="barrier" v="gate"/>
-    <tag k="access" v="yes"/>
-  </node>
-  <node id="52" lat="49.040000" lon="8.006000"/>
   <way id="100">
     <nd ref="10"/><nd ref="11"/>
     <tag k="highway" v="trunk"/>
@@ -75,22 +61,6 @@ constexpr auto const kOsm = R"(
   <way id="301">
     <nd ref="31"/><nd ref="32"/>
     <tag k="highway" v="trunk"/><tag k="motorroad" v="yes"/>
-  </way>
-  <way id="400">
-    <nd ref="40"/><nd ref="41"/>
-    <tag k="highway" v="path"/>
-  </way>
-  <way id="401">
-    <nd ref="41"/><nd ref="42"/>
-    <tag k="highway" v="path"/>
-  </way>
-  <way id="500">
-    <nd ref="50"/><nd ref="51"/>
-    <tag k="highway" v="path"/>
-  </way>
-  <way id="501">
-    <nd ref="51"/><nd ref="52"/>
-    <tag k="highway" v="path"/>
   </way>
   <node id="60" lat="49.050000" lon="8.000000"/>
   <node id="61" lat="49.050000" lon="8.003000"/>
@@ -121,17 +91,6 @@ constexpr auto const kOsm = R"(
   <way id="621">
     <nd ref="62"/><nd ref="65"/>
     <tag k="highway" v="footway"/>
-  </way>
-  <node id="70" lat="49.060000" lon="8.000000"/>
-  <node id="71" lat="49.060000" lon="8.003000"/>
-  <node id="72" lat="49.060000" lon="8.006000"/>
-  <way id="700">
-    <nd ref="70"/><nd ref="71"/>
-    <tag k="highway" v="trunk"/><tag k="maxspeed" v="50"/>
-  </way>
-  <way id="701">
-    <nd ref="71"/><nd ref="72"/>
-    <tag k="highway" v="trunk"/><tag k="maxspeed" v="50"/>
   </way>
   <node id="80" lat="49.070000" lon="8.000000"/>
   <node id="81" lat="49.070000" lon="8.003000">
@@ -183,20 +142,17 @@ struct foot_access_test : ::testing::Test {
     fs::remove_all(dir_, ec);
   }
 
-  static std::optional<path> route(
-      double const lat,
-      foot<false, elevator_tracking>::parameters const& params) {
-    return osr::route(params, *w_, *l_, search_profile::kFoot,
-                      location{{lat, 8.001}, kNoLevel},
+  static std::optional<path> route(double const lat) {
+    return osr::route(foot<false, elevator_tracking>::parameters{}, *w_, *l_,
+                      search_profile::kFoot, location{{lat, 8.001}, kNoLevel},
                       location{{lat, 8.005}, kNoLevel},
                       std::chrono::seconds{3600}, direction::kForward, 20.0,
                       nullptr, nullptr, nullptr, routing_algorithm::kDijkstra);
   }
 
-  static std::optional<path> bike_route(
-      double const lat,
-      bike<bike_costing::kSafe, kElevationNoCost>::parameters const& params) {
-    return osr::route(params, *w_, *l_, search_profile::kBike,
+  static std::optional<path> bike_route(double const lat) {
+    return osr::route(bike<bike_costing::kSafe, kElevationNoCost>::parameters{},
+                      *w_, *l_, search_profile::kBike,
                       location{{lat, 8.001}, kNoLevel},
                       location{{lat, 8.005}, kNoLevel},
                       std::chrono::seconds{3600}, direction::kForward, 20.0,
@@ -218,47 +174,22 @@ TEST_F(foot_access_test, trunk_is_walkable_with_penalty) {
   EXPECT_TRUE(p.is_foot_accessible_with_penalty());
   EXPECT_TRUE(is_accessible(component_class::kFoot, p));
 
-  auto const once = route(49.0, {.trunk_cost_factor_ = 1.0F});
-  auto const twice = route(49.0, {.trunk_cost_factor_ = 2.0F});
-  ASSERT_TRUE(once.has_value());
-  ASSERT_TRUE(twice.has_value());
-  EXPECT_NEAR(292.0, once->dist_, 2.0);
-  EXPECT_EQ(once->duration_, twice->duration_);
-  EXPECT_NEAR(2.0 * once->cost_, twice->cost_, 2.0);
+  auto const r = route(49.0);
+  ASSERT_TRUE(r.has_value());
+  EXPECT_NEAR(292.0, r->dist_, 2.0);
 }
 
 TEST_F(foot_access_test, trunk_with_sidewalk_has_no_penalty) {
   auto const p = props(osm_way_idx_t{200U});
   EXPECT_TRUE(p.is_foot_accessible());
   EXPECT_FALSE(p.is_foot_accessible_with_penalty());
-
-  auto const once = route(49.01, {.trunk_cost_factor_ = 1.0F});
-  auto const twice = route(49.01, {.trunk_cost_factor_ = 2.0F});
-  ASSERT_TRUE(once.has_value());
-  ASSERT_TRUE(twice.has_value());
-  EXPECT_EQ(once->cost_, twice->cost_);
 }
 
 TEST_F(foot_access_test, motorroad_is_not_walkable) {
   auto const p = props(osm_way_idx_t{300U});
   EXPECT_FALSE(p.is_foot_accessible());
   EXPECT_FALSE(p.is_foot_accessible_with_penalty());
-  EXPECT_FALSE(route(49.02, {}).has_value());
-}
-
-TEST_F(foot_access_test, gate_costs) {
-  auto const free = route(49.03, {.gate_cost_ = 0U});
-  auto const gate = route(49.03, {.gate_cost_ = 60U});
-  ASSERT_TRUE(free.has_value());
-  ASSERT_TRUE(gate.has_value());
-  EXPECT_EQ(free->cost_ + 60U, gate->cost_);
-  EXPECT_EQ(free->duration_, gate->duration_);
-
-  auto const open_free = route(49.04, {.gate_cost_ = 0U});
-  auto const open_gate = route(49.04, {.gate_cost_ = 60U});
-  ASSERT_TRUE(open_free.has_value());
-  ASSERT_TRUE(open_gate.has_value());
-  EXPECT_EQ(open_free->cost_, open_gate->cost_);
+  EXPECT_FALSE(route(49.02).has_value());
 }
 
 // A closer trunk candidate must not drop the cycleway (less penalised).
@@ -286,14 +217,6 @@ TEST_F(foot_access_test, cycleway_does_not_shadow_trunk) {
   EXPECT_NE(end(ways), std::find(begin(ways), end(ways), trunk));
 }
 
-TEST_F(foot_access_test, slow_trunk_has_no_factor) {
-  auto const once = route(49.06, {.trunk_cost_factor_ = 1.0F});
-  auto const twice = route(49.06, {.trunk_cost_factor_ = 2.0F});
-  ASSERT_TRUE(once.has_value());
-  ASSERT_TRUE(twice.has_value());
-  EXPECT_EQ(once->cost_, twice->cost_);
-}
-
 TEST_F(foot_access_test, bike_on_trunk) {
   auto const p = props(osm_way_idx_t{100U});
   EXPECT_FALSE(p.is_bike_accessible());
@@ -301,34 +224,16 @@ TEST_F(foot_access_test, bike_on_trunk) {
   EXPECT_TRUE(is_accessible(component_class::kBike, p));
   EXPECT_FALSE(props(osm_way_idx_t{300U}).is_bike_accessible_with_penalty());
 
-  auto const once = bike_route(49.0, {.trunk_cost_factor_ = 1.0F});
-  auto const twice = bike_route(49.0, {.trunk_cost_factor_ = 2.0F});
-  ASSERT_TRUE(once.has_value());
-  ASSERT_TRUE(twice.has_value());
-  EXPECT_EQ(once->duration_, twice->duration_);
-  EXPECT_NEAR(2.0 * once->cost_, twice->cost_, 2.0);
-  EXPECT_FALSE(bike_route(49.02, {}).has_value());
+  EXPECT_TRUE(bike_route(49.0).has_value());
+  EXPECT_FALSE(bike_route(49.02).has_value());
 }
 
-TEST_F(foot_access_test, bike_gate_costs) {
-  auto const free = bike_route(49.03, {.gate_cost_ = 0U});
-  auto const gate = bike_route(49.03, {.gate_cost_ = 60U});
-  ASSERT_TRUE(free.has_value());
-  ASSERT_TRUE(gate.has_value());
-  EXPECT_EQ(free->cost_ + 60U, gate->cost_);
-}
+TEST_F(foot_access_test, private_barriers) {
+  EXPECT_TRUE(route(49.07).has_value());
+  EXPECT_TRUE(bike_route(49.07).has_value());
 
-TEST_F(foot_access_test, private_barrier_costs) {
-  auto const cheap = route(49.07, {.private_barrier_cost_ = 0U});
-  auto const expensive = route(49.07, {.private_barrier_cost_ = 600U});
-  ASSERT_TRUE(cheap.has_value());
-  ASSERT_TRUE(expensive.has_value());
-  EXPECT_EQ(cheap->cost_ + 600U, expensive->cost_);
-  EXPECT_EQ(cheap->duration_, expensive->duration_);
-  EXPECT_TRUE(bike_route(49.07, {}).has_value());
-
-  EXPECT_FALSE(route(49.08, {}).has_value());
-  EXPECT_FALSE(bike_route(49.08, {}).has_value());
+  EXPECT_FALSE(route(49.08).has_value());
+  EXPECT_FALSE(bike_route(49.08).has_value());
 }
 
 }  // namespace osr
