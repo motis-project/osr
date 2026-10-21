@@ -872,6 +872,57 @@ struct one_to_many_state_impl final : public one_to_many_state {
                                c.total_, sp.dir_, sp.start_time_);
   }
 
+  std::optional<rental_duration_info> rental_durations(
+      std::size_t const k) const override {
+    if constexpr (requires(typename P::node n) { n.is_rental_node(); }) {
+      if (k >= results_.size() || !results_[k].has_value() ||
+          k >= candidates_.size() || !candidates_[k].has_value()) {
+        return std::nullopt;
+      }
+      auto const& c = *candidates_[k];
+      auto const duration = [&](typename P::node const n) {
+        return d_.cost_.at(n.get_key()).duration(n);
+      };
+      auto const total = c.total_.duration_;
+      auto before_rental = std::optional<duration_t>{};
+      auto rental_end = std::optional<duration_t>{};
+      auto n = c.node_;
+      if (n.is_rental_node()) {
+        rental_end = total;
+      }
+      // Walk the chain from the destination back to the search start:
+      // durations decrease.
+      while (true) {
+        auto const d = duration(n);
+        if (n.is_rental_node()) {
+          if (!rental_end.has_value()) {
+            rental_end = d;
+          }
+        } else if (rental_end.has_value() && !before_rental.has_value()) {
+          before_rental = d;
+        }
+        auto const pred = d_.cost_.at(n.get_key()).pred(n);
+        if (!pred.has_value()) {
+          break;
+        }
+        n = *pred;
+      }
+      if (!rental_end.has_value()) {
+        return std::nullopt;
+      }
+      auto const ride_from = before_rental.value_or(duration_t{0U});
+      auto const ride_to = *rental_end;
+      if (d_.params_.dir_ == direction::kForward) {
+        return rental_duration_info{.ride_start_ = ride_from,
+                                    .ride_end_ = ride_to};
+      }
+      return rental_duration_info{.ride_start_ = total - ride_to,
+                                  .ride_end_ = total - ride_from};
+    } else {
+      return std::nullopt;
+    }
+  }
+
   // The search owns everything it ran with (profile parameters, blocked,
   // direction, start time, the start location, ...) - see `osr::search_params`.
   // `sharing_data` is the exception: it is only valid while the search runs,
