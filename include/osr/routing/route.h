@@ -1,13 +1,13 @@
 #pragma once
 
 #include <chrono>
+
 #include <memory>
 #include <optional>
 #include <string_view>
 #include <vector>
 
 #include "geo/polyline.h"
-
 #include "osr/elevation_storage.h"
 #include "osr/location.h"
 #include "osr/lookup.h"
@@ -33,6 +33,20 @@ struct bidirectional;
 
 struct sharing_data;
 
+// search start                                         destination
+// o -foot- o --foot-- [o]  =rental=  [o] --foot-- o ~~~match~~~ x
+// 0        ^           ^              ^           ^             ^
+//          |           rental_start_  rental_end_ t_dest_       t_dest_
+//          before_rental_                         after_rental_ + length_match_
+struct rental_duration_info {
+  duration_t before_rental_;
+  duration_t rental_start_;
+  duration_t rental_end_;
+  duration_t after_rental_;
+  duration_t t_dest_;
+  duration_t length_match_;
+};
+
 struct one_to_many_state {
   virtual ~one_to_many_state() = default;
   virtual std::vector<std::optional<path>> const& results() const = 0;
@@ -40,24 +54,8 @@ struct one_to_many_state {
                                           lookup const&,
                                           std::size_t dest_idx,
                                           sharing_data const*) = 0;
-
-  // search start                                       destination
-  // o -foot- o --foot-- [o]=car=[o]=car=[o] --foot-- o ~~match~~ x
-  // 0        ^           ^               ^           ^           ^
-  //          before_min_ min_            max_        dest_node_  dest_node_
-  //                                                  after_max_  + dest_match_
-  struct rental_duration_info {
-    duration_t before_min_;
-    duration_t min_;
-    duration_t max_;
-    duration_t after_max_;
-    duration_t dest_node_;
-    duration_t dest_match_;
-  };
   virtual std::optional<rental_duration_info> rental_durations(
-      std::size_t /* dest_idx */) const {
-    return std::nullopt;
-  }
+      std::size_t dest_idx) const = 0;
 };
 
 std::unique_ptr<one_to_many_state> route_one_to_many(

@@ -212,17 +212,17 @@ outcome check(graph const& g,
 
     // The chain plus the final matching piece is the whole path as
     // reconstruct() shows it.
-    auto const total = rc->dest_node_ + rc->dest_match_;
+    auto const total = rc->t_dest_ + rc->length_match_;
     EXPECT_EQ(p->duration_, total) << k;
 
     // Durations along the chain, in search order.
-    EXPECT_LE(rc->before_min_, rc->min_) << k;
-    EXPECT_LE(rc->min_, rc->max_) << k;
-    EXPECT_LE(rc->max_, rc->after_max_) << k;
-    EXPECT_LE(rc->after_max_, total) << k;
+    EXPECT_LE(rc->before_rental_, rc->rental_start_) << k;
+    EXPECT_LE(rc->rental_start_, rc->rental_end_) << k;
+    EXPECT_LE(rc->rental_end_, rc->after_rental_) << k;
+    EXPECT_LE(rc->after_rental_, total) << k;
     if (!return_at_destination) {
       // The switch takes time (the search never starts on the vehicle).
-      EXPECT_LT(rc->before_min_, rc->min_) << k;
+      EXPECT_LT(rc->before_rental_, rc->rental_start_) << k;
     }
 
     // The vehicle is returned at the destination coordinate exactly if the
@@ -235,22 +235,23 @@ outcome check(graph const& g,
       EXPECT_TRUE(return_at_destination) << k;
       ++out.n_returned_at_destination_;
       if (dir == direction::kForward) {
-        EXPECT_EQ(rc->max_, total) << k;
-        EXPECT_EQ(rc->after_max_, total) << k;
+        EXPECT_EQ(rc->rental_end_, total) << k;
+        EXPECT_EQ(rc->after_rental_, total) << k;
       } else {
-        EXPECT_EQ(rc->before_min_, duration_t{0U}) << k;
+        EXPECT_EQ(rc->before_rental_, duration_t{0U}) << k;
       }
     } else if (dir == direction::kForward) {
-      EXPECT_LE(rc->after_max_, rc->dest_node_) << k;
+      EXPECT_LE(rc->after_rental_, rc->t_dest_) << k;
     }
 
     // Ride start and end as the segments show them. Forward, the chain runs
     // in travel order; backward, it runs from the travel end, so positions
     // are measured from the far end.
-    auto const pickup =
-        dir == direction::kForward ? rc->before_min_ : total - rc->max_;
-    auto const drop_off =
-        dir == direction::kForward ? rc->max_ : total - rc->before_min_;
+    auto const pickup = dir == direction::kForward ? rc->before_rental_
+                                                   : total - rc->rental_end_;
+    auto const drop_off = dir == direction::kForward
+                              ? rc->rental_end_
+                              : total - rc->before_rental_;
     EXPECT_EQ(ride->pickup_, pickup) << k;
     EXPECT_EQ(ride->drop_off_, drop_off) << k;
   }

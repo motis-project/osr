@@ -888,29 +888,29 @@ struct one_to_many_state_impl final : public one_to_many_state {
       // with the mode of the node they connect to, so a rental node at an end
       // of the chain means the ride goes through to that end of the path (the
       // vehicle is returned at the destination coordinate).
-      auto const dest = duration(c.node_);
-      auto const total = clamp_add_duration(dest, c.connection_.duration_);
-      auto min = std::optional<duration_t>{};
-      auto max = std::optional<duration_t>{};
-      auto before_min = std::optional<duration_t>{};
-      auto after_max = total;
+      auto const t_dest = duration(c.node_);
+      auto const total = clamp_add_duration(t_dest, c.connection_.duration_);
+      auto rental_start = std::optional<duration_t>{};
+      auto rental_end = std::optional<duration_t>{};
+      auto before_rental = std::optional<duration_t>{};
+      auto after_rental = total;
       auto prev = total;  // label visited before (later on the chain)
       auto n = c.node_;
       if (n.is_rental_node()) {
-        max = total;
+        rental_end = total;
       }
       // Walk the chain from the destination back to the search start:
       // durations decrease.
       while (true) {
         auto const d = duration(n);
         if (n.is_rental_node()) {
-          if (!max.has_value()) {
-            max = d;
-            after_max = prev;
+          if (!rental_end.has_value()) {
+            rental_end = d;
+            after_rental = prev;
           }
-          min = d;
-        } else if (min.has_value() && !before_min.has_value()) {
-          before_min = d;
+          rental_start = d;
+        } else if (rental_start.has_value() && !before_rental.has_value()) {
+          before_rental = d;
         }
         prev = d;
         auto const pred = d_.cost_.at(n.get_key()).pred(n);
@@ -919,16 +919,16 @@ struct one_to_many_state_impl final : public one_to_many_state {
         }
         n = *pred;
       }
-      if (!min.has_value()) {
+      if (!rental_start.has_value()) {
         return std::nullopt;
       }
       return rental_duration_info{
-          .before_min_ = before_min.value_or(duration_t{0U}),
-          .min_ = *min,
-          .max_ = *max,
-          .after_max_ = after_max,
-          .dest_node_ = dest,
-          .dest_match_ = c.connection_.duration_};
+          .before_rental_ = before_rental.value_or(duration_t{0U}),
+          .rental_start_ = *rental_start,
+          .rental_end_ = *rental_end,
+          .after_rental_ = after_rental,
+          .t_dest_ = t_dest,
+          .length_match_ = c.connection_.duration_};
     } else {
       return std::nullopt;
     }
