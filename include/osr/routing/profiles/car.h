@@ -419,6 +419,9 @@ struct generic_car {
                  : component_classes{component_class::kCar};
   }
 
+  static constexpr auto kReachabilityClass =
+      IsBus ? std::nullopt : std::optional{component_class::kCar};
+
   static bool endpoint_way_feasible(parameters const& params,
                                     endpoint_way_query const& q) {
     return q.feasible<generic_car>(params);
