@@ -1,12 +1,9 @@
 #include "gtest/gtest.h"
 
 #include <chrono>
-#include <filesystem>
-#include <memory>
 #include <random>
 #include <string>
 
-#include "osr/extract/extract.h"
 #include "osr/lookup.h"
 #include "osr/routing/parameters.h"
 #include "osr/routing/profiles/bike_sharing.h"
@@ -17,8 +14,10 @@
 #include "osr/types.h"
 #include "osr/ways.h"
 
-namespace fs = std::filesystem;
+#include "test_graph.h"
+
 using namespace osr;
+using test::graph;
 
 // one_to_many_state::rental_durations() reports where the ride is on a sharing
 // path from the search chain alone. It has to agree with what reconstruct()
@@ -53,21 +52,9 @@ node_idx_t random_node(ways const& w,
   }
 }
 
-struct graph {
-  graph() {
-    dir_ = fs::temp_directory_path() / "osr_rental_durations_test";
-    auto ec = std::error_code{};
-    fs::remove_all(dir_, ec);
-    fs::create_directories(dir_, ec);
-    extract(false, "test/miraustr.osm.pbf", dir_, {});
-    w_ = std::make_unique<ways>(dir_, cista::mmap::protection::READ);
-    l_ = std::make_unique<lookup>(*w_, dir_, cista::mmap::protection::READ);
-  }
-
-  fs::path dir_;
-  std::unique_ptr<ways> w_;
-  std::unique_ptr<lookup> l_;
-};
+graph make_graph() {
+  return graph{"test/miraustr.osm.pbf", "osr_rental_durations_test"};
+}
 
 // Free-floating vehicles at kNumVehicles random nodes on ways the vehicle can
 // use; they can be returned anywhere (end allowed everywhere). car_sharing
@@ -278,7 +265,7 @@ void check_both_directions(search_profile const profile,
                            bool const return_at_destination,
                            unsigned const seed,
                            Accessible&& accessible) {
-  auto const g = graph{};
+  auto const g = make_graph();
   for (auto const dir : {direction::kForward, direction::kBackward}) {
     SCOPED_TRACE(std::string{to_str(dir)});
     // Several searches: backward, one search has a single travel destination,
@@ -341,7 +328,7 @@ TEST(rental_durations, bike_sharing_return_at_destination) {
 
 // Profiles without rental nodes never report a ride.
 TEST(rental_durations, foot_has_no_ride) {
-  auto const g = graph{};
+  auto const g = make_graph();
   auto const& w = *g.w_;
   auto const& l = *g.l_;
   auto const params =
