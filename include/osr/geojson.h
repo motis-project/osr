@@ -595,9 +595,9 @@ struct geojson_writer {
           {"bike", p.is_bike_accessible()},
           {"foot", p.is_foot_accessible()},
           {"bus", p.is_bus_accessible()},
-          {"bus_with_penalty", p.is_bus_accessible_with_penalty()},
+          {"bus_with_penalty", p.has_bus_penalty()},
           {"railway", p.is_railway_accessible()},
-          {"railway_with_penalty", p.is_railway_accessible_with_penalty()},
+          {"railway_with_penalty", p.has_railway_penalty()},
           {"ferry", p.is_ferry_accessible()},
           {"low_emission_zone", p.is_in_low_emission_zone()},
           {"is_big_street", p.is_big_street()},
@@ -635,9 +635,9 @@ struct geojson_writer {
         {"bike", p.is_bike_accessible()},
         {"foot", p.is_foot_accessible()},
         {"bus", p.is_bus_accessible()},
-        {"bus_with_penalty", p.is_bus_accessible_with_penalty()},
+        {"bus_with_penalty", p.has_bus_penalty()},
         {"railway", p.is_railway_accessible()},
-        {"railway_with_penalty", p.is_railway_accessible_with_penalty()},
+        {"railway_with_penalty", p.has_railway_penalty()},
         {"ferry", p.is_ferry_accessible()},
         {"low_emission_zone", p.is_in_low_emission_zone()},
         {"is_destination", p.is_destination()},
@@ -656,7 +656,8 @@ struct geojson_writer {
         {"is_parking", p.is_parking()},
         {"is_ramp", p.is_ramp()},
         {"in_route", p.in_route()},
-        {"is_detour", p.is_detour()}};
+        {"is_detour", p.is_detour()},
+    };
     add_hgv_way_info_properties(properties, *w_.r_, i, p);
     add_conditional_properties(properties, w_, i, p);
     add_class_component_properties(properties, *w_.r_, i);
@@ -707,7 +708,7 @@ struct geojson_writer {
           {"foot", p.is_walk_accessible()},
           {"wheelchair", p.is_wheelchair_accessible()},
           {"bus", p.is_bus_accessible()},
-          {"bus_with_penalty", p.is_bus_accessible_with_penalty()},
+          {"bus_with_penalty", p.has_bus_penalty()},
           {"is_restricted", w_.r_->node_is_restricted_[n]},
           {"is_entrance", p.is_entrance()},
           {"is_elevator", p.is_elevator()},

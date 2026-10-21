@@ -28,6 +28,7 @@ struct kept_candidate {
   float dist_{};
   component_classes kept_by_{};
   component_classes unpenalized_{};
+  component_classes with_penalty_{};
   component_classes oneway_{};
   std::array<std::optional<std::uint32_t>, kNumComponentClasses> component_{};
   bool on_target_level_{};
@@ -58,7 +59,8 @@ std::array<double, 2> get_travel_heading(ways const& w,
 // filtered here, the profile decides about them later. A class drops a
 // candidate if a kept candidate in the same component is clearly closer and
 // at least as good:
-// - not penalised if this one is not (e.g. foot on a `foot=no` cycleway)
+// - not penalised, or penalised for the same reason as this one (e.g. for
+//   foot, a trunk road does not shadow a cycleway)
 // - on the target level (the query level, or the ground without one), or both
 //   are off it on overlapping levels
 // - for oneways: heading the same way (not the other carriageway)
@@ -92,10 +94,12 @@ std::optional<kept_candidate> keep_candidate(
     auto const ci = static_cast<std::size_t>(c);
     auto const id = w.r_->get_class_components(c).get(way);
     auto const unpenalized = is_accessible_without_penalty(c, props);
+    auto const with_penalty = has_penalty(c, props);
     auto const oneway = is_oneway(c, props);
     auto const shadows = [&](kept_candidate const& x) {
       return x.kept_by_.contains(c) && x.component_[ci] == id &&
-             (x.unpenalized_.contains(c) || !unpenalized) &&
+             (x.unpenalized_.contains(c) ||
+              (!unpenalized && x.with_penalty_.contains(c) == with_penalty)) &&
              (!x.oneway_.contains(c) ||
               (oneway &&
                x.heading_[0] * k.heading_[0] + x.heading_[1] * k.heading_[1] >
@@ -115,6 +119,9 @@ std::optional<kept_candidate> keep_candidate(
     k.component_[ci] = id;
     if (unpenalized) {
       k.unpenalized_.insert(c);
+    }
+    if (with_penalty) {
+      k.with_penalty_.insert(c);
     }
     if (oneway) {
       k.oneway_.insert(c);

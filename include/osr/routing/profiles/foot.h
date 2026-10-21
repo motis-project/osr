@@ -19,6 +19,9 @@ struct sharing_data;
 template <bool IsWheelchair, typename Tracking = noop_tracking>
 struct foot {
   static constexpr auto const kMaxMatchDistance = 100U;
+  static constexpr auto const kTrunkCostFactor = IsWheelchair ? 4.0 : 2.0;
+  static constexpr auto const kGateCost = cost_t{60U};
+  static constexpr auto const kPrivateBarrierCost = cost_t{600U};
 
   struct parameters {
     using profile_t = foot<IsWheelchair, Tracking>;
@@ -397,19 +400,21 @@ struct foot {
     if (IsWheelchair && e.is_steps()) {
       return infeasible_cost_and_duration();
     }
-    if (!e.is_foot_accessible() &&
-        (!e.is_bike_accessible() || e.is_railway_accessible() ||
-         e.is_railway_accessible_with_penalty())) {
+    auto const is_trunk = e.has_foot_penalty();
+    auto const is_bike_way = !e.is_foot_accessible();
+    if (is_bike_way && (!e.is_bike_accessible() || e.has_bike_penalty() ||
+                        e.is_railway_accessible())) {
       return infeasible_cost_and_duration();
     }
+    auto const factor = is_trunk ? trunk_cost_factor(e, kTrunkCostFactor) : 1.0;
     auto const duration = duration_from_cost(static_cast<cost_t>(std::round(
         static_cast<double>(dist) / params.speed_meters_per_second_)));
-    auto const cost = (!e.is_foot_accessible() ? 90U : 0U) +
+    auto const walk = dist / (params.speed_meters_per_second_ +
+                              (e.is_big_street_ ? -0.2 : 0) +
+                              (e.motor_vehicle_no_ ? 0.1 : 0.0));
+    auto const cost = (is_bike_way ? 90U : 0U) +
                       (e.is_sidewalk_separate() ? 45U : 0U) +
-                      static_cast<cost_t>(std::round(
-                          dist / (params.speed_meters_per_second_ +
-                                  (e.is_big_street_ ? -0.2 : 0) +
-                                  (e.motor_vehicle_no_ ? 0.1 : 0.0))));
+                      static_cast<cost_t>(std::round(walk * factor));
     return {.cost_ = cost, .duration_ = duration};
   }
 
@@ -472,9 +477,17 @@ struct foot {
         return infeasible_cost_and_duration();
       }
     }
-    return n.is_walk_accessible()
-               ? cost_and_duration_from_cost(n.is_elevator() ? 90U : 0U)
-               : infeasible_cost_and_duration();
+    if (!n.is_walk_accessible()) {
+      return n.has_barrier_cost()
+                 ? cost_and_duration{.cost_ = kPrivateBarrierCost,
+                                     .duration_ = duration_t{0}}
+                 : infeasible_cost_and_duration();
+    }
+    auto c = cost_and_duration_from_cost(n.is_elevator() ? 90U : 0U);
+    if (n.has_barrier_cost()) {
+      c.cost_ += kGateCost;
+    }
+    return c;
   }
 
   static constexpr double lower_bound_heuristic(parameters const& params,

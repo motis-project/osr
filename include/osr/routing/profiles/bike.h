@@ -36,6 +36,9 @@ template <bike_costing Costing,
           unsigned int ElevationExponentThousandth = 2100U>
 struct bike {
   static constexpr auto const kMaxMatchDistance = 100U;
+  static constexpr auto const kTrunkCostFactor = 2.0;
+  static constexpr auto const kGateCost = cost_t{60U};
+  static constexpr auto const kPrivateBarrierCost = cost_t{600U};
 
   struct parameters {
     using profile_t =
@@ -290,14 +293,16 @@ struct bike {
       std::optional<routing_time_t> const,
       duration_t const,
       direction const) {
+    auto const is_trunk = e.has_bike_penalty();
     if (e.is_bike_accessible() && e.is_bike_direction_allowed(dir)) {
-      auto const cost = static_cast<cost_t>(
-          std::round(static_cast<double>(dist) /
-                     (params.speed_meters_per_second_ +
-                      (Costing == bike_costing::kFast
-                           ? 0
-                           : (e.is_big_street_ ? -0.7 : 0) +
-                                 (e.motor_vehicle_no_ ? 0.5 : 0.0)))));
+      auto const ride = static_cast<double>(dist) /
+                        (params.speed_meters_per_second_ +
+                         (Costing == bike_costing::kFast
+                              ? 0
+                              : (e.is_big_street_ ? -0.7 : 0) +
+                                    (e.motor_vehicle_no_ ? 0.5 : 0.0)));
+      auto const cost = static_cast<cost_t>(std::round(
+          is_trunk ? ride * trunk_cost_factor(e, kTrunkCostFactor) : ride));
       return {
           .cost_ = cost,
           .duration_ = duration_from_cost(static_cast<cost_t>(std::round(
@@ -359,10 +364,17 @@ struct bike {
 
   static constexpr cost_and_duration node_cost(parameters const&,
                                                node_properties const n) {
-    return n.is_bike_accessible() ? n.is_steps()
-                                        ? cost_and_duration_from_cost(30U)
-                                        : cost_and_duration_from_cost(0U)
-                                  : infeasible_cost_and_duration();
+    if (!n.is_bike_accessible()) {
+      return n.has_barrier_cost()
+                 ? cost_and_duration{.cost_ = kPrivateBarrierCost,
+                                     .duration_ = duration_t{0}}
+                 : infeasible_cost_and_duration();
+    }
+    auto c = cost_and_duration_from_cost(n.is_steps() ? 30U : 0U);
+    if (n.has_barrier_cost()) {
+      c.cost_ += kGateCost;
+    }
+    return c;
   }
 
   static constexpr double lower_bound_heuristic(parameters const& params,

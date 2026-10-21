@@ -167,9 +167,9 @@ boost::json::object build_map_match_debug_json(
         {"bike", p.is_bike_accessible()},
         {"foot", p.is_foot_accessible()},
         {"bus", p.is_bus_accessible()},
-        {"busWithPenalty", p.is_bus_accessible_with_penalty()},
+        {"busWithPenalty", p.has_bus_penalty()},
         {"railway", p.is_railway_accessible()},
-        {"railwayWithPenalty", p.is_railway_accessible_with_penalty()},
+        {"railwayWithPenalty", p.has_railway_penalty()},
         {"ferry", p.is_ferry_accessible()},
         {"lowEmissionZone", p.is_in_low_emission_zone()},
         {"isBigStreet", p.is_big_street()},
@@ -187,7 +187,8 @@ boost::json::object build_map_match_debug_json(
         {"isSteps", p.is_steps()},
         {"isParking", p.is_parking()},
         {"isRamp", p.is_ramp()},
-        {"inRoute", p.in_route()}};
+        {"inRoute", p.in_route()},
+    };
     auto components = boost::json::object{};
     for (auto const c : kAllComponentClasses) {
       auto const id = w.r_->get_class_components(c).get(way_idx);
@@ -218,7 +219,7 @@ boost::json::object build_map_match_debug_json(
             {"bike", p.is_bike_accessible()},
             {"foot", p.is_walk_accessible()},
             {"bus", p.is_bus_accessible()},
-            {"busWithPenalty", p.is_bus_accessible_with_penalty()},
+            {"busWithPenalty", p.has_bus_penalty()},
             {"isRestricted", w.r_->node_is_restricted_[node_idx]},
             {"isEntrance", p.is_entrance()},
             {"isElevator", p.is_elevator()},
