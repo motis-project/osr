@@ -33,18 +33,13 @@ struct bidirectional;
 
 struct sharing_data;
 
-// search start                                         destination
-// o -foot- o --foot-- [o]  =rental=  [o] --foot-- o ~~~match~~~ x
-// 0        ^           ^              ^           ^             ^
-//          |           rental_start_  rental_end_ t_dest_       t_dest_
-//          before_rental_                         after_rental_ + length_match_
+// travel start                                       travel end
+// x ~~match~~ o --foot-- o ==vehicle== o --foot-- o ~~match~~ x
+// 0                      ^             ^                      ^
+//                        ride_start_   ride_end_              path::duration_
 struct rental_duration_info {
-  duration_t before_rental_;
-  duration_t rental_start_;
-  duration_t rental_end_;
-  duration_t after_rental_;
-  duration_t t_dest_;
-  duration_t length_match_;
+  duration_t ride_start_;
+  duration_t ride_end_;
 };
 
 struct one_to_many_state {

@@ -883,18 +883,9 @@ struct one_to_many_state_impl final : public one_to_many_state {
       auto const duration = [&](typename P::node const n) {
         return d_.cost_.at(n.get_key()).duration(n);
       };
-      // The path in search order: the root's matching piece, the chain of
-      // labels, the destination's matching piece. Both pieces are laid out
-      // with the mode of the node they connect to, so a rental node at an end
-      // of the chain means the ride goes through to that end of the path (the
-      // vehicle is returned at the destination coordinate).
-      auto const t_dest = duration(c.node_);
-      auto const total = clamp_add_duration(t_dest, c.connection_.duration_);
-      auto rental_start = std::optional<duration_t>{};
-      auto rental_end = std::optional<duration_t>{};
+      auto const total = c.total_.duration_;
       auto before_rental = std::optional<duration_t>{};
-      auto after_rental = total;
-      auto prev = total;  // label visited before (later on the chain)
+      auto rental_end = std::optional<duration_t>{};
       auto n = c.node_;
       if (n.is_rental_node()) {
         rental_end = total;
@@ -906,29 +897,27 @@ struct one_to_many_state_impl final : public one_to_many_state {
         if (n.is_rental_node()) {
           if (!rental_end.has_value()) {
             rental_end = d;
-            after_rental = prev;
           }
-          rental_start = d;
-        } else if (rental_start.has_value() && !before_rental.has_value()) {
+        } else if (rental_end.has_value() && !before_rental.has_value()) {
           before_rental = d;
         }
-        prev = d;
         auto const pred = d_.cost_.at(n.get_key()).pred(n);
         if (!pred.has_value()) {
           break;
         }
         n = *pred;
       }
-      if (!rental_start.has_value()) {
+      if (!rental_end.has_value()) {
         return std::nullopt;
       }
-      return rental_duration_info{
-          .before_rental_ = before_rental.value_or(duration_t{0U}),
-          .rental_start_ = *rental_start,
-          .rental_end_ = *rental_end,
-          .after_rental_ = after_rental,
-          .t_dest_ = t_dest,
-          .length_match_ = c.connection_.duration_};
+      auto const ride_from = before_rental.value_or(duration_t{0U});
+      auto const ride_to = *rental_end;
+      if (d_.params_.dir_ == direction::kForward) {
+        return rental_duration_info{.ride_start_ = ride_from,
+                                    .ride_end_ = ride_to};
+      }
+      return rental_duration_info{.ride_start_ = total - ride_to,
+                                  .ride_end_ = total - ride_from};
     } else {
       return std::nullopt;
     }

@@ -108,7 +108,7 @@ struct vehicles {
 // Duration from the start of the path (travel order) to the start of the first
 // and to the end of the last segment travelled with `ride_mode`.
 struct ride_position {
-  duration_t pickup_, drop_off_;
+  duration_t ride_start_, ride_end_;
 };
 
 std::optional<ride_position> ride_from_segments(path const& p,
@@ -118,9 +118,9 @@ std::optional<ride_position> ride_from_segments(path const& p,
   for (auto const& s : p.segments_) {
     if (s.mode_ == ride_mode) {
       if (!pos.has_value()) {
-        pos = ride_position{.pickup_ = at, .drop_off_ = at};
+        pos = ride_position{.ride_start_ = at, .ride_end_ = at};
       }
-      pos->drop_off_ = at + s.duration_;
+      pos->ride_end_ = at + s.duration_;
     }
     at += s.duration_;
   }
@@ -210,50 +210,23 @@ outcome check(graph const& g,
     }
     ++out.n_rides_;
 
-    // The chain plus the final matching piece is the whole path as
-    // reconstruct() shows it.
-    auto const total = rc->t_dest_ + rc->length_match_;
-    EXPECT_EQ(p->duration_, total) << k;
-
-    // Durations along the chain, in search order.
-    EXPECT_LE(rc->before_rental_, rc->rental_start_) << k;
-    EXPECT_LE(rc->rental_start_, rc->rental_end_) << k;
-    EXPECT_LE(rc->rental_end_, rc->after_rental_) << k;
-    EXPECT_LE(rc->after_rental_, total) << k;
+    // Ride start and end as the segments show them.
+    EXPECT_EQ(ride->ride_start_, rc->ride_start_) << k;
+    EXPECT_EQ(ride->ride_end_, rc->ride_end_) << k;
     if (!return_at_destination) {
-      // The switch takes time (the search never starts on the vehicle).
-      EXPECT_LT(rc->before_rental_, rc->rental_start_) << k;
+      // The ride includes a switch, which takes time.
+      EXPECT_LT(rc->ride_start_, rc->ride_end_) << k;
     }
 
     // The vehicle is returned at the destination coordinate exactly if the
     // final matching piece, the path's last segment, is ridden. The ride then
-    // reaches the end of the path: forward, the destination node is the last
-    // rental label and the piece follows it; backward, the search root is the
-    // first rental label and nothing precedes it.
+    // reaches the end of the path.
     auto const returned_at_destination = p->segments_.back().mode_ == ride_mode;
     if (returned_at_destination) {
       EXPECT_TRUE(return_at_destination) << k;
       ++out.n_returned_at_destination_;
-      if (dir == direction::kForward) {
-        EXPECT_EQ(rc->rental_end_, total) << k;
-        EXPECT_EQ(rc->after_rental_, total) << k;
-      } else {
-        EXPECT_EQ(rc->before_rental_, duration_t{0U}) << k;
-      }
-    } else if (dir == direction::kForward) {
-      EXPECT_LE(rc->after_rental_, rc->t_dest_) << k;
+      EXPECT_EQ(rc->ride_end_, p->duration_) << k;
     }
-
-    // Ride start and end as the segments show them. Forward, the chain runs
-    // in travel order; backward, it runs from the travel end, so positions
-    // are measured from the far end.
-    auto const pickup = dir == direction::kForward ? rc->before_rental_
-                                                   : total - rc->rental_end_;
-    auto const drop_off = dir == direction::kForward
-                              ? rc->rental_end_
-                              : total - rc->before_rental_;
-    EXPECT_EQ(ride->pickup_, pickup) << k;
-    EXPECT_EQ(ride->drop_off_, drop_off) << k;
   }
   return out;
 }
