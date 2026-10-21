@@ -923,11 +923,9 @@ struct one_to_many_state_impl final : public one_to_many_state {
         return std::nullopt;
       }
       return rental_duration_info{
+          .before_min_ = before_min.value_or(duration_t{0U}),
           .min_ = *min,
           .max_ = *max,
-          // no non-rental label before the first rental label: the search
-          // started with the vehicle, the ride begins with the path
-          .before_min_ = before_min.value_or(duration_t{0U}),
           .after_max_ = after_max,
           .dest_node_ = dest,
           .dest_match_ = c.connection_.duration_};
