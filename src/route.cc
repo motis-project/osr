@@ -8,7 +8,6 @@
 #include <optional>
 #include <ranges>
 #include <span>
-#include <type_traits>
 #include <utility>
 
 #include "utl/helpers/algorithm.h"
@@ -38,6 +37,10 @@ namespace osr {
 
 constexpr auto const kMinCostSettled = cost_t{900};
 constexpr auto const kMatchingPenaltyFactor = 20.0;
+
+// Budget contribution of matching penalties per endpoint. Candidates with a
+// higher penalty remain eligible; routes through them may exceed the budget.
+constexpr auto const kMatchingPenaltyBudgetSlack = cost_t{300U};
 
 duration_t to_duration_limit(std::chrono::seconds const duration) {
   utl::verify(duration.count() >= 0 && duration.count() < kMaxDuration.count(),
@@ -621,23 +624,12 @@ cost_t max_matching_penalty(match_view_t const& matches) {
 
 cost_t endpoint_cost_limit(cost_t const profile_limit,
                            cost_t const from_penalty,
-                           cost_t const to_penalty,
-                           cost_t const max_penalty_slack) {
+                           cost_t const to_penalty) {
   auto const limit = static_cast<std::uint64_t>(profile_limit) +
-                     std::min(from_penalty, max_penalty_slack) +
-                     std::min(to_penalty, max_penalty_slack) + 1U;
+                     std::min(from_penalty, kMatchingPenaltyBudgetSlack) +
+                     std::min(to_penalty, kMatchingPenaltyBudgetSlack) + 1U;
   return static_cast<cost_t>(
       std::min<std::uint64_t>(limit, kMaxDurationSearchCost));
-}
-
-// Budget contribution of matching penalties per endpoint. Candidates with a
-// higher penalty remain eligible; routes through them may exceed the budget.
-template <typename P>
-constexpr cost_t matching_penalty_budget_slack() {
-  return std::is_same_v<P, car> || std::is_same_v<P, bus> ||
-                 std::is_same_v<P, hgv>
-             ? 300U
-             : 600U;
 }
 
 // Applied only to the final choice: a route rejected here must not make the
@@ -915,8 +907,7 @@ std::vector<std::optional<path>> route(
       [&](match_idx_t::value_t const i) {
         return endpoint_cost_limit(
             profile_limit, from_penalty,
-            max_matching_penalty(to_match[match_idx_t{i}]),
-            matching_penalty_budget_slack<P>());
+            max_matching_penalty(to_match[match_idx_t{i}]));
       });
   auto const max = std::ranges::max(destination_limits);
   auto const search_max = std::max(kMinCostSettled, max);
@@ -1114,8 +1105,7 @@ std::optional<path> route_astar(
     }
     auto const max = endpoint_cost_limit(
         cost_search_limit(params, duration_limit),
-        max_matching_penalty(from_match), max_matching_penalty(to_match),
-        matching_penalty_budget_slack<P>());
+        max_matching_penalty(from_match), max_matching_penalty(to_match));
     auto a = astar<P>{};
     return within_duration_limit(
         cheaper(route_astar(pp, w, l, a, from, to, from_match, to_match, max,
@@ -1189,8 +1179,7 @@ std::optional<path> route(profile_parameters const& params,
     }
     auto const max = endpoint_cost_limit(
         cost_search_limit(params, duration_limit),
-        max_matching_penalty(from_match), max_matching_penalty(to_match),
-        matching_penalty_budget_slack<P>());
+        max_matching_penalty(from_match), max_matching_penalty(to_match));
     auto stretch = same_stretch_path<P>(pp, w, l, from, to, from_match,
                                         to_match, dir, start_time, max);
     switch (algo) {
