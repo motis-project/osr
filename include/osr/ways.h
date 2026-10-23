@@ -341,6 +341,14 @@ struct ways {
     return n != node_idx_t::invalid() && n >= n_nodes();
   }
 
+  bool is_regular_way(osr::way_idx_t const way) const {
+    return way != way_idx_t::invalid() && way < n_ways();
+  }
+
+  bool is_additional_way(osr::way_idx_t const way) const {
+    return way != way_idx_t::invalid() && way >= n_ways();
+  }
+
   std::optional<node_idx_t> find_node_idx(osm_node_idx_t const i) const {
     auto const it = std::lower_bound(begin(node_to_osm_), end(node_to_osm_), i,
                                      [](auto&& a, auto&& b) { return a < b; });
@@ -371,9 +379,8 @@ struct ways {
   }
 
   std::optional<std::int64_t> get_osm_way(way_idx_t const way) const {
-    return way != way_idx_t::invalid()
-               ? std::optional{decode_osm_id(way_osm_idx_[way])}
-               : std::nullopt;
+    return is_regular_way(way) ? std::optional{decode_osm_id(way_osm_idx_[way])}
+                               : std::nullopt;
   }
 
   cista::mmap mm(char const* file) {

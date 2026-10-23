@@ -12,6 +12,7 @@
 #include "geo/latlng.h"
 
 #include "osr/elevation_storage.h"
+#include "osr/lookup.h"
 #include "osr/routing/additional_connection.h"
 #include "osr/routing/path.h"
 #include "osr/routing/profile.h"
@@ -33,10 +34,6 @@ struct connecting_way {
   distance_t distance_{};
   elevation_storage::elevation elevation_{};
 };
-
-inline bool is_regular_way(ways::routing const& r, way_idx_t const way) {
-  return way != way_idx_t::invalid() && !is_additional_connection(r, way);
-}
 
 template <direction SearchDir, bool WithBlocked, Profile P>
 inline connecting_way find_connecting_way(
@@ -60,7 +57,7 @@ inline connecting_way find_connecting_way(
           std::uint16_t const a_idx, std::uint16_t const b_idx,
           elevation_storage::elevation const elevation, bool) {
         if (target == to && cost == expected_cost) {
-          auto const is_loop = is_regular_way(*w.r_, way) && r.is_loop(way) &&
+          auto const is_loop = w.is_regular_way(way) && r.is_loop(way) &&
                                static_cast<unsigned>(std::abs(a_idx - b_idx)) ==
                                    r.way_nodes_[way].size() - 2U;
           conn = {way, a_idx, b_idx, is_loop, dist, elevation};
@@ -140,7 +137,7 @@ inline double add_path(typename P::parameters const& params,
   segment.elevation_ = elevation;
   segment.mode_ = to.get_mode();
 
-  if (is_regular_way(*w.r_, way)) {
+  if (w.is_regular_way(way)) {
     auto const start_idx = dir == direction::kBackward ? to_idx : from_idx;
     auto const end_idx = dir == direction::kBackward ? from_idx : to_idx;
     auto const is_reverse = (start_idx > end_idx) ^ is_loop;
