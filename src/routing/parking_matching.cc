@@ -9,7 +9,6 @@
 #include <ranges>
 
 #include "osr/routing/additional_connection.h"
-#include "utl/erase_if.h"
 
 #include "osr/location.h"
 #include "osr/lookup.h"
@@ -28,33 +27,15 @@ using offset = ways::routing::full_additional_connection::offset;
 
 using matching_result_t = std::pair<offset, point>;
 
-// TODO Update
-vec_map<unsigned, std::size_t> compute_component_sizes(
-    ways const& w, unsigned const n_components) {
-  auto component_sizes =
-      vec_map<unsigned, std::size_t>(n_components, std::size_t{0U});
-  auto const& class_component =
-      w.r_->get_class_components(component_class::kFoot);
-  for (auto i = 0U; i != w.n_ways(); ++i) {
-    auto const component = class_component.get(way_idx_t{i});
-    utl::verify(component.has_value(), "No component for way {}", i);
-    utl::verify(*component < n_components, "Invalid component index {} (>= {})",
-                component, n_components);
-    ++component_sizes[*component];
-  }
-  return component_sizes;
-}
+// Radius for extended bounding box to find nearby ways
+constexpr auto const kExtensionDistance = 20.0;
 
 std::tuple<geo::latlng, double, std::optional<unsigned>> analyze_surroundings(
-    ways const& w,
-    lookup const& l,
-    way_idx_t const way_idx,
-    vec_map<unsigned, std::size_t> const& component_sizes) {
+    ways const& w, lookup const& l, way_idx_t const way_idx) {
   // Compute bounding box
   auto const& class_components =
       w.r_->get_class_components(component_class::kFoot);
   auto const get_bounding_box = [&]() {
-    constexpr auto const kExtensionDistance = 20.0;
     auto bbox = geo::box{};
     for (auto const pos : w.way_polylines_[way_idx]) {
       bbox.extend(pos);
@@ -62,23 +43,17 @@ std::tuple<geo::latlng, double, std::optional<unsigned>> analyze_surroundings(
     bbox.extend(kExtensionDistance);
     return bbox;
   };
-  // Identify component_idx of largest nearby component
+  // Identify the largest nearby component
   auto const get_largest_component_idx = [&](geo::box const& bbox) {
     auto largest_componet = std::optional<unsigned>{};
-    auto largest_size = std::size_t{0UL};
     l.find(bbox, [&](way_idx_t const candidate) {
       auto const component = class_components.get(candidate);
-      if (component.has_value()) {
-        auto const size = component_sizes[*component];
-        if (size > largest_size) {
-          largest_size = size;
-          largest_componet = component;
-        }
+      // Assume components are sorted by size, descending
+      if (component.has_value() &&
+          (!largest_componet.has_value() || component < largest_componet)) {
+        largest_componet = component;
       }
     });
-    // TODO: MK - Can this actually happen?
-    utl::verify(largest_componet.has_value(),
-                "Isolated parking space, way_idx: {}", way_idx);
     return largest_componet;
   };
 
@@ -157,10 +132,7 @@ std::optional<matching_result_t> find_closest(
 void connect_parking_ways(
     ways& w,
     lookup const& l,
-    vec_map<way_idx_t, way_extra_properties> const& way_extra,
-    unsigned const n_components) {
-  auto const component_sizes = compute_component_sizes(w, n_components);
-
+    vec_map<way_idx_t, way_extra_properties> const& way_extra) {
   auto const is_connected =
       [&](way_idx_t const way_idx,
           std::function<bool(way_properties const&)> const& pred) {
@@ -293,7 +265,11 @@ void connect_parking_ways(
     }
 
     auto const [center, approx_distance_lng_degrees, matching_component] =
-        analyze_surroundings(w, l, way_idx, component_sizes);
+        analyze_surroundings(w, l, way_idx);
+    if (!matching_component.has_value()) {
+      fmt::println("No matching for way {} at {}", way_idx, center);
+      continue;
+    }
 
     auto const is_same_component =
         class_component.get(way_idx) == matching_component;

@@ -965,7 +965,7 @@ void extract(bool const with_platforms,
   w.sync();
 
   w.connect_ways();
-  auto const n_components = w.build_class_components();
+  w.build_class_components();
 
   auto r = std::vector<resolved_restriction>{};
   {  // Pass 3: node properties + turn restrictions.
@@ -1109,7 +1109,8 @@ void extract(bool const with_platforms,
   pt->status("Build R-Tree").in_high(1).out_bounds(99, 100);
   auto l = lookup{w, out, cista::mmap::protection::WRITE};
   l.build_rtree();
-  connect_parking_ways(w, l, *way_extra, static_cast<unsigned>(n_components));
+  // TODO: MK - Update progress bar
+  connect_parking_ways(w, l, *way_extra);
   way_extra.reset();
 
   w.r_->write(out);

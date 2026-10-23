@@ -31,8 +31,7 @@ static_assert(!is_parking<car_parking<true, false>>());
 
 void connect_parking_ways(ways&,
                           lookup const&,
-                          vec_map<way_idx_t, way_extra_properties> const&,
-                          unsigned n_components);
+                          vec_map<way_idx_t, way_extra_properties> const&);
 
 // bool is_parking_way(ways::routing const&, way_idx_t);
 //

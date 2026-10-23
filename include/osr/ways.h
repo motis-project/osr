@@ -474,7 +474,7 @@ struct ways {
   void add_restriction(std::vector<resolved_restriction>&);
   void compute_big_street_neighbors();
   void connect_ways();
-  unsigned build_class_components();
+  void build_class_components();
 
   std::optional<way_idx_t> find_way(osm_way_idx_t const i) {
     auto const it = std::lower_bound(

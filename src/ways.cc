@@ -192,13 +192,12 @@ ways::ways(std::filesystem::path p, cista::mmap::protection const mode)
           mm_vec<std::uint64_t>(mm("way_has_conditional_access_no"))},
       way_conditional_access_no_{mm("way_conditional_access_no")} {}
 
-unsigned ways::build_class_components() {
+void ways::build_class_components() {
   auto pt = utl::get_active_progress_tracker_or_activate("osr");
   pt->status("Build components")
       .in_high(kNumComponentClasses)
       .out_bounds(75, 90);
 
-  auto max_components_count = 0U;
   r_->class_components_.clear();
   r_->class_components_.resize(kNumComponentClasses);
   auto const threads =
@@ -213,7 +212,6 @@ unsigned ways::build_class_components() {
       },
       utl::noop_progress_update{}, utl::parallel_error_strategy::QUIT_EXEC,
       threads);
-  return max_components_count + 10'000;  // TODO
 }
 
 void ways::add_restriction(std::vector<resolved_restriction>& rs) {
