@@ -61,7 +61,7 @@
 [utl]
   url=git@github.com:motis-project/utl.git
   branch=master
-  commit=158339cb270d6cb2ed2d6e2baf876b8c32faeef0
+  commit=7687e5037669daef6695adcef9507c92362a54c1
 [zlib-ng]
   url=git@github.com:motis-project/zlib-ng.git
   branch=develop

@@ -176,7 +176,8 @@ TEST(way_cost_foot, combinations) {
   EXPECT_EQ(osr::kInfeasible, cost({
                                   .is_foot_accessible_ = false,
                                   .is_bike_accessible_ = true,
-                                  .is_railway_accessible_with_penalty_ = true,
+                                  .is_railway_accessible_ = true,
+                                  .has_railway_penalty_ = true,
                               }));
 }
 

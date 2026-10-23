@@ -1,11 +1,16 @@
 #include "osr/ways.h"
 
 #include <algorithm>
+#include <limits>
+#include <numeric>
+#include <thread>
+#include <tuple>
 
 #include "date/tz.h"
 
 #include "utl/parallel_for.h"
 #include "utl/to_vec.h"
+#include "utl/verify.h"
 
 #include "cista/io.h"
 
@@ -51,7 +56,119 @@ quantized_angle_t get_next_bearing(Polyline const& polyline,
   return 0U;
 }
 
+constexpr auto const kNoComponent = std::numeric_limits<std::uint32_t>::max();
+
+std::uint32_t find_component_root(std::vector<std::uint32_t>& parent,
+                                  std::uint32_t way) {
+  while (parent[way] != way) {
+    parent[way] = parent[parent[way]];
+    way = parent[way];
+  }
+  return way;
+}
+
+std::vector<std::uint32_t> build_component_forest(ways::routing const& r,
+                                                  component_class const cls) {
+  auto parent =
+      std::vector<std::uint32_t>(r.way_properties_.size(), kNoComponent);
+  for (auto i = 0U; i != parent.size(); ++i) {
+    if (is_accessible(cls, r.way_properties_[way_idx_t{i}])) {
+      parent[i] = i;
+    }
+  }
+  for (auto n = 0U; n != r.node_ways_.size(); ++n) {
+    auto anchor = kNoComponent;
+    for (auto const w : r.node_ways_[node_idx_t{n}]) {
+      if (parent[to_idx(w)] == kNoComponent) {
+        continue;
+      }
+      auto const root = find_component_root(parent, to_idx(w));
+      if (anchor == kNoComponent) {
+        anchor = root;
+      } else {
+        auto const a = find_component_root(parent, anchor);
+        anchor = std::min(a, root);
+        parent[std::max(a, root)] = anchor;
+      }
+    }
+  }
+  return parent;
+}
+
+// Every non-root points to a smaller index, which is already renumbered.
+std::vector<std::uint32_t> number_component_roots(
+    std::vector<std::uint32_t>& parent) {
+  auto sizes = std::vector<std::uint32_t>{};
+  for (auto i = 0U; i != parent.size(); ++i) {
+    if (parent[i] == kNoComponent) {
+      continue;
+    }
+    if (parent[i] == i) {
+      utl::verify(sizes.size() < kNoComponent, "too many components");
+      parent[i] = static_cast<std::uint32_t>(sizes.size());
+      sizes.push_back(0U);
+    } else {
+      parent[i] = parent[parent[i]];
+    }
+    ++sizes[parent[i]];
+  }
+  return sizes;
+}
+
 }  // namespace
+
+class_components compute_class_components(ways::routing const& r,
+                                          component_class const cls) {
+  auto parent = build_component_forest(r, cls);
+  auto const sizes = number_component_roots(parent);
+  return class_components::build(parent, sizes);
+}
+
+class_components class_components::build(
+    std::span<std::uint32_t const> const comp,
+    std::span<std::uint32_t const> const sizes) {
+  utl::verify(comp.size() <= std::numeric_limits<std::uint32_t>::max() &&
+                  sizes.size() < std::numeric_limits<std::uint32_t>::max(),
+              "component graph exceeds index range");
+  auto ranked = std::vector<std::uint32_t>(sizes.size());
+  std::iota(begin(ranked), end(ranked), 0U);
+  std::erase_if(ranked, [&](auto const id) { return sizes[id] < 2U; });
+  std::sort(begin(ranked), end(ranked), [&](auto const a, auto const b) {
+    return sizes[a] != sizes[b] ? sizes[a] > sizes[b] : a < b;
+  });
+  auto ids = std::vector<std::uint32_t>(sizes.size(), 0U);
+  for (auto i = std::size_t{0U}; i != ranked.size(); ++i) {
+    ids[ranked[i]] = static_cast<std::uint32_t>(i + 1U);
+  }
+
+  auto out = class_components{};
+  out.way_component_.resize(static_cast<std::uint32_t>(comp.size()),
+                            kNoComponent);
+  auto exception_ways = std::uint64_t{0U};
+  for (auto i = std::size_t{kException - 1U}; i < ranked.size(); ++i) {
+    exception_ways += sizes[ranked[i]];
+  }
+  utl::verify(exception_ways <= comp.size(), "invalid component sizes");
+  out.exception_way_.reserve(static_cast<std::uint32_t>(exception_ways));
+  out.exception_component_.reserve(static_cast<std::uint32_t>(exception_ways));
+  for (auto i = std::size_t{0U}; i != comp.size(); ++i) {
+    auto const c = comp[i];
+    if (c == std::numeric_limits<std::uint32_t>::max()) {
+      continue;
+    }
+    utl::verify(c < sizes.size(), "invalid component id {}", c);
+    auto const id = ids[c];
+    auto const way = way_idx_t{static_cast<std::uint32_t>(i)};
+    if (id < kException) {
+      out.way_component_[way] = static_cast<std::uint8_t>(id);
+    } else {
+      out.way_component_[way] = kException;
+      out.exception_way_.push_back(way);
+      out.exception_component_.push_back(id);
+    }
+  }
+  return out;
+}
 
 ways::ways(std::filesystem::path p, cista::mmap::protection const mode)
     : p_{std::move(p)},
@@ -75,42 +192,28 @@ ways::ways(std::filesystem::path p, cista::mmap::protection const mode)
           mm_vec<std::uint64_t>(mm("way_has_conditional_access_no"))},
       way_conditional_access_no_{mm("way_conditional_access_no")} {}
 
-unsigned ways::build_components() {
-  auto q = hash_set<way_idx_t>{};
-  auto flood_fill = [&](way_idx_t const way_idx, component_idx_t const c) {
-    assert(q.empty());
-    q.insert(way_idx);
-    while (!q.empty()) {
-      auto const next = *q.begin();
-      q.erase(q.begin());
-      for (auto const n : r_->way_nodes_[next]) {
-        for (auto const w : r_->node_ways_[n]) {
-          auto& wc = r_->way_component_[w];
-          if (wc == component_idx_t::invalid()) {
-            wc = c;
-            q.insert(w);
-          }
-        }
-      }
-    }
-  };
-
+unsigned ways::build_class_components() {
   auto pt = utl::get_active_progress_tracker_or_activate("osr");
-  pt->status("Build components").in_high(n_ways()).out_bounds(75, 90);
+  pt->status("Build components")
+      .in_high(kNumComponentClasses)
+      .out_bounds(75, 90);
 
-  auto next_component_idx = component_idx_t{0U};
-  r_->way_component_.resize(n_ways(), component_idx_t::invalid());
-  for (auto i = 0U; i != n_ways(); ++i) {
-    auto const way_idx = way_idx_t{i};
-    auto& c = r_->way_component_[way_idx];
-    if (c != component_idx_t::invalid()) {
-      continue;
-    }
-    c = next_component_idx++;
-    flood_fill(way_idx, c);
-    pt->increment();
-  }
-  return next_component_idx.v_;
+  auto max_components_count = 0U;
+  r_->class_components_.clear();
+  r_->class_components_.resize(kNumComponentClasses);
+  auto const threads =
+      std::min(static_cast<unsigned>(kNumComponentClasses),
+               std::max(1U, std::thread::hardware_concurrency()));
+  utl::parallel_for_run(
+      kNumComponentClasses,
+      [&](std::size_t const i) {
+        r_->class_components_[static_cast<std::uint32_t>(i)] =
+            compute_class_components(*r_, kAllComponentClasses[i]);
+        pt->increment();
+      },
+      utl::noop_progress_update{}, utl::parallel_error_strategy::QUIT_EXEC,
+      threads);
+  return max_components_count + 10'000;  // TODO
 }
 
 void ways::add_restriction(std::vector<resolved_restriction>& rs) {
@@ -222,13 +325,17 @@ void ways::connect_ways() {
     pt->status("Connect ways").in_high(n_ways).out_bounds(50, 71);
 
     // Phase 1: Count number of ways per node (if way visits *N -> counted *N).
-    // Phase 2: Reserve node_ways_ / node_in_way_idx_ and reset counts to 0.
-    // Phase 3: Fill node_ways_ / node_in_way_idx_ = transpose of way_nodes_.
+    // Phase 2: Reserve node_ways_ / node_in_way_idx_ / node_turn_bearings_
+    //          and reset counts to 0.
+    // Phase 3: Fill node_ways_ / node_in_way_idx_ / node_turn_bearings_ =
+    //          transpose of way_nodes_ / way_bearings.
     //          -> count becomes a fill cursor per node
     auto count = std::vector<std::atomic<std::uint32_t>>(n_nodes);
+    auto way_bearings = vecvec<way_idx_t, turn_bearing>{};
 
     struct way_edges {
       std::vector<node_idx_t> nodes_;
+      std::vector<turn_bearing> bearings_;
       std::vector<std::uint16_t> dists_;
       std::vector<routing::long_distance> long_dists_;
     };
@@ -250,8 +357,10 @@ void ways::connect_ways() {
             auto from = node_idx_t::invalid();
             auto distance = 0.0;
             auto i = std::uint16_t{0U};
-            for (auto const [osm_node_idx, pos] :
-                 utl::zip(way_osm_nodes_[way_idx], way_polylines_[way_idx])) {
+            auto const polyline = way_polylines_[way_idx];
+            for (auto const [poly_idx, osm_node_idx] :
+                 utl::enumerate(way_osm_nodes_[way_idx])) {
+              auto const pos = polyline[poly_idx];
               if (pred_pos.has_value()) {
                 distance += geo::distance(pos, *pred_pos);
               }
@@ -266,6 +375,9 @@ void ways::connect_ways() {
                 }
 
                 c.nodes_.push_back(to);
+                c.bearings_.push_back(
+                    {.to_prev_ = get_prev_bearing(polyline, poly_idx),
+                     .to_next_ = get_next_bearing(polyline, poly_idx)});
 
                 if (from != node_idx_t::invalid()) {
                   auto const dist =
@@ -303,6 +415,7 @@ void ways::connect_ways() {
         [&](std::size_t, std::vector<way_edges> const& chunk_out) {
           for (auto const& c : chunk_out) {
             r_->way_nodes_.emplace_back(c.nodes_);
+            way_bearings.emplace_back(c.bearings_);
             r_->way_node_dist_.emplace_back(c.dists_);
             for (auto const& x : c.long_dists_) {
               r_->long_way_node_dist_.push_back(x);
@@ -315,92 +428,72 @@ void ways::connect_ways() {
 
     pt->status("Connect ways / transpose").in_high(n_ways).out_bounds(71, 74);
 
-    // Reserve node_ways_ / node_in_way_idx_ for each node.
+    // Reserve node_ways_ / node_in_way_idx_ / node_turn_bearings_ per node.
     for (auto n = std::size_t{0U}; n != n_nodes; ++n) {
       auto const size =
           std::min(count[n].exchange(0U, std::memory_order_relaxed),
                    static_cast<std::uint32_t>(kMaxWaysPerNode));
       r_->node_ways_.add_back_sized(size);
       r_->node_in_way_idx_.add_back_sized(size);
+      r_->node_turn_bearings_.add_back_sized(size);
     }
 
-    // Fill node_ways_ / node_in_way_idx_ = transpose of way_nodes_.
+    // Fill node_ways_ / node_in_way_idx_ / node_turn_bearings_ = transpose of
+    // way_nodes_ / way_bearings.
     // Threads claims their write slot via the atomic per-node cursor.
     utl::parallel_for_run(
         n_ways,
         [&](std::size_t const way) {
           auto i = std::uint16_t{0U};
-          for (auto const n : r_->way_nodes_[way_idx_t{way}]) {
+          for (auto const [n, bearing] :
+               utl::zip(r_->way_nodes_[way_idx_t{way}],
+                        way_bearings[way_idx_t{way}])) {
             auto const pos =
                 count[to_idx(n)].fetch_add(1U, std::memory_order_relaxed);
             r_->node_ways_[n][pos] = way_idx_t{way};
             r_->node_in_way_idx_[n][pos] = i++;
+            r_->node_turn_bearings_[n][pos] = bearing;
           }
         },
         pt->update_fn());
+    way_bearings = {};
 
-    // Sort node_ways_ / node_in_way_idx_ by way_idx for deterministic ordering.
+    // Sort node_ways_ / node_in_way_idx_ / node_turn_bearings_ by
+    // (way_idx, node_in_way_idx) for deterministic ordering.
+    struct node_way {
+      way_idx_t way_;
+      std::uint16_t in_way_idx_;
+      turn_bearing bearing_;
+    };
     pt->status("Connect ways / sort").in_high(n_nodes).out_bounds(74, 75);
-    utl::parallel_for_run_threadlocal<
-        std::vector<std::pair<way_idx_t, std::uint16_t>>>(
+    utl::parallel_for_run_threadlocal<std::vector<node_way>>(
         n_nodes,
-        [&](std::vector<std::pair<way_idx_t, std::uint16_t>>& scratch,
-            std::size_t const n) {
+        [&](std::vector<node_way>& scratch, std::size_t const n) {
           auto ways = r_->node_ways_[node_idx_t{n}];
           auto positions = r_->node_in_way_idx_[node_idx_t{n}];
+          auto bearings = r_->node_turn_bearings_[node_idx_t{n}];
 
           // Copy to scratch + sort.
           scratch.clear();
-          for (auto const [w, p] : utl::zip(ways, positions)) {
-            scratch.emplace_back(w, p);
+          for (auto const [w, p, b] : utl::zip(ways, positions, bearings)) {
+            scratch.push_back({w, p, b});
           }
-          utl::sort(scratch);
+          utl::sort(scratch, [](node_way const& a, node_way const& b) {
+            return std::tie(a.way_, a.in_way_idx_) <
+                   std::tie(b.way_, b.in_way_idx_);
+          });
 
           // Copy back from scratch.
           for (auto const [i, x] : utl::enumerate(scratch)) {
-            ways[i] = x.first;
-            positions[i] = x.second;
+            ways[i] = x.way_;
+            positions[i] = x.in_way_idx_;
+            bearings[i] = x.bearing_;
           }
         },
         pt->update_fn());
   }
 
-  compute_turn_bearings();
-}
-
-std::size_t ways::get_polyline_node_idx(
-    way_idx_t const way, std::uint16_t const target_routing_idx) const {
-  auto const& routing_nodes = r_->way_nodes_[way];
-  auto const& polyline_osm_nodes = way_osm_nodes_[way];
-
-  auto current_routing_idx = 0U;
-  for (auto const [poly_idx, osm_node] : utl::enumerate(polyline_osm_nodes)) {
-    auto const expected_osm_node =
-        node_to_osm_[routing_nodes[current_routing_idx]];
-    if (osm_node == expected_osm_node) {
-      if (current_routing_idx == target_routing_idx) {
-        return poly_idx;
-      }
-      ++current_routing_idx;
-    }
-  }
-
-  throw utl::fail("polyline node index not found: way={} idx={}", to_idx(way),
-                  target_routing_idx);
-}
-
-void ways::compute_turn_bearings() {
-  for (auto i = node_idx_t{0U}; i != n_nodes(); ++i) {
-    auto bearings = r_->node_turn_bearings_.add_back_sized(0U);
-    for (auto const [way, node_in_way_idx] :
-         utl::zip(r_->node_ways_[i], r_->node_in_way_idx_[i])) {
-      auto const polyline = way_polylines_[way];
-      auto const polyline_idx = get_polyline_node_idx(way, node_in_way_idx);
-      bearings.push_back(
-          turn_bearing{.to_prev_ = get_prev_bearing(polyline, polyline_idx),
-                       .to_next_ = get_next_bearing(polyline, polyline_idx)});
-    }
-  }
+  node_way_counter_ = {};
 }
 
 void ways::sync() {

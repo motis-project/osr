@@ -69,6 +69,7 @@ private:
         case cista::hash("amenity"):
           is_parking_ |=
               (value == "parking"sv || value == "parking_entrance"sv);
+          is_ticket_validator_ = value == "ticket_validator"sv;
           break;
         case cista::hash("building"):
           is_parking_ |= value == "parking"sv;
@@ -113,6 +114,7 @@ private:
         case cista::hash("hazmat"): hazmat_ = value; break;
         case cista::hash("hazmat:water"): hazmat_water_ = value; break;
         case cista::hash("foot"): foot_ = value; break;
+        case cista::hash("wheelchair"): wheelchair_ = value; break;
         case cista::hash("bicycle"): bicycle_ = value; break;
         case cista::hash("highway"):
           highway_ = value;
@@ -139,19 +141,22 @@ private:
         case cista::hash("sidewalk:both"):
         case cista::hash("sidewalk:left"): [[fallthrough]];
         case cista::hash("sidewalk:right"):
-          if (value == "yes"sv) {
-            sidewalk_ = true;
-          }
-          if (value == "separate"sv) {
-            sidewalk_separate_ = true;
+          switch (cista::hash(std::string_view{value})) {
+            case cista::hash("separate"): sidewalk_separate_ = true; break;
+            case cista::hash("yes"):
+            case cista::hash("both"):
+            case cista::hash("left"): [[fallthrough]];
+            case cista::hash("right"): sidewalk_ = true; break;
           }
           break;
+        case cista::hash("motorroad"): motorroad_ = value == "yes"sv; break;
         case cista::hash("cycleway"): cycleway_ = value; break;
         case cista::hash("motorcar"):
           motorcar_ = value;
           is_destination_ |= motorcar_ == "destination";
           break;
         case cista::hash("barrier"): barrier_ = value; break;
+        case cista::hash("kerb"): kerb_ = value; break;
         case cista::hash("platform_edge"): is_platform_ = true; break;
         case cista::hash("public_transport"):
           switch (cista::hash(std::string_view{value})) {
@@ -250,6 +255,23 @@ private:
 public:
   bool is_platform() const { return is_platform_ && !is_construction_; }
 
+  bool is_trunk() const {
+    return highway_ == "trunk" || highway_ == "trunk_link";
+  }
+
+  // Gate that may have to be opened: no access tags say it is open.
+  bool is_gate() const {
+    switch (cista::hash(barrier_)) {
+      case cista::hash("gate"):
+      case cista::hash("swing_gate"):
+      case cista::hash("sliding_gate"): [[fallthrough]];
+      case cista::hash("hampshire_gate"):
+        return access_ == override::kNone && foot_.empty() &&
+               !is_ticket_validator_;
+      default: return false;
+    }
+  }
+
   bool is_public_transport_route() const {
     switch (cista::hash(route_type_)) {
       case cista::hash("bus"):
@@ -294,6 +316,12 @@ public:
   // https://wiki.openstreetmap.org/wiki/Key:barrier
   std::string_view barrier_;
 
+  // https://wiki.openstreetmap.org/wiki/Key:kerb
+  std::string_view kerb_;
+
+  // https://wiki.openstreetmap.org/wiki/Tag:amenity=ticket_validator
+  bool is_ticket_validator_{false};
+
   // https://wiki.openstreetmap.org/wiki/Key:motorcar
   std::string_view motorcar_;
 
@@ -321,6 +349,9 @@ public:
   // https://wiki.openstreetmap.org/wiki/Key:foot
   std::string_view foot_;
 
+  // https://wiki.openstreetmap.org/wiki/Key:wheelchair
+  std::string_view wheelchair_;
+
   // https://wiki.openstreetmap.org/wiki/Key:bicycle
   std::string_view bicycle_;
 
@@ -331,8 +362,11 @@ public:
   std::string_view railway_;
 
   // https://wiki.openstreetmap.org/wiki/Key:sidewalk
-  bool sidewalk_{false};
   bool sidewalk_separate_{false};
+  bool sidewalk_{false};
+
+  // https://wiki.openstreetmap.org/wiki/Key:motorroad
+  bool motorroad_{false};
 
   // https://wiki.openstreetmap.org/wiki/Key:cycleway
   std::string_view cycleway_;
@@ -440,6 +474,16 @@ bool is_accessible_with_penalty(tags const& o, osm_obj_type const type) {
   return T::access_with_penalty(o, type);
 }
 
+static inline bool is_steps(tags const& t, osm_obj_type const type) {
+  using namespace std::string_view_literals;
+  switch (type) {
+    case osr::osm_obj_type::kWay: return t.highway_ == "steps"sv;
+    case osr::osm_obj_type::kNode:
+      return !t.kerb_.empty() && (t.kerb_ == "yes"sv || t.kerb_ == "raised"sv);
+    default: return false;
+  }
+}
+
 struct foot_profile {
   static override access_override(tags const& t, osm_obj_type) {
     if (t.is_route_ || t.sidewalk_separate_ || t.is_ferry_route_) {
@@ -460,6 +504,10 @@ struct foot_profile {
       case cista::hash("yes"):
       case cista::hash("permissive"): [[fallthrough]];
       case cista::hash("designated"): return override::kWhitelist;
+    }
+
+    if (t.motorroad_) {
+      return override::kBlacklist;
     }
 
     if (t.is_platform_ || t.is_parking_) {
@@ -498,6 +546,8 @@ struct foot_profile {
         case cista::hash("corridor"):
         case cista::hash("footway"): [[fallthrough]];
         case cista::hash("pier"): return true;
+        case cista::hash("trunk"): [[fallthrough]];
+        case cista::hash("trunk_link"): return t.sidewalk_;
         default: return false;
       }
     } else {
@@ -505,8 +555,38 @@ struct foot_profile {
     }
   }
 
-  static bool access_with_penalty(tags const&, osm_obj_type const) {
-    return false;
+  // Trunk roads without sidewalk or foot tags: walkable, but avoided.
+  static bool access_with_penalty(tags const& t, osm_obj_type const type) {
+    return type == osm_obj_type::kWay && t.is_trunk() && !t.sidewalk_ &&
+           access_override(t, type) == override::kNone;
+  }
+};
+
+struct wheelchair_profile {
+  static override access_override(tags const& t, osm_obj_type const type) {
+    switch (cista::hash(t.wheelchair_)) {
+      case cista::hash("yes"):
+      case cista::hash("limited"): [[fallthrough]];
+      case cista::hash("designated"): return override::kWhitelist;
+      case cista::hash("no"): return override::kBlacklist;
+    }
+    switch (cista::hash(t.kerb_)) {
+      case cista::hash("rolled"): return override::kBlacklist;
+      case cista::hash("raised"):
+        if (!t.is_platform()) {
+          return override::kBlacklist;
+        }
+    }
+
+    return foot_profile::access_override(t, type);
+  }
+
+  static bool default_access(tags const& t, osm_obj_type const type) {
+    return foot_profile::default_access(t, type);
+  }
+
+  static bool access_with_penalty(tags const& t, osm_obj_type const type) {
+    return foot_profile::access_with_penalty(t, type);
   }
 };
 
@@ -536,6 +616,10 @@ struct bike_profile {
       case cista::hash("yes"):
       case cista::hash("permissive"): [[fallthrough]];
       case cista::hash("designated"): return override::kWhitelist;
+    }
+
+    if (t.motorroad_) {
+      return override::kBlacklist;
     }
 
     if (t.access_ == override::kBlacklist) {
@@ -569,8 +653,10 @@ struct bike_profile {
     }
   }
 
-  static bool access_with_penalty(tags const&, osm_obj_type const) {
-    return false;
+  // Trunk roads without bicycle tags: rideable, but avoided.
+  static bool access_with_penalty(tags const& t, osm_obj_type const type) {
+    return type == osm_obj_type::kWay && t.is_trunk() &&
+           access_override(t, type) == override::kNone;
   }
 };
 
@@ -598,6 +684,11 @@ struct car_profile {
         case cista::hash("coupure"):
         case cista::hash("height_restrictor"): [[fallthrough]];
         case cista::hash("arch"): break;
+        case cista::hash("kerb"):
+          if (t.kerb_.empty() || is_steps(t, type)) {
+            return override::kBlacklist;
+          }
+          break;
         default: return override::kBlacklist;
       }
     }

@@ -9,6 +9,7 @@
 #include "osr/routing/entry_storage.h"
 #include "osr/routing/mode.h"
 #include "osr/routing/path.h"
+#include "osr/routing/profile.h"
 #include "osr/routing/profiles/common.h"
 #include "osr/routing/turns.h"
 #include "osr/ways.h"
@@ -191,31 +192,77 @@ struct generic_car {
   }
 
   template <typename Fn>
-  static void resolve_start_node(ways::routing const& w,
-                                 way_idx_t const way,
-                                 node_idx_t const n,
-                                 level_t,
-                                 direction,
-                                 Fn&& f) {
-    auto const ways = w.node_ways_[n];
-    for (auto i = way_pos_t{0U}; i != ways.size(); ++i) {
-      if (ways[i] == way) {
-        f(node{n, i, direction::kForward});
-        f(node{n, i, direction::kBackward});
-      }
+  static void resolve_all(ways::routing const& w, node_idx_t const n, Fn&& f) {
+    auto const n_ways = to_idx(n) < w.node_ways_.size() ? w.node_ways_[n].size()
+                                                        : kMaxWaysPerNode;
+    for (auto i = way_pos_t{0U}; i != n_ways; ++i) {
+      f(node{n, i, direction::kForward});
+      f(node{n, i, direction::kBackward});
     }
   }
 
   template <typename Fn>
-  static void resolve_all(ways::routing const& w,
-                          node_idx_t const n,
-                          level_t,
-                          Fn&& f) {
-    auto const ways = w.node_ways_[n];
-    for (auto i = way_pos_t{0U}; i != ways.size(); ++i) {
-      f(node{n, i, direction::kForward});
-      f(node{n, i, direction::kBackward});
+  static void resolve_endpoint(ways::routing const& w,
+                               way_idx_t const way,
+                               node_idx_t const n,
+                               level_t,
+                               route_end,
+                               endpoint_role const role,
+                               endpoint_state_t,
+                               Fn&& f) {
+    resolve_way_aware_endpoint<generic_car>(w, way, n, role,
+                                            std::forward<Fn>(f));
+  }
+
+  static cost_and_duration endpoint_transition_cost(
+      parameters const& params,
+      ways::routing const& w,
+      timezone_cache_t const&,
+      node const n,
+      way_idx_t const way,
+      direction const way_dir,
+      direction const search_dir,
+      std::optional<routing_time_t>,
+      duration_t) {
+    auto const transition_node =
+        search_dir == direction::kForward ? n : get_reverse(n);
+    auto const transition_dir =
+        search_dir == direction::kForward ? way_dir : opposite(way_dir);
+    return get_endpoint_transition_cost<generic_car>(
+        params, w, transition_node, way, transition_dir, params.uturn_penalty_,
+        [&](way_pos_t const way_pos) {
+          return !w.template is_restricted<IsBus>(n.n_, n.way_, way_pos,
+                                                  search_dir);
+        });
+  }
+
+  // The endpoint way is entered in `way_dir`, so only states that arrived in
+  // that direction are reachable from the endpoint.
+  static constexpr bool endpoint_root_allowed(parameters const&,
+                                              node const n,
+                                              direction const way_dir) {
+    return n.dir_ == way_dir;
+  }
+
+  static constexpr cost_and_duration bidirectional_meet_cost(
+      parameters const& params,
+      ways::routing const& w,
+      node const fwd,
+      node const bwd,
+      sharing_data const* additional = nullptr) {
+    if (additional != nullptr && additional->is_additional_node(fwd.n_)) {
+      auto const uturn =
+          fwd.get_way(w, additional) == bwd.get_way(w, additional) &&
+          fwd.dir_ != bwd.dir_;
+      return {.cost_ = uturn ? params.uturn_penalty_ : 0U};
     }
+    if (w.template is_restricted<IsBus>(fwd.n_, fwd.way_, bwd.way_,
+                                        direction::kForward)) {
+      return infeasible_cost_and_duration();
+    }
+    return get_transition_cost<generic_car>(params, w, get_reverse(bwd),
+                                            fwd.way_, opposite(fwd.dir_),
+                                            params.uturn_penalty_);
   }
 
   template <direction SearchDir, bool WithBlocked, typename Fn>
@@ -243,7 +290,7 @@ struct generic_car {
             }
 
             auto const [target, cost, duration] =
-                get_adjacent_additional_node<generic_car>(
+                get_adjacent_additional_node<generic_car, SearchDir>(
                     params, w, n, additional, ae, edge_dir, edge_cost,
                     params.uturn_penalty_);
             if (cost == kInfeasible) {
@@ -264,30 +311,6 @@ struct generic_car {
         current_duration, SearchDir, fn);
   }
 
-  static bool is_dest_reachable(parameters const& params,
-                                ways::routing const& w,
-                                timezone_cache_t const& timezones,
-                                node const n,
-                                way_idx_t const way,
-                                direction const way_dir,
-                                direction const search_dir,
-                                std::optional<routing_time_t> const start_time,
-                                duration_t const current_duration) {
-    auto const target_way_prop = w.way_properties_[way];
-    if (way_cost(params, w, timezones, way, target_way_prop, way_dir, 0U,
-                 start_time, current_duration, search_dir)
-            .cost_ == kInfeasible) {
-      return false;
-    }
-
-    if (w.is_restricted<IsBus>(n.n_, n.way_, w.get_way_pos(n.n_, way),
-                               search_dir)) {
-      return false;
-    }
-
-    return true;
-  }
-
   static constexpr cost_and_duration way_cost(
       parameters const&,
       ways::routing const&,
@@ -300,10 +323,7 @@ struct generic_car {
       duration_t const,
       direction const) {
     if constexpr (IsBus) {
-      auto const accessible = e.is_bus_accessible();
-      auto const accessible_with_penalty = e.is_bus_accessible_with_penalty();
-      if ((accessible || accessible_with_penalty) &&
-          e.is_bus_psv_direction_allowed(dir)) {
+      if (e.is_bus_accessible() && e.is_bus_psv_direction_allowed(dir)) {
         auto const in_route = e.in_route();
         auto const bus_only = !e.is_car_accessible();
         auto sl = static_cast<speed_limit>(e.speed_limit_);
@@ -319,7 +339,7 @@ struct generic_car {
         if (e.is_parking()) {
           cost *= 2U;
         }
-        if (accessible_with_penalty) {
+        if (e.has_bus_penalty()) {
           cost *= e.in_route() ? 2U : 4U;
         }
         return {.cost_ = cost, .duration_ = duration_from_cost(base_cost)};
@@ -340,16 +360,32 @@ struct generic_car {
     }
   }
 
+  static constexpr cost_and_duration endpoint_way_cost(
+      parameters const& params,
+      ways::routing const& w,
+      timezone_cache_t const& timezones,
+      node const,
+      way_idx_t const way,
+      way_properties const& properties,
+      direction const way_dir,
+      distance_t const distance,
+      std::optional<routing_time_t> const start_time,
+      duration_t const current_duration,
+      direction const search_dir) {
+    return way_cost(params, w, timezones, way, properties, way_dir, distance,
+                    start_time, current_duration, search_dir);
+  }
+
   static constexpr cost_and_duration node_cost(parameters const& params,
                                                node_properties const& n) {
     if constexpr (IsBus) {
-      return n.is_bus_accessible()
-                 ? cost_and_duration_from_cost(0U)
-                 : (n.is_bus_accessible_with_penalty()
-                        ? cost_and_duration{.cost_ =
-                                                params.private_gate_penalty_,
-                                            .duration_ = duration_t{0}}
-                        : infeasible_cost_and_duration());
+      if (!n.is_bus_accessible()) {
+        return infeasible_cost_and_duration();
+      }
+      return n.has_bus_penalty()
+                 ? cost_and_duration{.cost_ = params.private_gate_penalty_,
+                                     .duration_ = duration_t{0}}
+                 : cost_and_duration_from_cost(0U);
     } else {
       return n.is_car_accessible() ? cost_and_duration_from_cost(0U)
                                    : infeasible_cost_and_duration();
@@ -368,6 +404,22 @@ struct generic_car {
     return cost;
   }
 
+  static constexpr cost_and_duration endpoint_node_cost(
+      parameters const& params, node const, node_properties const& n) {
+    return node_cost(params, n);
+  }
+
+  static constexpr component_classes endpoint_component_classes(
+      route_end, endpoint_state_t) noexcept {
+    // Bus can use some ways a car can't
+    return IsBus ? component_classes{}
+                 : component_classes{component_class::kCar};
+  }
+
+  static bool endpoint_way_feasible(parameters const& params,
+                                    endpoint_way_query const& q) {
+    return q.feasible<generic_car>(params);
+  }
   static constexpr double lower_bound_heuristic(parameters const&,
                                                 double const dist) {
     return (3.6 / 130U) * dist;
@@ -385,5 +437,10 @@ struct generic_car {
 
 using car = generic_car<false>;
 using bus = generic_car<true>;
+
+template <bool IsBus>
+struct bidirectional_meet_policy<generic_car<IsBus>> {
+  static constexpr auto const kEnumerateStates = true;
+};
 
 }  // namespace osr

@@ -63,7 +63,7 @@ TEST(car_parking, monaco) {
   auto const l = osr::lookup{w, data_dir, cista::mmap::protection::READ};
 
   auto const params = car_parking<false, true>::parameters{};
-  auto const max_cost = cost_t{900};
+  auto const max_duration = std::chrono::seconds{900};
   auto const max_matching_dist = 250.0;
 
   // Forward search, curved path to parking space
@@ -73,7 +73,7 @@ TEST(car_parking, monaco) {
 
     auto const res = route(params, w, l, search_profile::kCarParking,
                            location{.pos_ = from, .lvl_ = kNoLevel},
-                           location{.pos_ = to, .lvl_ = kNoLevel}, max_cost,
+                           location{.pos_ = to, .lvl_ = kNoLevel}, max_duration,
                            direction::kForward, max_matching_dist, nullptr,
                            nullptr, nullptr, routing_algorithm::kDijkstra);
 
@@ -133,12 +133,12 @@ TEST(car_parking, monaco) {
     auto const results = vec<std::optional<path>>{
         route(params, w, l, search_profile::kCarParking,
               location{.pos_ = from, .lvl_ = kNoLevel},
-              location{.pos_ = to, .lvl_ = kNoLevel}, max_cost,
+              location{.pos_ = to, .lvl_ = kNoLevel}, max_duration,
               direction::kForward, max_matching_dist, nullptr, nullptr, nullptr,
               routing_algorithm::kDijkstra),
         route(params, w, l, search_profile::kCarParking,
               location{.pos_ = to, .lvl_ = kNoLevel},
-              location{.pos_ = from, .lvl_ = kNoLevel}, max_cost,
+              location{.pos_ = from, .lvl_ = kNoLevel}, max_duration,
               direction::kBackward, max_matching_dist, nullptr, nullptr,
               nullptr, routing_algorithm::kDijkstra)};
 
@@ -172,12 +172,12 @@ TEST(car_parking, monaco) {
       auto const results = vec<std::optional<path>>{
           route(params, w, l, search_profile::kCarParking,
                 location{.pos_ = from, .lvl_ = kNoLevel},
-                location{.pos_ = to, .lvl_ = kNoLevel}, max_cost,
+                location{.pos_ = to, .lvl_ = kNoLevel}, max_duration,
                 direction::kForward, max_matching_dist, nullptr, nullptr,
                 nullptr, routing_algorithm::kDijkstra),
           route(params, w, l, search_profile::kCarParking,
                 location{.pos_ = to, .lvl_ = kNoLevel},
-                location{.pos_ = from, .lvl_ = kNoLevel}, max_cost,
+                location{.pos_ = from, .lvl_ = kNoLevel}, max_duration,
                 direction::kBackward, max_matching_dist, nullptr, nullptr,
                 nullptr, routing_algorithm::kDijkstra)};
 
@@ -204,7 +204,7 @@ TEST(car_parking, monaco) {
       auto const res =
           route(params, w, l, search_profile::kCarParking,
                 location{.pos_ = not_used_car_parking_node, .lvl_ = kNoLevel},
-                location{.pos_ = to, .lvl_ = kNoLevel}, max_cost,
+                location{.pos_ = to, .lvl_ = kNoLevel}, max_duration,
                 direction::kForward, max_matching_dist, nullptr, nullptr,
                 nullptr, routing_algorithm::kDijkstra);
 

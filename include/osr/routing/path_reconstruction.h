@@ -189,8 +189,8 @@ inline double add_path(typename P::parameters const& params,
     segment.from_ =
         dir == direction::kBackward ? to.get_node() : from.get_node();
     segment.to_ = dir == direction::kBackward ? from.get_node() : to.get_node();
-    if (is_additional_connection(*w.r_, way)) {
-      auto const conn = get_additional_connection(*w.r_, way);
+    if (w.is_additional_way(way)) {
+      auto const conn = get_additional_connection(w, way);
       if (conn.is_parking()) {
         segment.mode_ = mode::kParking;
         segment.polyline_ = get_additional_connection_polyline(

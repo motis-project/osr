@@ -28,25 +28,31 @@ using offset = ways::routing::full_additional_connection::offset;
 
 using matching_result_t = std::pair<offset, point>;
 
-vec_map<component_idx_t, std::size_t> compute_component_sizes(
+// TODO Update
+vec_map<unsigned, std::size_t> compute_component_sizes(
     ways const& w, unsigned const n_components) {
   auto component_sizes =
-      vec_map<component_idx_t, std::size_t>(n_components, std::size_t{0U});
+      vec_map<unsigned, std::size_t>(n_components, std::size_t{0U});
+  auto const& class_component =
+      w.r_->get_class_components(component_class::kFoot);
   for (auto i = 0U; i != w.n_ways(); ++i) {
-    auto const component = w.r_->way_component_[way_idx_t{i}];
-    utl::verify(static_cast<std::size_t>(component.v_) < n_components,
-                "Invalid component index {} (>= {})", component, n_components);
-    ++component_sizes[component];
+    auto const component = class_component.get(way_idx_t{i});
+    utl::verify(component.has_value(), "No component for way {}", i);
+    utl::verify(*component < n_components, "Invalid component index {} (>= {})",
+                component, n_components);
+    ++component_sizes[*component];
   }
   return component_sizes;
 }
 
-std::tuple<geo::latlng, double, component_idx_t> analyze_surroundings(
+std::tuple<geo::latlng, double, std::optional<unsigned>> analyze_surroundings(
     ways const& w,
     lookup const& l,
     way_idx_t const way_idx,
-    vec_map<component_idx_t, std::size_t> const& component_sizes) {
+    vec_map<unsigned, std::size_t> const& component_sizes) {
   // Compute bounding box
+  auto const& class_components =
+      w.r_->get_class_components(component_class::kFoot);
   auto const get_bounding_box = [&]() {
     constexpr auto const kExtensionDistance = 20.0;
     auto bbox = geo::box{};
@@ -58,18 +64,20 @@ std::tuple<geo::latlng, double, component_idx_t> analyze_surroundings(
   };
   // Identify component_idx of largest nearby component
   auto const get_largest_component_idx = [&](geo::box const& bbox) {
-    auto largest_componet = component_idx_t::invalid();
+    auto largest_componet = std::optional<unsigned>{};
     auto largest_size = std::size_t{0UL};
     l.find(bbox, [&](way_idx_t const candidate) {
-      auto const component = w.r_->way_component_[candidate];
-      auto const size = component_sizes[component];
-      if (size > largest_size) {
-        largest_size = size;
-        largest_componet = component;
+      auto const component = class_components.get(candidate);
+      if (component.has_value()) {
+        auto const size = component_sizes[*component];
+        if (size > largest_size) {
+          largest_size = size;
+          largest_componet = component;
+        }
       }
     });
     // TODO: MK - Can this actually happen?
-    utl::verify(largest_componet != component_idx_t::invalid(),
+    utl::verify(largest_componet.has_value(),
                 "Isolated parking space, way_idx: {}", way_idx);
     return largest_componet;
   };
@@ -87,7 +95,7 @@ std::optional<matching_result_t> find_closest(
     lookup const& l,
     location const& loc,
     direction const dir,
-    component_idx_t const matching_component,
+    std::optional<unsigned> const matching_component,
     [[maybe_unused]] way_idx_t const debug_way_idx,
     std::function<double(double, way_idx_t)> const& score) {
   auto const params = typename P::parameters{};
@@ -98,11 +106,13 @@ std::optional<matching_result_t> find_closest(
   auto best_score = std::numeric_limits<double>::lowest();
   auto best_dir = direction::kForward;
 
+  auto const& class_components =
+      w.r_->get_class_components(component_class::kFoot);
   for (auto i = match_idx_t{0U}; i < match_idx_t{matches.size()}; ++i) {
     auto const match = matches[i];
     for (auto j = 0U; j < match.size(); ++j) {
       auto const way_idx = match.way_[j];
-      if (w.r_->way_component_[way_idx] != matching_component) {
+      if (class_components.get(way_idx) != matching_component) {
         continue;
       }
       auto const left = match.left(j);
@@ -266,6 +276,8 @@ void connect_parking_ways(
 
   w.r_->has_additional_connections_.resize(w.n_nodes());
 
+  auto const& class_component =
+      w.r_->get_class_components(component_class::kFoot);
   for (auto i = 0U; i != w.n_ways(); ++i) {
     auto const way_idx = way_idx_t{i};
     auto const p = w.r_->way_properties_[way_idx];
@@ -284,7 +296,7 @@ void connect_parking_ways(
         analyze_surroundings(w, l, way_idx, component_sizes);
 
     auto const is_same_component =
-        w.r_->way_component_[way_idx] == matching_component;
+        class_component.get(way_idx) == matching_component;
 
     auto const loc = location{.pos_ = center, .lvl_ = kNoLevel};
 
@@ -332,8 +344,8 @@ void connect_parking_ways(
     auto conn = make_connection(center, approx_distance_lng_degrees,
                                 car_way_point, car_entrance.best_,
                                 foot_entrance.best_, foot_way_point);
-    add_additional_connection(*w.r_, std::move(car_offset),
-                              std::move(foot_offset), std::move(conn), true);
+    add_additional_connection(w, std::move(car_offset), std::move(foot_offset),
+                              std::move(conn), true);
   }
   utl::sort(w.r_->additional_node_connections_);
 }

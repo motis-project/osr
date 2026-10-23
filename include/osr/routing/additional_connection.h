@@ -27,13 +27,11 @@ void for_each_connection(ways::routing const&,
                          node_idx_t,
                          std::function<void(connection_idx_t)> const&);
 
-bool is_additional_connection(ways::routing const&, way_idx_t);
-
 ways::routing::full_additional_connection const& get_additional_connection(
-    ways::routing const&, way_idx_t);
+    ways const&, way_idx_t);
 
 way_idx_t add_additional_connection(
-    ways::routing&,
+    ways&,
     ways::routing::full_additional_connection::offset&& from,
     ways::routing::full_additional_connection::offset&& to,
     vec<point>&& connection,
@@ -55,7 +53,7 @@ geo::polyline get_additional_connection_offset_points(
     bool is_left);
 
 void for_each_additional_connection(
-    ways::routing const&,
+    ways const&,
     node_idx_t,
     direction,
     std::function<void(additional_connection)> const&);

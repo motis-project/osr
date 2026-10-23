@@ -13,15 +13,14 @@
 namespace osr {
 
 namespace {
-connection_idx_t to_connection_idx(ways::routing const& r,
-                                   way_idx_t const way_idx) {
-  utl::verify(way_idx >= r.way_component_.size(), "way_idx too low: {} < {}",
-              way_idx, r.way_component_.size());
-  return connection_idx_t{to_idx(way_idx) - r.way_component_.size()};
+connection_idx_t to_connection_idx(ways const& w, way_idx_t const way_idx) {
+  utl::verify(w.is_additional_way(way_idx), "way_idx too low: {} < {}", way_idx,
+              w.n_ways());
+  return connection_idx_t{to_idx(way_idx) - w.n_ways()};
 }
 
-way_idx_t to_way_idx(ways::routing const& r, connection_idx_t const conn_idx) {
-  return way_idx_t{to_idx(conn_idx) + r.way_component_.size()};
+way_idx_t to_way_idx(ways const& w, connection_idx_t const conn_idx) {
+  return way_idx_t{to_idx(conn_idx) + w.n_ways()};
 }
 
 geo::polyline reverse(geo::polyline&& line) {
@@ -49,21 +48,17 @@ void for_each_connection(ways::routing const& r,
   }
 }
 
-bool is_additional_connection(ways::routing const& r, way_idx_t const way_idx) {
-  return way_idx != way_idx_t::invalid() && way_idx >= r.way_component_.size();
-}
-
 ways::routing::full_additional_connection const& get_additional_connection(
-    ways::routing const& r, way_idx_t const way_idx) {
-  auto const conn_idx = to_connection_idx(r, way_idx);
-  utl::verify(conn_idx < r.additional_connections_.size(),
+    ways const& w, way_idx_t const way_idx) {
+  auto const conn_idx = to_connection_idx(w, way_idx);
+  utl::verify(conn_idx < w.r_->additional_connections_.size(),
               "Invalid connection index: {} >= {}", conn_idx,
-              r.additional_connections_.size());
-  return r.additional_connections_[conn_idx];
+              w.r_->additional_connections_.size());
+  return w.r_->additional_connections_[conn_idx];
 }
 
 way_idx_t add_additional_connection(
-    ways::routing& r,
+    ways& w,
     ways::routing::full_additional_connection::offset&& from,
     ways::routing::full_additional_connection::offset&& to,
     vec<point>&& connection,
@@ -73,11 +68,11 @@ way_idx_t add_additional_connection(
                   (to.left_.node_ != node_idx_t::invalid() ||
                    to.right_.node_ != node_idx_t::invalid()),
               "Cannot add offset without valid node");
-  auto const conn_idx = connection_idx_t{r.additional_connections_.size()};
+  auto const conn_idx = connection_idx_t{w.r_->additional_connections_.size()};
   auto const add_node = [&](node_idx_t const node_idx) {
-    r.additional_node_connections_.emplace_back(node_idx, conn_idx);
+    w.r_->additional_node_connections_.emplace_back(node_idx, conn_idx);
     if (is_parking) {
-      r.has_additional_connections_.set(node_idx);
+      w.r_->has_additional_connections_.set(node_idx);
     }
   };
 
@@ -89,10 +84,10 @@ way_idx_t add_additional_connection(
   auto const length = geo::length(to_polyline(connection));
   utl::verify(length < std::numeric_limits<std::uint16_t>::max(),
               "Connecting path too long");
-  r.additional_connections_.emplace_back(std::move(connection), std::move(from),
-                                         std::move(to),
-                                         static_cast<std::uint16_t>(length));
-  return to_way_idx(r, conn_idx);
+  w.r_->additional_connections_.emplace_back(
+      std::move(connection), std::move(from), std::move(to),
+      static_cast<std::uint16_t>(length));
+  return to_way_idx(w, conn_idx);
 }
 
 geo::polyline get_additional_connection_polyline(
@@ -142,12 +137,12 @@ geo::polyline get_additional_connection_offset_points(
 }
 
 void for_each_additional_connection(
-    ways::routing const& r,
+    ways const& w,
     node_idx_t const node_idx,
     direction const dir,
     std::function<void(additional_connection)> const& f) {
-  for_each_connection(r, node_idx, [&](connection_idx_t const connection_idx) {
-    auto const& conn = r.additional_connections_[connection_idx];
+  for_each_connection(*w.r_, node_idx, [&](connection_idx_t const connection_idx) {
+    auto const& conn = w.r_->additional_connections_[connection_idx];
     auto const g =
         [&](ways::routing::full_additional_connection::offset const& from,
             ways::routing::full_additional_connection::offset const& to) {
@@ -170,7 +165,7 @@ void for_each_additional_connection(
                            .dir_ = to_left ? direction::kBackward
                                            : direction::kForward},
                    .connection_dist_ = conn.dist_,
-                   .connection_way_ = to_way_idx(r, connection_idx)});
+                   .connection_way_ = to_way_idx(w, connection_idx)});
               }
             }
           }
