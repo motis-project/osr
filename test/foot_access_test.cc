@@ -30,6 +30,10 @@ namespace osr {
 // - 1000, 1001: trunk with foot=no
 // - 1100, 1101: path with a private gate and kerb=raised (node 111)
 // - 1200, 1201: cycleway with sidewalk=right
+// - 1300, 1301: primary with foot=no
+// - 1400, 1401: cycleway with foot=use_sidepath
+// - 1500, 1501: cycleway
+// - 1600, 1601: residential with sidewalk=separate
 constexpr auto const kOsm = R"(
 <osm version="0.6" generator="osr-test">
   <node id="10" lat="49.000000" lon="8.000000"/>
@@ -160,6 +164,50 @@ constexpr auto const kOsm = R"(
   <way id="1201">
     <nd ref="121"/><nd ref="122"/>
     <tag k="highway" v="cycleway"/><tag k="sidewalk" v="right"/>
+  </way>
+  <node id="130" lat="49.120000" lon="8.000000"/>
+  <node id="131" lat="49.120000" lon="8.003000"/>
+  <node id="132" lat="49.120000" lon="8.006000"/>
+  <way id="1300">
+    <nd ref="130"/><nd ref="131"/>
+    <tag k="highway" v="primary"/><tag k="foot" v="no"/>
+  </way>
+  <way id="1301">
+    <nd ref="131"/><nd ref="132"/>
+    <tag k="highway" v="primary"/><tag k="foot" v="no"/>
+  </way>
+  <node id="140" lat="49.130000" lon="8.000000"/>
+  <node id="141" lat="49.130000" lon="8.003000"/>
+  <node id="142" lat="49.130000" lon="8.006000"/>
+  <way id="1400">
+    <nd ref="140"/><nd ref="141"/>
+    <tag k="highway" v="cycleway"/><tag k="foot" v="use_sidepath"/>
+  </way>
+  <way id="1401">
+    <nd ref="141"/><nd ref="142"/>
+    <tag k="highway" v="cycleway"/><tag k="foot" v="use_sidepath"/>
+  </way>
+  <node id="150" lat="49.140000" lon="8.000000"/>
+  <node id="151" lat="49.140000" lon="8.003000"/>
+  <node id="152" lat="49.140000" lon="8.006000"/>
+  <way id="1500">
+    <nd ref="150"/><nd ref="151"/>
+    <tag k="highway" v="cycleway"/>
+  </way>
+  <way id="1501">
+    <nd ref="151"/><nd ref="152"/>
+    <tag k="highway" v="cycleway"/>
+  </way>
+  <node id="160" lat="49.150000" lon="8.000000"/>
+  <node id="161" lat="49.150000" lon="8.003000"/>
+  <node id="162" lat="49.150000" lon="8.006000"/>
+  <way id="1600">
+    <nd ref="160"/><nd ref="161"/>
+    <tag k="highway" v="residential"/><tag k="sidewalk" v="separate"/>
+  </way>
+  <way id="1601">
+    <nd ref="161"/><nd ref="162"/>
+    <tag k="highway" v="residential"/><tag k="sidewalk" v="separate"/>
   </way>
 </osm>
 )";
@@ -293,6 +341,52 @@ TEST_F(foot_access_test, cycleway_with_sidewalk_is_walkable) {
   EXPECT_TRUE(p.is_foot_accessible());
   EXPECT_FALSE(p.has_foot_penalty());
   EXPECT_TRUE(route(49.11).has_value());
+}
+
+TEST_F(foot_access_test, foot_no_is_not_walkable) {
+  auto const p = props(osm_way_idx_t{1300U});
+  EXPECT_FALSE(p.is_foot_accessible());
+  EXPECT_FALSE(p.has_foot_penalty());
+  EXPECT_TRUE(p.is_bike_accessible());
+  EXPECT_FALSE(p.has_bike_penalty());
+  EXPECT_FALSE(is_accessible(component_class::kFoot, p));
+  EXPECT_FALSE(route(49.12).has_value());
+  EXPECT_TRUE(bike_route(49.12).has_value());
+}
+
+TEST_F(foot_access_test, use_sidepath_is_not_walkable) {
+  auto const p = props(osm_way_idx_t{1400U});
+  EXPECT_FALSE(p.is_foot_accessible());
+  EXPECT_FALSE(p.has_foot_penalty());
+  EXPECT_FALSE(route(49.13).has_value());
+  EXPECT_TRUE(bike_route(49.13).has_value());
+}
+
+// The penalty grows with the length: ×1.5 for a cycleway, ×1.8 for a street
+// with a separate sidewalk.
+TEST_F(foot_access_test, bike_ways_are_walkable_with_penalty) {
+  auto const cycleway = props(osm_way_idx_t{1500U});
+  EXPECT_FALSE(cycleway.is_foot_accessible());
+  EXPECT_TRUE(cycleway.has_foot_penalty());
+  EXPECT_TRUE(is_accessible(component_class::kFoot, cycleway));
+  EXPECT_FALSE(has_penalty(component_class::kFoot, cycleway));
+
+  auto const street = props(osm_way_idx_t{1600U});
+  EXPECT_FALSE(street.is_foot_accessible());
+  EXPECT_TRUE(street.has_foot_penalty());
+  EXPECT_TRUE(street.is_sidewalk_separate());
+
+  auto const walkable = route(49.11);
+  auto const bike_way = route(49.14);
+  auto const separate = route(49.15);
+  ASSERT_TRUE(walkable.has_value());
+  ASSERT_TRUE(bike_way.has_value());
+  ASSERT_TRUE(separate.has_value());
+  EXPECT_EQ(walkable->duration_, bike_way->duration_);
+  EXPECT_EQ(walkable->duration_, separate->duration_);
+  EXPECT_EQ(242U, walkable->cost_);
+  EXPECT_EQ(362U, bike_way->cost_);
+  EXPECT_EQ(434U, separate->cost_);
 }
 
 TEST_F(foot_access_test, private_barriers) {
