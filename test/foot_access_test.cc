@@ -29,6 +29,7 @@ namespace osr {
 // - 900, 901: path with a foot=no gate (node 91)
 // - 1000, 1001: trunk with foot=no
 // - 1100, 1101: path with a private gate and kerb=raised (node 111)
+// - 1200, 1201: cycleway with sidewalk=right
 constexpr auto const kOsm = R"(
 <osm version="0.6" generator="osr-test">
   <node id="10" lat="49.000000" lon="8.000000"/>
@@ -148,6 +149,17 @@ constexpr auto const kOsm = R"(
   <way id="1101">
     <nd ref="111"/><nd ref="112"/>
     <tag k="highway" v="path"/>
+  </way>
+  <node id="120" lat="49.110000" lon="8.000000"/>
+  <node id="121" lat="49.110000" lon="8.003000"/>
+  <node id="122" lat="49.110000" lon="8.006000"/>
+  <way id="1200">
+    <nd ref="120"/><nd ref="121"/>
+    <tag k="highway" v="cycleway"/><tag k="sidewalk" v="right"/>
+  </way>
+  <way id="1201">
+    <nd ref="121"/><nd ref="122"/>
+    <tag k="highway" v="cycleway"/><tag k="sidewalk" v="right"/>
   </way>
 </osm>
 )";
@@ -274,6 +286,13 @@ TEST_F(foot_access_test, trunk_with_foot_no_is_not_walkable) {
   EXPECT_FALSE(is_accessible(component_class::kFoot, p));
   EXPECT_FALSE(route(49.09).has_value());
   EXPECT_TRUE(bike_route(49.09).has_value());
+}
+
+TEST_F(foot_access_test, cycleway_with_sidewalk_is_walkable) {
+  auto const p = props(osm_way_idx_t{1200U});
+  EXPECT_TRUE(p.is_foot_accessible());
+  EXPECT_FALSE(p.has_foot_penalty());
+  EXPECT_TRUE(route(49.11).has_value());
 }
 
 TEST_F(foot_access_test, private_barriers) {

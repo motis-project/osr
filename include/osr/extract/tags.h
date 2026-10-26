@@ -540,6 +540,7 @@ struct foot_profile {
         case cista::hash("corridor"):
         case cista::hash("footway"): [[fallthrough]];
         case cista::hash("pier"): return true;
+        case cista::hash("cycleway"):
         case cista::hash("trunk"): [[fallthrough]];
         case cista::hash("trunk_link"): return t.sidewalk_;
         default: return false;
