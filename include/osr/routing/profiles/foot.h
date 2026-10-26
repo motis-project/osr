@@ -22,7 +22,7 @@ struct foot {
   static constexpr auto const kTrunkCostFactor = IsWheelchair ? 4.0 : 2.0;
   static constexpr auto const kBikeWayCostFactor = 1.5;
   static constexpr auto const kSidewalkSeparateCostFactor = 1.2;
-  static constexpr auto const kGateCost = cost_t{60U};
+  static constexpr auto const kGateCost = cost_t{30U};
   static constexpr auto const kPrivateBarrierCost = cost_t{600U};
 
   struct parameters {
