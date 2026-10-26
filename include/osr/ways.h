@@ -231,7 +231,7 @@ struct way_properties {
   template <std::size_t NMaxTypes>
   friend constexpr auto static_type_hash(
       way_properties const*, cista::hash_data<NMaxTypes> h) noexcept {
-    return h.combine(cista::hash("way_properties v1.3"));
+    return h.combine(cista::hash("way_properties v1.4"));
   }
 
   template <typename Ctx>
@@ -354,10 +354,7 @@ constexpr char const* to_str(component_class const c) {
 constexpr bool is_accessible(component_class const c, way_properties const& p) {
   switch (c) {
     case component_class::kFoot:
-      // Foot may also use bike ways (with a penalty).
-      return p.is_foot_accessible() ||
-             (p.is_bike_accessible() && !p.has_bike_penalty() &&
-              !p.is_railway_accessible());
+      return p.is_foot_accessible() || p.has_foot_penalty();
     case component_class::kBike: return p.is_bike_accessible();
     case component_class::kCar: return p.is_car_accessible();
   }
@@ -378,7 +375,8 @@ constexpr bool is_accessible_without_penalty(component_class const c,
 
 constexpr bool has_penalty(component_class const c, way_properties const& p) {
   switch (c) {
-    case component_class::kFoot: return p.has_foot_penalty();
+    case component_class::kFoot:
+      return p.is_foot_accessible() && p.has_foot_penalty();
     case component_class::kBike: return p.has_bike_penalty();
     case component_class::kCar: return false;
   }

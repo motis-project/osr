@@ -479,11 +479,14 @@ bool is_steps(tags const& t, osm_obj_type const type) {
 }
 
 struct foot_profile {
-  static override access_override(tags const& t, osm_obj_type) {
+  static override access_override(tags const& t, osm_obj_type const type) {
     if (t.is_route_ || t.sidewalk_separate_ || t.is_ferry_route_) {
       return override::kBlacklist;
     }
+    return explicit_access_override(t, type);
+  }
 
+  static override explicit_access_override(tags const& t, osm_obj_type) {
     switch (cista::hash(t.barrier_)) {
       case cista::hash("yes"):
       case cista::hash("wall"):

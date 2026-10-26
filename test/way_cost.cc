@@ -138,14 +138,22 @@ TEST(way_cost_foot, combinations) {
                                   .is_sidewalk_separate_ = true,
                               }));
 
+  // bike way without foot access: explicitly forbidden (foot=no) or walkable
+  // at a higher cost
+  EXPECT_EQ(osr::kInfeasible, cost({
+                                  .is_foot_accessible_ = false,
+                                  .is_bike_accessible_ = true,
+                              }));
   EXPECT_EQ(150, cost({
                      .is_foot_accessible_ = false,
                      .is_bike_accessible_ = true,
+                     .has_foot_penalty_ = true,
                  }));
   EXPECT_EQ(180, cost({
                      .is_foot_accessible_ = false,
                      .is_bike_accessible_ = true,
                      .is_sidewalk_separate_ = true,
+                     .has_foot_penalty_ = true,
                  }));
 
   EXPECT_EQ(100, cost({
