@@ -185,6 +185,22 @@ TEST(way_cost_foot, combinations) {
                               }));
 }
 
+TEST(node_cost_foot, gate) {
+  auto const node_cost = [](osr::node_properties const n) {
+    return osr::foot<false>::node_cost({}, n);
+  };
+  EXPECT_EQ(0U, node_cost({.is_foot_accessible_ = true}).cost_);
+  EXPECT_EQ(30U,
+            node_cost({.is_foot_accessible_ = true, .has_barrier_cost_ = true})
+                .cost_);
+  EXPECT_EQ(0U,
+            node_cost({.is_foot_accessible_ = true, .has_barrier_cost_ = true})
+                .duration_.count());
+  EXPECT_EQ(600U,
+            node_cost({.is_foot_accessible_ = false, .has_barrier_cost_ = true})
+                .cost_);
+}
+
 TEST(way_cost_hgv, hgv_access_values_change_cost) {
   EXPECT_EQ(45U, hgv_cost(osr::access_value::kYes));
   EXPECT_EQ(36U, hgv_cost(osr::access_value::kDesignated));
