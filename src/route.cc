@@ -36,7 +36,6 @@
 
 namespace osr {
 
-constexpr auto const kMinCostSettled = cost_t{900};
 constexpr auto const kMatchingPenaltyFactor = 20.0;
 
 // Budget contribution of matching penalties per endpoint. Candidates with a
@@ -669,10 +668,9 @@ std::optional<path> route_bidirectional(typename P::parameters const& params,
                                         bitvec<node_idx_t> const* blocked,
                                         sharing_data const* sharing,
                                         elevation_storage const* elevations) {
-  auto const search_max = std::max(kMinCostSettled, max);
   b.reset({.profile_ = params,
            .w_ = &w,
-           .max_ = search_max,
+           .max_ = max,
            .dir_ = dir,
            .blocked_ = blocked,
            .sharing_ = sharing,
@@ -731,10 +729,9 @@ std::optional<path> route_dijkstra(
     sharing_data const* sharing,
     elevation_storage const* elevations,
     std::optional<path> stretch) {
-  auto const search_max = std::max(kMinCostSettled, max);
   d.reset({.profile_ = params,
            .w_ = &w,
-           .max_ = search_max,
+           .max_ = max,
            .max_duration_ = max_duration,
            .dir_ = dir,
            .start_time_ = start_time,
@@ -795,10 +792,9 @@ std::optional<path> route_astar(typename P::parameters const& params,
                                 bitvec<node_idx_t> const* blocked,
                                 sharing_data const* sharing,
                                 elevation_storage const* elevations) {
-  auto const search_max = std::max(kMinCostSettled, max);
   a.reset({.profile_ = params,
            .w_ = &w,
-           .max_ = search_max,
+           .max_ = max,
            .dir_ = dir,
            .start_time_ = start_time,
            .blocked_ = blocked,
@@ -919,10 +915,9 @@ std::vector<std::optional<path>> route(
       connected_candidates<P>(w, sharing, from_match, to_match.way_);
   auto const from_connected = from_connected_m[match_idx_t{0U}];
   auto const max = std::ranges::max(destination_limits);
-  auto const search_max = std::max(kMinCostSettled, max);
   d.reset({.profile_ = params,
            .w_ = &w,
-           .max_ = search_max,
+           .max_ = max,
            .max_duration_ = max_duration,
            .dir_ = dir,
            .start_time_ = start_time,
