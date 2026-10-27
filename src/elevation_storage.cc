@@ -123,7 +123,8 @@ elevation_storage::elevation get_way_elevation(
             {from_lat + s * way_dir.y_, adjust_lng(from_lng + s * way_dir.x_)});
         auto const ele_diff = (m < a) ? a - m : m - a;
         if (m != ev::elevation_meters_t::invalid() &&
-            ele_diff >= min_elevation && ele_diff / step_dist < max_incline) {
+            ele_diff >= min_elevation &&
+            to_idx(ele_diff) / step_dist < max_incline) {
           if (a < m) {
             elevation.up_ += static_cast<cista::base_t<elevation_monotonic_t>>(
                 to_idx(m - a));
