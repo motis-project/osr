@@ -6,6 +6,7 @@
 
 #include "cista/mmap.h"
 
+#include "osr/preprocessing/elevation/shared.h"
 #include "osr/types.h"
 #include "osr/ways.h"
 
@@ -19,9 +20,10 @@ struct elevation_storage {
   struct elevation {
     elevation& operator+=(elevation const&);
     elevation swapped() const;
+    elevation_absolute_t start_{elevation_absolute_t::invalid()};
+    elevation_absolute_t end_{elevation_absolute_t::invalid()};
     elevation_monotonic_t up_{0U};
     elevation_monotonic_t down_{0U};
-    elevation_absolute_t absolute_{elevation_absolute_t::invalid()};
   };
   struct encoding {
     using coding = std::uint8_t;
@@ -29,7 +31,8 @@ struct elevation_storage {
     encoding() = default;
     elevation decode() const;
     explicit operator bool() const;
-    elevation_absolute_t absolute_{};
+    elevation_absolute_t start_{};
+    elevation_absolute_t end_{};
     coding up_ : 4 {};
     coding down_ : 4 {};
   };
@@ -37,7 +40,11 @@ struct elevation_storage {
                     cista::mmap::protection const mode);
   static std::unique_ptr<elevation_storage> try_open(
       std::filesystem::path const&);
-  void set_elevations(ways const&, preprocessing::elevation::provider const&);
+  void set_elevations(
+      ways const&,
+      preprocessing::elevation::provider const&,
+      preprocessing::elevation::elevation_meters_t min_elevation,
+      double max_incline);
   elevation get_elevations(way_idx_t const way,
                            std::uint16_t const segment) const;
 

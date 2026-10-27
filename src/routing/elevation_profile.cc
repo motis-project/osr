@@ -17,35 +17,30 @@ elevation_profile::elevation_profile(ways const& w,
                                      std::span<path::segment const> segments,
                                      double resolution)
     : resolution_(resolution) {
-  if (segments.empty() || utl::all_of(segments, [](auto const& s) {
-        return s.elevation_.absolute_ == elevation_absolute_t::invalid();
-      })) {
-    return;
-  }
-
-  auto const adjust_lng = [](double const x) {
-    if (x < -180.) {
-      return x + 360.;
-    } else if (x <= 180.) {
-      return x;
-    } else {
-      return x - 360.;
-    }
-  };
+  // auto const adjust_lng = [](double const x) {
+  //   if (x < -180.) {
+  //     return x + 360.;
+  //   } else if (x <= 180.) {
+  //     return x;
+  //   } else {
+  //     return x - 360.;
+  //   }
+  // };
 
   auto it = utl::find_if(segments, [&](auto const& s) {
-    return s.elevation_.absolute_ != elevation_absolute_t::invalid();
+    return s.elevation_.start_ != elevation_absolute_t::invalid();
   });
-  baseline_ = it->elevation_.absolute_;
+  if (it == end(segments)) {
+    return;
+  }
+  baseline_ = it->elevation_.start_;
+  min_ = baseline_;
+  max_ = baseline_;
 
-  auto const add = [&](node_idx_t a, node_idx_t b, elevation_absolute_t z) {
-    auto const a_pos = w.get_node_pos(a);
-    auto const b_pos = w.get_node_pos(b);
+  auto const add = [&](node_idx_t pt, elevation_absolute_t z) {
+    auto const pos = w.get_node_pos(pt);
 
-    auto const lat = a_pos.lat() + (b_pos.lat() - a_pos.lat()) * 0.5;
-    auto const lng =
-        adjust_lng(a_pos.lng() + (b_pos.lng() - a_pos.lng()) * 0.5);
-    points_.push_back(point::from_latlng({lat, lng}));
+    points_.push_back(pos);
     elevation_.push_back(z);
 
     min_ = std::min(z, min_);
@@ -53,20 +48,20 @@ elevation_profile::elevation_profile(ways const& w,
   };
 
   auto dist_acc = distance_t{0};
-  add(it->from_, it->to_, baseline_);
-  while (++it != prev(end(segments), 2)) {
+  add(it->from_, baseline_);
+  for (; it != prev(end(segments), 2); it++) {
     dist_acc += it->dist_;
 
     if (dist_acc < resolution ||
-        it->elevation_.absolute_ == elevation_absolute_t::invalid()) {
+        it->elevation_.end_ == elevation_absolute_t::invalid()) {
       continue;
     }
 
-    add(it->from_, it->to_, it->elevation_.absolute_);
+    add(it->to_, it->elevation_.end_);
     dist_acc = 0;
   }
-  if (it->elevation_.absolute_ != elevation_absolute_t::invalid()) {
-    add(it->from_, it->to_, it->elevation_.absolute_);
+  if (it->elevation_.end_ != elevation_absolute_t::invalid()) {
+    add(it->to_, it->elevation_.end_);
   }
 }
 

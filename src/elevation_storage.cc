@@ -1,4 +1,5 @@
 #include "osr/elevation_storage.h"
+#include <cmath>
 
 #include <algorithm>
 #include <array>
@@ -78,10 +79,13 @@ std::unique_ptr<elevation_storage> elevation_storage::try_open(
                                              cista::mmap::protection::READ);
 }
 
-elevation_storage::elevation get_way_elevation(ev::provider const& provider,
-                                               point const from,
-                                               point const to,
-                                               ev::resolution const& res) {
+elevation_storage::elevation get_way_elevation(
+    ev::provider const& provider,
+    point const from,
+    point const to,
+    ev::resolution const& res,
+    preprocessing::elevation::elevation_meters_t min_elevation,
+    double max_incline) {
   auto elevation = elevation_storage::elevation{};
   auto a = provider.get(from);
   auto const b = provider.get(to);
@@ -107,13 +111,19 @@ elevation_storage::elevation get_way_elevation(ev::provider const& provider,
     auto const steps = static_cast<int>(
         std::max(std::ceil(kSafetyFactor * std::abs(lat_diff) / res.y_),
                  std::ceil(kSafetyFactor * std::abs(min_lng_diff) / res.x_)));
+    auto const step_dist = std::sqrt(std::pow(res.x_, 2) + std::pow(res.y_, 2));
+
+    elevation.start_ = static_cast<elevation_absolute_t>(to_idx(a));
+    elevation.end_ = static_cast<elevation_absolute_t>(to_idx(b));
     if (steps > 1) {
       auto const way_dir =
           ev::resolution{.x_ = min_lng_diff / steps, .y_ = lat_diff / steps};
       for (auto s = 1; s < steps; ++s) {
         auto const m = provider.get(
             {from_lat + s * way_dir.y_, adjust_lng(from_lng + s * way_dir.x_)});
-        if (m != ev::elevation_meters_t::invalid()) {
+        auto const ele_diff = (m < a) ? a - m : m - a;
+        if (m != ev::elevation_meters_t::invalid() &&
+            ele_diff >= min_elevation && ele_diff / step_dist < max_incline) {
           if (a < m) {
             elevation.up_ += static_cast<cista::base_t<elevation_monotonic_t>>(
                 to_idx(m - a));
@@ -133,8 +143,6 @@ elevation_storage::elevation get_way_elevation(ev::provider const& provider,
       elevation.down_ +=
           static_cast<cista::base_t<elevation_monotonic_t>>(to_idx(a - b));
     }
-    elevation.absolute_ =
-        static_cast<elevation_absolute_t>(to_idx((a + b) / 2));
   }
   return elevation;
 }
@@ -205,7 +213,9 @@ encoding_result_t calculate_way_encodings(
     ev::provider const& provider,
     mm_vec<way_ordering_t> const& ordering,
     node_point_map const& points,
-    utl::progress_tracker_ptr& pt) {
+    utl::progress_tracker_ptr& pt,
+    preprocessing::elevation::elevation_meters_t min_elevation,
+    double max_incline) {
   paths.reserve(paths.size() + 3U);
   auto const& mapping_path = paths.emplace_back(fs::temp_directory_path() /
                                                 "temp_osr_extract_mapping");
@@ -243,7 +253,8 @@ encoding_result_t calculate_way_encodings(
         auto elevations_idx = std::size_t{0U};
         for (auto const [from, to] : utl::pairwise(w.r_->way_nodes_[way_idx])) {
           auto const elevation = elevation_storage::encoding{
-              get_way_elevation(provider, points[from], points[to], res)};
+              get_way_elevation(provider, points[from], points[to], res,
+                                min_elevation, max_incline)};
           if (elevation) {
             elevations.resize(elevations_idx);
             elevations.push_back(elevation);
@@ -288,8 +299,11 @@ void write_ordered_encodings(elevation_storage& storage,
   }
 }
 
-void elevation_storage::set_elevations(ways const& w,
-                                       ev::provider const& provider) {
+void elevation_storage::set_elevations(
+    ways const& w,
+    ev::provider const& provider,
+    preprocessing::elevation::elevation_meters_t min_elevation,
+    double max_incline) {
   auto pt = utl::get_active_progress_tracker_or_activate("osr");
   auto cleanup_paths = utl::make_raii(path_vec{}, [](path_vec const& paths) {
     auto e = std::error_code{};
@@ -305,7 +319,8 @@ void elevation_storage::set_elevations(ways const& w,
       calculate_way_order(cleanup_paths.get(), w, points, provider, pt);
   pt->status("Calculating way elevations").out_bounds(81, 89);
   auto unordered_encodings = calculate_way_encodings(
-      cleanup_paths.get(), w, provider, processing_order, points, pt);
+      cleanup_paths.get(), w, provider, processing_order, points, pt,
+      min_elevation, max_incline);
   pt->status("Storing ordered elevations").out_bounds(89, 90);
   write_ordered_encodings(*this, std::move(unordered_encodings), pt);
 }
@@ -364,19 +379,24 @@ elevation_monotonic_t decode_helper(
 }
 
 elevation_storage::encoding::encoding(elevation const& e)
-    : absolute_{e.absolute_}, up_{encode(e.up_)}, down_{encode(e.down_)} {}
+    : start_{e.start_},
+      end_{e.end_},
+      up_{encode(e.up_)},
+      down_{encode(e.down_)} {}
 
 elevation_storage::elevation elevation_storage::encoding::decode() const {
   return {
+      .start_{start_},
+      .end_{end_},
       .up_ = decode_helper(up_),
       .down_ = decode_helper(down_),
-      .absolute_ = absolute_,
   };
 }
 
 elevation_storage::encoding::operator bool() const {
   return up_ != 0U || down_ != 0U ||
-         absolute_ != elevation_absolute_t::invalid();
+         (start_ != elevation_absolute_t::invalid() &&
+          end_ != elevation_absolute_t::invalid());
 }
 
 }  // namespace osr

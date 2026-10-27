@@ -1,9 +1,9 @@
 #pragma once
 
-#include <limits>
 #include <vector>
 
 #include "osr/point.h"
+#include "osr/preprocessing/elevation/shared.h"
 #include "osr/routing/path.h"
 #include "osr/types.h"
 
@@ -19,8 +19,7 @@ struct elevation_profile {
   std::vector<point> points_{};
   std::vector<elevation_absolute_t> elevation_{};
   elevation_absolute_t baseline_;
-  elevation_absolute_t min_{std::numeric_limits<elevation_absolute_t>::max()},
-      max_{std::numeric_limits<elevation_absolute_t>::min()};
+  elevation_absolute_t min_{0}, max_{0};
   double resolution_;
 };
 
