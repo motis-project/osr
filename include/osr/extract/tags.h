@@ -479,11 +479,14 @@ bool is_steps(tags const& t, osm_obj_type const type) {
 }
 
 struct foot_profile {
-  static override access_override(tags const& t, osm_obj_type) {
+  static override access_override(tags const& t, osm_obj_type const type) {
     if (t.is_route_ || t.sidewalk_separate_ || t.is_ferry_route_) {
       return override::kBlacklist;
     }
+    return explicit_access_override(t, type);
+  }
 
+  static override explicit_access_override(tags const& t, osm_obj_type) {
     switch (cista::hash(t.barrier_)) {
       case cista::hash("yes"):
       case cista::hash("wall"):
@@ -540,6 +543,7 @@ struct foot_profile {
         case cista::hash("corridor"):
         case cista::hash("footway"): [[fallthrough]];
         case cista::hash("pier"): return true;
+        case cista::hash("cycleway"):
         case cista::hash("trunk"): [[fallthrough]];
         case cista::hash("trunk_link"): return t.sidewalk_;
         default: return false;
@@ -553,6 +557,12 @@ struct foot_profile {
   static bool access_with_penalty(tags const& t, osm_obj_type const type) {
     return type == osm_obj_type::kWay && t.is_trunk() && !t.sidewalk_ &&
            access_override(t, type) == override::kNone;
+  }
+
+  // Bike ways and streets with a separate sidewalk: no foot access, but
+  // usable at a higher cost unless walking is explicitly forbidden.
+  static bool walkable_bike_way(tags const& t, osm_obj_type const type) {
+    return explicit_access_override(t, type) != override::kBlacklist;
   }
 };
 

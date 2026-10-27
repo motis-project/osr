@@ -23,7 +23,8 @@ TEST(component_preprocessing, loops_accessibility_and_islands) {
     r.way_properties_.push_back(
         {.is_foot_accessible_ = i == 0U || i == 4U || i == 5U || i >= 8U,
          .is_bike_accessible_ = i <= 1U,
-         .is_car_accessible_ = i == 2U || i == 3U || i == 7U});
+         .is_car_accessible_ = i == 2U || i == 3U || i == 7U,
+         .has_foot_penalty_ = i == 1U});
   }
   for (auto const& ways : node_ways) {
     r.node_ways_.emplace_back(ways);

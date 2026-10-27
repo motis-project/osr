@@ -280,9 +280,6 @@ way_properties get_way_properties(
   auto const [from, to, _] = get_levels(t);
   auto p = way_properties{};
   std::memset(&p, 0, sizeof(way_properties));
-  p.has_foot_penalty_ = is_accessible_with_penalty<foot_profile>(t, obj_type);
-  p.is_foot_accessible_ =
-      p.has_foot_penalty_ || is_accessible<foot_profile>(t, obj_type);
   p.has_bike_penalty_ = is_accessible_with_penalty<bike_profile>(t, obj_type);
   p.is_bike_accessible_ =
       p.has_bike_penalty_ || is_accessible<bike_profile>(t, obj_type);
@@ -294,6 +291,13 @@ way_properties get_way_properties(
       is_accessible_with_penalty<railway_profile>(t, obj_type);
   p.is_railway_accessible_ =
       p.has_railway_penalty_ || is_accessible<railway_profile>(t, obj_type);
+  auto const foot_trunk = is_accessible_with_penalty<foot_profile>(t, obj_type);
+  p.is_foot_accessible_ =
+      foot_trunk || is_accessible<foot_profile>(t, obj_type);
+  p.has_foot_penalty_ =
+      foot_trunk || (!p.is_foot_accessible_ && p.is_bike_accessible_ &&
+                     !p.has_bike_penalty_ && !p.is_railway_accessible_ &&
+                     foot_profile::walkable_bike_way(t, obj_type));
   p.is_destination_ = t.is_destination_;
   p.is_oneway_car_ = t.oneway_;
   p.is_oneway_bike_ = t.oneway_ && !t.not_oneway_bike_;

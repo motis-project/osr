@@ -20,7 +20,9 @@ template <bool IsWheelchair, typename Tracking = noop_tracking>
 struct foot {
   static constexpr auto const kMaxMatchDistance = 100U;
   static constexpr auto const kTrunkCostFactor = IsWheelchair ? 4.0 : 2.0;
-  static constexpr auto const kGateCost = cost_t{60U};
+  static constexpr auto const kBikeWayCostFactor = 1.5;
+  static constexpr auto const kSidewalkSeparateCostFactor = 1.2;
+  static constexpr auto const kGateCost = cost_t{30U};
   static constexpr auto const kPrivateBarrierCost = cost_t{600U};
 
   struct parameters {
@@ -400,21 +402,21 @@ struct foot {
     if (IsWheelchair && e.is_steps()) {
       return infeasible_cost_and_duration();
     }
-    auto const is_trunk = e.has_foot_penalty();
     auto const is_bike_way = !e.is_foot_accessible();
-    if (is_bike_way && (!e.is_bike_accessible() || e.has_bike_penalty() ||
-                        e.is_railway_accessible())) {
+    if (is_bike_way && !e.has_foot_penalty()) {
       return infeasible_cost_and_duration();
     }
-    auto const factor = is_trunk ? trunk_cost_factor(e, kTrunkCostFactor) : 1.0;
+    auto const is_trunk = !is_bike_way && e.has_foot_penalty();
+    auto const factor =
+        (is_bike_way ? kBikeWayCostFactor : 1.0) *
+        (is_trunk ? trunk_cost_factor(e, kTrunkCostFactor) : 1.0) *
+        (e.is_sidewalk_separate() ? kSidewalkSeparateCostFactor : 1.0);
     auto const duration = duration_from_cost(static_cast<cost_t>(std::round(
         static_cast<double>(dist) / params.speed_meters_per_second_)));
     auto const walk = dist / (params.speed_meters_per_second_ +
                               (e.is_big_street_ ? -0.2 : 0) +
                               (e.motor_vehicle_no_ ? 0.1 : 0.0));
-    auto const cost = (is_bike_way ? 90U : 0U) +
-                      (e.is_sidewalk_separate() ? 45U : 0U) +
-                      static_cast<cost_t>(std::round(walk * factor));
+    auto const cost = static_cast<cost_t>(std::round(walk * factor));
     return {.cost_ = cost, .duration_ = duration};
   }
 
