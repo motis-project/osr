@@ -332,9 +332,9 @@ TEST_F(endpoint_routing, duration_budget_includes_both_matching_penalties) {
     out.add(0.0F, matches.way_.front(), {}, {});
     for (auto i = std::size_t{0U}; i != matches.size(); ++i) {
       auto nodes = matches.nodes_[i];
-      nodes.left_.dist_to_node_ += 25.0F;
-      nodes.right_.dist_to_node_ += 25.0F;
-      out.add(matches.dist_to_way_[i] + 25.0F, matches.way_[i], nodes,
+      nodes.left_.dist_to_node_ += 12.0F;
+      nodes.right_.dist_to_node_ += 12.0F;
+      out.add(matches.dist_to_way_[i] + 12.0F, matches.way_[i], nodes,
               matches.state_[i]);
     }
     out.finish();
@@ -429,14 +429,14 @@ TEST_F(endpoint_routing, destination_budget_independent_of_batch) {
   fm.start(kNoLevel);
   fm.add(0.F, *w_->find_way(osm_way_idx_t{9U}), {.left_ = {.node_ = root}}, {});
   fm.finish();
-  // Destination 0 has a 25 m farther match (penalty 525, below the budget
-  // slack), so its route only fits its own budget and not that of the other
+  // Destination 0 has a 19 m farther match (penalty 399, capped at 300), so
+  // its route only fits its own budget and not that of the other
   // destinations. It must be found whatever else shares the batch.
   auto single = match_result{};
   single.start(kNoLevel);
   single.add(0.F, *w_->find_way(osm_way_idx_t{10U}), {}, {});
-  single.add(25.F, *w_->find_way(osm_way_idx_t{10U}),
-             {.right_ = {.node_ = goal, .dist_to_node_ = 25.F}}, {});
+  single.add(19.F, *w_->find_way(osm_way_idx_t{10U}),
+             {.right_ = {.node_ = goal, .dist_to_node_ = 19.F}}, {});
   single.finish();
   auto const baseline = route(params, *w_, *l_, search_profile::kFoot, from, to,
                               fm[match_idx_t{0U}], single[match_idx_t{0U}],
@@ -448,7 +448,7 @@ TEST_F(endpoint_routing, destination_budget_independent_of_batch) {
            penalty + 1U;
   };
   auto t = static_cast<int>(baseline->duration_.count());
-  while (baseline->cost_ >= budget(t, 525U)) {
+  while (baseline->cost_ >= budget(t, 300U)) {
     ++t;
   }
   ASSERT_GE(baseline->cost_, budget(t, 0U));
@@ -461,7 +461,7 @@ TEST_F(endpoint_routing, destination_budget_independent_of_batch) {
         auto const way = *w_->find_way(osm_way_idx_t{10U});
         if (i == 0U) {
           tm.add(0.F, way, {}, {});
-          tm.add(25.F, way, {.right_ = {.node_ = goal, .dist_to_node_ = 25.F}},
+          tm.add(19.F, way, {.right_ = {.node_ = goal, .dist_to_node_ = 19.F}},
                  {});
         } else {
           tm.add(0.F, way, {.right_ = {.node_ = goal}}, {});
@@ -480,7 +480,7 @@ TEST_F(endpoint_routing, destination_budget_independent_of_batch) {
   }
 }
 
-TEST_F(endpoint_routing, matching_penalty_above_budget_slack_counts_fully) {
+TEST_F(endpoint_routing, matching_penalty_above_cap_counts_fully) {
   using foot_t = foot<false, elevator_tracking>;
   auto const params = foot_t::parameters{};
   auto const from = location{49.2, 8.001};
@@ -492,7 +492,7 @@ TEST_F(endpoint_routing, matching_penalty_above_budget_slack_counts_fully) {
   fm.add(0.F, *w_->find_way(osm_way_idx_t{9U}), {.left_ = {.node_ = root}}, {});
   fm.finish();
   // The only usable destination candidate is 100 m farther away than the
-  // closest match: its penalty (2100) exceeds the budget slack (600).
+  // closest match: its penalty (2100) exceeds the cap (300).
   auto tm = match_result{};
   tm.start(kNoLevel);
   tm.add(0.F, *w_->find_way(osm_way_idx_t{10U}), {}, {});
@@ -512,7 +512,7 @@ TEST_F(endpoint_routing, matching_penalty_above_budget_slack_counts_fully) {
        t += 10) {
     auto const budget =
         static_cast<std::uint64_t>(cost_search_limit(params, duration_t{t})) +
-        600U + 1U;
+        300U + 1U;
     auto const p = route(params, *w_, *l_, search_profile::kFoot, from, to,
                          fm[match_idx_t{0U}], tm[match_idx_t{0U}],
                          std::chrono::seconds{t}, direction::kForward);
