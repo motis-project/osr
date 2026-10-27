@@ -429,9 +429,9 @@ TEST_F(endpoint_routing, destination_budget_independent_of_batch) {
   fm.start(kNoLevel);
   fm.add(0.F, *w_->find_way(osm_way_idx_t{9U}), {.left_ = {.node_ = root}}, {});
   fm.finish();
-  // Destination 0 has a 19 m farther match (penalty 399, of which the budget
-  // slack covers 300), so its route only fits its own budget and not that of
-  // the other destinations. It must be found whatever else shares the batch.
+  // Destination 0 has a 19 m farther match (penalty 399, capped at 300), so
+  // its route only fits its own budget and not that of the other
+  // destinations. It must be found whatever else shares the batch.
   auto single = match_result{};
   single.start(kNoLevel);
   single.add(0.F, *w_->find_way(osm_way_idx_t{10U}), {}, {});
@@ -480,7 +480,7 @@ TEST_F(endpoint_routing, destination_budget_independent_of_batch) {
   }
 }
 
-TEST_F(endpoint_routing, matching_penalty_above_budget_slack_counts_fully) {
+TEST_F(endpoint_routing, matching_penalty_above_cap_counts_fully) {
   using foot_t = foot<false, elevator_tracking>;
   auto const params = foot_t::parameters{};
   auto const from = location{49.2, 8.001};
@@ -492,7 +492,7 @@ TEST_F(endpoint_routing, matching_penalty_above_budget_slack_counts_fully) {
   fm.add(0.F, *w_->find_way(osm_way_idx_t{9U}), {.left_ = {.node_ = root}}, {});
   fm.finish();
   // The only usable destination candidate is 100 m farther away than the
-  // closest match: its penalty (2100) exceeds the budget slack (300).
+  // closest match: its penalty (2100) exceeds the cap (300).
   auto tm = match_result{};
   tm.start(kNoLevel);
   tm.add(0.F, *w_->find_way(osm_way_idx_t{10U}), {}, {});
