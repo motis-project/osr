@@ -39,7 +39,7 @@ constexpr auto const kMatchingPenaltyFactor = 20.0;
 
 // Budget contribution of matching penalties per endpoint. Candidates with a
 // higher penalty remain eligible; routes through them may exceed the budget.
-constexpr auto const kMatchingPenaltyBudgetSlack = cost_t{300U};
+constexpr auto const kMatchingPenaltyCap = cost_t{300U};
 
 duration_t to_duration_limit(std::chrono::seconds const duration) {
   utl::verify(duration.count() >= 0 && duration.count() < kMaxDuration.count(),
@@ -625,8 +625,8 @@ cost_t endpoint_cost_limit(cost_t const profile_limit,
                            cost_t const from_penalty,
                            cost_t const to_penalty) {
   auto const limit = static_cast<std::uint64_t>(profile_limit) +
-                     std::min(from_penalty, kMatchingPenaltyBudgetSlack) +
-                     std::min(to_penalty, kMatchingPenaltyBudgetSlack) + 1U;
+                     std::min(from_penalty, kMatchingPenaltyCap) +
+                     std::min(to_penalty, kMatchingPenaltyCap) + 1U;
   return static_cast<cost_t>(
       std::min<std::uint64_t>(limit, kMaxDurationSearchCost));
 }
