@@ -74,9 +74,9 @@ inline boost::json::object to_featurecollection_value(
              {
                  "properties",
                  {{"level", s.from_level_.to_float()},
-                  {"osm_way_id", s.way_ == way_idx_t::invalid()
-                                     ? 0U
-                                     : to_idx(w.way_osm_idx_[s.way_])},
+                  {"osm_way_id", w.is_regular_way(s.way_)
+                                     ? to_idx(w.way_osm_idx_[s.way_])
+                                     : 0U},
                   {"cost", s.cost_},
                   {"distance", s.dist_},
                   // TODO: MK - Remove mode or update all tests

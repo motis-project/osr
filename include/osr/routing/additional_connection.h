@@ -53,7 +53,7 @@ geo::polyline get_additional_connection_offset_points(
     bool is_left);
 
 void for_each_additional_connection(
-    ways const&,
+    ways::routing const&,
     node_idx_t,
     direction,
     std::function<void(additional_connection)> const&);

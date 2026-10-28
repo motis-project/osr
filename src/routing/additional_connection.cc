@@ -23,6 +23,10 @@ way_idx_t to_way_idx(ways const& w, connection_idx_t const conn_idx) {
   return way_idx_t{to_idx(conn_idx) + w.n_ways()};
 }
 
+way_idx_t to_way_idx(ways::routing const& r, connection_idx_t const conn_idx) {
+  return way_idx_t{to_idx(conn_idx) + r.way_properties_.size()};
+}
+
 geo::polyline reverse(geo::polyline&& line) {
   std::reverse(begin(line), end(line));
   return line;
@@ -137,12 +141,12 @@ geo::polyline get_additional_connection_offset_points(
 }
 
 void for_each_additional_connection(
-    ways const& w,
+    ways::routing const& r,
     node_idx_t const node_idx,
     direction const dir,
     std::function<void(additional_connection)> const& f) {
-  for_each_connection(*w.r_, node_idx, [&](connection_idx_t const connection_idx) {
-    auto const& conn = w.r_->additional_connections_[connection_idx];
+  for_each_connection(r, node_idx, [&](connection_idx_t const connection_idx) {
+    auto const& conn = r.additional_connections_[connection_idx];
     auto const g =
         [&](ways::routing::full_additional_connection::offset const& from,
             ways::routing::full_additional_connection::offset const& to) {
@@ -165,7 +169,7 @@ void for_each_additional_connection(
                            .dir_ = to_left ? direction::kBackward
                                            : direction::kForward},
                    .connection_dist_ = conn.dist_,
-                   .connection_way_ = to_way_idx(w, connection_idx)});
+                   .connection_way_ = to_way_idx(r, connection_idx)});
               }
             }
           }
