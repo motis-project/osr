@@ -1,6 +1,7 @@
 #include "osr/routing/parking_matching.h"
 
 #include <concepts>
+#include <algorithm>
 #include <functional>
 #include <iostream>
 #include <iterator>
@@ -8,13 +9,11 @@
 #include <optional>
 #include <ranges>
 
-#include "osr/routing/additional_connection.h"
-
 #include "osr/location.h"
 #include "osr/lookup.h"
+#include "osr/routing/additional_connection.h"
 #include "osr/routing/profile.h"
 #include "osr/routing/profiles/car.h"
-#include "osr/routing/profiles/car_parking.h"
 #include "osr/routing/profiles/foot.h"
 #include "osr/types.h"
 #include "osr/ways.h"
@@ -323,7 +322,13 @@ void connect_parking_ways(
     add_additional_connection(w, std::move(car_offset), std::move(foot_offset),
                               std::move(conn), true);
   }
+
   utl::sort(w.r_->additional_node_connections_);
+  // Ensure no duplicates are stored
+  auto const last = std::unique(begin(w.r_->additional_node_connections_),
+                                end(w.r_->additional_node_connections_));
+  w.r_->additional_node_connections_.erase(
+      last, end(w.r_->additional_node_connections_));
 }
 
 }  // namespace osr

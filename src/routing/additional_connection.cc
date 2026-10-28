@@ -73,10 +73,18 @@ way_idx_t add_additional_connection(
                    to.right_.node_ != node_idx_t::invalid()),
               "Cannot add offset without valid node");
   auto const conn_idx = connection_idx_t{w.r_->additional_connections_.size()};
+  auto seen = std::array<node_idx_t, 3>{node_idx_t::invalid()};
+  auto seen_count = 0U;
   auto const add_node = [&](node_idx_t const node_idx) {
+    if (std::ranges::contains(seen, node_idx)) {
+      return;
+    }
     w.r_->additional_node_connections_.emplace_back(node_idx, conn_idx);
     if (is_parking) {
       w.r_->has_additional_connections_.set(node_idx);
+    }
+    if (seen_count < seen.size()) {
+      seen[seen_count++] = node_idx;
     }
   };
 
