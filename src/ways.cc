@@ -14,6 +14,8 @@
 
 #include "cista/io.h"
 
+using std::literals::string_view_literals::operator""sv;
+
 namespace osr {
 
 namespace {

@@ -12,6 +12,8 @@
 #include "geo/latlng.h"
 
 #include "osr/elevation_storage.h"
+#include "osr/lookup.h"
+#include "osr/routing/additional_connection.h"
 #include "osr/routing/path.h"
 #include "osr/routing/profile.h"
 #include "osr/routing/sharing_data.h"
@@ -55,7 +57,7 @@ inline connecting_way find_connecting_way(
           std::uint16_t const a_idx, std::uint16_t const b_idx,
           elevation_storage::elevation const elevation, bool) {
         if (target == to && cost == expected_cost) {
-          auto const is_loop = way != way_idx_t::invalid() && r.is_loop(way) &&
+          auto const is_loop = w.is_regular_way(way) && r.is_loop(way) &&
                                static_cast<unsigned>(std::abs(a_idx - b_idx)) ==
                                    r.way_nodes_[way].size() - 2U;
           conn = {way, a_idx, b_idx, is_loop, dist, elevation};
@@ -108,6 +110,7 @@ inline connecting_way find_connecting_way(
 template <Profile P>
 inline double add_path(typename P::parameters const& params,
                        ways const& w,
+                       lookup const& l,
                        ways::routing const& r,
                        bitvec<node_idx_t> const* blocked,
                        sharing_data const* sharing,
@@ -134,7 +137,7 @@ inline double add_path(typename P::parameters const& params,
   segment.elevation_ = elevation;
   segment.mode_ = to.get_mode();
 
-  if (way != way_idx_t::invalid()) {
+  if (w.is_regular_way(way)) {
     auto const start_idx = dir == direction::kBackward ? to_idx : from_idx;
     auto const end_idx = dir == direction::kBackward ? from_idx : to_idx;
     auto const is_reverse = (start_idx > end_idx) ^ is_loop;
@@ -186,8 +189,17 @@ inline double add_path(typename P::parameters const& params,
     segment.from_ =
         dir == direction::kBackward ? to.get_node() : from.get_node();
     segment.to_ = dir == direction::kBackward ? from.get_node() : to.get_node();
-    segment.polyline_ = {get_node_pos(segment.from_),
-                         get_node_pos(segment.to_)};
+    if (w.is_additional_way(way)) {
+      auto const conn = get_additional_connection(w, way);
+      if (conn.is_parking()) {
+        segment.mode_ = mode::kParking;
+        segment.polyline_ = get_additional_connection_polyline(
+            l, conn, segment.from_, segment.to_);
+      }
+    } else {
+      segment.polyline_ = {get_node_pos(segment.from_),
+                           get_node_pos(segment.to_)};
+    }
   }
 
   return distance;

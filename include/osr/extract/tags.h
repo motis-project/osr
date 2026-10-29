@@ -8,6 +8,8 @@
 
 #include "cista/hash.h"
 
+#include "utl/parser/arg_parser.h"
+
 #include "osmium/osm/object.hpp"
 
 #include "osr/conditional.h"
@@ -132,6 +134,10 @@ private:
         case cista::hash("ref"): ref_ = value; break;
         case cista::hash("entrance"): is_entrance_ = true; break;
         case cista::hash("sidewalk"):
+          if (value == "left"sv || value == "right"sv || value == "both"sv) {
+            sidewalk_ = true;
+          }
+          [[fallthrough]];
         case cista::hash("sidewalk:both"):
         case cista::hash("sidewalk:left"): [[fallthrough]];
         case cista::hash("sidewalk:right"):
@@ -468,7 +474,7 @@ bool is_accessible_with_penalty(tags const& o, osm_obj_type const type) {
   return T::access_with_penalty(o, type);
 }
 
-bool is_steps(tags const& t, osm_obj_type const type) {
+static inline bool is_steps(tags const& t, osm_obj_type const type) {
   using namespace std::string_view_literals;
   switch (type) {
     case osr::osm_obj_type::kWay: return t.highway_ == "steps"sv;
