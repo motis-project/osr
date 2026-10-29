@@ -686,7 +686,7 @@ struct ways {
         struct side {
           bool valid() const { return node_ != node_idx_t::invalid(); }
 
-          node_idx_t node_;
+          node_idx_t node_{node_idx_t::invalid()};
           std::uint16_t dist_;
         };
 

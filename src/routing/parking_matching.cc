@@ -176,8 +176,8 @@ void connect_parking_ways(
       -> std::optional<matching_result_t> {
     auto node = node_idx_t::invalid();
     auto min_dist = 0.0;
-    auto lvl = kNoLevel;
     auto idx = 0U;
+    auto best_way = way_idx_t::invalid();
     for (auto const [i, node_idx] : utl::enumerate(w.r_->way_nodes_[way_idx])) {
       for (auto const connecting_way : w.r_->node_ways_[node_idx]) {
         auto const props = w.r_->way_properties_[connecting_way];
@@ -188,8 +188,8 @@ void connect_parking_ways(
           if (node == node_idx_t::invalid() || dist < min_dist) {
             node = node_idx;
             min_dist = dist;
-            lvl = props.from_level();
             idx = static_cast<unsigned>(i);
+            best_way = connecting_way;
             break;
           }
         }
@@ -202,7 +202,7 @@ void connect_parking_ways(
                             : offset::side{},
           .right_ = idx != 0 ? offset::side{.node_ = node, .dist_ = 0U}
                              : offset::side{},
-          .way_ = way_idx},
+          .way_ = best_way},
          w.r_->node_positions_[node]}};
   };
 
