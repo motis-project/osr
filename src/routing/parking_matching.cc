@@ -74,7 +74,7 @@ std::optional<matching_result_t> find_closest(
     std::function<double(double, way_idx_t)> const& score) {
   auto const params = typename P::parameters{};
 
-  auto best = std::optional<matching_result_t>{};
+  auto best = std::optional<offset>{};
   auto matches = match_result{};
   l.match<P>(params, loc, false, dir, 250.0, nullptr, matches, std::nullopt);
   auto best_score = std::numeric_limits<double>::lowest();
@@ -101,29 +101,25 @@ std::optional<matching_result_t> find_closest(
           .way_ = way_idx};
       auto const s = score(match.dist_to_way_[j], match.way_[j]);
       if (s > best_score) {
-        best = {wc, point::from_latlng(loc.pos_)};
+        best = wc;
         best_score = s;
         best_dir = left.way_dir_;
       }
     }
   }
   if (best.has_value()) {
-    auto& best0 = std::get<0>(*best);
-    utl::verify(best0.left_.valid() || best0.right_.valid(),
+    utl::verify(best->left_.valid() || best->right_.valid(),
                 "match returned without valid nodes");
     auto const path = l.get_node_candidate_path(
-        best0.way_,
-        best0.left_.valid() ? best0.left_.node_ : best0.right_.node_,
-        best0.left_.valid() ? best_dir : opposite(best_dir), false, loc);
-    if (debug_way_idx == 1643) {
-      fmt::println("path: {}   loc: {}", path, loc.pos_);
-    }
+        best->way_,
+        best->left_.valid() ? best->left_.node_ : best->right_.node_,
+        best->left_.valid() ? best_dir : opposite(best_dir), false, loc);
     utl::verify(!path.empty(), "Path should not be empty. way: {} query: {}",
-                best0.way_, loc.pos_);
-    std::get<1>(*best) = point::from_latlng(path.front());
+                best->way_, loc.pos_);
+    return {{*best, point::from_latlng(path.front())}};
   }
 
-  return best;
+  return std::nullopt;
 }
 
 }  // namespace
@@ -174,10 +170,12 @@ void connect_parking_ways(
           double const approx_distance_lng_degrees,
           std::function<bool(way_properties const&)> const& pred)
       -> std::optional<matching_result_t> {
-    auto node = node_idx_t::invalid();
-    auto min_dist = 0.0;
-    auto idx = 0U;
-    auto best_way = way_idx_t::invalid();
+    struct best {
+      way_idx_t way_{way_idx_t::invalid()};
+      node_idx_t node_{node_idx_t::invalid()};
+      double dist_{0.0};
+      unsigned idx_{0U};
+    } best;
     for (auto const [i, node_idx] : utl::enumerate(w.r_->way_nodes_[way_idx])) {
       for (auto const connecting_way : w.r_->node_ways_[node_idx]) {
         auto const props = w.r_->way_properties_[connecting_way];
@@ -185,25 +183,24 @@ void connect_parking_ways(
           auto const dist = geo::approx_squared_distance(
               center, w.r_->node_positions_[node_idx],
               approx_distance_lng_degrees);
-          if (node == node_idx_t::invalid() || dist < min_dist) {
-            node = node_idx;
-            min_dist = dist;
-            idx = static_cast<unsigned>(i);
-            best_way = connecting_way;
+          if (best.node_ == node_idx_t::invalid() || dist < best.dist_) {
+            best = {connecting_way, node_idx, dist, static_cast<unsigned>(i)};
             break;
           }
         }
       }
     }
-    utl::verify(node != node_idx_t::invalid(),
+    utl::verify(best.node_ != node_idx_t::invalid(),
                 "Connected way must have at least one connected node");
     return std::optional<matching_result_t>{
-        {{.left_ = idx == 0 ? offset::side{.node_ = node, .dist_ = 0U}
-                            : offset::side{},
-          .right_ = idx != 0 ? offset::side{.node_ = node, .dist_ = 0U}
-                             : offset::side{},
-          .way_ = best_way},
-         w.r_->node_positions_[node]}};
+        {{.left_ = best.idx_ == 0
+                       ? offset::side{.node_ = best.node_, .dist_ = 0U}
+                       : offset::side{},
+          .right_ = best.idx_ != 0
+                        ? offset::side{.node_ = best.node_, .dist_ = 0U}
+                        : offset::side{},
+          .way_ = best.way_},
+         w.r_->node_positions_[best.node_]}};
   };
 
   // TODO: MK - Duplicate?
