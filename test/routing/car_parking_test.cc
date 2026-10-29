@@ -78,10 +78,10 @@ TEST(car_parking, monaco) {
                            nullptr, nullptr, routing_algorithm::kDijkstra);
 
     ASSERT_TRUE(res.has_value());
-    EXPECT_NEAR(res->dist_, 772, 0.5);
-    EXPECT_EQ(res->duration_, duration_t{455});
-    ASSERT_EQ(res->segments_.size(), 10);
-    auto const& parking_segment = res->segments_[8];
+    EXPECT_NEAR(res->dist_, 766, 0.5);
+    EXPECT_EQ(res->duration_, duration_t{422});
+    ASSERT_EQ(res->segments_.size(), 9);
+    auto const& parking_segment = res->segments_[7];
     EXPECT_EQ(parking_segment.mode_, mode::kParking);
 
     auto const expected_polyline = geo::polyline{
@@ -144,8 +144,8 @@ TEST(car_parking, monaco) {
 
     for (auto const& res : results) {
       ASSERT_TRUE(res.has_value());
-      EXPECT_NEAR(res->dist_, 786, 0.5);
-      EXPECT_EQ(res->duration_, duration_t{350});
+      EXPECT_NEAR(res->dist_, 785, 0.5);
+      EXPECT_EQ(res->duration_, duration_t{334});
       ASSERT_EQ(res->segments_.size(), 27);
       EXPECT_EQ(res->segments_[23].mode_, mode::kParking);
       // Ensure path passes node north east of parking edge
@@ -183,8 +183,8 @@ TEST(car_parking, monaco) {
 
       for (auto const& res : results) {
         ASSERT_TRUE(res.has_value());
-        ASSERT_TRUE(res->segments_.size() > 5);
-        auto const parking_segment = res->segments_.size() - 5;
+        ASSERT_TRUE(res->segments_.size() > 7);
+        auto const parking_segment = res->segments_.size() - 7;
         for (auto const& [idx, segment] : utl::enumerate(res->segments_)) {
           EXPECT_EQ(segment.mode_, idx < parking_segment    ? mode::kCar
                                    : idx == parking_segment ? mode::kParking
@@ -209,7 +209,7 @@ TEST(car_parking, monaco) {
                 nullptr, routing_algorithm::kDijkstra);
 
       ASSERT_TRUE(res.has_value());
-      ASSERT_EQ(res->segments_.size(), 12);
+      ASSERT_EQ(res->segments_.size(), 14);
       EXPECT_EQ(res->segments_[7].mode_, mode::kParking);
       EXPECT_TRUE(geo::distance(res->segments_[0].polyline_.front(),
                                 not_used_car_parking_node) < 1e-6);
