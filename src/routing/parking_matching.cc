@@ -29,6 +29,23 @@ using matching_result_t = std::pair<offset, point>;
 // Radius for extended bounding box to find nearby ways
 constexpr auto const kExtensionDistance = 20.0;
 
+struct connected_way_candidate {
+  bool valid() const { return node_ != node_idx_t::invalid(); }
+  offset to_offset() const {
+    return {
+        .left_ = idx_ == 0 ? offset::side{.node_ = node_, .dist_ = 0U}
+                           : offset::side{},
+        .right_ = idx_ != 0 ? offset::side{.node_ = node_, .dist_ = 0U}
+                            : offset::side{},
+        .way_ = way_,
+    };
+  }
+  way_idx_t way_{way_idx_t::invalid()};
+  node_idx_t node_{node_idx_t::invalid()};
+  double dist_{0.0};
+  unsigned idx_{0U};
+};
+
 std::tuple<geo::latlng, double, std::optional<unsigned>> analyze_surroundings(
     ways const& w, lookup const& l, way_idx_t const way_idx) {
   // Compute bounding box
@@ -130,16 +147,15 @@ void connect_parking_ways(
     vec_map<way_idx_t, way_extra_properties> const& way_extra) {
   auto const is_connected =
       [&](way_idx_t const way_idx,
-          std::function<bool(way_properties const&)> const& pred) {
-        return utl::any_of(
-            w.r_->way_nodes_[way_idx], [&](node_idx_t const node_idx) {
-              return utl::any_of(
-                  w.r_->node_ways_[node_idx],
-                  [&](way_idx_t const connecting_way) {
-                    return connecting_way != way_idx &&
-                           pred(w.r_->way_properties_[connecting_way]);
-                  });
-            });
+          std::function<bool(way_properties const&)> const& is_accessible) {
+        auto const is_accessible_way = [&](way_idx_t const connecting_way) {
+          return connecting_way != way_idx &&
+                 is_accessible(w.r_->way_properties_[connecting_way]);
+        };
+        auto const lies_on_accessible_way = [&](node_idx_t const node_idx) {
+          return utl::any_of(w.r_->node_ways_[node_idx], is_accessible_way);
+        };
+        return utl::any_of(w.r_->way_nodes_[way_idx], lies_on_accessible_way);
       };
 
   auto const is_car_accessible = [&](way_properties const& props) {
@@ -168,54 +184,35 @@ void connect_parking_ways(
   auto const get_connected_way =
       [&](way_idx_t const way_idx, geo::latlng const& center,
           double const approx_distance_lng_degrees,
-          std::function<bool(way_properties const&)> const& pred)
+          std::function<bool(way_properties const&)> const& is_accessible)
       -> std::optional<matching_result_t> {
-    struct best {
-      way_idx_t way_{way_idx_t::invalid()};
-      node_idx_t node_{node_idx_t::invalid()};
-      double dist_{0.0};
-      unsigned idx_{0U};
-    } best;
+    auto best = connected_way_candidate{};
     for (auto const [i, node_idx] : utl::enumerate(w.r_->way_nodes_[way_idx])) {
       for (auto const connecting_way : w.r_->node_ways_[node_idx]) {
-        auto const props = w.r_->way_properties_[connecting_way];
-        if (connecting_way != way_idx && pred(props)) {
+        auto const way_props = w.r_->way_properties_[connecting_way];
+        if (connecting_way != way_idx && is_accessible(way_props)) {
           auto const dist = geo::approx_squared_distance(
               center, w.r_->node_positions_[node_idx],
               approx_distance_lng_degrees);
           if (best.node_ == node_idx_t::invalid() || dist < best.dist_) {
-            best = {connecting_way, node_idx, dist, static_cast<unsigned>(i)};
+            best = {
+                .way_ = connecting_way,
+                .node_ = node_idx,
+                .dist_ = dist,
+                .idx_ = static_cast<unsigned>(i),
+            };
+            // We can pick any way using this node as candidate
             break;
           }
         }
       }
     }
-    utl::verify(best.node_ != node_idx_t::invalid(),
+    utl::verify(best.valid(),
                 "Connected way must have at least one connected node");
     return std::optional<matching_result_t>{
-        {{.left_ = best.idx_ == 0
-                       ? offset::side{.node_ = best.node_, .dist_ = 0U}
-                       : offset::side{},
-          .right_ = best.idx_ != 0
-                        ? offset::side{.node_ = best.node_, .dist_ = 0U}
-                        : offset::side{},
-          .way_ = best.way_},
-         w.r_->node_positions_[best.node_]}};
+        {best.to_offset(), w.r_->node_positions_[best.node_]}};
   };
 
-  // TODO: MK - Duplicate?
-  auto const remove_duplicates =
-      [](vec<geo::latlng> const& points) -> vec<point> {
-    auto conn = vec<point>{};
-    auto previous = geo::latlng{};
-    for (auto const point : points) {
-      if (point != previous) {
-        conn.push_back(point::from_latlng(point));
-        previous = point;
-      }
-    }
-    return conn;
-  };
   auto const make_connection =
       [&](geo::latlng const& center, double const approx_distance_lng_degrees,
           geo::latlng car_way_point, geo::latlng car_connection_point,
@@ -229,17 +226,24 @@ void connect_parking_ways(
                                           approx_distance_lng_degrees);
     };
 
-    auto conn = vec<geo::latlng>{};
-    conn.push_back(car_way_point);
+    auto conn = vec<point>{};
+    auto last = geo::latlng{};
+    auto const add_point = [&](geo::latlng const p) {
+      if (conn.empty() || p != last) {
+        conn.push_back(point::from_latlng(p));
+        last = p;
+      }
+    };
+    add_point(car_way_point);
     if (is_closer_than_center(car_way_point, car_connection_point)) {
-      conn.push_back(car_connection_point);
+      add_point(car_connection_point);
     }
     if (is_closer_than_center(foot_way_point, foot_connection_point)) {
-      conn.push_back(foot_connection_point);
+      add_point(foot_connection_point);
     }
-    conn.push_back(foot_way_point);
+    add_point(foot_way_point);
 
-    return remove_duplicates(conn);
+    return conn;
   };
 
   w.r_->has_additional_connections_.resize(w.n_nodes());
