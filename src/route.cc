@@ -29,6 +29,7 @@
 #include "osr/routing/profiles/car_sharing.h"
 #include "osr/routing/profiles/foot.h"
 #include "osr/routing/profiles/hgv.h"
+#include "osr/routing/reachability.h"
 #include "osr/routing/sharing_data.h"
 #include "osr/routing/with_profile.h"
 #include "osr/util/infinite.h"
@@ -907,17 +908,25 @@ std::vector<std::optional<path>> route(
     return result;
   }
 
+  auto const* components = reachability_components<P>(w, sharing);
   auto const profile_limit = cost_search_limit(params, max_duration);
   auto const from_penalty = max_matching_penalty(from_match);
   auto const destination_limits = utl::to_vec(
       std::views::iota(match_idx_t::value_t{0U},
                        static_cast<match_idx_t::value_t>(to_match.size())),
       [&](match_idx_t::value_t const i) {
-        return endpoint_cost_limit(
-            profile_limit, from_penalty,
-            max_matching_penalty(to_match[match_idx_t{i}]),
-            matching_penalty_budget_slack<P>());
+        auto const to_i = to_match[match_idx_t{i}];
+        if (components != nullptr &&
+            !is_connected(*components, from_match, to_i)) {
+          return cost_t{0U};
+        }
+        return endpoint_cost_limit(profile_limit, from_penalty,
+                                   max_matching_penalty(to_i),
+                                   matching_penalty_budget_slack<P>());
       });
+  auto const from_connected_m =
+      connected_candidates<P>(w, sharing, from_match, to_match.way_);
+  auto const from_connected = from_connected_m[match_idx_t{0U}];
   auto const max = std::ranges::max(destination_limits);
   auto const search_max = std::max(kMinCostSettled, max);
   d.reset({.profile_ = params,
@@ -933,7 +942,7 @@ std::vector<std::optional<path>> route(
   auto local_starts = std::vector<endpoint_root<P>>{};
   auto& starts = state == nullptr ? local_starts : state->starts_;
   starts = add_endpoint_roots<P>(
-      params, w, from_match, route_end_of(dir), dir, start_time, max,
+      params, w, from_connected, route_end_of(dir), dir, start_time, max,
       [&](auto&& label, duration_t const duration) {
         d.add_start(std::forward<decltype(label)>(label), duration);
       });
@@ -1116,12 +1125,21 @@ std::optional<path> route_astar(
         cost_search_limit(params, duration_limit),
         max_matching_penalty(from_match), max_matching_penalty(to_match),
         matching_penalty_budget_slack<P>());
+    auto const from_connected_m =
+        connected_candidates<P>(w, sharing, from_match, to_match.way_);
+    auto const to_connected_m =
+        connected_candidates<P>(w, sharing, to_match, from_match.way_);
+    auto const from_connected = from_connected_m[match_idx_t{0U}];
+    auto const to_connected = to_connected_m[match_idx_t{0U}];
+    if (from_connected.empty() || to_connected.empty()) {
+      return std::nullopt;
+    }
     auto a = astar<P>{};
     return within_duration_limit(
-        cheaper(route_astar(pp, w, l, a, from, to, from_match, to_match, max,
-                            dir, start_time, blocked, sharing, elevations),
-                same_stretch_path<P>(pp, w, l, from, to, from_match, to_match,
-                                     dir, start_time, max)),
+        cheaper(route_astar(pp, w, l, a, from, to, from_connected, to_connected,
+                            max, dir, start_time, blocked, sharing, elevations),
+                same_stretch_path<P>(pp, w, l, from, to, from_connected,
+                                     to_connected, dir, start_time, max)),
         duration_limit);
   });
 }
@@ -1191,21 +1209,31 @@ std::optional<path> route(profile_parameters const& params,
         cost_search_limit(params, duration_limit),
         max_matching_penalty(from_match), max_matching_penalty(to_match),
         matching_penalty_budget_slack<P>());
-    auto stretch = same_stretch_path<P>(pp, w, l, from, to, from_match,
-                                        to_match, dir, start_time, max);
+    auto const from_connected_m =
+        connected_candidates<P>(w, sharing, from_match, to_match.way_);
+    auto const to_connected_m =
+        connected_candidates<P>(w, sharing, to_match, from_match.way_);
+    auto const from_connected = from_connected_m[match_idx_t{0U}];
+    auto const to_connected = to_connected_m[match_idx_t{0U}];
+    if (from_connected.empty() || to_connected.empty()) {
+      return std::nullopt;
+    }
+    auto stretch = same_stretch_path<P>(pp, w, l, from, to, from_connected,
+                                        to_connected, dir, start_time, max);
     switch (algo) {
       case routing_algorithm::kAStarBi: {
         auto b = bidirectional<P>{};
-        return cheaper(
-            route_bidirectional(pp, w, l, b, from, to, from_match, to_match,
-                                max, dir, blocked, sharing, elevations),
-            std::move(stretch));
+        return cheaper(route_bidirectional(pp, w, l, b, from, to,
+                                           from_connected, to_connected, max,
+                                           dir, blocked, sharing, elevations),
+                       std::move(stretch));
       }
       case routing_algorithm::kDijkstra: {
         auto d = dijkstra<P>{};
-        return route_dijkstra(pp, w, l, d, from, to, from_match, to_match, max,
-                              duration_limit, dir, start_time, blocked, sharing,
-                              elevations, std::move(stretch));
+        return route_dijkstra(pp, w, l, d, from, to, from_connected,
+                              to_connected, max, duration_limit, dir,
+                              start_time, blocked, sharing, elevations,
+                              std::move(stretch));
       }
     }
     throw utl::fail("not implemented");
