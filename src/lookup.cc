@@ -265,7 +265,7 @@ void lookup::set_penalty_reference(match_result& out,
   auto const to = static_cast<std::uint32_t>(out.way_.size());
   for (auto i = to_idx(out.begin_.back()); i != to; ++i) {
     if (touches_ground(ways_.r_->way_properties_[out.way_[idx_t{i}]])) {
-      out.penalty_ref_.back() = out.dist_to_way_[idx_t{i}];
+      out.penalty_ref_.resize(to, out.dist_to_way_[idx_t{i}]);
       return;
     }
   }

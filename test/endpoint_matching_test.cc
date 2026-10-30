@@ -56,6 +56,20 @@ TEST_F(endpoint_matching_test, endpoint_matches_work_with_all_algorithms) {
   EXPECT_EQ(dijkstra->duration_, bidirectional->duration_);
 }
 
+// Nothing within 1 m: the lookup widens the search, but the match keeps the
+// requested distance.
+TEST_F(endpoint_matching_test, match_keeps_requested_distance) {
+  using profile_t = foot<false, elevator_tracking>;
+  auto m = match_result{};
+  lookup_->match<profile_t>(profile_t::parameters{},
+                            location{{49.010100, 8.000500}, kNoLevel}, false,
+                            direction::kForward, 1.0, nullptr, m);
+  auto const v = m[match_idx_t{0U}];
+  ASSERT_FALSE(v.empty());
+  EXPECT_GT(v.dist_to_way_[0], 1.0F);
+  EXPECT_EQ(1.0F, v.max_match_distance_);
+}
+
 TEST_F(endpoint_matching_test,
        reconstructed_duration_excludes_matching_penalty) {
   auto const& w = *ways_;
@@ -151,7 +165,7 @@ TEST_F(endpoint_matching_test,
 }
 
 // The closest match 402 is on a car island {402, 403}: it does not shadow way
-// 300 in the network, but 403.
+// 300 in the network, but 403. The network has 3 ways, the island 2.
 TEST_F(endpoint_matching_test, unreachable_closest_match_uses_farther_match) {
   auto const& w = *ways_;
   auto const& l = *lookup_;
@@ -170,7 +184,9 @@ TEST_F(endpoint_matching_test, unreachable_closest_match_uses_farther_match) {
 
   auto const result =
       route(params, w, l, search_profile::kCar, from, to,
-            std::chrono::seconds{3600}, direction::kForward, 50.0);
+            std::chrono::seconds{3600}, direction::kForward, 50.0, nullptr,
+            nullptr, nullptr, routing_algorithm::kDijkstra, std::nullopt,
+            route_options{.tiny_component_ways_ = 3U});
   ASSERT_TRUE(result.has_value());
   ASSERT_FALSE(result->segments_.empty());
   ASSERT_FALSE(result->segments_.back().polyline_.empty());
