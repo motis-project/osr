@@ -366,7 +366,6 @@ struct car_parking {
                                   })) {
         car::resolve_all(w, n.n_,
                          [&](car::node const cn) { leave_car(to_node(cn)); });
-        // >>>>>>> origin/master
       }
     }
   }
