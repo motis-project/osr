@@ -1,14 +1,11 @@
 #pragma once
 
-#include <cista/containers/mmap_vec.h>
-#include <cista/containers/vecvec.h>
-#include <cista/strong.h>
 #include <cstdint>
-#include <atomic>
 #include <filesystem>
 #include <memory>
 
 #include "cista/mmap.h"
+#include "cista/strong.h"
 
 #include "osr/preprocessing/elevation/shared.h"
 #include "osr/types.h"

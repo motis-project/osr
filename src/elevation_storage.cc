@@ -1,30 +1,22 @@
 #include "osr/elevation_storage.h"
-#include <cista/containers/mmap_vec.h>
-#include <cista/mmap.h>
-#include <cmath>
 
+#include <cmath>
 #include <algorithm>
 #include <array>
-#include <execution>
-#include <filesystem>
 #include <mutex>
 #include <ranges>
 #include <string>
 #include <vector>
 
-#include "osr/types.h"
 #include "utl/enumerate.h"
 #include "utl/pairwise.h"
 #include "utl/parallel_for.h"
 #include "utl/progress_tracker.h"
 #include "utl/raii.h"
 
-#include "cista/strong.h"
-
 #include "osr/point.h"
 #include "osr/preprocessing/elevation/provider.h"
 #include "osr/preprocessing/elevation/resolution.h"
-#include "osr/preprocessing/elevation/shared.h"
 
 namespace ev = osr::preprocessing::elevation;
 namespace fs = std::filesystem;
