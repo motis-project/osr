@@ -46,6 +46,47 @@ struct connected_way_candidate {
   unsigned idx_{0U};
 };
 
+struct best_matching_candidate {
+  bool valid() const { return component_ != 0U; }
+
+  bool update_component(std::optional<std::uint32_t> const component) {
+    if (!component.has_value() || (valid() && component_ < component)) {
+      return false;
+    }
+    if (!valid() || component < component_) {
+      component_ = *component;
+      score_ = std::numeric_limits<double>::lowest();
+    }
+    return true;
+  }
+
+  void update(way_idx_t const way_idx,
+              match_result::view const& match,
+              unsigned const j,
+              double const score) {
+    if (score <= score_) {
+      return;
+    }
+    auto const& left = match.left(j);
+    auto const& right = match.right(j);
+    utl::verify(left.way_dir_ == opposite(right.way_dir_),
+                "expected opposite directions for matching nodes");
+    offset_ = {
+        .left_ = {.node_ = left.node_,
+                  .dist_ = static_cast<std::uint16_t>(left.dist_to_node_)},
+        .right_ = {.node_ = right.node_,
+                   .dist_ = static_cast<std::uint16_t>(right.dist_to_node_)},
+        .way_ = way_idx};
+    dir_ = left.way_dir_;
+    score_ = score;
+  }
+
+  offset offset_{};
+  direction dir_{};
+  double score_{std::numeric_limits<double>::lowest()};
+  std::uint32_t component_{0U};
+};
+
 // TODO: MK - Use car_parking + ::footp
 template <Profile P>
 std::optional<matching_result_t> find_closest_offset(
@@ -58,31 +99,7 @@ std::optional<matching_result_t> find_closest_offset(
   auto const params = typename P::parameters{};
   auto const& class_components = w.r_->get_class_components(cc);
 
-  auto best = std::optional<offset>{};
-  auto best_score = std::numeric_limits<double>::lowest();
-  auto best_dir = direction::kForward;
-  auto best_component = std::uint32_t{0U};
-
-  auto const update_best = [&](auto const& match, way_idx_t const way_idx,
-                               unsigned const j,
-                               std::uint32_t const way_component) {
-    auto const s = score(match.dist_to_way_[j], match.way_[j]);
-    if (s > best_score) {
-      auto const left = match.left(j);
-      auto const right = match.right(j);
-      utl::verify(left.way_dir_ == opposite(right.way_dir_),
-                  "matching nodes need to have opposite directions");
-      best = offset{
-          .left_ = {.node_ = left.node_,
-                    .dist_ = static_cast<std::uint16_t>(left.dist_to_node_)},
-          .right_ = {.node_ = right.node_,
-                     .dist_ = static_cast<std::uint16_t>(right.dist_to_node_)},
-          .way_ = way_idx};
-      best_score = s;
-      best_dir = left.way_dir_;
-      best_component = way_component;
-    }
-  };
+  auto best = best_matching_candidate{};
 
   auto matches = match_result{};
   l.match<P>(params, loc, false, dir, 250.0, nullptr, matches, std::nullopt);
@@ -92,32 +109,31 @@ std::optional<matching_result_t> find_closest_offset(
     for (auto j = 0U; j < match.size(); ++j) {
       auto const way_idx = match.way_[j];
       auto const way_component = class_components.get(way_idx);
-      if (way_component.has_value() &&
-          (best_component == 0U || way_component <= best_component)) {
-        if (best_component == 0U || way_component < best_component) {
-          // Reset score, so we always change to the larger component
-          best_score = std::numeric_limits<double>::lowest();
-        }
-        update_best(match, way_idx, j, *way_component);
+      if (best.update_component(way_component)) {
+        auto const s = score(match.dist_to_way_[j], way_idx);
+        best.update(way_idx, match, j, s);
       }
     }
   }
-  if (best.has_value()) {
-    utl::verify(best->left_.valid() || best->right_.valid(),
-                "match returned without valid nodes");
-    auto const path = l.get_node_candidate_path(
-        best->way_,
-        best->left_.valid() ? best->left_.node_ : best->right_.node_,
-        best->left_.valid() ? best_dir : opposite(best_dir), false, loc);
-    utl::verify(!path.empty(), "Path should not be empty. way: {} query: {}",
-                best->way_, loc.pos_);
-    return {{*best, point::from_latlng(path.front())}};
-  }
 
-  std::clog << fmt::format(
-      "osr: No matching way found for location {} (component_class={})\n",
-      loc.pos_, to_str(cc));
-  return std::nullopt;
+  if (best.valid()) {
+    utl::verify(best.offset_.left_.valid() || best.offset_.right_.valid(),
+                "match returned without valid nodes");
+    auto const use_left = best.offset_.left_.valid();
+    auto const path = l.get_node_candidate_path(
+        best.offset_.way_,
+        use_left ? best.offset_.left_.node_ : best.offset_.right_.node_,
+        use_left ? best.dir_ : opposite(best.dir_), false, loc);
+    utl::verify(!path.empty(), "Path should not be empty. way: {} query: {}",
+                best.offset_.way_, loc.pos_);
+    return {{std::move(best.offset_), point::from_latlng(path.front())}};
+  } else {
+
+    std::clog << fmt::format(
+        "osr: No matching way found for location {} (component_class={})\n",
+        loc.pos_, to_str(cc));
+    return std::nullopt;
+  }
 }
 
 }  // namespace
