@@ -635,6 +635,8 @@ struct car_sharing {
                                    : component_classes{component_class::kFoot};
   }
 
+  static constexpr auto kReachabilityClass = std::optional<component_class>{};
+
   static bool endpoint_way_feasible(parameters const& params,
                                     endpoint_way_query const& q) {
     return q.feasible<footp>(params.foot_) ||

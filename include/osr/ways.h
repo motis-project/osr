@@ -462,6 +462,11 @@ struct class_components {
         std::distance(begin(exception_way_), it))];
   }
 
+  bool is_connected(way_idx_t const a, way_idx_t const b) const {
+    auto const id = get(a);
+    return id.has_value() ? id == get(b) : a == b;
+  }
+
   vec_map<way_idx_t, std::uint8_t> way_component_{};
   vec<way_idx_t> exception_way_{};  // sorted
   vec<std::uint32_t> exception_component_{};  // parallel to exception_way_
