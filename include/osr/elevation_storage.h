@@ -36,8 +36,10 @@ struct elevation_storage {
   data_vec_t elevations_;
 
   struct offset_t {
-    cista::base_t<way_idx_t> const idx_ = 0;
-    std::uint8_t const n_ = 0;
+    cista::base_t<way_idx_t> idx_{0};
+    std::uint8_t n_{0};
+    elevation_monotonic_t up_{0};
+    elevation_monotonic_t down_{0};
 
     bool valid() const { return n_ != 0; }
   };

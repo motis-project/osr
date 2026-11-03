@@ -3,11 +3,14 @@
 #include <cmath>
 #include <algorithm>
 #include <array>
+#include <filesystem>
 #include <mutex>
 #include <ranges>
 #include <string>
 #include <vector>
 
+#include "osr/preprocessing/elevation/shared.h"
+#include "osr/types.h"
 #include "utl/enumerate.h"
 #include "utl/pairwise.h"
 #include "utl/parallel_for.h"
@@ -26,6 +29,7 @@ namespace osr {
 namespace elevation_files {
 constexpr auto const kDataName = "elevation_data.bin";
 constexpr auto const kIndexName = "elevation_idx.bin";
+constexpr auto const kOffsetIndexName = "elevation_offset_idx.bin";
 };  // namespace elevation_files
 
 using path_vec = std::vector<fs::path>;
@@ -58,9 +62,10 @@ cista::mmap mm(fs::path const& path, cista::mmap::protection const mode) {
 
 elevation_storage::elevation_storage(fs::path const& p,
                                      cista::mmap::protection const mode)
-    : elevations_{mm_vec<encoding>{mm(p / elevation_files::kDataName, mode)},
-                  mm_vec<cista::base_t<way_idx_t>>{
-                      mm(p / elevation_files::kIndexName, mode)}} {}
+    : elevations_{mm(p / elevation_files::kDataName, mode)},
+      offsets_{mm_vec<offset_t>{mm(p / elevation_files::kIndexName, mode)},
+               mm_vec<cista::base_t<way_idx_t>>{
+                   mm(p / elevation_files::kOffsetIndexName, mode)}} {}
 
 std::unique_ptr<elevation_storage> elevation_storage::try_open(
     fs::path const& path) {
@@ -313,7 +318,26 @@ encoding_result_t calculate_way_encodings(
 
           offsets.resize(elevations_idx);
           if (!segment_elevation.empty()) {
-            offsets.emplace_back(elevations_idx, segment_elevation.size());
+            auto& offset = offsets.emplace_back(
+                elevations_idx, segment_elevation.size(),
+                elevation_monotonic_t{0}, elevation_monotonic_t{0});
+            if (segment_elevation.size() > 1) {
+              auto prev = segment_elevation[0];
+              for (auto it = ++begin(segment_elevation);
+                   it != end(segment_elevation); ++it) {
+                if (*it < prev) {
+                  offset.down_ +=
+                      static_cast<cista::base_t<elevation_monotonic_t>>(
+                          to_idx(prev - (*it)));
+                } else {
+                  offset.up_ +=
+                      static_cast<cista::base_t<elevation_monotonic_t>>(
+                          to_idx((*it) - prev));
+                }
+
+                prev = *it;
+              }
+            }
             elevations.insert(end(elevations), begin(segment_elevation),
                               end(segment_elevation));
           }
@@ -325,8 +349,10 @@ encoding_result_t calculate_way_encodings(
           auto const lock = std::lock_guard{m};
           result.mappings_.emplace_back(way_idx,
                                         sort_idx_t{result.offsets_.size()});
-          result.elevations_.emplace_back(elevations);
+          offsets[0].idx_ = result.elevations_.size();
           result.offsets_.emplace_back(offsets);
+          result.elevations_.insert(end(result.elevations_), begin(elevations),
+                                    end(elevations));
         }
       },
       pt->update_fn());
@@ -394,76 +420,24 @@ void elevation_storage::set_elevations(
 
 std::vector<ev::elevation_meters_t> elevation_storage::get_elevations(
     way_idx_t const way, std::uint16_t const segment) const {
-  return (way < elevations_.size() && segment < elevations_[way].size())
-             ? elevations_[way][segment].decode()
-             : elevation{};
+  if (way >= elevations_.size() || segment >= offsets_[way].size()) {
+    return {};
+  }
+
+  auto const offset = offsets_[way][segment];
+  return {std::next(begin(elevations_), offset.idx_),
+          std::next(begin(elevations_), offset.idx_ + offset.n_)};
 }
 
-elevation_storage::elevation get_elevations(elevation_storage const* elevations,
-                                            way_idx_t const way,
-                                            std::uint16_t const segment) {
-  return elevations == nullptr ? elevation_storage::elevation{}
-                               : elevations->get_elevations(way, segment);
-}
+std::vector<ev::elevation_meters_t> get_elevations(
+    elevation_storage const* elevations,
+    way_idx_t const way,
+    std::uint16_t const segment) {
+  if (elevations == nullptr) {
+    return {};
+  }
 
-elevation_storage::elevation& elevation_storage::elevation::operator+=(
-    elevation const& other) {
-  up_ += to_idx(other.up_);
-  down_ += to_idx(other.down_);
-  return *this;
-}
-
-elevation_storage::elevation elevation_storage::elevation::swapped() const {
-  return {
-      .up_ = down_,
-      .down_ = up_,
-  };
-}
-
-constexpr auto const kCompressedValues = std::array<elevation_monotonic_t, 16>{
-    elevation_monotonic_t{0U},  elevation_monotonic_t{1U},
-    elevation_monotonic_t{2U},  elevation_monotonic_t{4U},
-    elevation_monotonic_t{6U},  elevation_monotonic_t{8U},
-    elevation_monotonic_t{11U}, elevation_monotonic_t{14U},
-    elevation_monotonic_t{17U}, elevation_monotonic_t{21U},
-    elevation_monotonic_t{25U}, elevation_monotonic_t{29U},
-    elevation_monotonic_t{34U}, elevation_monotonic_t{38U},
-    elevation_monotonic_t{43U}, elevation_monotonic_t{48U}};
-
-elevation_storage::encoding::coding encode(elevation_monotonic_t const e) {
-  auto const c = std::ranges::lower_bound(kCompressedValues, e);
-  return (c == end(kCompressedValues))
-             ? static_cast<elevation_storage::encoding::coding>(
-                   kCompressedValues.size() - 1)
-             : static_cast<elevation_storage::encoding::coding>(
-                   c - begin(kCompressedValues));
-}
-
-elevation_monotonic_t decode_helper(
-    elevation_storage::encoding::coding const c) {
-  assert(c < kCompressedValues.size());
-  return kCompressedValues.at(c);
-}
-
-elevation_storage::encoding::encoding(elevation const& e)
-    : start_{e.start_},
-      end_{e.end_},
-      up_{encode(e.up_)},
-      down_{encode(e.down_)} {}
-
-elevation_storage::elevation elevation_storage::encoding::decode() const {
-  return {
-      .start_{start_},
-      .end_{end_},
-      .up_ = decode_helper(up_),
-      .down_ = decode_helper(down_),
-  };
-}
-
-elevation_storage::encoding::operator bool() const {
-  return up_ != 0U || down_ != 0U ||
-         (start_ != elevation_absolute_t::invalid() &&
-          end_ != elevation_absolute_t::invalid());
+  return elevations->get_elevations(way, segment);
 }
 
 }  // namespace osr

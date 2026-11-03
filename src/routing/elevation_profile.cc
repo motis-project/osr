@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <vector>
 
+#include "osr/preprocessing/elevation/shared.h"
 #include "utl/helpers/algorithm.h"
 
 #include "cista/strong.h"
@@ -13,10 +14,13 @@
 
 namespace osr {
 
+namespace ev = preprocessing::elevation;
+
 elevation_profile::elevation_profile(ways const& w,
                                      std::span<path::segment const> segments,
                                      double resolution)
     : resolution_(resolution) {
+
   // auto const adjust_lng = [](double const x) {
   //   if (x < -180.) {
   //     return x + 360.;
@@ -28,7 +32,7 @@ elevation_profile::elevation_profile(ways const& w,
   // };
 
   auto it = utl::find_if(segments, [&](auto const& s) {
-    return s.elevation_.start_ != elevation_absolute_t::invalid();
+    return s.elevation_.start_ != ev::elevation_meters_t::invalid();
   });
   if (it == end(segments)) {
     return;
@@ -37,7 +41,7 @@ elevation_profile::elevation_profile(ways const& w,
   min_ = baseline_;
   max_ = baseline_;
 
-  auto const add = [&](node_idx_t pt, elevation_absolute_t z) {
+  auto const add = [&](node_idx_t pt, ev::elevation_meters_t z) {
     auto const pos = w.get_node_pos(pt);
 
     points_.push_back(pos);
@@ -53,33 +57,34 @@ elevation_profile::elevation_profile(ways const& w,
     dist_acc += it->dist_;
 
     if (dist_acc < resolution ||
-        it->elevation_.end_ == elevation_absolute_t::invalid()) {
+        it->elevation_.end_ == ev::elevation_meters_t::invalid()) {
       continue;
     }
 
     add(it->to_, it->elevation_.end_);
     dist_acc = 0;
   }
-  if (it->elevation_.end_ != elevation_absolute_t::invalid()) {
+  if (it->elevation_.end_ != ev::elevation_meters_t::invalid()) {
     add(it->to_, it->elevation_.end_);
   }
 }
 
-elevation_absolute_t elevation_profile::median() const {
+ev::elevation_meters_t elevation_profile::median() const {
   if (elevation_.empty()) {
-    return elevation_absolute_t::invalid();
+    return ev::elevation_meters_t::invalid();
   }
 
   if (elevation_.size() == 1) {
     return baseline_;
   }
 
-  auto sorted = std::vector<elevation_absolute_t>{elevation_};
+  auto sorted = std::vector<ev::elevation_meters_t>{elevation_};
   auto const n = sorted.size() / 2;
   std::nth_element(
       begin(sorted),
-      next(begin(sorted),
-           static_cast<std::vector<elevation_absolute_t>::difference_type>(n)),
+      next(
+          begin(sorted),
+          static_cast<std::vector<ev::elevation_meters_t>::difference_type>(n)),
       end(sorted));
 
   if (n % 2 == 0) {
