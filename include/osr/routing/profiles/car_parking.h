@@ -39,7 +39,9 @@ struct car_parking_slot {
 template <bool IsWheelchair, bool UseParking = true>
 struct car_parking {
   using footp = foot<IsWheelchair>;
+  using streetp = car;
 
+  static constexpr auto const kStreetComponentClass = component_class::kCar;
   static constexpr auto const kSwitchPenalty = cost_t{200U};
   static constexpr auto const kMaxMatchDistance = car::kMaxMatchDistance;
 
@@ -495,5 +497,8 @@ struct car_parking {
     return {n.n_, n.type_, n.lvl_, opposite(n.dir_), n.way_};
   }
 };
+
+static_assert(Profile<car_parking<false>>);
+static_assert(ParkingProfile<car_parking<false, true>>);
 
 }  // namespace osr

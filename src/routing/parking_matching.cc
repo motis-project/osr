@@ -87,7 +87,6 @@ struct best_matching_candidate {
   std::uint32_t component_{0U};
 };
 
-// TODO: MK - Use car_parking + ::footp
 template <Profile P>
 std::optional<matching_result_t> find_closest_offset(
     ways const& w,
@@ -136,12 +135,32 @@ std::optional<matching_result_t> find_closest_offset(
   }
 }
 
+double score(double const dist_to_way, bool const is_preferred) {
+  // Penalize not designated ways
+  // Add shift to find nearby preferred ways, like nearest footpath
+  // Lower penalty to not match with ways too far away
+  return -((1 + ((is_preferred ? 0.0 : 4.0) / (dist_to_way + 1.0))) *
+           (dist_to_way + 2.5));
+}
+
 }  // namespace
 
+template <ParkingProfile P>
 void connect_parking_ways(
     ways& w,
     lookup const& l,
-    vec_map<way_idx_t, way_extra_properties> const& way_extra) {
+    vec_map<way_idx_t, way_extra_properties> const& way_extra,
+    std::function<bool(way_properties const&)> const& is_street_accessible,
+    std::function<double(double, way_idx_t)> const& street_way_score) {
+  auto const is_foot_accessible = [&](way_properties const& props) {
+    return props.is_foot_accessible();
+  };
+
+  auto const foot_way_score = [&](double const dist_to_way,
+                                  way_idx_t const way_idx) -> double {
+    return score(dist_to_way, way_extra[way_idx].is_preferred_footpath());
+  };
+
   auto const get_parking_space_center = [&](way_idx_t const way_idx) {
     auto bbox = geo::box{};
     for (auto const pos : w.way_polylines_[way_idx]) {
@@ -150,32 +169,10 @@ void connect_parking_ways(
     bbox.extend(kExtensionDistance);
     return bbox.centroid();
   };
+
   auto const is_connected = [&](way_idx_t const way_idx,
                                 class_components const& components) {
     return components.get(way_idx).has_value();
-  };
-
-  auto const is_car_accessible = [&](way_properties const& props) {
-    return props.is_car_accessible();
-  };
-  auto const is_foot_accessible = [&](way_properties const& props) {
-    return props.is_foot_accessible();
-  };
-
-  auto const score = [&](double const dist_to_way, bool const is_preferred) {
-    // Penalize not designated ways
-    // Add shift to find nearby preferred ways, like nearest footpath
-    // Lower penalty to not match with ways too far away
-    return -((1 + ((is_preferred ? 0.0 : 4.0) / (dist_to_way + 1.0))) *
-             (dist_to_way + 2.5));
-  };
-  auto const car_score = [&](double const dist_to_way,
-                             way_idx_t const way_idx) -> double {
-    return score(dist_to_way, way_extra[way_idx].is_parking_aisle());
-  };
-  auto const foot_score = [&](double const dist_to_way,
-                              way_idx_t const way_idx) -> double {
-    return score(dist_to_way, way_extra[way_idx].is_preferred_footpath());
   };
 
   auto const get_closest_connected_way =
@@ -218,7 +215,7 @@ void connect_parking_ways(
 
   auto const make_connection =
       [&](geo::latlng const& center, double const approx_distance_lng_degrees,
-          geo::latlng car_way_point, geo::latlng car_connection_point,
+          geo::latlng street_way_point, geo::latlng street_connection_point,
           geo::latlng foot_connection_point,
           geo::latlng foot_way_point) -> vec<point> {
     auto const is_closer_than_center = [&](geo::latlng const& p,
@@ -237,9 +234,9 @@ void connect_parking_ways(
         last = p;
       }
     };
-    add_point(car_way_point);
-    if (is_closer_than_center(car_way_point, car_connection_point)) {
-      add_point(car_connection_point);
+    add_point(street_way_point);
+    if (is_closer_than_center(street_way_point, street_connection_point)) {
+      add_point(street_connection_point);
     }
     if (is_closer_than_center(foot_way_point, foot_connection_point)) {
       add_point(foot_connection_point);
@@ -251,10 +248,10 @@ void connect_parking_ways(
 
   w.r_->has_additional_connections_.resize(w.n_nodes());
 
-  auto const& class_component =
+  auto const& foot_components =
       w.r_->get_class_components(component_class::kFoot);
-  auto const& street_component =
-      w.r_->get_class_components(component_class::kCar);
+  auto const& street_components =
+      w.r_->get_class_components(P::kStreetComponentClass);
   for (auto i = 0U; i != w.n_ways(); ++i) {
     auto const way_idx = way_idx_t{i};
     auto const p = w.r_->way_properties_[way_idx];
@@ -262,9 +259,9 @@ void connect_parking_ways(
     if (!p.is_parking()) {
       continue;
     }
-    auto const is_car_connected = is_connected(way_idx, street_component);
-    auto const is_foot_connected = is_connected(way_idx, class_component);
-    if (is_car_connected && is_foot_connected) {
+    auto const is_street_connected = is_connected(way_idx, street_components);
+    auto const is_foot_connected = is_connected(way_idx, foot_components);
+    if (is_street_connected && is_foot_connected) {
       // Already connected => Nothing to do
       continue;
     }
@@ -275,16 +272,16 @@ void connect_parking_ways(
 
     auto const loc = location{.pos_ = center, .lvl_ = kNoLevel};
 
-    auto const car_matching =
-        is_car_connected
-            ? get_closest_connected_way(way_idx, center,
-                                        approx_distance_lng_degrees,
-                                        is_car_accessible)
-            : find_closest_offset<car>(w, l, loc, direction::kBackward,
-                                       component_class::kCar, car_score);
-    if (!car_matching.has_value()) {
+    auto const street_matching =
+        is_street_connected ? get_closest_connected_way(
+                                  way_idx, center, approx_distance_lng_degrees,
+                                  is_street_accessible)
+                            : find_closest_offset<typename P::streetp>(
+                                  w, l, loc, direction::kBackward,
+                                  P::kStreetComponentClass, street_way_score);
+    if (!street_matching.has_value()) {
       std::clog << fmt::format(
-          "osr: parking space matching failed for car offset on way {} "
+          "osr: parking space matching failed for street offset on way {} "
           "(center: {})\n",
           *w.get_osm_way(way_idx), center);
       continue;
@@ -293,8 +290,8 @@ void connect_parking_ways(
     // Assume street accessible ways are usually also foot accessible
     // => matching ways should be in the same (foot) component
     auto const is_same_foot_component =
-        class_component.get(car_matching->first.way_) ==
-        class_component.get(way_idx);
+        foot_components.get(street_matching->first.way_) ==
+        foot_components.get(way_idx);
     auto const foot_matching =
         (is_foot_connected && is_same_foot_component)
             ? get_closest_connected_way(way_idx, center,
@@ -302,7 +299,7 @@ void connect_parking_ways(
                                         is_foot_accessible)
             : find_closest_offset<foot<false>>(w, l, loc, direction::kForward,
                                                component_class::kFoot,
-                                               foot_score);
+                                               foot_way_score);
     if (!foot_matching.has_value()) {
       std::clog << fmt::format(
           "osr: parking space matching failed for foot offset on way {} "
@@ -312,28 +309,47 @@ void connect_parking_ways(
     }
 
     auto [foot_offset, foot_way_point] = *foot_matching;
-    auto [car_offset, car_way_point] = *car_matching;
+    auto [street_offset, street_way_point] = *street_matching;
     if (!foot_offset.left_.valid() && !foot_offset.right_.valid()) {
       fmt::println("Connected footpath not usable! Way: {}  at: {}",
                    foot_offset.way_, foot_way_point);
       continue;
     }
-    if (!car_offset.left_.valid() && !car_offset.right_.valid()) {
-      fmt::println("Connected carpath not usable! Way: {}  at: {}",
-                   car_offset.way_, car_way_point);
+    if (!street_offset.left_.valid() && !street_offset.right_.valid()) {
+      fmt::println("Connected street is not usable! Way: {}  at: {}",
+                   street_offset.way_, street_way_point);
       continue;
     }
 
-    auto const car_entrance = geo::approx_squared_distance_to_polyline(
-        car_way_point, w.way_polylines_[way_idx], approx_distance_lng_degrees);
-    auto const foot_entrance = geo::approx_squared_distance_to_polyline(
+    auto const street_connection_point =
+        geo::approx_squared_distance_to_polyline(street_way_point,
+                                                 w.way_polylines_[way_idx],
+                                                 approx_distance_lng_degrees);
+    auto const foot_connection_point = geo::approx_squared_distance_to_polyline(
         foot_way_point, w.way_polylines_[way_idx], approx_distance_lng_degrees);
     auto conn = make_connection(center, approx_distance_lng_degrees,
-                                car_way_point, car_entrance.best_,
-                                foot_entrance.best_, foot_way_point);
-    add_additional_connection(w, std::move(car_offset), std::move(foot_offset),
-                              std::move(conn), true);
+                                street_way_point, street_connection_point.best_,
+                                foot_connection_point.best_, foot_way_point);
+    add_additional_connection(w, std::move(street_offset),
+                              std::move(foot_offset), std::move(conn), true);
   }
+}
+
+void connect_parking_ways(
+    ways& w,
+    lookup const& l,
+    vec_map<way_idx_t, way_extra_properties> const& way_extra) {
+  auto const is_car_accessible = [&](way_properties const& props) {
+    return props.is_car_accessible();
+  };
+  auto const car_way_score = [&](double const dist_to_way,
+                                 way_idx_t const way_idx) -> double {
+    return score(dist_to_way, way_extra[way_idx].is_parking_aisle());
+  };
+
+  connect_parking_ways<car_parking<false, true>>(
+      w, l, way_extra, is_car_accessible, car_way_score);
+  // TODO: MK - Add bike_parking
 
   utl::sort(w.r_->additional_node_connections_);
   // Ensure no duplicates are stored

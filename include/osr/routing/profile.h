@@ -252,6 +252,15 @@ concept WayAwareProfile = Profile<P> &&
                             } -> std::same_as<way_idx_t>;
                           };
 
+template <typename P>
+concept ParkingProfile =
+    Profile<P> && Profile<typename P::footp> && Profile<typename P::streetp> &&
+    requires(P p) {
+      requires std::is_same_v<
+          std::remove_cv_t<decltype(P::kStreetComponentClass)>,
+          component_class>;
+    };
+
 template <typename Parameters>
 concept ProfileParameters = Profile<typename Parameters::profile_t>;
 
