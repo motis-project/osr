@@ -210,7 +210,13 @@ struct way_properties {
   constexpr bool is_elevator() const { return is_elevator_; }
   constexpr bool is_steps() const { return is_steps_; }
   constexpr bool is_ramp() const { return is_ramp_; }
-  constexpr bool is_parking() const { return is_parking_; }
+  constexpr bool is_bike_parking() const {
+    return is_parking_ && is_bike_accessible_ && !is_car_accessible_;
+  }
+  constexpr bool is_parking() const {
+    return is_parking_;
+    // return is_parking_ && is_car_accessible_;
+  }
   constexpr bool has_toll() const { return has_toll_; }
   constexpr bool is_sidewalk_separate() const { return is_sidewalk_separate_; }
   constexpr bool in_route() const { return in_route_; }

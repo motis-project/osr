@@ -69,6 +69,7 @@ private:
         case cista::hash("amenity"):
           is_parking_ |=
               (value == "parking"sv || value == "parking_entrance"sv);
+          is_bicycle_parking_ |= value == "bicycle_parking"sv;
           is_ticket_validator_ = value == "ticket_validator"sv;
           break;
         case cista::hash("building"):
@@ -443,6 +444,9 @@ public:
   // https://wiki.openstreetmap.org/wiki/Tag:amenity%3Dparking
   bool is_parking_{false};
 
+  // https://wiki.openstreetmap.org/wiki/Tag:amenity%3Dbicycle_parking
+  bool is_bicycle_parking_{false};
+
   // https://wiki.openstreetmap.org/wiki/Key:level
   bool has_level_{false};
   level_bits_t level_bits_{0U};
@@ -624,6 +628,10 @@ struct bike_profile {
 
     if (t.access_ == override::kBlacklist) {
       return override::kBlacklist;
+    }
+
+    if (t.is_bicycle_parking_) {
+      return override::kWhitelist;
     }
 
     return t.vehicle_;
