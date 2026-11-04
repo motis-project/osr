@@ -275,6 +275,7 @@ enum class search_profile : std::uint8_t {
   kHgv,
   kCarDropOff,
   kCarDropOffWheelchair,
+  kBikeParking,
   kCarParking,
   kCarParkingWheelchair,
   kBikeSharing,

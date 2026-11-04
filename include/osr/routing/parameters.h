@@ -4,6 +4,7 @@
 
 #include "osr/routing/profile.h"
 #include "osr/routing/profiles/bike.h"
+#include "osr/routing/profiles/bike_parking.h"
 #include "osr/routing/profiles/bike_sharing.h"
 #include "osr/routing/profiles/car.h"
 #include "osr/routing/profiles/car_parking.h"
@@ -24,6 +25,8 @@ using profile_parameters =
                  bike<bike_costing::kFast, kElevationNoCost>::parameters,
                  bike<bike_costing::kSafe, kElevationLowCost>::parameters,
                  bike<bike_costing::kSafe, kElevationHighCost>::parameters,
+                 bike_parking<false>::parameters,
+                 bike_parking<true>::parameters,
                  car::parameters,
                  hgv::parameters,
                  car_parking<false, false>::parameters,

@@ -13,7 +13,8 @@
 #include "osr/lookup.h"
 #include "osr/routing/additional_connection.h"
 #include "osr/routing/profile.h"
-#include "osr/routing/profiles/car.h"
+#include "osr/routing/profiles/bike_parking.h"
+#include "osr/routing/profiles/car_parking.h"
 #include "osr/routing/profiles/foot.h"
 #include "osr/types.h"
 #include "osr/ways.h"
@@ -339,6 +340,13 @@ void connect_parking_ways(
     ways& w,
     lookup const& l,
     vec_map<way_idx_t, way_extra_properties> const& way_extra) {
+  auto const is_bike_accessible = [&](way_properties const& props) {
+    return props.is_bike_accessible();
+  };
+  auto const bike_way_score = [&](double const dist_to_way,
+                                  way_idx_t const way_idx) -> double {
+    return score(dist_to_way, !w.r_->way_properties_[way_idx].is_big_street());
+  };
   auto const is_car_accessible = [&](way_properties const& props) {
     return props.is_car_accessible();
   };
@@ -347,9 +355,10 @@ void connect_parking_ways(
     return score(dist_to_way, way_extra[way_idx].is_parking_aisle());
   };
 
+  connect_parking_ways<bike_parking<true>>(w, l, way_extra, is_bike_accessible,
+                                           bike_way_score);
   connect_parking_ways<car_parking<false, true>>(
       w, l, way_extra, is_car_accessible, car_way_score);
-  // TODO: MK - Add bike_parking
 
   utl::sort(w.r_->additional_node_connections_);
   // Ensure no duplicates are stored
