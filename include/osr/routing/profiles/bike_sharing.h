@@ -164,6 +164,8 @@ struct bike_sharing {
       return type_ == node_type::kBike;
     }
 
+    constexpr bool is_rental_node() const noexcept { return is_bike_node(); }
+
     constexpr bool is_trailing_foot_node() const noexcept {
       return type_ == node_type::kTrailingFoot;
     }
