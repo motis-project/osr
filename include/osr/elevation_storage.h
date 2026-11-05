@@ -22,6 +22,12 @@ struct elevation_storage {
   using data_vec_t = mm_vec32<preprocessing::elevation::elevation_meters_t>;
 
   struct elevation {
+    elevation() = default;
+    elevation(elevation const& other)
+        : first_{other.first_},
+          n_{other.n_},
+          up_{other.up_},
+          down_{other.down_} {}
     elevation& operator+=(elevation const&);
     elevation swapped() const;
 
