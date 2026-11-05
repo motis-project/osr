@@ -119,8 +119,12 @@ elevation_profile::elevation_profile(ways const& w,
 
   auto avg = moving_average<ev::elevation_meters_t>{5};
   avg.init_from(elevation_);
-  for (auto& e : elevation_) {
-    avg.next(e);
+  for (auto i = avg.window_size_; i < elevation_.size() + avg.window_size_;
+       ++i) {
+    auto const curr = i - avg.window_size_;
+    auto const next =
+        (i < elevation_.size()) ? elevation_[i] : elevation_.back();
+    elevation_[curr] = avg.next(next);
   }
 }
 
