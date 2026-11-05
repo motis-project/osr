@@ -275,14 +275,20 @@ std::tuple<level_t, level_t, bool> get_levels(tags const& t) {
   return get_levels(t.has_level_, t.level_bits_);
 }
 
+bool is_foot_fallback(tags const& t,
+                      osm_obj_type const type,
+                      way_properties const& p) {
+  return !p.is_foot_accessible_ && p.is_bike_accessible_ &&
+         !p.has_bike_penalty_ && !p.is_railway_accessible_ &&
+         foot_profile::explicit_access_override(t, type) !=
+             override::kBlacklist;
+}
+
 way_properties get_way_properties(
     tags const& t, osm_obj_type const obj_type = osm_obj_type::kWay) {
   auto const [from, to, _] = get_levels(t);
   auto p = way_properties{};
   std::memset(&p, 0, sizeof(way_properties));
-  p.has_foot_penalty_ = is_accessible_with_penalty<foot_profile>(t, obj_type);
-  p.is_foot_accessible_ =
-      p.has_foot_penalty_ || is_accessible<foot_profile>(t, obj_type);
   p.has_bike_penalty_ = is_accessible_with_penalty<bike_profile>(t, obj_type);
   p.is_bike_accessible_ =
       p.has_bike_penalty_ || is_accessible<bike_profile>(t, obj_type);
@@ -294,6 +300,10 @@ way_properties get_way_properties(
       is_accessible_with_penalty<railway_profile>(t, obj_type);
   p.is_railway_accessible_ =
       p.has_railway_penalty_ || is_accessible<railway_profile>(t, obj_type);
+  auto const foot_trunk = is_accessible_with_penalty<foot_profile>(t, obj_type);
+  p.is_foot_accessible_ =
+      foot_trunk || is_accessible<foot_profile>(t, obj_type);
+  p.has_foot_penalty_ = foot_trunk || is_foot_fallback(t, obj_type, p);
   p.is_destination_ = t.is_destination_;
   p.is_oneway_car_ = t.oneway_;
   p.is_oneway_bike_ = t.oneway_ && !t.not_oneway_bike_;

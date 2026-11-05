@@ -149,8 +149,8 @@ TEST_F(class_components_test, components_per_class) {
 // Around the query, each pair connected outside the match radius:
 //   way 1  footway, bicycle=no   ~5.6 m north
 //   way 2  footway, bicycle=no  ~16.7 m north
-//   way 3  cycleway, foot=no     ~6.7 m south
-//   way 4  cycleway, foot=no    ~17.8 m south
+//   way 3  cycleway              ~6.7 m south
+//   way 4  cycleway             ~17.8 m south
 constexpr auto const kSharingOsm = R"(
 <osm version="0.6" generator="osr-test">
   <node id="1" lat="49.000050" lon="7.999000"/>
@@ -171,11 +171,11 @@ constexpr auto const kSharingOsm = R"(
   </way>
   <way id="3">
     <nd ref="5"/><nd ref="6"/>
-    <tag k="highway" v="cycleway"/><tag k="foot" v="no"/>
+    <tag k="highway" v="cycleway"/>
   </way>
   <way id="4">
     <nd ref="7"/><nd ref="8"/>
-    <tag k="highway" v="cycleway"/><tag k="foot" v="no"/>
+    <tag k="highway" v="cycleway"/>
   </way>
   <way id="5">
     <nd ref="2"/><nd ref="4"/>
@@ -183,7 +183,7 @@ constexpr auto const kSharingOsm = R"(
   </way>
   <way id="6">
     <nd ref="6"/><nd ref="8"/>
-    <tag k="highway" v="cycleway"/><tag k="foot" v="no"/>
+    <tag k="highway" v="cycleway"/>
   </way>
 </osm>
 )";
@@ -212,11 +212,11 @@ TEST_F(sharing_components_test,
 
 // One foot component around the query, joined by a connector ~73 m east
 // (outside the match radius):
-//   way 4  cycleway, foot=no   ~4.4 m south  penalised for foot
+//   way 4  cycleway            ~4.4 m south  penalised for foot
 //   way 1  footway             ~5.6 m north
 //   way 2  footway             ~6.1 m north  near-tie of way 1
 //   way 3  footway            ~16.7 m north
-//   way 5  cycleway, foot=no  ~16.7 m south
+//   way 5  cycleway           ~16.7 m south
 constexpr auto const kFilterRulesOsm = R"(
 <osm version="0.6" generator="osr-test">
   <node id="11" lat="49.000050" lon="7.999000"/>
@@ -243,11 +243,11 @@ constexpr auto const kFilterRulesOsm = R"(
   </way>
   <way id="4">
     <nd ref="41"/><nd ref="42"/>
-    <tag k="highway" v="cycleway"/><tag k="foot" v="no"/>
+    <tag k="highway" v="cycleway"/>
   </way>
   <way id="5">
     <nd ref="51"/><nd ref="52"/>
-    <tag k="highway" v="cycleway"/><tag k="foot" v="no"/>
+    <tag k="highway" v="cycleway"/>
   </way>
   <way id="9">
     <nd ref="52"/><nd ref="42"/><nd ref="12"/><nd ref="22"/><nd ref="32"/>
