@@ -8,6 +8,7 @@
 #include "cista/strong.h"
 
 #include "osr/point.h"
+#include "osr/preprocessing/elevation/shared.h"
 #include "utl/helpers/algorithm.h"
 
 #include "osr/elevation_storage.h"
@@ -17,6 +18,46 @@
 namespace osr {
 
 namespace ev = preprocessing::elevation;
+
+template <typename T>
+struct moving_average {
+  moving_average(std::size_t window_size, std::vector<double> weights)
+      : window_size_(window_size), weights_(weights) {
+    assert(window_size % 2 == 1);
+  }
+
+  moving_average(unsigned window_size) : window_size_(window_size) {
+    assert(window_size % 2 == 1);
+    weights_.resize(window_size, 1.0 / window_size);
+  }
+
+  void init_from(std::vector<T> const& values) {
+    auto const left = window_size_ / 2 + 1;
+    auto const right = window_size_ - left;
+    window_.resize(left, values[0]);
+    for (auto i = std::size_t{1}; i <= right; ++i) {
+      window_.push_back(values[i]);
+    }
+  }
+
+  T next(T value) {
+    window_.push_back(value);
+    if (window_.size() > window_size_) {
+      window_.erase(window_.begin());
+    }
+
+    double sum = 0.0;
+    for (auto i = std::size_t{0}; i < window_size_; ++i) {
+      sum = sum + to_idx(window_[i]) * weights_[i];
+    }
+
+    return static_cast<T>(sum);
+  }
+
+  std::size_t window_size_;
+  std::vector<T> window_{};
+  std::vector<double> weights_{};
+};
 
 elevation_profile::elevation_profile(ways const& w,
                                      std::span<path::segment const> segments) {
@@ -70,6 +111,16 @@ elevation_profile::elevation_profile(ways const& w,
       add(point::from_latlng({.lng_ = new_lng, .lat_ = new_lat}),
           *std::next(s.elevation_.first_, i));
     }
+  }
+
+  if (elevation_.size() < 5) {
+    return;
+  }
+
+  auto avg = moving_average<ev::elevation_meters_t>{5};
+  avg.init_from(elevation_);
+  for (auto& e : elevation_) {
+    avg.next(e);
   }
 }
 
