@@ -9,9 +9,7 @@
 namespace osr {
 
 struct elevation_profile {
-  elevation_profile(ways const&,
-                    std::span<path::segment const>,
-                    double resolution);
+  elevation_profile(ways const&, std::span<path::segment const>);
 
   preprocessing::elevation::elevation_meters_t median() const;
 
@@ -19,7 +17,6 @@ struct elevation_profile {
   std::vector<preprocessing::elevation::elevation_meters_t> elevation_{};
   preprocessing::elevation::elevation_meters_t baseline_;
   preprocessing::elevation::elevation_meters_t min_{0}, max_{0};
-  double resolution_;
 };
 
 }  // namespace osr

@@ -1,4 +1,5 @@
 #include "osr/routing/elevation_profile.h"
+#include <cstddef>
 
 #include <algorithm>
 #include <iterator>
@@ -18,9 +19,7 @@ namespace osr {
 namespace ev = preprocessing::elevation;
 
 elevation_profile::elevation_profile(ways const& w,
-                                     std::span<path::segment const> segments,
-                                     double resolution)
-    : resolution_(resolution) {
+                                     std::span<path::segment const> segments) {
 
   auto const adjust_lng = [](double const x) {
     if (x < -180.) {
@@ -32,14 +31,13 @@ elevation_profile::elevation_profile(ways const& w,
     }
   };
 
-  auto s = utl::find_if(segments, [&](auto const& seg) {
-    return seg.elevation_.first_ != nullptr && seg.elevation_.n_ != 0;
-  });
-  if (s == end(segments)) {
+  if (utl::find_if(segments, [&](auto const& seg) {
+        return seg.elevation_.first_ != nullptr && seg.elevation_.n_ != 0;
+      }) == end(segments)) {
     return;
   }
 
-  baseline_ = *s->elevation_.first_;
+  baseline_ = *segments[1].elevation_.first_;
   min_ = baseline_;
   max_ = baseline_;
 
@@ -51,27 +49,26 @@ elevation_profile::elevation_profile(ways const& w,
     max_ = std::max(z, max_);
   };
 
-  // TODO -> start at seg_it
-  for (; s != end(segments); s++) {
-    if (s->elevation_.n_ <= 2) {
-      add(w.get_node_pos(s->from_), *(s->elevation_.first_));
-      add(w.get_node_pos(s->to_), (s->elevation_.n_ == 1)
-                                      ? *(s->elevation_.first_)
-                                      : *std::next(s->elevation_.first_));
+  for (auto s : segments) {
+    if (s.elevation_.n_ <= 2) {
+      add(w.get_node_pos(s.from_), *s.elevation_.first_);
+      add(w.get_node_pos(s.to_), (s.elevation_.n_ == 1)
+                                     ? *s.elevation_.first_
+                                     : *std::next(s.elevation_.first_));
       continue;
     }
 
-    auto const step_dist = 1 / (s->elevation_.n_ - 1);
-    auto const from_pos = w.get_node_pos(s->from_);
-    auto const to_pos = w.get_node_pos(s->to_);
+    auto const step_dist = 1 / (s.elevation_.n_ - 1);
+    auto const from_pos = w.get_node_pos(s.from_);
+    auto const to_pos = w.get_node_pos(s.to_);
     auto const lng_dist = adjust_lng(to_pos.lng() - from_pos.lng()) * step_dist;
     auto const lat_dist = (to_pos.lat() - from_pos.lat()) * step_dist;
-    for (auto i = 1U; i < s->elevation_.n_; ++i) {
+    for (auto i = 1U; i < s.elevation_.n_; ++i) {
       auto const new_lng = from_pos.lng() + lng_dist * i;
       auto const new_lat = from_pos.lat() + lat_dist * i;
 
       add(point::from_latlng({.lng_ = new_lng, .lat_ = new_lat}),
-          *std::next(s->elevation_.first_, i));
+          *std::next(s.elevation_.first_, i));
     }
   }
 }
