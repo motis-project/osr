@@ -11,6 +11,7 @@ struct cost_policy {
 };
 
 constexpr auto const kDefaultPolicy = cost_policy{1.25, 300U};
+constexpr auto const kBikePolicy = cost_policy{1.25, 120U};
 constexpr auto const kDurationPolicy = cost_policy{1.0, 60U};
 
 template <bool Wheelchair, typename Tracking>
@@ -24,9 +25,9 @@ cost_policy policy(
     bike<Costing, Elevation, Exponent> const&,
     typename bike<Costing, Elevation, Exponent>::parameters const&) {
   if (Elevation != 0U) {
-    return {kDefaultPolicy.factor_, kDefaultPolicy.allowance_ + Elevation};
+    return {kBikePolicy.factor_, kBikePolicy.allowance_ + Elevation};
   }
-  return Costing == bike_costing::kFast ? kDurationPolicy : kDefaultPolicy;
+  return Costing == bike_costing::kFast ? kDurationPolicy : kBikePolicy;
 }
 
 template <bool Bus>

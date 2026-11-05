@@ -20,7 +20,7 @@ struct search_params {
   ProfileParameters profile_{};
   ways const* w_{nullptr};
 
-  cost_t max_{0U};  // caller clamps to max(kMinCostSettled, max)
+  cost_t max_{0U};
   duration_t max_duration_{kMaxDuration};
   direction dir_{direction::kForward};
   std::optional<routing_time_t> start_time_{};
