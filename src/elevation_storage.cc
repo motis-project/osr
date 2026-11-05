@@ -6,6 +6,7 @@
 #include <filesystem>
 #include <mutex>
 #include <ranges>
+#include <span>
 #include <string>
 #include <vector>
 
@@ -420,6 +421,31 @@ void elevation_storage::set_elevations(
   write_ordered_encodings(*this, std::move(unordered_encodings), pt);
 }
 
+constexpr auto const kCompressedValues = std::array<elevation_monotonic_t, 16>{
+    elevation_monotonic_t{0U},  elevation_monotonic_t{1U},
+    elevation_monotonic_t{2U},  elevation_monotonic_t{4U},
+    elevation_monotonic_t{6U},  elevation_monotonic_t{8U},
+    elevation_monotonic_t{11U}, elevation_monotonic_t{14U},
+    elevation_monotonic_t{17U}, elevation_monotonic_t{21U},
+    elevation_monotonic_t{25U}, elevation_monotonic_t{29U},
+    elevation_monotonic_t{34U}, elevation_monotonic_t{38U},
+    elevation_monotonic_t{43U}, elevation_monotonic_t{48U}};
+
+elevation_storage::encoding::coding encode(elevation_monotonic_t const e) {
+  auto const c = std::ranges::lower_bound(kCompressedValues, e);
+  return (c == end(kCompressedValues))
+             ? static_cast<elevation_storage::encoding::coding>(
+                   kCompressedValues.size() - 1)
+             : static_cast<elevation_storage::encoding::coding>(
+                   c - begin(kCompressedValues));
+}
+
+elevation_monotonic_t decode_helper(
+    elevation_storage::encoding::coding const c) {
+  assert(c < kCompressedValues.size());
+  return kCompressedValues.at(c);
+}
+
 elevation_storage::elevation elevation_storage::get_elevations(
     way_idx_t const way, std::uint16_t const segment) const {
   if (way >= elevations_.size() || segment >= offsets_[way].size()) {
@@ -427,7 +453,15 @@ elevation_storage::elevation elevation_storage::get_elevations(
   }
 
   auto const encoding = offsets_[way][segment];
-  return encoding.decode();
+
+  if (!encoding.valid()) {
+    return {};
+  }
+
+  return {.first_ = std::next(begin(elevations_), encoding.idx_),
+          .n_ = encoding.n_,
+          .up_ = decode_helper(encoding.up_),
+          .down_ = decode_helper(encoding.down_)};
 }
 
 elevation_storage::elevation get_elevations(elevation_storage const* elevations,
@@ -454,43 +488,9 @@ elevation_storage::elevation elevation_storage::elevation::swapped() const {
   };
 }
 
-constexpr auto const kCompressedValues = std::array<elevation_monotonic_t, 16>{
-    elevation_monotonic_t{0U},  elevation_monotonic_t{1U},
-    elevation_monotonic_t{2U},  elevation_monotonic_t{4U},
-    elevation_monotonic_t{6U},  elevation_monotonic_t{8U},
-    elevation_monotonic_t{11U}, elevation_monotonic_t{14U},
-    elevation_monotonic_t{17U}, elevation_monotonic_t{21U},
-    elevation_monotonic_t{25U}, elevation_monotonic_t{29U},
-    elevation_monotonic_t{34U}, elevation_monotonic_t{38U},
-    elevation_monotonic_t{43U}, elevation_monotonic_t{48U}};
-
-elevation_storage::encoding::coding encode(elevation_monotonic_t const e) {
-  auto const c = std::ranges::lower_bound(kCompressedValues, e);
-  return (c == end(kCompressedValues))
-             ? static_cast<elevation_storage::encoding::coding>(
-                   kCompressedValues.size() - 1)
-             : static_cast<elevation_storage::encoding::coding>(
-                   c - begin(kCompressedValues));
-}
-
-elevation_monotonic_t decode_helper(
-    elevation_storage::encoding::coding const c) {
-  assert(c < kCompressedValues.size());
-  return kCompressedValues.at(c);
-}
-
 // TODO is that needed?
-elevation_storage::encoding::encoding(elevation const& e)
-    : up_{encode(e.up_)}, down_{encode(e.down_)} {}
-
-elevation_storage::elevation elevation_storage::encoding::decode() const {
-  return {
-      .idx_ = idx_,
-      .n_ = n_,
-      .up_ = decode_helper(up_),
-      .down_ = decode_helper(down_),
-  };
-}
+// elevation_storage::encoding::encoding(elevation const& e)
+//     : up_{encode(e.up_)}, down_{encode(e.down_)} {}
 
 elevation_storage::encoding::operator bool() const {
   return valid() && (up_ != 0U || down_ != 0U);

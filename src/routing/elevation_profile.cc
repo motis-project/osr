@@ -1,12 +1,13 @@
 #include "osr/routing/elevation_profile.h"
 
 #include <algorithm>
+#include <iterator>
 #include <vector>
 
-#include "osr/preprocessing/elevation/shared.h"
-#include "utl/helpers/algorithm.h"
-
 #include "cista/strong.h"
+
+#include "osr/point.h"
+#include "utl/helpers/algorithm.h"
 
 #include "osr/elevation_storage.h"
 #include "osr/types.h"
@@ -21,29 +22,28 @@ elevation_profile::elevation_profile(ways const& w,
                                      double resolution)
     : resolution_(resolution) {
 
-  // auto const adjust_lng = [](double const x) {
-  //   if (x < -180.) {
-  //     return x + 360.;
-  //   } else if (x <= 180.) {
-  //     return x;
-  //   } else {
-  //     return x - 360.;
-  //   }
-  // };
+  auto const adjust_lng = [](double const x) {
+    if (x < -180.) {
+      return x + 360.;
+    } else if (x <= 180.) {
+      return x;
+    } else {
+      return x - 360.;
+    }
+  };
 
-  auto it = utl::find_if(segments, [&](auto const& s) {
-    return s.elevation_.start_ != ev::elevation_meters_t::invalid();
+  auto s = utl::find_if(segments, [&](auto const& seg) {
+    return seg.elevation_.first_ != nullptr && seg.elevation_.n_ != 0;
   });
-  if (it == end(segments)) {
+  if (s == end(segments)) {
     return;
   }
-  baseline_ = it->elevation_.start_;
+
+  baseline_ = *s->elevation_.first_;
   min_ = baseline_;
   max_ = baseline_;
 
-  auto const add = [&](node_idx_t pt, ev::elevation_meters_t z) {
-    auto const pos = w.get_node_pos(pt);
-
+  auto const add = [&](point const& pos, ev::elevation_meters_t z) {
     points_.push_back(pos);
     elevation_.push_back(z);
 
@@ -51,21 +51,28 @@ elevation_profile::elevation_profile(ways const& w,
     max_ = std::max(z, max_);
   };
 
-  auto dist_acc = distance_t{0};
-  add(it->from_, baseline_);
-  for (; it != prev(end(segments), 2); it++) {
-    dist_acc += it->dist_;
-
-    if (dist_acc < resolution ||
-        it->elevation_.end_ == ev::elevation_meters_t::invalid()) {
+  // TODO -> start at seg_it
+  for (; s != end(segments); s++) {
+    if (s->elevation_.n_ <= 2) {
+      add(w.get_node_pos(s->from_), *(s->elevation_.first_));
+      add(w.get_node_pos(s->to_), (s->elevation_.n_ == 1)
+                                      ? *(s->elevation_.first_)
+                                      : *std::next(s->elevation_.first_));
       continue;
     }
 
-    add(it->to_, it->elevation_.end_);
-    dist_acc = 0;
-  }
-  if (it->elevation_.end_ != ev::elevation_meters_t::invalid()) {
-    add(it->to_, it->elevation_.end_);
+    auto const step_dist = 1 / (s->elevation_.n_ - 1);
+    auto const from_pos = w.get_node_pos(s->from_);
+    auto const to_pos = w.get_node_pos(s->to_);
+    auto const lng_dist = adjust_lng(to_pos.lng() - from_pos.lng()) * step_dist;
+    auto const lat_dist = (to_pos.lat() - from_pos.lat()) * step_dist;
+    for (auto i = 1U; i < s->elevation_.n_; ++i) {
+      auto const new_lng = from_pos.lng() + lng_dist * i;
+      auto const new_lat = from_pos.lat() + lat_dist * i;
+
+      add(point::from_latlng({.lng_ = new_lng, .lat_ = new_lat}),
+          *std::next(s->elevation_.first_, i));
+    }
   }
 }
 
