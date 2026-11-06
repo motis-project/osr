@@ -2,7 +2,6 @@
 
 #include <cstdint>
 #include <filesystem>
-#include <functional>
 #include <memory>
 
 #include "cista/mmap.h"
@@ -22,16 +21,10 @@ struct elevation_storage {
   using data_vec_t = mm_vec32<preprocessing::elevation::elevation_meters_t>;
 
   struct elevation {
-    elevation() = default;
-    elevation(elevation const& other)
-        : first_{other.first_},
-          n_{other.n_},
-          up_{other.up_},
-          down_{other.down_} {}
     elevation& operator+=(elevation const&);
     elevation swapped() const;
 
-    data_vec_t::value_type const* const first_{nullptr};
+    data_vec_t::value_type const* first_{nullptr};
     std::uint8_t n_{0};
     elevation_monotonic_t up_{0};
     elevation_monotonic_t down_{0};
@@ -44,7 +37,6 @@ struct elevation_storage {
              coding up,
              coding down)
         : idx_{idx}, n_{n}, up_{up}, down_{down} {}
-    // explicit encoding(elevation const&);
     encoding() = default;
     elevation decode() const;
     explicit operator bool() const;

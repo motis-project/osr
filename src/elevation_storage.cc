@@ -10,8 +10,6 @@
 #include <string>
 #include <vector>
 
-#include "osr/preprocessing/elevation/shared.h"
-#include "osr/types.h"
 #include "utl/enumerate.h"
 #include "utl/pairwise.h"
 #include "utl/parallel_for.h"
@@ -21,6 +19,8 @@
 #include "osr/point.h"
 #include "osr/preprocessing/elevation/provider.h"
 #include "osr/preprocessing/elevation/resolution.h"
+#include "osr/preprocessing/elevation/shared.h"
+#include "osr/types.h"
 
 namespace ev = osr::preprocessing::elevation;
 namespace fs = std::filesystem;
@@ -29,7 +29,7 @@ namespace osr {
 
 namespace elevation_files {
 constexpr auto const kDataName = "elevation_data.bin";
-constexpr auto const kIndexName = "elevation_idx.bin";
+constexpr auto const kOffsetName = "elevation_offsets.bin";
 constexpr auto const kOffsetIndexName = "elevation_offset_idx.bin";
 };  // namespace elevation_files
 
@@ -64,14 +64,15 @@ cista::mmap mm(fs::path const& path, cista::mmap::protection const mode) {
 elevation_storage::elevation_storage(fs::path const& p,
                                      cista::mmap::protection const mode)
     : elevations_{mm(p / elevation_files::kDataName, mode)},
-      offsets_{mm_vec<encoding>{mm(p / elevation_files::kIndexName, mode)},
+      offsets_{mm_vec<encoding>{mm(p / elevation_files::kOffsetName, mode)},
                mm_vec<cista::base_t<way_idx_t>>{
                    mm(p / elevation_files::kOffsetIndexName, mode)}} {}
 
 std::unique_ptr<elevation_storage> elevation_storage::try_open(
     fs::path const& path) {
   for (auto const& filename :
-       {elevation_files::kDataName, elevation_files::kIndexName}) {
+       {elevation_files::kDataName, elevation_files::kOffsetName,
+        elevation_files::kOffsetIndexName}) {
     auto const full_path = path / filename;
     if (!fs::exists(full_path)) {
       std::clog << "Elevation file " << full_path << " does not exist\n";
@@ -122,11 +123,6 @@ std::vector<ev::elevation_meters_t> get_way_elevation(
   unsigned n = 2;
   elevation.push_back(a);
   step_index.push_back(0);
-
-  if (steps <= 1) {
-    // TODO
-  }
-
   elevation.push_back(b);
   step_index.push_back(steps - 1);
 
@@ -168,7 +164,7 @@ std::vector<ev::elevation_meters_t> get_way_elevation(
   auto stop = false;
   while (n <= 32) {
     stop = true;
-    for (auto s = unsigned{1}; s < steps - 1; ++s) {
+    for (auto s = 1U; s < steps - 1; ++s) {
       auto const m = get(s);
 
       if (m == ev::elevation_meters_t::invalid() ||
@@ -270,14 +266,14 @@ encoding_result_t calculate_way_encodings(
     utl::progress_tracker_ptr& pt,
     preprocessing::elevation::elevation_meters_t min_elevation,
     double min_rel_elevation) {
-  paths.reserve(paths.size() + 3U);
+  paths.reserve(paths.size() + 4U);
   auto const& mapping_path = paths.emplace_back(fs::temp_directory_path() /
                                                 "temp_osr_extract_mapping");
   auto const& encoding_data_path = paths.emplace_back(
       fs::temp_directory_path() / "temp_osr_extract_unordered_elevation_data");
-  auto const& encoding_idx_path = paths.emplace_back(
+  auto const& encoding_offset_path = paths.emplace_back(
       fs::temp_directory_path() / "temp_osr_extract_unordered_elevation_idx");
-  auto const& encoding_offset_path =
+  auto const& encoding_offset_idx_path =
       paths.emplace_back(fs::temp_directory_path() /
                          "temp_osr_extract_unordered_elevation_offset_idx");
 
@@ -288,9 +284,9 @@ encoding_result_t calculate_way_encodings(
       .offsets_ =
           mm_vecvec<sort_idx_t, elevation_storage::encoding>{
               mm_vec<cista::base_t<elevation_storage::encoding>>{
-                  mm(encoding_idx_path, kWriteMode)},
+                  mm(encoding_offset_path, kWriteMode)},
               mm_vec<cista::base_t<sort_idx_t>>{
-                  mm(encoding_offset_path, kWriteMode)}},
+                  mm(encoding_offset_idx_path, kWriteMode)}},
 
   };
   result.mappings_.reserve(ordering.size());
@@ -487,10 +483,6 @@ elevation_storage::elevation elevation_storage::elevation::swapped() const {
       .down_ = up_,
   };
 }
-
-// TODO is that needed?
-// elevation_storage::encoding::encoding(elevation const& e)
-//     : up_{encode(e.up_)}, down_{encode(e.down_)} {}
 
 elevation_storage::encoding::operator bool() const {
   return valid() && (up_ != 0U || down_ != 0U);
