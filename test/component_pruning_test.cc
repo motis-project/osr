@@ -204,7 +204,7 @@ TEST_F(component_pruning_test, connected_candidates) {
   auto const b = connected(mainland_b, mainland_a.way_);
   ASSERT_EQ(1U, b[match_idx_t{0U}].size());
   EXPECT_EQ(way(102U), b[match_idx_t{0U}].way_[0]);
-  EXPECT_EQ(mainland_b.penalty_ref_, b[match_idx_t{0U}].penalty_ref_);
+  EXPECT_EQ(mainland_b.penalty_ref_[0], b[match_idx_t{0U}].penalty_ref_[0]);
 
   auto const coordinates = std::vector<geo::latlng>{};
   auto const edges = hash_map<node_idx_t, std::vector<additional_edge>>{};
