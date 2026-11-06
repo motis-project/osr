@@ -259,8 +259,8 @@ struct bike_parking {
   static void resolve_all(ways::routing const& w, node_idx_t const n, Fn&& f) {
     footp::resolve_all(
         w, n, [&](footp::node const neighbor) { f(to_node(neighbor)); });
-    streetp::resolve_all(w, n,
-                     [&](streetp::node const neighbor) { f(to_node(neighbor)); });
+    streetp::resolve_all(
+        w, n, [&](streetp::node const neighbor) { f(to_node(neighbor)); });
   }
 
   template <direction SearchDir, bool WithBlocked, typename Fn>
@@ -305,6 +305,9 @@ struct bike_parking {
       if ((kFwd && n.is_bike_node()) || (!kFwd && n.is_foot_node())) {
         for_each_additional_connection(
             w, n.n_, SearchDir, [&](additional_connection const connection) {
+              if (!connection.is_bike_parking_) {
+                return;
+              }
               auto const& bike_side = kFwd ? connection.from_ : connection.to_;
               auto const& foot_side = kFwd ? connection.to_ : connection.from_;
               auto const target = connection.to_.node_;
@@ -314,11 +317,12 @@ struct bike_parking {
                   bike_side.dist_ + connection.connection_dist_ +
                   foot_side.dist_);
               auto const cost = clamp_add(
-                  clamp_add(streetp::way_cost(
-                                params.bike_, w, timezones, bike_side.way_,
-                                w.way_properties_[bike_side.way_],
-                                flip<SearchDir>(bike_side.dir_), bike_side.dist_,
-                                start_time, current_duration, SearchDir),
+                  clamp_add(streetp::way_cost(params.bike_, w, timezones,
+                                              bike_side.way_,
+                                              w.way_properties_[bike_side.way_],
+                                              flip<SearchDir>(bike_side.dir_),
+                                              bike_side.dist_, start_time,
+                                              current_duration, SearchDir),
                             footp::way_cost(
                                 params.foot_, w, timezones, foot_side.way_,
                                 w.way_properties_[foot_side.way_],
@@ -366,8 +370,8 @@ struct bike_parking {
                                   w, n, [&](footp::node const foot_state) {
                                     return to_node(foot_state);
                                   })) {
-        streetp::resolve_all(w, n.n_,
-                         [&](streetp::node const cn) { leave_bike(to_node(cn)); });
+        streetp::resolve_all(
+            w, n.n_, [&](streetp::node const cn) { leave_bike(to_node(cn)); });
       }
     }
   }
@@ -389,8 +393,9 @@ struct bike_parking {
                                endpoint_state_t,
                                Fn&& f) {
     if (end == route_end::kOrigin) {
-      streetp::resolve_endpoint(w, way, n, lvl, end, role, kNoEndpointState,
-                            [&](streetp::node const cn) { f(to_node(cn)); });
+      streetp::resolve_endpoint(
+          w, way, n, lvl, end, role, kNoEndpointState,
+          [&](streetp::node const cn) { f(to_node(cn)); });
     } else {
       footp::resolve_endpoint(
           w, way, n, lvl, end, role, kNoEndpointState,
@@ -453,8 +458,8 @@ struct bike_parking {
       direction const search_dir) {
     return n.is_bike_node()
                ? streetp::way_cost(params.bike_, w, timezones, way, properties,
-                               way_dir, distance, start_time, current_duration,
-                               search_dir)
+                                   way_dir, distance, start_time,
+                                   current_duration, search_dir)
                : footp::way_cost(params.foot_, w, timezones, way, properties,
                                  way_dir, distance, start_time,
                                  current_duration, search_dir);
@@ -468,7 +473,7 @@ struct bike_parking {
   static constexpr cost_and_duration endpoint_node_cost(
       parameters const& params, node const n, node_properties const props) {
     return n.is_bike_node() ? streetp::node_cost(params.bike_, props)
-                           : footp::node_cost(params.foot_, props);
+                            : footp::node_cost(params.foot_, props);
   }
 
   static constexpr component_classes endpoint_component_classes(

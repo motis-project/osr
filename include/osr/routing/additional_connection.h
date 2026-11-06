@@ -21,6 +21,9 @@ struct additional_connection {
   side to_;
   std::uint16_t connection_dist_;
   way_idx_t connection_way_;
+
+  std::uint8_t is_car_parking_ : 1 {0U};
+  std::uint8_t is_bike_parking_ : 1 {0U};
 };
 
 void for_each_connection(ways::routing const&,
@@ -35,7 +38,8 @@ way_idx_t add_additional_connection(
     ways::routing::full_additional_connection::offset&& from,
     ways::routing::full_additional_connection::offset&& to,
     vec<point>&& connection,
-    bool const is_parking);
+    bool const is_car_parking,
+    bool const is_bike_parking);
 
 geo::polyline get_additional_connection_polyline(
     lookup const&,

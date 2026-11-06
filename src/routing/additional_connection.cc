@@ -66,7 +66,8 @@ way_idx_t add_additional_connection(
     ways::routing::full_additional_connection::offset&& from,
     ways::routing::full_additional_connection::offset&& to,
     vec<point>&& connection,
-    bool const is_parking) {
+    bool const is_car_parking,
+    bool const is_bike_parking) {
   utl::verify((from.left_.node_ != node_idx_t::invalid() ||
                from.right_.node_ != node_idx_t::invalid()) &&
                   (to.left_.node_ != node_idx_t::invalid() ||
@@ -80,9 +81,7 @@ way_idx_t add_additional_connection(
       return;
     }
     w.r_->additional_node_connections_.emplace_back(node_idx, conn_idx);
-    if (is_parking) {
-      w.r_->has_additional_connections_.set(node_idx);
-    }
+    w.r_->has_additional_connections_.set(node_idx);
     if (seen_count < seen.size()) {
       seen[seen_count++] = node_idx;
     }
@@ -98,7 +97,8 @@ way_idx_t add_additional_connection(
               "Connecting path too long");
   w.r_->additional_connections_.emplace_back(
       std::move(connection), std::move(from), std::move(to),
-      static_cast<std::uint16_t>(length));
+      static_cast<std::uint16_t>(length), is_car_parking, is_bike_parking,
+      false);
   return to_way_idx(w, conn_idx);
 }
 
@@ -166,18 +166,22 @@ void for_each_additional_connection(
             for (auto const to_left : {true, false}) {
               auto const target = to_left ? to.left_ : to.right_;
               if (target.node_ != node_idx_t::invalid()) {
-                f({.from_ = {.node_ = node_idx,
-                             .way_ = from.way_,
-                             .dist_ = start.dist_,
-                             .dir_ = from_left ? direction::kForward
-                                               : direction::kBackward},
-                   .to_ = {.node_ = target.node_,
-                           .way_ = to.way_,
-                           .dist_ = target.dist_,
-                           .dir_ = to_left ? direction::kBackward
-                                           : direction::kForward},
-                   .connection_dist_ = conn.dist_,
-                   .connection_way_ = to_way_idx(r, connection_idx)});
+                f({
+                    .from_ = {.node_ = node_idx,
+                              .way_ = from.way_,
+                              .dist_ = start.dist_,
+                              .dir_ = from_left ? direction::kForward
+                                                : direction::kBackward},
+                    .to_ = {.node_ = target.node_,
+                            .way_ = to.way_,
+                            .dist_ = target.dist_,
+                            .dir_ = to_left ? direction::kBackward
+                                            : direction::kForward},
+                    .connection_dist_ = conn.dist_,
+                    .connection_way_ = to_way_idx(r, connection_idx),
+                    .is_car_parking_ = conn.is_car_parking(),
+                    .is_bike_parking_ = conn.is_bike_parking(),
+                });
               }
             }
           }

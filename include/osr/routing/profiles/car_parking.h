@@ -305,6 +305,9 @@ struct car_parking {
       if ((kFwd && n.is_car_node()) || (!kFwd && n.is_foot_node())) {
         for_each_additional_connection(
             w, n.n_, SearchDir, [&](additional_connection const connection) {
+              if (!connection.is_car_parking_) {
+                return;
+              }
               auto const& car_side = kFwd ? connection.from_ : connection.to_;
               auto const& foot_side = kFwd ? connection.to_ : connection.from_;
               auto const target = connection.to_.node_;

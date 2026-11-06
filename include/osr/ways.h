@@ -702,15 +702,20 @@ struct ways {
       };
 
       // Currently only one property exists
-      bool is_parking() const { return true; }
+      bool is_parking() const { return is_car_parking_ || is_bike_parking_; }
+      bool is_car_parking() const { return is_car_parking_; }
+      bool is_bike_parking() const { return is_bike_parking_; }
 
       vec<point> connection_;
       offset from_;
       offset to_;
       std::uint16_t dist_;
 
-      // TODO: MK - Add properties, to handle different use cases
-      // Examples: parking, forward_only, detour, ...
+      // TODO: MK - Add more properties, to handle different use cases
+      // Examples: detour, ...
+      bool is_car_parking_{false};
+      bool is_bike_parking_{false};
+      bool is_reversible_{false};
     };
 
     vec_map<node_idx_t, node_properties> node_properties_;

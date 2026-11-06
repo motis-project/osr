@@ -298,6 +298,8 @@ void connect_parking_ways(
     auto const node_idx = node_idx_t{i};
     auto const p = w.r_->node_properties_[node_idx];
 
+		// TODO Must be bike_parking
+		// ⇒ BUG: All parking nodes are allowed
     if (!p.is_parking()) {
       continue;
     }
@@ -363,8 +365,10 @@ void connect_parking_ways(
     }
 
     auto conn = make_node_connection(center, street_way_point, foot_way_point);
-    add_additional_connection(w, std::move(street_offset),
-                              std::move(foot_offset), std::move(conn), true);
+    add_additional_connection(
+        w, std::move(street_offset), std::move(foot_offset), std::move(conn),
+        P::kStreetComponentClass == component_class::kCar,
+        P::kStreetComponentClass == component_class::kBike);
   }
   // Connect to parking spaces (ways)
   for (auto i = 0U; i != w.n_ways(); ++i) {
@@ -445,8 +449,10 @@ void connect_parking_ways(
     auto conn = make_connection(center, approx_distance_lng_degrees,
                                 street_way_point, street_connection_point.best_,
                                 foot_connection_point.best_, foot_way_point);
-    add_additional_connection(w, std::move(street_offset),
-                              std::move(foot_offset), std::move(conn), true);
+    add_additional_connection(
+        w, std::move(street_offset), std::move(foot_offset), std::move(conn),
+        P::kStreetComponentClass == component_class::kCar,
+        P::kStreetComponentClass == component_class::kBike);
   }
 }
 

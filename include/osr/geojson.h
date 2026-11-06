@@ -726,7 +726,8 @@ struct geojson_writer {
                 connection.to_.right_.node_ != node_idx_t::invalid()},
                {"to.left_dist", connection.to_.left_.dist_},
                {"to.right_dist", connection.to_.right_.dist_},
-               // {"is_parking", connection.is_parking_},
+               {"is_car_parking", connection.is_car_parking()},
+               {"is_bike_parking", connection.is_bike_parking()},
            }},
           {"geometry", to_multi_line_string(geom)}});
     });
