@@ -176,7 +176,37 @@ void connect_parking_ways(
                                 class_components const& components) {
     return components.get(way_idx).has_value();
   };
+  auto const is_node_connected = [&](node_idx_t const node_idx,
+                                     class_components const& components) {
+    return utl::any_of(w.r_->node_ways_[node_idx],
+                       [&](way_idx_t const way_idx) {
+                         return components.get(way_idx).has_value();
+                       });
+  };
 
+  auto const get_connected_way =
+      [&](node_idx_t const node_idx, geo::latlng const& center,
+          std::function<bool(way_properties const&)> const& is_accessible)
+      -> std::optional<matching_result_t> {
+    for (auto const connecting_way : w.r_->node_ways_[node_idx]) {
+      auto const way_props = w.r_->way_properties_[connecting_way];
+      if (is_accessible(way_props)) {
+        return std::optional<matching_result_t>{{connected_way_candidate{
+                                                     .way_ = connecting_way,
+                                                     .node_ = node_idx,
+                                                     .dist_ = 0U,
+                                                     .idx_ = 0U,
+                                                 }
+                                                     .to_offset(),
+                                                 point::from_latlng(center)}};
+      }
+    }
+    std::clog << fmt::format(
+        "osr: No accessible way connected to way with component size > 1: "
+        "Matching failed for parking space {} at {}.\n",
+        node_idx, center);
+    return std::nullopt;
+  };
   auto const get_closest_connected_way =
       [&](way_idx_t const way_idx, geo::latlng const& center,
           double const approx_distance_lng_degrees,
@@ -215,6 +245,15 @@ void connect_parking_ways(
         {best.to_offset(), w.r_->node_positions_[best.node_]}};
   };
 
+  auto const make_node_connection =
+      [&](geo::latlng const& center, geo::latlng street_way_point,
+          geo::latlng foot_way_point) -> vec<point> {
+    auto conn = vec<point>{};
+    conn.push_back(point::from_latlng(street_way_point));
+    conn.push_back(point::from_latlng(center));
+    conn.push_back(point::from_latlng(foot_way_point));
+    return conn;
+  };
   auto const make_connection =
       [&](geo::latlng const& center, double const approx_distance_lng_degrees,
           geo::latlng street_way_point, geo::latlng street_connection_point,
@@ -254,6 +293,80 @@ void connect_parking_ways(
       w.r_->get_class_components(component_class::kFoot);
   auto const& street_components =
       w.r_->get_class_components(P::kStreetComponentClass);
+  // Connect to parking space nodes(nodes)
+  for (auto i = 0U; i != w.n_nodes(); ++i) {
+    auto const node_idx = node_idx_t{i};
+    auto const p = w.r_->node_properties_[node_idx];
+
+    if (!p.is_parking()) {
+      continue;
+    }
+    auto const is_street_connected =
+        is_node_connected(node_idx, street_components);
+    auto const is_foot_connected = is_node_connected(node_idx, foot_components);
+    if (is_street_connected && is_foot_connected) {
+      // Already connected => Nothing to do
+      continue;
+    }
+
+    // TODO: MK - Use point only?
+    auto const center = w.r_->node_positions_[node_idx].as_latlng();
+
+    auto const loc = location{.pos_ = center, .lvl_ = kNoLevel};
+
+    auto const street_matching =
+        is_street_connected
+            ? get_connected_way(node_idx, center, is_street_accessible)
+            : find_closest_offset<typename P::streetp>(
+                  w, l, loc, direction::kBackward, P::kStreetComponentClass,
+                  street_way_score);
+    if (!street_matching.has_value()) {
+      std::clog << fmt::format(
+          "osr: parking space matching failed for street offset on node {} "
+          "(center: {})\n",
+          *w.get_osm_node(node_idx), center);
+      continue;
+    }
+
+    // Assume street accessible ways are usually also foot accessible
+    // => matching ways should be in the same (foot) component
+
+    // TODO Get component during 'is_connected' std::find -> ...
+    auto const is_same_foot_component = false;
+    // foot_components.get(street_matching->first.way_) ==
+    // foot_components.get(way_idx);
+    auto const foot_matching =
+        (is_foot_connected && is_same_foot_component)
+            ? get_connected_way(node_idx, center, is_foot_accessible)
+            : find_closest_offset<foot<false>>(w, l, loc, direction::kForward,
+                                               component_class::kFoot,
+                                               foot_way_score);
+    if (!foot_matching.has_value()) {
+      std::clog << fmt::format(
+          "osr: parking space matching failed for foot offset on node {} "
+          "(center: {})\n",
+          *w.get_osm_node(node_idx), center);
+      continue;
+    }
+
+    auto [foot_offset, foot_way_point] = *foot_matching;
+    auto [street_offset, street_way_point] = *street_matching;
+    if (!foot_offset.left_.valid() && !foot_offset.right_.valid()) {
+      fmt::println("Connected footpath not usable! Way: {}  at: {}",
+                   foot_offset.way_, foot_way_point);
+      continue;
+    }
+    if (!street_offset.left_.valid() && !street_offset.right_.valid()) {
+      fmt::println("Connected street is not usable! Way: {}  at: {}",
+                   street_offset.way_, street_way_point);
+      continue;
+    }
+
+    auto conn = make_node_connection(center, street_way_point, foot_way_point);
+    add_additional_connection(w, std::move(street_offset),
+                              std::move(foot_offset), std::move(conn), true);
+  }
+  // Connect to parking spaces (ways)
   for (auto i = 0U; i != w.n_ways(); ++i) {
     auto const way_idx = way_idx_t{i};
     auto const p = w.r_->way_properties_[way_idx];

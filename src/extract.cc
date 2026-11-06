@@ -828,13 +828,16 @@ void extract(bool const with_platforms,
                 is_accessible<wheelchair_profile>(t, osm_obj_type::kNode) &&
                 is_accessible<foot_profile>(t, osm_obj_type::kNode);
             if (!accessible || t.is_elevator_ || t.is_platform() ||
-                t.is_gate()) {
+                t.is_gate() || t.is_bicycle_parking_) {
               ctx.blocking_nodes_.push_back(to_idx(to_osm_node_idx(id)));
             }
 
+            // TODO: MK - Keep isolated parking nodes for matching only
+            // For now: Ensure nodes are created
+
             // Ensure platform nodes are created
             // even if they are not part of a routable way.
-            if (pl != nullptr && t.is_platform()) {
+            if ((pl != nullptr && t.is_platform()) || t.is_bicycle_parking_) {
               ctx.blocking_nodes_.push_back(to_idx(to_osm_node_idx(id)));
             }
           }
