@@ -162,7 +162,7 @@ std::vector<ev::elevation_meters_t> get_way_elevation(
   };
 
   auto stop = false;
-  while (n <= 32) {
+  while (n < 8) {
     stop = true;
     for (auto s = 1U; s < steps - 1; ++s) {
       auto const m = get(s);
@@ -181,7 +181,7 @@ std::vector<ev::elevation_meters_t> get_way_elevation(
 
     step_index.insert(--end(step_index), steps * (n - 1) / n);
     elevation.insert(--end(elevation), get(steps * (n - 1) / n));
-    for (auto i = unsigned{1}; i < n - 1; ++i) {
+    for (auto i = 1U; i < n - 1; ++i) {
       auto const new_s = steps * i / n;
       step_index[i] = new_s;
       elevation[i] = get(new_s);
