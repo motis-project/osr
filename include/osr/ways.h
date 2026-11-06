@@ -35,6 +35,7 @@
 #include "utl/zip.h"
 
 #include "osr/conditional.h"
+#include "osr/extract/tags.h"
 #include "osr/point.h"
 #include "osr/routing/turns.h"
 #include "osr/types.h"
@@ -209,7 +210,13 @@ struct way_properties {
   constexpr bool is_elevator() const { return is_elevator_; }
   constexpr bool is_steps() const { return is_steps_; }
   constexpr bool is_ramp() const { return is_ramp_; }
-  constexpr bool is_parking() const { return is_parking_; }
+  constexpr bool is_bike_parking() const {
+    return is_parking_ && is_bike_accessible_ && !is_car_accessible_;
+  }
+  constexpr bool is_parking() const {
+    return is_parking_;
+    // return is_parking_ && is_car_accessible_;
+  }
   constexpr bool has_toll() const { return has_toll_; }
   constexpr bool is_sidewalk_separate() const { return is_sidewalk_separate_; }
   constexpr bool in_route() const { return in_route_; }
@@ -494,6 +501,14 @@ struct ways {
     return n != node_idx_t::invalid() && n >= n_nodes();
   }
 
+  bool is_regular_way(osr::way_idx_t const way) const {
+    return way != way_idx_t::invalid() && way < n_ways();
+  }
+
+  bool is_additional_way(osr::way_idx_t const way) const {
+    return way != way_idx_t::invalid() && way >= n_ways();
+  }
+
   std::optional<node_idx_t> find_node_idx(osm_node_idx_t const i) const {
     auto const it = std::lower_bound(begin(node_to_osm_), end(node_to_osm_), i,
                                      [](auto&& a, auto&& b) { return a < b; });
@@ -521,9 +536,8 @@ struct ways {
   }
 
   std::optional<std::int64_t> get_osm_way(way_idx_t const way) const {
-    return way != way_idx_t::invalid()
-               ? std::optional{decode_osm_id(way_osm_idx_[way])}
-               : std::nullopt;
+    return is_regular_way(way) ? std::optional{decode_osm_id(way_osm_idx_[way])}
+                               : std::nullopt;
   }
 
   cista::mmap mm(char const* file) {
@@ -609,6 +623,8 @@ struct ways {
     }
 
     bool is_loop(way_idx_t const w) const {
+      utl::verify(w < way_nodes_.size(), "invalid way_idx: {} > {}", w,
+                  way_nodes_.size());
       return way_nodes_[w].back() == way_nodes_[w].front();
     }
 
@@ -675,6 +691,38 @@ struct ways {
       distance_t distance_{};
     };
 
+    // TODO: MK - Make separate structure for dynamic updates
+    struct full_additional_connection {
+      struct offset {
+        struct side {
+          bool valid() const { return node_ != node_idx_t::invalid(); }
+
+          node_idx_t node_{node_idx_t::invalid()};
+          std::uint16_t dist_;
+        };
+
+        side left_;
+        side right_;
+        way_idx_t way_;
+      };
+
+      // Currently only one property exists
+      bool is_parking() const { return is_car_parking_ || is_bike_parking_; }
+      bool is_car_parking() const { return is_car_parking_; }
+      bool is_bike_parking() const { return is_bike_parking_; }
+
+      vec<point> connection_;
+      offset from_;
+      offset to_;
+      std::uint16_t dist_;
+
+      // TODO: MK - Add more properties, to handle different use cases
+      // Examples: detour, ...
+      bool is_car_parking_{false};
+      bool is_bike_parking_{false};
+      bool is_reversible_{false};
+    };
+
     vec_map<node_idx_t, node_properties> node_properties_;
     vec_map<way_idx_t, way_properties> way_properties_;
     vec<pair<way_idx_t, hgv_way_info>> way_hgv_info_;
@@ -716,6 +764,11 @@ struct ways {
     }
 
     vec<class_components> class_components_;
+
+    bitvec<node_idx_t> has_additional_connections_;
+    vec<pair<node_idx_t, connection_idx_t>> additional_node_connections_;
+    vec_map<connection_idx_t, full_additional_connection>
+        additional_connections_;
   };
 
   cista::wrapped<routing> r_;

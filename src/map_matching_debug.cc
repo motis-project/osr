@@ -1073,6 +1073,28 @@ template boost::json::object build_map_match_debug_json<hgv>(
     std::function<geo::latlng(node_idx_t)> const&);
 
 template boost::json::object
+build_map_match_debug_json<bike_parking<false>>(
+    ways const&,
+    lookup const&,
+    bike_parking<false>::parameters const&,
+    std::vector<location> const&,
+    std::vector<point_data<bike_parking<false>>> const&,
+    std::vector<segment_data<bike_parking<false>>> const&,
+    matched_route const&,
+    std::function<geo::latlng(node_idx_t)> const&);
+
+template boost::json::object
+build_map_match_debug_json<bike_parking<true>>(
+    ways const&,
+    lookup const&,
+    bike_parking<true>::parameters const&,
+    std::vector<location> const&,
+    std::vector<point_data<bike_parking<true>>> const&,
+    std::vector<segment_data<bike_parking<true>>> const&,
+    matched_route const&,
+    std::function<geo::latlng(node_idx_t)> const&);
+
+template boost::json::object
 build_map_match_debug_json<car_parking<false, false>>(
     ways const&,
     lookup const&,

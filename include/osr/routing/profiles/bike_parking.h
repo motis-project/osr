@@ -1,0 +1,509 @@
+#pragma once
+
+#include <optional>
+
+#include "boost/json.hpp"
+
+#include "osr/elevation_storage.h"
+#include "osr/routing/additional_connection.h"
+#include "osr/routing/entry_storage.h"
+#include "osr/routing/mode.h"
+#include "osr/routing/path.h"
+#include "osr/routing/profile.h"
+#include "osr/routing/profiles/bike.h"
+#include "osr/routing/profiles/foot.h"
+#include "osr/types.h"
+#include "osr/ways.h"
+#include "utl/helpers/algorithm.h"
+
+namespace osr {
+
+struct sharing_data;
+
+struct bike_parking_slot {
+  node_idx_t pred_{node_idx_t::invalid()};
+  cost_t cost_{kInfeasible};
+  level_t pred_lvl_{kNoLevel};
+  static_assert(kMaxWaysPerNode <= 32U, "pred_way_ holds a way position");
+
+  std::uint8_t pred_way_ : 5 {0U};
+  std::uint8_t pred_dir_ : 1 {0U};
+  std::uint8_t pred_type_ : 1 {0U};
+  duration_t duration_{kMaxDuration};
+
+  constexpr cost_and_duration cd() const noexcept {
+    return {.cost_ = cost_, .duration_ = duration_};
+  }
+};
+
+template <bool UseParking = true>
+struct bike_parking {
+  using footp = foot<false>;
+  using streetp = bike<bike_costing::kFast, kElevationNoCost>;
+
+  static constexpr auto const kStreetComponentClass = component_class::kBike;
+  static constexpr auto const kSwitchPenalty = cost_t{200U};
+  static constexpr auto const kMaxMatchDistance = streetp::kMaxMatchDistance;
+
+  struct key {
+    friend constexpr bool operator==(key const&, key const&) = default;
+
+    node_idx_t n_{node_idx_t::invalid()};
+    level_t lvl_{};
+  };
+
+  using hash = typename footp::hash;
+
+  enum class node_type : std::uint8_t { kBike, kFoot, kInvalid };
+
+  static constexpr std::string_view node_type_to_str(node_type const type) {
+    switch (type) {
+      case node_type::kBike: return "bike";
+      case node_type::kFoot: return "foot";
+      case node_type::kInvalid: return "invalid";
+    }
+    std::unreachable();
+  }
+
+  struct parameters {
+    using profile_t = bike_parking<UseParking>;
+    streetp::parameters bike_{};
+    footp::parameters foot_{};
+  };
+
+  struct node {
+    friend constexpr bool operator==(node const&, node const&) = default;
+
+    friend constexpr bool operator<(node const& a, node const& b) noexcept {
+      return std::tie(a.n_, a.type_, a.lvl_, a.way_, a.dir_) <
+             std::tie(b.n_, b.type_, b.lvl_, b.way_, b.dir_);
+    }
+
+    boost::json::object geojson_properties(ways const& w) const {
+      auto properties =
+          boost::json::object{{"osm_node_id", to_idx(w.node_to_osm_[n_])},
+                              {"level", lvl_.to_float()},
+                              {"type", node_type_to_str(type_)}};
+      if (is_bike_node()) {
+        properties.emplace("direction", to_str(dir_));
+      }
+      return properties;
+    }
+
+    std::ostream& print(std::ostream& out, ways const& w) const {
+      return out << "(node=" << w.node_to_osm_[n_] << ", level=" << lvl_
+                 << ", dir=" << to_str(dir_)
+                 << ", way=" << w.way_osm_idx_[w.r_->node_ways_[n_][way_]]
+                 << ", type=" << node_type_to_str(type_) << ")";
+    }
+
+    static constexpr node invalid() noexcept { return node{}; }
+    constexpr node_idx_t get_node() const noexcept { return n_; }
+    constexpr key get_key() const noexcept { return {n_, lvl_}; }
+
+    constexpr std::optional<direction> get_direction() const noexcept {
+      return dir_;
+    }
+
+    constexpr mode get_mode() const noexcept {
+      return is_bike_node() ? mode::kBike : mode::kFoot;
+    }
+
+    constexpr bool is_bike_node() const noexcept {
+      return type_ == node_type::kBike;
+    }
+
+    constexpr bool is_foot_node() const noexcept {
+      return type_ == node_type::kFoot;
+    }
+
+    constexpr bool is_invalid_node() const noexcept {
+      return type_ == node_type::kInvalid;
+    }
+
+    node_idx_t n_{node_idx_t::invalid()};
+    node_type type_{node_type::kInvalid};
+    level_t lvl_;
+    direction dir_;
+    way_pos_t way_;
+  };
+  static_assert(sizeof(std::declval<node>()) == 8);
+
+  struct label {
+    label(node const n, cost_t const c)
+        : n_{n.n_},
+          cost_{c},
+          type_{n.type_},
+          lvl_{n.lvl_},
+          dir_{n.dir_},
+          way_(n.way_) {}
+
+    constexpr node get_node() const noexcept {
+      return {
+          .n_ = n_, .type_ = type_, .lvl_ = lvl_, .dir_ = dir_, .way_ = way_};
+    }
+
+    constexpr cost_t cost() const noexcept { return cost_; }
+
+    void track(
+        label const&, ways::routing const&, way_idx_t, node_idx_t, bool) {}
+
+    node_idx_t n_;
+    cost_t cost_;
+    node_type type_;
+    level_t lvl_;
+    direction dir_;
+    way_pos_t way_;  // TODO: MK - Remove if not used
+  };
+
+  struct entry {
+    using slot_t = bike_parking_slot;
+
+    using storage_t = entry_storage<slot_t, 1U>;  // 1 extra for foot
+    static constexpr auto const kN = storage_t::kN;
+
+    std::optional<node> pred(node const n) const noexcept {
+      auto const s = s_[get_index(n)];
+      return s.pred_ == node_idx_t::invalid()
+                 ? std::nullopt
+                 : std::optional{node{.n_ = s.pred_,
+                                      .type_ = to_node_type(s.pred_type_),
+                                      .lvl_ = s.pred_lvl_,
+                                      .dir_ = to_dir(s.pred_dir_),
+                                      .way_ = s.pred_way_}};
+    }
+
+    cost_t cost(node const n) const noexcept { return s_[get_index(n)].cost_; }
+
+    duration_t duration(node const n) const noexcept {
+      return s_[get_index(n)].duration_;
+    }
+
+    bool update(label const,
+                node const n,
+                cost_and_duration const c,
+                node const pred,
+                ways::routing const& w,
+                entry_storage_arena& a) {
+      auto& s = s_.slot(get_index(n), w, n.n_, a);
+      if (c >= s.cd()) {
+        return false;
+      }
+      s.cost_ = c.cost_;
+      s.duration_ = c.duration_;
+      s.pred_ = pred.n_;
+      s.pred_lvl_ = pred.lvl_;
+      s.pred_type_ = to_bool(pred.type_);
+      s.pred_way_ = pred.way_;
+      s.pred_dir_ = to_bool(pred.dir_);
+      return true;
+    }
+
+    static constexpr std::size_t get_index(node const n) {
+      return n.is_foot_node() ? 0U : storage_t::index(n.way_, n.dir_);
+    }
+
+    static constexpr direction to_dir(bool const b) {
+      return b ? direction::kBackward : direction::kForward;
+    }
+
+    static constexpr bool to_bool(direction const d) {
+      return d == direction::kBackward;
+    }
+
+    static constexpr node_type to_node_type(bool const b) {
+      return b ? node_type::kFoot : node_type::kBike;
+    }
+
+    static constexpr bool to_bool(node_type const t) {
+      return t == node_type::kFoot;
+    }
+
+    void write(node, path&) const {}
+
+    storage_t s_;
+  };
+
+  static streetp::node to_bike(node const n) {
+    return {.n_ = n.n_, .dir_ = n.dir_};
+  }
+
+  static footp::node to_foot(node const n) {
+    return {.n_ = n.n_, .lvl_ = n.lvl_};
+  }
+
+  static node to_node(streetp::node const n) {
+    return {.n_ = n.n_,
+            .type_ = node_type::kBike,
+            .lvl_ = kNoLevel,  // bike nodes don't have levels
+            .dir_ = n.dir_,
+            .way_ = 0};
+  }
+
+  static node to_node(footp::node const n) {
+    return {.n_ = n.n_,
+            .type_ = node_type::kFoot,
+            .lvl_ = n.lvl_,
+            .dir_ = direction::kForward,
+            .way_ = 0};
+  }
+
+  static node create_node(node_idx_t const n,
+                          level_t const lvl,
+                          way_pos_t const way,
+                          direction const dir) {
+    return node{n, node_type::kInvalid, lvl, dir, way};
+  }
+
+  template <typename Fn>
+  static void resolve_all(ways::routing const& w, node_idx_t const n, Fn&& f) {
+    footp::resolve_all(
+        w, n, [&](footp::node const neighbor) { f(to_node(neighbor)); });
+    streetp::resolve_all(
+        w, n, [&](streetp::node const neighbor) { f(to_node(neighbor)); });
+  }
+
+  template <direction SearchDir, bool WithBlocked, typename Fn>
+  static void adjacent(parameters const& params,
+                       ways::routing const& w,
+                       timezone_cache_t const& timezones,
+                       node const n,
+                       duration_t const current_duration,
+                       std::optional<routing_time_t> const start_time,
+                       bitvec<node_idx_t> const* blocked,
+                       sharing_data const*,
+                       elevation_storage const* elevations,
+                       Fn&& fn) {
+    constexpr auto const kFwd = SearchDir == direction::kForward;
+    if (n.is_foot_node()) {
+      footp::template adjacent<SearchDir, WithBlocked>(
+          params.foot_, w, timezones, to_foot(n), current_duration, start_time,
+          blocked, nullptr, elevations,
+          [&](footp::node const neighbor, std::uint32_t const cost,
+              duration_t const duration, distance_t const dist,
+              way_idx_t const way, std::uint16_t const from,
+              std::uint16_t const to,
+              elevation_storage::elevation const elevation, bool) {
+            fn(to_node(neighbor), cost, duration, dist, way, from, to,
+               elevation, false);
+          });
+    } else {
+      streetp::template adjacent<SearchDir, WithBlocked>(
+          params.bike_, w, timezones, to_bike(n), current_duration, start_time,
+          blocked, nullptr, elevations,
+          [&](streetp::node const neighbor, std::uint32_t const cost,
+              duration_t const duration, distance_t const dist,
+              way_idx_t const way, std::uint16_t const from,
+              std::uint16_t const to,
+              elevation_storage::elevation const elevation, bool) {
+            fn(to_node(neighbor), cost, duration, dist, way, from, to,
+               elevation, false);
+          });
+    }
+
+    if constexpr (UseParking) {
+      if ((kFwd && n.is_bike_node()) || (!kFwd && n.is_foot_node())) {
+        for_each_additional_connection(
+            w, n.n_, SearchDir, [&](additional_connection const connection) {
+              if (!connection.is_bike_parking_) {
+                return;
+              }
+              auto const& bike_side = kFwd ? connection.from_ : connection.to_;
+              auto const& foot_side = kFwd ? connection.to_ : connection.from_;
+              auto const target = connection.to_.node_;
+              auto const lvl = w.node_properties_[target].from_level();
+
+              auto const dist = static_cast<distance_t>(
+                  bike_side.dist_ + connection.connection_dist_ +
+                  foot_side.dist_);
+              auto const cost = clamp_add(
+                  clamp_add(streetp::way_cost(params.bike_, w, timezones,
+                                              bike_side.way_,
+                                              w.way_properties_[bike_side.way_],
+                                              flip<SearchDir>(bike_side.dir_),
+                                              bike_side.dist_, start_time,
+                                              current_duration, SearchDir),
+                            footp::way_cost(
+                                params.foot_, w, timezones, foot_side.way_,
+                                w.way_properties_[foot_side.way_],
+                                flip<SearchDir>(foot_side.dir_),
+                                connection.connection_dist_ + foot_side.dist_,
+                                start_time, current_duration, SearchDir)),
+                  cost_and_duration{
+                      .cost_ = kSwitchPenalty,
+                      .duration_ = duration_from_cost(kSwitchPenalty)});
+              if (kFwd) {
+                fn({target, node_type::kFoot, lvl, direction::kForward, 0U},
+                   cost.cost_, cost.duration_, dist, connection.connection_way_,
+                   0, 0, elevation_storage::elevation{}, false);
+              } else {
+                // Route in both directions
+                fn({target, node_type::kBike, lvl,
+                    flip<SearchDir>(connection.to_.dir_), 0U},
+                   cost.cost_, cost.duration_, dist, connection.connection_way_,
+                   0, 0, elevation_storage::elevation{}, false);
+                fn({target, node_type::kBike, lvl,
+                    flip<SearchDir>(opposite(connection.to_.dir_)), 0U},
+                   cost.cost_, cost.duration_, dist, connection.connection_way_,
+                   0, 0, elevation_storage::elevation{}, false);
+              }
+            });
+      }
+    }
+
+    if (!can_leave_bike(w, n.n_)) {
+      return;
+    }
+    auto const leave_bike = [&](node const target) {
+      fn(target, kSwitchPenalty, duration_from_cost(kSwitchPenalty),
+         distance_t{0U}, way_idx_t::invalid(), 0U, 0U,
+         elevation_storage::elevation{}, false);
+    };
+    if constexpr (kFwd) {
+      if (n.is_bike_node()) {
+        footp::resolve_all(w, n.n_, [&](footp::node const foot_state) {
+          leave_bike(to_node(foot_state));
+        });
+      }
+    } else {
+      if (n.is_foot_node() && is_resolved_foot_state<footp>(
+                                  w, n, [&](footp::node const foot_state) {
+                                    return to_node(foot_state);
+                                  })) {
+        streetp::resolve_all(
+            w, n.n_, [&](streetp::node const cn) { leave_bike(to_node(cn)); });
+      }
+    }
+  }
+
+  static bool can_leave_bike(ways::routing const& w, node_idx_t const n) {
+    return !UseParking || w.node_properties_[n].is_parking() ||
+           utl::any_of(w.node_ways_[n], [&](way_idx_t const way) {
+             return w.way_properties_[way].is_parking();
+           });
+  }
+
+  template <typename Fn>
+  static void resolve_endpoint(ways::routing const& w,
+                               way_idx_t const way,
+                               node_idx_t const n,
+                               level_t const lvl,
+                               route_end const end,
+                               endpoint_role const role,
+                               endpoint_state_t,
+                               Fn&& f) {
+    if (end == route_end::kOrigin) {
+      streetp::resolve_endpoint(
+          w, way, n, lvl, end, role, kNoEndpointState,
+          [&](streetp::node const cn) { f(to_node(cn)); });
+    } else {
+      footp::resolve_endpoint(
+          w, way, n, lvl, end, role, kNoEndpointState,
+          [&](typename footp::node const fn) { f(to_node(fn)); });
+    }
+  }
+
+  static cost_and_duration endpoint_transition_cost(
+      parameters const& params,
+      ways::routing const& w,
+      timezone_cache_t const& timezones,
+      node const n,
+      way_idx_t const way,
+      direction const way_dir,
+      direction const search_dir,
+      std::optional<routing_time_t> const start_time,
+      duration_t const current_duration) {
+    return n.is_bike_node()
+               ? streetp::endpoint_transition_cost(
+                     params.bike_, w, timezones, to_bike(n), way, way_dir,
+                     search_dir, start_time, current_duration)
+               : footp::endpoint_transition_cost(
+                     params.foot_, w, timezones, to_foot(n), way, way_dir,
+                     search_dir, start_time, current_duration);
+  }
+
+  static constexpr bool endpoint_root_allowed(parameters const& params,
+                                              node const n,
+                                              direction const way_dir) {
+    return !n.is_bike_node() ||
+           streetp::endpoint_root_allowed(params.bike_, to_bike(n), way_dir);
+  }
+
+  static constexpr cost_and_duration way_cost(
+      parameters const& params,
+      ways::routing const& w,
+      timezone_cache_t const& timezones,
+      way_idx_t const way,
+      way_properties const& e,
+      direction const dir,
+      distance_t const dist,
+      std::optional<routing_time_t> const start_time,
+      duration_t const current_duration,
+      direction const search_dir) {
+    return footp::way_cost(params.foot_, w, timezones, way, e, dir, dist,
+                           start_time, current_duration, search_dir);
+  }
+
+  static constexpr cost_and_duration endpoint_way_cost(
+      parameters const& params,
+      ways::routing const& w,
+      timezone_cache_t const& timezones,
+      node const n,
+      way_idx_t const way,
+      way_properties const& properties,
+      direction const way_dir,
+      distance_t const distance,
+      std::optional<routing_time_t> const start_time,
+      duration_t const current_duration,
+      direction const search_dir) {
+    return n.is_bike_node()
+               ? streetp::way_cost(params.bike_, w, timezones, way, properties,
+                                   way_dir, distance, start_time,
+                                   current_duration, search_dir)
+               : footp::way_cost(params.foot_, w, timezones, way, properties,
+                                 way_dir, distance, start_time,
+                                 current_duration, search_dir);
+  }
+
+  static constexpr cost_and_duration node_cost(parameters const& params,
+                                               node_properties const n) {
+    return footp::node_cost(params.foot_, n);
+  }
+
+  static constexpr cost_and_duration endpoint_node_cost(
+      parameters const& params, node const n, node_properties const props) {
+    return n.is_bike_node() ? streetp::node_cost(params.bike_, props)
+                            : footp::node_cost(params.foot_, props);
+  }
+
+  static constexpr component_classes endpoint_component_classes(
+      route_end const end, endpoint_state_t) noexcept {
+    return {end == route_end::kOrigin ? component_class::kBike
+                                      : component_class::kFoot};
+  }
+
+  static bool endpoint_way_feasible(parameters const& params,
+                                    endpoint_way_query const& q) {
+    return q.end_ == route_end::kOrigin ? q.feasible<streetp>(params.bike_)
+                                        : q.feasible<footp>(params.foot_);
+  }
+
+  static constexpr double lower_bound_heuristic(parameters const& params,
+                                                double const dist) {
+    return streetp::lower_bound_heuristic(params.bike_, dist);
+  }
+
+  static constexpr double upper_bound_heuristic(parameters const& params,
+                                                double const dist) {
+    return streetp::upper_bound_heuristic(params.bike_, dist);
+  }
+
+  static constexpr node get_reverse(node n) {
+    return {n.n_, n.type_, n.lvl_, opposite(n.dir_), n.way_};
+  }
+};
+
+static_assert(Profile<bike_parking<false>>);
+static_assert(ParkingProfile<bike_parking<true>>);
+
+}  // namespace osr

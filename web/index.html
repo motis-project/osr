@@ -388,7 +388,25 @@
                 ['==', 'level', currentLevel]
             ],
             'paint': {
-                'line-color': '#42a5f5',
+                'line-color': [
+                     'match',
+                     ['get', 'mode'],
+                     'foot',
+                     'Orange',
+                     'wheelchair',
+                     'OrangeRed',
+                     'car',
+                     'MediumSlateBlue',
+                     'bike',
+                     'SpringGreen',
+                     'railway',
+                     'Crimson',
+                     'ferry',
+                     'Cyan',
+                     'parking',
+                     'DeepSkyBlue',
+                     '#42a5f5',
+                 ],
                 'line-width': 5,
                 'line-opacity': 0.8
             }
@@ -412,7 +430,7 @@
     const updateGraph = async () => {
         const removeGraph = () => {
             ['graph-geometry', 'graph-edge', 'graph-node', 'platform-node',
-                'platform-edge'].forEach((l) => {
+                'platform-edge', 'parking-edge'].forEach((l) => {
                 if (map.getLayer(l)) {
                     map.removeLayer(l);
                 }
@@ -537,6 +555,29 @@
                     'line-width': 3
                 }
             });
+            map.addLayer({
+                'id': 'parking-edge',
+                'type': 'line',
+                'source': 'graph',
+                'filter': [
+                    'all',
+                    ['==', 'type', 'parking-edge'],
+                    [
+                        'any',
+                        ['!has', 'level'],
+                        ['==', 'level', currentLevel]
+                    ]
+                ],
+                'layout': {
+                    'line-join': 'round',
+                    'line-cap': 'round',
+                },
+                'paint': {
+                    'line-color': 'yellow',
+                    'line-width': 3,
+                    'line-dasharray': [1, 5]
+                }
+            });
         }
     }
 
@@ -586,7 +627,7 @@
         updateLevels();
     });
 
-    ['graph-node', 'graph-edge', 'graph-geometry'].forEach((layer) => {
+    ['graph-node', 'graph-edge', 'graph-geometry', 'parking-edge'].forEach((layer) => {
         map.on('click', layer, (e) => {
             new maplibregl.Popup()
                 .setLngLat(e.lngLat)

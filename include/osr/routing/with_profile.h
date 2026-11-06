@@ -32,6 +32,7 @@ auto with_profile(search_profile const p, Fn&& fn) {
     case search_profile::kCarDropOff: return fn(car_parking<false, false>{});
     case search_profile::kCarDropOffWheelchair:
       return fn(car_parking<true, false>{});
+    case search_profile::kBikeParking: return fn(bike_parking<true>{});
     case search_profile::kCarParking: return fn(car_parking<false, true>{});
     case search_profile::kCarParkingWheelchair:
       return fn(car_parking<true, true>{});
