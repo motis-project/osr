@@ -60,4 +60,44 @@ TEST(class_component_storage, exception_boundary_and_serialization) {
   EXPECT_EQ(c.exception_way_.size(), c.exception_component_.size());
 }
 
+TEST(class_component_storage, sizes) {
+  auto const comp = std::array{0U, 1U, 2U, 0U, 1U, 2U, 1U, 2U, 1U, 3U, 3U};
+  auto const sizes = std::array{2U, 4U, 3U, 2U};
+  auto const c = class_components::build(comp, sizes);
+  EXPECT_EQ(4U, c.size(*c.get(way_idx_t{1U})));
+  EXPECT_EQ(3U, c.size(*c.get(way_idx_t{2U})));
+  EXPECT_EQ(2U, c.size(*c.get(way_idx_t{0U})));
+  EXPECT_EQ(2U, c.size(*c.get(way_idx_t{9U})));
+  EXPECT_EQ(3U, c.size_run_id_.size());
+  EXPECT_EQ(1U, c.first_smaller_than(5U));
+  EXPECT_EQ(2U, c.first_smaller_than(4U));
+  EXPECT_EQ(3U, c.first_smaller_than(3U));
+  EXPECT_EQ(std::numeric_limits<std::uint32_t>::max(),
+            c.first_smaller_than(2U));
+}
+
+// Ids are assigned by size: input component 299 (3 ways) gets id 1, input
+// components 0..298 (2 ways each) get ids 2..300, so ids from 255 on are
+// stored as exceptions.
+TEST(class_component_storage, sizes_of_exceptions) {
+  auto sizes = std::vector<std::uint32_t>(300U, 2U);
+  sizes[299U] = 3U;
+  auto comp = std::vector<std::uint32_t>{};
+  for (auto i = 0U; i != sizes.size(); ++i) {
+    comp.insert(end(comp), sizes[i], i);
+  }
+  auto const c = class_components::build(comp, sizes);
+
+  auto const first_way_of_largest = way_idx_t{598U};
+  EXPECT_EQ(1U, c.get(first_way_of_largest));
+  EXPECT_EQ(3U, c.size(1U));
+
+  auto const last_way_of_id_300 = way_idx_t{597U};
+  EXPECT_EQ(class_components::kException, c.way_component_[last_way_of_id_300]);
+  EXPECT_EQ(300U, c.get(last_way_of_id_300));
+  EXPECT_EQ(2U, c.size(300U));
+
+  EXPECT_EQ(2U, c.first_smaller_than(3U));
+}
+
 }  // namespace osr
