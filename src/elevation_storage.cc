@@ -96,7 +96,6 @@ std::vector<ev::elevation_meters_t> get_way_elevation(
       b == ev::elevation_meters_t::invalid()) {
     return {};
   }
-  auto elevation = std::vector<ev::elevation_meters_t>{};
 
   // TODO Approximation only for short ways
   // Use slightly larger value to not skip intermediate values
@@ -119,14 +118,19 @@ std::vector<ev::elevation_meters_t> get_way_elevation(
       std::max(std::ceil(kSafetyFactor * std::abs(lat_diff) / res.y_),
                std::ceil(kSafetyFactor * std::abs(min_lng_diff) / res.x_)));
 
+  auto const kMaxPoints = 8U;
+  auto elevation = std::vector<ev::elevation_meters_t>{};
   auto step_index = std::vector<unsigned>{};
+  step_index.reserve(kMaxPoints);
+  step_index.reserve(kMaxPoints);
+
   unsigned n = 2;
   elevation.push_back(a);
   step_index.push_back(0);
   elevation.push_back(b);
-  step_index.push_back(steps - 1);
+  step_index.push_back(steps);
 
-  // only call with at least 2 points, never with s = steps - 1
+  // only call with at least 2 points, never with s = steps
   auto const evaluate = [&](auto const& s) {
     auto const i1 = static_cast<std::size_t>(
         std::distance(begin(step_index),
@@ -162,9 +166,9 @@ std::vector<ev::elevation_meters_t> get_way_elevation(
   };
 
   auto stop = false;
-  while (n < 8) {
+  while (n < kMaxPoints) {
     stop = true;
-    for (auto s = 1U; s < steps - 1; ++s) {
+    for (auto s = 1U; s < steps; ++s) {
       auto const m = get(s);
 
       if (m == ev::elevation_meters_t::invalid() ||
@@ -181,12 +185,15 @@ std::vector<ev::elevation_meters_t> get_way_elevation(
 
     step_index.insert(--end(step_index), steps * (n - 1) / n);
     elevation.insert(--end(elevation), get(steps * (n - 1) / n));
-    for (auto i = 1U; i < n - 1; ++i) {
-      auto const new_s = steps * i / n;
-      step_index[i] = new_s;
-      elevation[i] = get(new_s);
-    }
     n++;
+    elevation.push_back(b);
+    step_index.push_back(steps);
+    auto x = steps / n;
+    for (auto i = 1U; i < n - 1; ++i) {
+      step_index[i] = x;
+      elevation[i] = get(x);
+      x += steps / n;
+    }
   }
 
   if (elevation.size() == 2 &&
