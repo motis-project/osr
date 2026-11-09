@@ -12,6 +12,7 @@
 #include <array>
 #include <filesystem>
 #include <initializer_list>
+#include <limits>
 #include <optional>
 #include <ranges>
 #include <span>
@@ -439,35 +440,87 @@ struct class_components {
   static constexpr auto kNoComponent = std::uint8_t{0U};
   static constexpr auto kException = std::uint8_t{255U};
 
-  static class_components build(std::span<std::uint32_t const>,
-                                std::span<std::uint32_t const>);
+  // Piece of a way split at impassable nodes, starting at edge `from_`. Edges
+  // count along the way's routing nodes (`way_nodes_`): edge e lies between
+  // routing node e - 1 and e, edge 0 is the geometry before the first routing
+  // node and edge n the geometry after the last one.
+  struct piece {
+    way_idx_t way_;
+    std::uint16_t from_;
+  };
 
-  // nullopt: single-way component or a way the class cannot use.
-  std::optional<std::uint32_t> get(way_idx_t const w) const {
+  static class_components build(std::span<std::uint32_t const>,
+                                std::span<std::uint32_t const>,
+                                std::span<piece const> = {});
+
+  // Component of edge `edge` of way `w` (see `piece`).
+  // nullopt: a component without an id (single way or piece) or a way the
+  // class cannot use.
+  std::optional<std::uint32_t> get(way_idx_t const w,
+                                   std::uint16_t const edge = 1U) const {
     auto const code = way_component_[w];
-    if (code == kNoComponent) {
-      return std::nullopt;
-    }
     if (code != kException) {
-      return code;
+      return code == kNoComponent ? std::nullopt
+                                  : std::optional<std::uint32_t>{code};
     }
-    auto const it =
-        std::lower_bound(begin(exception_way_), end(exception_way_), w);
-    if (it == end(exception_way_) || *it != w) {
-      return std::nullopt;
-    }
-    return exception_component_[static_cast<std::uint32_t>(
-        std::distance(begin(exception_way_), it))];
+    auto const c = exception_component_[find_exception(w, edge)];
+    return c == 0U ? std::nullopt : std::optional{c};
   }
 
-  bool is_connected(way_idx_t const a, way_idx_t const b) const {
-    auto const id = get(a);
-    return id.has_value() ? id == get(b) : a == b;
+  // The component id, or for components without an id a key that is unique
+  // per way piece and larger than all ids.
+  std::uint64_t key(way_idx_t const w, std::uint16_t const edge = 1U) const {
+    if (auto const id = get(w, edge); id.has_value()) {
+      return *id;
+    }
+    auto const from = way_component_[w] == kException
+                          ? exception_from_[find_exception(w, edge)]
+                          : 0U;
+    return (std::uint64_t{1U} << 48U) | (std::uint64_t{to_idx(w)} << 16U) |
+           from;
+  }
+
+  std::uint32_t find_exception(way_idx_t const w,
+                               std::uint16_t const edge) const {
+    auto const ways = std::ranges::equal_range(exception_way_, w);
+    auto const first = std::distance(begin(exception_way_), ways.begin());
+    auto const from = std::span{begin(exception_from_) + first, ways.size()};
+    return static_cast<std::uint32_t>(
+        first +
+        std::distance(begin(from), std::ranges::upper_bound(from, edge)) - 1);
+  }
+
+  std::uint32_t size(std::uint32_t const id) const {
+    auto const it =
+        std::upper_bound(begin(size_run_id_), end(size_run_id_), id);
+    utl::verify(it != begin(size_run_id_), "invalid component id {}", id);
+    return size_run_size_[static_cast<std::uint32_t>(
+        std::distance(begin(size_run_id_), it) - 1)];
+  }
+
+  std::uint32_t first_smaller_than(std::uint32_t const min_ways) const {
+    auto const it =
+        std::partition_point(begin(size_run_size_), end(size_run_size_),
+                             [&](auto const s) { return s >= min_ways; });
+    return it == end(size_run_size_)
+               ? std::numeric_limits<std::uint32_t>::max()
+               : size_run_id_[static_cast<std::uint32_t>(
+                     std::distance(begin(size_run_size_), it))];
   }
 
   vec_map<way_idx_t, std::uint8_t> way_component_{};
-  vec<way_idx_t> exception_way_{};  // sorted
-  vec<std::uint32_t> exception_component_{};  // parallel to exception_way_
+
+  // Ways with an id >= kException (one entry, from 0) and split ways (one
+  // entry per piece, component 0 for a piece without an id). Sorted by
+  // (way, from).
+  vec<way_idx_t> exception_way_{};
+  vec<std::uint16_t> exception_from_{};
+  vec<std::uint32_t> exception_component_{};
+
+  // Run length encoded sizes: ids from size_run_id_[i] on have
+  // size_run_size_[i] ways, until the next run.
+  vec<std::uint32_t> size_run_id_{};
+  vec<std::uint32_t> size_run_size_{};
 };
 
 struct ways {

@@ -1,7 +1,10 @@
 #pragma once
 
+#include <algorithm>
+#include <limits>
 #include <optional>
 #include <ostream>
+#include <ranges>
 #include <span>
 
 #include "cista/containers/rtree.h"
@@ -119,8 +122,11 @@ struct match_result {
     std::span<endpoint_state_t const> state_{};
     level_t lvl_{kNoLevel};
 
-    // Distance the matching penalty is measured from.
-    float penalty_ref_{0.0F};
+    // Per candidate: distance its matching penalty is measured from.
+    std::span<float const> penalty_ref_{};
+
+    // As requested: the lookup widens the search if nothing is within it.
+    float max_match_distance_{std::numeric_limits<float>::infinity()};
   };
 
   match_result() { begin_.emplace_back(way_candidate_idx_t{0U}); }
@@ -130,6 +136,7 @@ struct match_result {
     begin_.emplace_back(way_candidate_idx_t{0U});
     lvl_.clear();
     penalty_ref_.clear();
+    max_match_distance_.clear();
     dist_to_way_.clear();
     way_.clear();
     nodes_.clear();
@@ -140,9 +147,11 @@ struct match_result {
   bool empty() const { return lvl_.empty(); }
 
   // Appending a match: start() -> add()* -> finish().
-  void start(level_t const lvl) {
+  void start(
+      level_t const lvl,
+      float const max_match_distance = std::numeric_limits<float>::infinity()) {
     lvl_.emplace_back(lvl);
-    penalty_ref_.emplace_back(-1.0F);
+    max_match_distance_.emplace_back(max_match_distance);
   }
 
   void add(float const dist_to_way,
@@ -155,31 +164,30 @@ struct match_result {
     state_.emplace_back(state);
   }
 
+  // Candidates without a penalty reference measure from the closest one.
   void finish() {
     auto const from = begin_.back();
-    auto& ref = penalty_ref_.back();
-    if (ref < 0.0F) {
-      ref = to_idx(from) == way_.size() ? 0.0F : dist_to_way_[from];
-    }
+    penalty_ref_.resize(
+        way_.size(), to_idx(from) == way_.size() ? 0.0F : dist_to_way_[from]);
     begin_.emplace_back(way_candidate_idx_t{(way_.size())});
   }
 
   // Appends a copy of one bucket of `src`. Used to gather a scattered subset
   // of precomputed matches into the contiguous form `route()` consumes.
   void append(match_result const& src, match_idx_t const i) {
-    append(src[i], [](way_idx_t) { return true; });
+    append(src[i], [](std::size_t) { return true; });
   }
 
-  // Appends the candidates of `v` on ways `keep` accepts.
+  // Appends the candidates `j` of `v` that `keep(j)` accepts.
   template <typename Fn>
   void append(view const& v, Fn&& keep) {
-    start(v.lvl_);
+    start(v.lvl_, v.max_match_distance_);
     for (auto j = std::size_t{0U}; j != v.size(); ++j) {
-      if (keep(v.way_[j])) {
+      if (keep(j)) {
         add(v.dist_to_way_[j], v.way_[j], v.nodes_[j], v.state_[j]);
+        penalty_ref_.emplace_back(v.penalty_ref_[j]);
       }
     }
-    penalty_ref_.back() = v.penalty_ref_;
     finish();
   }
 
@@ -201,13 +209,15 @@ struct match_result {
                 .nodes_ = at(nodes_),
                 .state_ = at(state_),
                 .lvl_ = lvl_[i],
-                .penalty_ref_ = penalty_ref_[i]};
+                .penalty_ref_ = at(penalty_ref_),
+                .max_match_distance_ = max_match_distance_[i]};
   }
 
   vec_map<match_idx_t, way_candidate_idx_t> begin_{};  // size() + 1 entries
   vec_map<match_idx_t, level_t> lvl_{};
-  vec_map<match_idx_t, float> penalty_ref_{};
+  vec_map<match_idx_t, float> max_match_distance_{};
   vec_map<way_candidate_idx_t, float> dist_to_way_{};
+  vec_map<way_candidate_idx_t, float> penalty_ref_{};
   vec_map<way_candidate_idx_t, way_idx_t> way_{};
   vec_map<way_candidate_idx_t, nodes> nodes_{};
   vec_map<way_candidate_idx_t, endpoint_state_t> state_{};
@@ -215,6 +225,32 @@ struct match_result {
 
 // One match, borrowed from the `match_result` that owns it.
 using match_view_t = match_result::view;
+
+// Edge of the way a candidate lies on (see `class_components::piece`). A node
+// can occur several times in a way's node list, so the (left, right) pair
+// identifies the edge.
+inline std::uint16_t candidate_edge(ways const& w,
+                                    way_idx_t const way,
+                                    match_result::nodes const& n) {
+  auto const nodes = w.r_->way_nodes_[way];
+  auto const pos = [&](auto const it) {
+    return static_cast<std::uint16_t>(std::distance(begin(nodes), it));
+  };
+  auto const l = n.left_.node_;
+  auto const r = n.right_.node_;
+  if (n.left_.valid() && n.right_.valid()) {
+    return static_cast<std::uint16_t>(
+        pos(std::ranges::adjacent_find(
+            nodes, [&](node_idx_t const a,
+                       node_idx_t const b) { return a == l && b == r; })) +
+        1U);
+  }
+  // With one neighbour only, the candidate lies after the last or before the
+  // first routing node of the way.
+  return n.left_.valid()
+             ? pos(std::ranges::find(std::views::reverse(nodes), l).base())
+             : pos(utl::find(nodes, r));
+}
 
 struct lookup {
   lookup(ways const&, std::filesystem::path, cista::mmap::protection);
@@ -263,7 +299,7 @@ struct lookup {
                       std::optional<routing_time_t> const start_time,
                       std::span<raw_way_candidate const> raw_way_candidates,
                       match_result& out) const {
-    out.start(query.lvl_);
+    out.start(query.lvl_, static_cast<float>(max_match_distance));
     auto doublings = 0U;
     auto const added =
         append_raw<P>(params, query, reverse, search_dir, max_match_distance,
@@ -410,7 +446,7 @@ struct lookup {
       bitvec<node_idx_t> const* blocked,
       match_result& out,
       std::optional<routing_time_t> const start_time = std::nullopt) const {
-    out.start(query.lvl_);
+    out.start(query.lvl_, static_cast<float>(max_match_distance));
     auto found =
         get_way_candidates<P>(params, query, reverse, search_dir,
                               max_match_distance, blocked, out, start_time);

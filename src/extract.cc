@@ -968,7 +968,6 @@ void extract(bool const with_platforms,
   w.sync();
 
   w.connect_ways();
-  w.build_class_components();
 
   auto r = std::vector<resolved_restriction>{};
   {  // Pass 3: node properties + turn restrictions.
@@ -1089,6 +1088,9 @@ void extract(bool const with_platforms,
   }
 
   w.add_restriction(r);
+
+  // Needs the node properties: impassable nodes split components.
+  w.build_class_components();
 
   utl::sort(w.r_->multi_level_elevators_);
 
