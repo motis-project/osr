@@ -14,9 +14,10 @@ osr::timezone_cache_t const& timezone_cache() {
 }
 
 osr::cost_t cost(const osr::way_properties p) {
+  // 120 m at 1.2 m/s: 100 s
   return osr::foot<false>::way_cost(
              {}, osr::ways::routing{}, timezone_cache(),
-             osr::way_idx_t::invalid(), p, osr::direction::kForward, 1,
+             osr::way_idx_t::invalid(), p, osr::direction::kForward, 120,
              std::nullopt, osr::duration_t{0}, osr::direction::kForward)
       .cost_;
 }
@@ -136,36 +137,47 @@ TEST(way_cost_foot, combinations) {
                                   .is_bike_accessible_ = false,
                                   .is_sidewalk_separate_ = true,
                               }));
-  EXPECT_EQ(91, cost({
-                    .is_foot_accessible_ = false,
-                    .is_bike_accessible_ = true,
-                    .is_sidewalk_separate_ = false,
-                }));
-  EXPECT_EQ(136, cost({
+
+  // bike way without foot access: explicitly forbidden (foot=no) or walkable
+  // at a higher cost
+  EXPECT_EQ(osr::kInfeasible, cost({
+                                  .is_foot_accessible_ = false,
+                                  .is_bike_accessible_ = true,
+                              }));
+  EXPECT_EQ(150, cost({
+                     .is_foot_accessible_ = false,
+                     .is_bike_accessible_ = true,
+                     .has_foot_penalty_ = true,
+                 }));
+  EXPECT_EQ(180, cost({
                      .is_foot_accessible_ = false,
                      .is_bike_accessible_ = true,
                      .is_sidewalk_separate_ = true,
+                     .has_foot_penalty_ = true,
                  }));
-  EXPECT_EQ(1, cost({
-                   .is_foot_accessible_ = true,
-                   .is_bike_accessible_ = false,
-                   .is_sidewalk_separate_ = false,
-               }));
-  EXPECT_EQ(46, cost({
-                    .is_foot_accessible_ = true,
-                    .is_bike_accessible_ = false,
-                    .is_sidewalk_separate_ = true,
-                }));
-  EXPECT_EQ(1, cost({
-                   .is_foot_accessible_ = true,
-                   .is_bike_accessible_ = true,
-                   .is_sidewalk_separate_ = false,
-               }));
-  EXPECT_EQ(46, cost({
-                    .is_foot_accessible_ = true,
-                    .is_bike_accessible_ = true,
-                    .is_sidewalk_separate_ = true,
-                }));
+
+  EXPECT_EQ(100, cost({
+                     .is_foot_accessible_ = true,
+                     .is_bike_accessible_ = false,
+                     .is_sidewalk_separate_ = false,
+                 }));
+  EXPECT_EQ(100, cost({
+                     .is_foot_accessible_ = true,
+                     .is_bike_accessible_ = true,
+                     .is_sidewalk_separate_ = false,
+                 }));
+
+  // trunk: factor 2 above 50 km/h
+  EXPECT_EQ(100, cost({
+                     .is_foot_accessible_ = true,
+                     .speed_limit_ = osr::speed_limit::kmh_50,
+                     .has_foot_penalty_ = true,
+                 }));
+  EXPECT_EQ(200, cost({
+                     .is_foot_accessible_ = true,
+                     .speed_limit_ = osr::speed_limit::kmh_80,
+                     .has_foot_penalty_ = true,
+                 }));
 
   // railway tracks must never be walkable, even if bike-accessible
   EXPECT_EQ(osr::kInfeasible, cost({
@@ -179,6 +191,22 @@ TEST(way_cost_foot, combinations) {
                                   .is_railway_accessible_ = true,
                                   .has_railway_penalty_ = true,
                               }));
+}
+
+TEST(node_cost_foot, gate) {
+  auto const node_cost = [](osr::node_properties const n) {
+    return osr::foot<false>::node_cost({}, n);
+  };
+  EXPECT_EQ(0U, node_cost({.is_foot_accessible_ = true}).cost_);
+  EXPECT_EQ(30U,
+            node_cost({.is_foot_accessible_ = true, .has_barrier_cost_ = true})
+                .cost_);
+  EXPECT_EQ(0U,
+            node_cost({.is_foot_accessible_ = true, .has_barrier_cost_ = true})
+                .duration_.count());
+  EXPECT_EQ(600U,
+            node_cost({.is_foot_accessible_ = false, .has_barrier_cost_ = true})
+                .cost_);
 }
 
 TEST(way_cost_hgv, hgv_access_values_change_cost) {
