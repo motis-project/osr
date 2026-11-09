@@ -170,6 +170,9 @@ concept Profile =
       {
         P::endpoint_component_classes(end, state)
       } -> std::same_as<component_classes>;
+      {
+        P::kReachabilityClass
+      } -> std::convertible_to<std::optional<component_class>>;
     } &&
     requires(typename P::parameters const& params,
              typename P::node const node,
