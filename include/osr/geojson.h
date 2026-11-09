@@ -79,7 +79,6 @@ inline boost::json::object to_featurecollection_value(
                                      : 0U},
                   {"cost", s.cost_},
                   {"distance", s.dist_},
-                  // TODO: MK - Remove mode or update all tests
                   {"mode", to_str(s.mode_)}},
              },
              {"geometry", to_line_string(s.polyline_)}};
