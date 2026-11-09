@@ -906,6 +906,9 @@ std::vector<std::optional<path>> route(
   auto const& to_match = selected.has_value() ? selected->to_ : all_to_match;
 
   auto const* components = reachability_components<P>(w, sharing);
+  auto const from_component_keys =
+      components == nullptr ? std::vector<std::uint64_t>{}
+                            : component_keys(*components, w, from_match);
   auto const profile_limit = cost_search_limit(params, max_duration);
   auto const from_penalty = max_matching_penalty(from_match);
   auto const destination_limits = utl::to_vec(
@@ -914,14 +917,14 @@ std::vector<std::optional<path>> route(
       [&](match_idx_t::value_t const i) {
         auto const to_i = to_match[match_idx_t{i}];
         if (components != nullptr &&
-            !is_connected(*components, from_match, to_i)) {
+            !shares_component(*components, w, to_i, from_component_keys)) {
           return cost_t{0U};
         }
         return endpoint_cost_limit(profile_limit, from_penalty,
                                    max_matching_penalty(to_i));
       });
   auto const from_connected_m =
-      connected_candidates<P>(w, sharing, from_match, to_match.way_);
+      connected_candidates<P>(w, sharing, from_match, to_match);
   auto const from_connected = from_connected_m[match_idx_t{0U}];
   auto const max = std::ranges::max(destination_limits);
   d.reset({.profile_ = params,
@@ -1131,9 +1134,9 @@ std::optional<path> route_astar(profile_parameters const& params,
         cost_search_limit(params, duration_limit),
         max_matching_penalty(from_match), max_matching_penalty(to_match));
     auto const from_connected_m =
-        connected_candidates<P>(w, sharing, from_match, to_match.way_);
+        connected_candidates<P>(w, sharing, from_match, to_match);
     auto const to_connected_m =
-        connected_candidates<P>(w, sharing, to_match, from_match.way_);
+        connected_candidates<P>(w, sharing, to_match, from_match);
     auto const from_connected = from_connected_m[match_idx_t{0U}];
     auto const to_connected = to_connected_m[match_idx_t{0U}];
     if (from_connected.empty() || to_connected.empty()) {
@@ -1224,9 +1227,9 @@ std::optional<path> route(profile_parameters const& params,
         cost_search_limit(params, duration_limit),
         max_matching_penalty(from_match), max_matching_penalty(to_match));
     auto const from_connected_m =
-        connected_candidates<P>(w, sharing, from_match, to_match.way_);
+        connected_candidates<P>(w, sharing, from_match, to_match);
     auto const to_connected_m =
-        connected_candidates<P>(w, sharing, to_match, from_match.way_);
+        connected_candidates<P>(w, sharing, to_match, from_match);
     auto const from_connected = from_connected_m[match_idx_t{0U}];
     auto const to_connected = to_connected_m[match_idx_t{0U}];
     if (from_connected.empty() || to_connected.empty()) {

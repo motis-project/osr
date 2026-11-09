@@ -1,8 +1,10 @@
 #pragma once
 
+#include <algorithm>
 #include <limits>
 #include <optional>
 #include <ostream>
+#include <ranges>
 #include <span>
 
 #include "cista/containers/rtree.h"
@@ -173,15 +175,15 @@ struct match_result {
   // Appends a copy of one bucket of `src`. Used to gather a scattered subset
   // of precomputed matches into the contiguous form `route()` consumes.
   void append(match_result const& src, match_idx_t const i) {
-    append(src[i], [](way_idx_t) { return true; });
+    append(src[i], [](std::size_t) { return true; });
   }
 
-  // Appends the candidates of `v` on ways `keep` accepts.
+  // Appends the candidates `j` of `v` that `keep(j)` accepts.
   template <typename Fn>
   void append(view const& v, Fn&& keep) {
     start(v.lvl_, v.max_match_distance_);
     for (auto j = std::size_t{0U}; j != v.size(); ++j) {
-      if (keep(v.way_[j])) {
+      if (keep(j)) {
         add(v.dist_to_way_[j], v.way_[j], v.nodes_[j], v.state_[j]);
         penalty_ref_.emplace_back(v.penalty_ref_[j]);
       }
@@ -223,6 +225,32 @@ struct match_result {
 
 // One match, borrowed from the `match_result` that owns it.
 using match_view_t = match_result::view;
+
+// Edge of the way a candidate lies on (see `class_components::piece`). A node
+// can occur several times in a way's node list, so the (left, right) pair
+// identifies the edge.
+inline std::uint16_t candidate_edge(ways const& w,
+                                    way_idx_t const way,
+                                    match_result::nodes const& n) {
+  auto const nodes = w.r_->way_nodes_[way];
+  auto const pos = [&](auto const it) {
+    return static_cast<std::uint16_t>(std::distance(begin(nodes), it));
+  };
+  auto const l = n.left_.node_;
+  auto const r = n.right_.node_;
+  if (n.left_.valid() && n.right_.valid()) {
+    return static_cast<std::uint16_t>(
+        pos(std::ranges::adjacent_find(
+            nodes, [&](node_idx_t const a,
+                       node_idx_t const b) { return a == l && b == r; })) +
+        1U);
+  }
+  // With one neighbour only, the candidate lies after the last or before the
+  // first routing node of the way.
+  return n.left_.valid()
+             ? pos(std::ranges::find(std::views::reverse(nodes), l).base())
+             : pos(utl::find(nodes, r));
+}
 
 struct lookup {
   lookup(ways const&, std::filesystem::path, cista::mmap::protection);

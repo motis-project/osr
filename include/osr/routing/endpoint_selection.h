@@ -50,12 +50,14 @@ bool for_each_component(ways const& w,
                         route_end const end,
                         Fn&& fn) {
   auto const classes = P::endpoint_component_classes(end, m.state_[i]);
-  auto const& props = w.r_->way_properties_[m.way_[i]];
+  auto const way = m.way_[i];
+  auto const& props = w.r_->way_properties_[way];
+  auto const edge = candidate_edge(w, way, m.nodes_[i]);
   auto any = false;
   for (auto const c : kAllComponentClasses) {
     if (classes.contains(c) && is_accessible(c, props)) {
       any = true;
-      fn(c, w.r_->get_class_components(c).key(m.way_[i]));
+      fn(c, w.r_->get_class_components(c).key(way, edge));
     }
   }
   return any;

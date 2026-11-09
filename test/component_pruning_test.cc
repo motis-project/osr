@@ -160,19 +160,17 @@ TEST_F(component_pruning_test, single_way_component_has_no_id) {
                   .has_value());
 }
 
-TEST_F(component_pruning_test, is_connected) {
+TEST_F(component_pruning_test, component_keys) {
   auto const& car = w_->r_->get_class_components(component_class::kCar);
-  EXPECT_TRUE(car.is_connected(way(100U), way(102U)));
-  EXPECT_FALSE(car.is_connected(way(100U), way(200U)));
-  EXPECT_TRUE(car.is_connected(way(300U), way(300U)));
-  EXPECT_FALSE(car.is_connected(way(300U), way(100U)));
-  EXPECT_FALSE(car.is_connected(way(100U), way(300U)));
-  EXPECT_FALSE(car.is_connected(way(300U), way(301U)));
+  EXPECT_EQ(car.key(way(100U)), car.key(way(102U)));
+  EXPECT_NE(car.key(way(100U)), car.key(way(200U)));
+  EXPECT_NE(car.key(way(300U)), car.key(way(100U)));
+  EXPECT_NE(car.key(way(300U)), car.key(way(301U)));
 
   auto const& foot = w_->r_->get_class_components(component_class::kFoot);
-  EXPECT_TRUE(foot.is_connected(way(300U), way(301U)));
-  EXPECT_TRUE(foot.is_connected(way(301U), way(302U)));
-  EXPECT_FALSE(foot.is_connected(way(300U), way(100U)));
+  EXPECT_EQ(foot.key(way(300U)), foot.key(way(301U)));
+  EXPECT_EQ(foot.key(way(301U)), foot.key(way(302U)));
+  EXPECT_NE(foot.key(way(300U)), foot.key(way(100U)));
 }
 
 TEST_F(component_pruning_test, connected_candidates) {
@@ -188,20 +186,19 @@ TEST_F(component_pruning_test, connected_candidates) {
   EXPECT_EQ(way(102U), mainland_b.way_[0]);
   EXPECT_EQ(way(400U), mainland_b.way_[1]);
 
-  auto const connected = [](match_view_t const& m,
-                            std::span<way_idx_t const> other_ways,
+  auto const connected = [](match_view_t const& m, match_view_t const& other,
                             sharing_data const* sharing = nullptr) {
-    return connected_candidates<P>(*w_, sharing, m, other_ways);
+    return connected_candidates<P>(*w_, sharing, m, other);
   };
 
-  EXPECT_TRUE(connected(mainland_a, island.way_)[match_idx_t{0U}].empty());
-  EXPECT_TRUE(connected(island, mainland_a.way_)[match_idx_t{0U}].empty());
+  EXPECT_TRUE(connected(mainland_a, island)[match_idx_t{0U}].empty());
+  EXPECT_TRUE(connected(island, mainland_a)[match_idx_t{0U}].empty());
 
-  auto const a = connected(mainland_a, mainland_b.way_);
+  auto const a = connected(mainland_a, mainland_b);
   ASSERT_EQ(1U, a[match_idx_t{0U}].size());
   EXPECT_EQ(way(100U), a[match_idx_t{0U}].way_[0]);
 
-  auto const b = connected(mainland_b, mainland_a.way_);
+  auto const b = connected(mainland_b, mainland_a);
   ASSERT_EQ(1U, b[match_idx_t{0U}].size());
   EXPECT_EQ(way(102U), b[match_idx_t{0U}].way_[0]);
   EXPECT_EQ(mainland_b.penalty_ref_[0], b[match_idx_t{0U}].penalty_ref_[0]);
@@ -210,9 +207,8 @@ TEST_F(component_pruning_test, connected_candidates) {
   auto const edges = hash_map<node_idx_t, std::vector<additional_edge>>{};
   auto const sharing = sharing_data{.additional_node_coordinates_ = coordinates,
                                     .additional_edges_ = edges};
-  EXPECT_EQ(
-      mainland_b.size(),
-      connected(mainland_b, island.way_, &sharing)[match_idx_t{0U}].size());
+  EXPECT_EQ(mainland_b.size(),
+            connected(mainland_b, island, &sharing)[match_idx_t{0U}].size());
 }
 
 TEST_F(component_pruning_test, routes_only_within_components) {

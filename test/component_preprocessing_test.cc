@@ -7,6 +7,10 @@
 
 namespace osr {
 
+constexpr auto const kPassable = node_properties{.is_foot_accessible_ = true,
+                                                 .is_bike_accessible_ = true,
+                                                 .is_car_accessible_ = true};
+
 TEST(component_preprocessing, loops_accessibility_and_islands) {
   auto r = ways::routing{};
   auto const way_nodes = std::vector<std::vector<std::uint32_t>>{
@@ -29,6 +33,7 @@ TEST(component_preprocessing, loops_accessibility_and_islands) {
   for (auto const& ways : node_ways) {
     r.node_ways_.emplace_back(ways);
   }
+  r.node_properties_.resize(node_ways.size(), kPassable);
   auto const expected =
       std::array{std::array{1U, 1U, 0U, 0U, 2U, 2U, 0U, 0U, 3U, 3U},
                  std::array{1U, 1U, 0U, 0U, 0U, 0U, 0U, 0U, 0U, 0U},
@@ -62,6 +67,7 @@ TEST(component_preprocessing, reverse_order_chain) {
   for (auto const& nodes : way_nodes) {
     r.way_nodes_.emplace_back(nodes);
   }
+  r.node_properties_.resize(kWays - 1U, kPassable);
   auto const c = compute_class_components(r, component_class::kCar);
   for (auto i = 0U; i != kWays; ++i) {
     EXPECT_EQ(c.get(way_idx_t{i}), 1U);

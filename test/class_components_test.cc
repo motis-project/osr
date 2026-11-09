@@ -1,9 +1,11 @@
 #include "gtest/gtest.h"
 
 #include <filesystem>
+#include <limits>
 #include <string_view>
 #include <vector>
 
+#include "utl/helpers/algorithm.h"
 #include "utl/to_vec.h"
 
 #include "osr/extract/extract.h"
@@ -11,6 +13,7 @@
 #include "osr/routing/profiles/bike_sharing.h"
 #include "osr/routing/profiles/car.h"
 #include "osr/routing/profiles/foot.h"
+#include "osr/routing/reachability.h"
 #include "osr/ways.h"
 
 #include "xml_to_pbf.h"
@@ -40,10 +43,14 @@ struct match_fixture : ::testing::Test {
     fs::remove_all(dir_, ec);
   }
 
+  way_idx_t way(std::int64_t const osm) const {
+    return *w_->find_way(osm_way_idx_t{static_cast<std::uint64_t>(osm)});
+  }
+
   std::optional<std::uint32_t> component(component_class const c,
-                                         std::int64_t const osm) const {
-    return w_->r_->get_class_components(c).get(
-        *w_->find_way(osm_way_idx_t{static_cast<std::uint64_t>(osm)}));
+                                         std::int64_t const osm,
+                                         std::uint16_t const edge = 1U) const {
+    return w_->r_->get_class_components(c).get(way(osm), edge);
   }
 
   template <Profile P = foot<false>>
@@ -493,6 +500,253 @@ TEST_F(tie_tolerance_test, tolerance_grows_with_the_distance) {
   // 53 m / 58 m: within 25 % of 53 m, both are kept.
   EXPECT_EQ((std::vector<std::int64_t>{1, 2}),
             matched_ways(location{{49.000480, 8.001000}, kNoLevel}, 150.0));
+}
+
+// Way 500 (way nodes 31, 33, 34, 35) has a wall at 33: edge 1 lies before it,
+// edges 2 and 3 after it. Way 600 (way nodes 41, 42, 43) has a bollard at 42.
+// The closed way 700 (way nodes 51, 52, 51) has a wall at 52, but both pieces
+// meet at 51. Way 800 (way nodes 81, 82, 83, 82, 85) and the dead end 900 (way
+// nodes 91, 92, 92) pass a node twice. The detached footway 1000 (way nodes
+// 102, 103, 104) has a wall at 103 between two bollards.
+constexpr auto const kBarrierOsm = R"(
+<osm version="0.6" generator="osr-test">
+  <node id="31" lat="49.020000" lon="8.000000"/>
+  <node id="32" lat="49.020000" lon="8.001000"/>
+  <node id="33" lat="49.020000" lon="8.002000">
+    <tag k="barrier" v="wall"/>
+  </node>
+  <node id="34" lat="49.020000" lon="8.003000"/>
+  <node id="35" lat="49.020000" lon="8.004000"/>
+  <node id="36" lat="49.021000" lon="8.000000"/>
+  <node id="37" lat="49.021000" lon="8.004000"/>
+  <node id="38" lat="49.021000" lon="8.003000"/>
+  <node id="41" lat="49.030000" lon="8.000000"/>
+  <node id="42" lat="49.030000" lon="8.001000">
+    <tag k="barrier" v="bollard"/>
+  </node>
+  <node id="43" lat="49.030000" lon="8.002000"/>
+  <node id="44" lat="49.031000" lon="8.000000"/>
+  <node id="45" lat="49.031000" lon="8.002000"/>
+  <node id="51" lat="49.040000" lon="8.000000"/>
+  <node id="52" lat="49.040000" lon="8.001000">
+    <tag k="barrier" v="wall"/>
+  </node>
+  <node id="53" lat="49.041000" lon="8.001000"/>
+  <node id="54" lat="49.041000" lon="8.000000"/>
+  <node id="55" lat="49.040000" lon="7.999000"/>
+  <node id="80" lat="49.049000" lon="8.000000"/>
+  <node id="81" lat="49.050000" lon="8.000000"/>
+  <node id="82" lat="49.050000" lon="8.001000"/>
+  <node id="83" lat="49.050500" lon="8.001500">
+    <tag k="barrier" v="wall"/>
+  </node>
+  <node id="84" lat="49.050500" lon="8.000500"/>
+  <node id="85" lat="49.050000" lon="8.003000"/>
+  <node id="86" lat="49.049000" lon="8.003000"/>
+  <node id="90" lat="49.059000" lon="8.000000"/>
+  <node id="91" lat="49.060000" lon="8.000000"/>
+  <node id="92" lat="49.060000" lon="8.001000"/>
+  <node id="93" lat="49.060500" lon="8.001500"/>
+  <node id="94" lat="49.060500" lon="8.000500"/>
+  <node id="95" lat="49.060000" lon="8.003000"/>
+  <node id="101" lat="49.070000" lon="8.000000"/>
+  <node id="102" lat="49.070000" lon="8.001000">
+    <tag k="barrier" v="bollard"/>
+  </node>
+  <node id="103" lat="49.070000" lon="8.002000">
+    <tag k="barrier" v="wall"/>
+  </node>
+  <node id="104" lat="49.070000" lon="8.003000">
+    <tag k="barrier" v="bollard"/>
+  </node>
+  <node id="105" lat="49.070000" lon="8.004000"/>
+  <way id="500">
+    <nd ref="31"/><nd ref="32"/><nd ref="33"/><nd ref="34"/><nd ref="35"/>
+    <tag k="highway" v="residential"/>
+  </way>
+  <way id="510">
+    <nd ref="36"/><nd ref="31"/>
+    <tag k="highway" v="residential"/>
+  </way>
+  <way id="520">
+    <nd ref="35"/><nd ref="37"/>
+    <tag k="highway" v="residential"/>
+  </way>
+  <way id="530">
+    <nd ref="34"/><nd ref="38"/>
+    <tag k="highway" v="residential"/>
+  </way>
+  <way id="600">
+    <nd ref="41"/><nd ref="42"/><nd ref="43"/>
+    <tag k="highway" v="residential"/>
+  </way>
+  <way id="610">
+    <nd ref="44"/><nd ref="41"/>
+    <tag k="highway" v="residential"/>
+  </way>
+  <way id="620">
+    <nd ref="43"/><nd ref="45"/>
+    <tag k="highway" v="residential"/>
+  </way>
+  <way id="700">
+    <nd ref="51"/><nd ref="52"/><nd ref="53"/><nd ref="54"/><nd ref="51"/>
+    <tag k="highway" v="residential"/>
+  </way>
+  <way id="710">
+    <nd ref="55"/><nd ref="51"/>
+    <tag k="highway" v="residential"/>
+  </way>
+  <way id="800">
+    <nd ref="81"/><nd ref="82"/><nd ref="83"/><nd ref="84"/><nd ref="82"/>
+    <nd ref="85"/>
+    <tag k="highway" v="residential"/>
+  </way>
+  <way id="810">
+    <nd ref="80"/><nd ref="81"/>
+    <tag k="highway" v="residential"/>
+  </way>
+  <way id="820">
+    <nd ref="85"/><nd ref="86"/>
+    <tag k="highway" v="residential"/>
+  </way>
+  <way id="900">
+    <nd ref="91"/><nd ref="92"/><nd ref="93"/><nd ref="94"/><nd ref="92"/>
+    <nd ref="95"/>
+    <tag k="highway" v="residential"/>
+  </way>
+  <way id="910">
+    <nd ref="90"/><nd ref="91"/>
+    <tag k="highway" v="residential"/>
+  </way>
+  <way id="1000">
+    <nd ref="101"/><nd ref="102"/><nd ref="103"/><nd ref="104"/><nd ref="105"/>
+    <tag k="highway" v="footway"/>
+  </way>
+</osm>
+)";
+
+struct barrier_split_test : match_fixture {
+  void SetUp() override { load("osr-barrier-split", kBarrierOsm); }
+
+  // Edge of the candidate on way `osm` matched at `pos`.
+  std::uint16_t edge_at(std::int64_t const osm, geo::latlng const& pos) {
+    auto const m = match(location{pos, kNoLevel});
+    auto const it = utl::find(m.way_, way(osm));
+    EXPECT_NE(it, end(m.way_));
+    return it == end(m.way_)
+               ? std::uint16_t{0U}
+               : candidate_edge(*w_, *it,
+                                m.nodes_[static_cast<std::size_t>(
+                                    std::distance(begin(m.way_), it))]);
+  }
+};
+
+TEST_F(barrier_split_test, impassable_node_splits_way) {
+  for (auto const c : kAllComponentClasses) {
+    SCOPED_TRACE(static_cast<int>(c));
+    auto const before = component(c, 500, 1U);
+    auto const after = component(c, 500, 2U);
+    ASSERT_TRUE(before.has_value());
+    ASSERT_TRUE(after.has_value());
+    EXPECT_NE(*before, *after);
+    EXPECT_EQ(before, component(c, 510));
+    EXPECT_EQ(after, component(c, 500, 3U));
+    EXPECT_EQ(after, component(c, 520));
+    EXPECT_EQ(after, component(c, 530));
+  }
+}
+
+TEST_F(barrier_split_test, split_depends_on_class) {
+  // The bollard blocks cars only.
+  auto const foot = component(component_class::kFoot, 600, 1U);
+  ASSERT_TRUE(foot.has_value());
+  EXPECT_EQ(foot, component(component_class::kFoot, 600, 2U));
+  EXPECT_EQ(foot, component(component_class::kFoot, 610));
+  EXPECT_EQ(foot, component(component_class::kFoot, 620));
+
+  auto const car_before = component(component_class::kCar, 600, 1U);
+  auto const car_after = component(component_class::kCar, 600, 2U);
+  ASSERT_TRUE(car_before.has_value());
+  ASSERT_TRUE(car_after.has_value());
+  EXPECT_NE(*car_before, *car_after);
+  EXPECT_EQ(car_before, component(component_class::kCar, 610));
+  EXPECT_EQ(car_after, component(component_class::kCar, 620));
+}
+
+TEST_F(barrier_split_test, closed_way_pieces_meet_at_closing_node) {
+  for (auto const c : kAllComponentClasses) {
+    SCOPED_TRACE(static_cast<int>(c));
+    auto const first = component(c, 700, 1U);
+    ASSERT_TRUE(first.has_value());
+    EXPECT_EQ(first, component(c, 700, 2U));
+    EXPECT_EQ(first, component(c, 710));
+  }
+}
+
+TEST_F(barrier_split_test, single_pieces_have_distinct_keys) {
+  auto const& foot = w_->r_->get_class_components(component_class::kFoot);
+  auto const w = way(1000);
+  // Each side of the wall is a component of its own, without an id.
+  EXPECT_FALSE(foot.get(w, 1U).has_value());
+  EXPECT_FALSE(foot.get(w, 2U).has_value());
+  EXPECT_NE(foot.key(w, 1U), foot.key(w, 2U));
+  EXPECT_EQ(foot.key(w, 0U), foot.key(w, 1U));
+  EXPECT_EQ(foot.key(w, 2U), foot.key(w, 3U));
+  // Single-way keys come after all ids.
+  EXPECT_GT(foot.key(w, 1U), std::numeric_limits<std::uint32_t>::max());
+}
+
+TEST_F(barrier_split_test, split_way_counts_once_per_component) {
+  for (auto const c : kAllComponentClasses) {
+    SCOPED_TRACE(static_cast<int>(c));
+    auto const& cc = w_->r_->get_class_components(c);
+    // 500 + 510 before the wall, 500 + 520 + 530 after it.
+    EXPECT_EQ(2U, cc.size(*component(c, 500, 1U)));
+    EXPECT_EQ(3U, cc.size(*component(c, 500, 2U)));
+    // Both pieces of 700 lie in the component of 700 + 710.
+    EXPECT_EQ(2U, cc.size(*component(c, 700, 1U)));
+  }
+}
+
+TEST_F(barrier_split_test, candidate_edge_selects_piece) {
+  EXPECT_EQ(1U, edge_at(500, {49.020050, 8.001000}));
+  EXPECT_EQ(2U, edge_at(500, {49.020050, 8.002500}));
+  EXPECT_EQ(3U, edge_at(500, {49.020050, 8.003500}));
+}
+
+TEST_F(barrier_split_test, candidate_edge_with_repeated_node) {
+  // Edge 4 (second 82 to 85), not edge 2 after the first 82.
+  EXPECT_EQ(4U, edge_at(800, {49.049950, 8.002000}));
+  // After the last routing node (the second 92): no right node.
+  EXPECT_EQ(3U, edge_at(900, {49.059950, 8.002000}));
+}
+
+TEST_F(barrier_split_test, pruning_respects_pieces) {
+  using P = foot<false>;
+  auto const match_at = [&](geo::latlng const& pos, match_result& out) {
+    l_->match<P>({}, location{pos, kNoLevel}, true, direction::kForward, 50.0,
+                 nullptr, out);
+    return out[match_idx_t{0U}];
+  };
+  auto before_m = match_result{};
+  auto after_m = match_result{};
+  auto after2_m = match_result{};
+  auto const before = match_at({49.020050, 8.001000}, before_m);
+  auto const after = match_at({49.020050, 8.003500}, after_m);
+  auto const after2 = match_at({49.020050, 8.002500}, after2_m);
+  ASSERT_NE(utl::find(before.way_, way(500)), end(before.way_));
+  ASSERT_NE(utl::find(after.way_, way(500)), end(after.way_));
+
+  // Same way, but on both sides of the wall.
+  EXPECT_TRUE(
+      connected_candidates<P>(*w_, nullptr, before, after)[match_idx_t{0U}]
+          .empty());
+  EXPECT_TRUE(
+      connected_candidates<P>(*w_, nullptr, after, before)[match_idx_t{0U}]
+          .empty());
+  EXPECT_FALSE(
+      connected_candidates<P>(*w_, nullptr, after, after2)[match_idx_t{0U}]
+          .empty());
 }
 
 }  // namespace osr

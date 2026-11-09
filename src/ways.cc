@@ -3,11 +3,13 @@
 #include <algorithm>
 #include <limits>
 #include <numeric>
+#include <span>
 #include <thread>
 #include <tuple>
 
 #include "date/tz.h"
 
+#include "utl/helpers/algorithm.h"
 #include "utl/parallel_for.h"
 #include "utl/to_vec.h"
 #include "utl/verify.h"
@@ -65,22 +67,78 @@ std::uint32_t find_component_root(std::vector<std::uint32_t>& parent,
   return way;
 }
 
-std::vector<std::uint32_t> build_component_forest(ways::routing const& r,
-                                                  component_class const cls) {
+bool is_impassable(ways::routing const& r,
+                   component_class const cls,
+                   node_idx_t const n) {
+  auto const p = r.node_properties_[n];
+  switch (cls) {
+    case component_class::kFoot:
+      return !p.is_walk_accessible() && !p.has_barrier_cost();
+    case component_class::kBike:
+      return !p.is_bike_accessible() && !p.has_barrier_cost();
+    case component_class::kCar: return !p.is_car_accessible();
+  }
+  return false;
+}
+
+// Union-find elements: one per way (its first piece), then one per further
+// piece of a way split at impassable nodes (appended to `pieces`).
+std::vector<std::uint32_t> build_component_forest(
+    ways::routing const& r,
+    component_class const cls,
+    std::vector<class_components::piece>& pieces) {
+  auto const n_ways = static_cast<std::uint32_t>(r.way_properties_.size());
+  auto first_piece = std::vector<std::uint32_t>(n_ways, kNoComponent);
+  for (auto i = 0U; i != n_ways; ++i) {
+    auto const way = way_idx_t{i};
+    if (!is_accessible(cls, r.way_properties_[way])) {
+      continue;
+    }
+    auto const nodes = r.way_nodes_[way];
+    for (auto pos = 0U; pos != nodes.size(); ++pos) {
+      if (is_impassable(r, cls, nodes[pos])) {
+        if (first_piece[i] == kNoComponent) {
+          first_piece[i] = static_cast<std::uint32_t>(pieces.size());
+        }
+        pieces.push_back({way, static_cast<std::uint16_t>(pos + 1U)});
+      }
+    }
+  }
+
   auto parent =
-      std::vector<std::uint32_t>(r.way_properties_.size(), kNoComponent);
+      std::vector<std::uint32_t>(n_ways + pieces.size(), kNoComponent);
   for (auto i = 0U; i != parent.size(); ++i) {
-    if (is_accessible(cls, r.way_properties_[way_idx_t{i}])) {
+    if (i >= n_ways || is_accessible(cls, r.way_properties_[way_idx_t{i}])) {
       parent[i] = i;
     }
   }
-  for (auto n = 0U; n != r.node_ways_.size(); ++n) {
+
+  // Element of the piece that contains the (passable) way node at `pos`.
+  auto const element = [&](way_idx_t const way, std::uint16_t const pos) {
+    auto e = to_idx(way);
+    for (auto k = first_piece[to_idx(way)];
+         k != pieces.size() && pieces[k].way_ == way && pieces[k].from_ <= pos;
+         ++k) {
+      e = n_ways + k;
+    }
+    return e;
+  };
+
+  for (auto n = node_idx_t{0U}; n != r.node_ways_.size(); ++n) {
+    if (is_impassable(r, cls, n)) {
+      continue;
+    }
     auto anchor = kNoComponent;
-    for (auto const w : r.node_ways_[node_idx_t{n}]) {
+    auto const node_ways = r.node_ways_[n];
+    for (auto i = 0U; i != node_ways.size(); ++i) {
+      auto const w = node_ways[i];
       if (parent[to_idx(w)] == kNoComponent) {
         continue;
       }
-      auto const root = find_component_root(parent, to_idx(w));
+      auto const e = first_piece[to_idx(w)] == kNoComponent
+                         ? to_idx(w)
+                         : element(w, r.node_in_way_idx_[n][i]);
+      auto const root = find_component_root(parent, e);
       if (anchor == kNoComponent) {
         anchor = root;
       } else {
@@ -113,18 +171,44 @@ std::vector<std::uint32_t> number_component_roots(
   return sizes;
 }
 
+// A way counts once per component, however many of its pieces lie in it.
+void count_split_ways_once(
+    std::vector<std::uint32_t> const& comp,
+    std::span<class_components::piece const> const pieces,
+    std::vector<std::uint32_t>& sizes) {
+  auto const n_ways = comp.size() - pieces.size();
+  auto seen = std::vector<std::uint32_t>{};
+  for (auto k = 0U; k != pieces.size(); ++k) {
+    auto const way = pieces[k].way_;
+    if (k == 0U || pieces[k - 1U].way_ != way) {
+      seen.clear();
+      seen.push_back(comp[to_idx(way)]);
+    }
+    auto const c = comp[n_ways + k];
+    if (utl::find(seen, c) != end(seen)) {
+      --sizes[c];
+    } else {
+      seen.push_back(c);
+    }
+  }
+}
+
 }  // namespace
 
 class_components compute_class_components(ways::routing const& r,
                                           component_class const cls) {
-  auto parent = build_component_forest(r, cls);
-  auto const sizes = number_component_roots(parent);
-  return class_components::build(parent, sizes);
+  auto pieces = std::vector<class_components::piece>{};
+  auto parent = build_component_forest(r, cls, pieces);
+  auto sizes = number_component_roots(parent);
+  count_split_ways_once(parent, pieces, sizes);
+  return class_components::build(parent, sizes, pieces);
 }
 
 class_components class_components::build(
-    std::span<std::uint32_t const> const comp,
-    std::span<std::uint32_t const> const sizes) {
+    std::span<std::uint32_t const> const elements,
+    std::span<std::uint32_t const> const sizes,
+    std::span<piece const> const pieces) {
+  auto const comp = elements.subspan(0U, elements.size() - pieces.size());
   utl::verify(comp.size() <= std::numeric_limits<std::uint32_t>::max() &&
                   sizes.size() < std::numeric_limits<std::uint32_t>::max(),
               "component graph exceeds index range");
@@ -153,8 +237,19 @@ class_components class_components::build(
     exception_ways += sizes[ranked[i]];
   }
   utl::verify(exception_ways <= comp.size(), "invalid component sizes");
-  out.exception_way_.reserve(static_cast<std::uint32_t>(exception_ways));
-  out.exception_component_.reserve(static_cast<std::uint32_t>(exception_ways));
+  auto const max_exceptions =
+      static_cast<std::uint32_t>(exception_ways + 2U * pieces.size());
+  out.exception_way_.reserve(max_exceptions);
+  out.exception_from_.reserve(max_exceptions);
+  out.exception_component_.reserve(max_exceptions);
+  auto const add_exception = [&](way_idx_t const way, std::uint16_t const from,
+                                 std::uint32_t const id) {
+    out.exception_way_.push_back(way);
+    out.exception_from_.push_back(from);
+    out.exception_component_.push_back(id);
+  };
+
+  auto k = std::size_t{0U};
   for (auto i = std::size_t{0U}; i != comp.size(); ++i) {
     auto const c = comp[i];
     if (c == std::numeric_limits<std::uint32_t>::max()) {
@@ -163,12 +258,17 @@ class_components class_components::build(
     utl::verify(c < sizes.size(), "invalid component id {}", c);
     auto const id = ids[c];
     auto const way = way_idx_t{static_cast<std::uint32_t>(i)};
-    if (id < kException) {
+    if (k != pieces.size() && pieces[k].way_ == way) {
+      out.way_component_[way] = kException;
+      add_exception(way, 0U, id);
+      for (; k != pieces.size() && pieces[k].way_ == way; ++k) {
+        add_exception(way, pieces[k].from_, ids[elements[comp.size() + k]]);
+      }
+    } else if (id < kException) {
       out.way_component_[way] = static_cast<std::uint8_t>(id);
     } else {
       out.way_component_[way] = kException;
-      out.exception_way_.push_back(way);
-      out.exception_component_.push_back(id);
+      add_exception(way, 0U, id);
     }
   }
   return out;

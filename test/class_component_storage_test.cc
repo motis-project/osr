@@ -57,7 +57,29 @@ TEST(class_component_storage, exception_boundary_and_serialization) {
   EXPECT_FALSE(c.get(way_idx_t{601U}));
   EXPECT_FALSE(loaded->get(way_idx_t{601U}));
   EXPECT_TRUE(std::is_sorted(begin(c.exception_way_), end(c.exception_way_)));
+  EXPECT_EQ(c.exception_way_.size(), c.exception_from_.size());
   EXPECT_EQ(c.exception_way_.size(), c.exception_component_.size());
+}
+
+// Ways 0-2, plus the piece of way 1 from edge 2 on (element 3).
+TEST(class_component_storage, split_way_pieces_are_exceptions) {
+  auto const comp = std::array{0U, 0U, 1U, 1U};
+  auto const sizes = std::array{2U, 2U};
+  auto const pieces = std::array{class_components::piece{way_idx_t{1U}, 2U}};
+  auto const c = class_components::build(comp, sizes, pieces);
+  EXPECT_EQ(1U, c.get(way_idx_t{0U}));
+  EXPECT_EQ(2U, c.get(way_idx_t{2U}));
+  EXPECT_EQ(class_components::kException, c.way_component_[way_idx_t{1U}]);
+  EXPECT_EQ(1U, c.get(way_idx_t{1U}, 0U));
+  EXPECT_EQ(1U, c.get(way_idx_t{1U}, 1U));
+  EXPECT_EQ(2U, c.get(way_idx_t{1U}, 2U));
+  EXPECT_EQ(2U, c.get(way_idx_t{1U}, 5U));
+  EXPECT_EQ(
+      (std::vector<way_idx_t>{way_idx_t{1U}, way_idx_t{1U}}),
+      (std::vector<way_idx_t>{begin(c.exception_way_), end(c.exception_way_)}));
+  EXPECT_EQ((std::vector<std::uint16_t>{0U, 2U}),
+            (std::vector<std::uint16_t>{begin(c.exception_from_),
+                                        end(c.exception_from_)}));
 }
 
 TEST(class_component_storage, sizes) {
