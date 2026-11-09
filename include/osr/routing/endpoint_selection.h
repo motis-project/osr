@@ -141,9 +141,13 @@ match_components get_match_components(ways const& w,
   return mc;
 }
 
-inline component_key_t choose_component(match_components const& e,
-                                        match_components const& o,
-                                        component_class const c) {
+// nullopt: keep all components of the class. A tiny closest component that
+// the other end isn't closest to is only left for a big one: without a big
+// component in reach, the components don't tell which one to use.
+inline std::optional<component_key_t> choose_component(
+    match_components const& e,
+    match_components const& o,
+    component_class const c) {
   auto const n = e.nearest(c);
   if (n == nullptr) {
     return kNoComponentKey;
@@ -153,7 +157,7 @@ inline component_key_t choose_component(match_components const& e,
     return n->key_;
   }
   auto const big = e.nearest_big(c);
-  return big == nullptr ? n->key_ : big->key_;
+  return big == nullptr ? std::nullopt : std::optional{big->key_};
 }
 
 struct selected_component {
@@ -174,6 +178,21 @@ inline void add_selected(component_selection& sel,
   }
 }
 
+inline void add_chosen(component_selection& sel,
+                       match_components const& e,
+                       match_components const& o,
+                       component_class const c) {
+  if (auto const k = choose_component(e, o, c); k.has_value()) {
+    add_selected(sel, c, *k);
+    return;
+  }
+  for (auto const& x : e.components_) {
+    if (x.class_ == c) {
+      add_selected(sel, c, x.key_);
+    }
+  }
+}
+
 // The components of different destinations are not connected: each
 // destination is only reached from its own.
 inline component_selection select_source(
@@ -181,7 +200,7 @@ inline component_selection select_source(
   auto sel = component_selection{};
   for (auto const c : kAllComponentClasses) {
     for (auto const& d : ds) {
-      add_selected(sel, c, choose_component(s, d, c));
+      add_chosen(sel, s, d, c);
     }
   }
   return sel;
@@ -191,7 +210,7 @@ inline component_selection select_destination(match_components const& d,
                                               match_components const& s) {
   auto sel = component_selection{};
   for (auto const c : kAllComponentClasses) {
-    add_selected(sel, c, choose_component(d, s, c));
+    add_chosen(sel, d, s, c);
   }
   return sel;
 }

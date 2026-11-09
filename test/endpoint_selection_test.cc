@@ -1,9 +1,13 @@
 #include "gtest/gtest.h"
 
 #include <chrono>
+#include <cstdint>
 #include <filesystem>
 #include <memory>
+#include <optional>
 #include <vector>
+
+#include "utl/to_vec.h"
 
 #include "osr/extract/extract.h"
 #include "osr/lookup.h"
@@ -171,17 +175,29 @@ TEST_F(endpoint_selection_test, largest_component_is_never_tiny) {
 }
 
 // Nothing within 25 m: the lookup finds the footway at 55 m and the street at
-// 88 m, more than 25 m farther away. With 100 m, the start may switch.
+// 88 m, more than 25 m farther away. The start can't switch to the street
+// and keeps both. With 100 m, it switches.
 TEST_F(endpoint_selection_test, switch_distance_is_capped) {
   auto const north_of_footway = location{{49.000795, 8.0043}, kNoLevel};
-  EXPECT_FALSE(
-      route(north_of_footway, kStreetEast, kTinyBelow4, 25.0).has_value());
-  EXPECT_TRUE(
-      route(north_of_footway, kStreetEast, kTinyBelow4, 100.0).has_value());
+  auto const kept_ways = [&](double const max_match_distance) {
+    auto from = match_result{};
+    auto to = match_result{};
+    l_->match<foot_t>(foot_t::parameters{}, north_of_footway, false,
+                      direction::kForward, max_match_distance, nullptr, from);
+    l_->match<foot_t>(foot_t::parameters{}, kStreetEast, true,
+                      direction::kForward, max_match_distance, nullptr, to);
+    auto const sel = select_endpoints<foot_t>(*w_, from[match_idx_t{0U}], to,
+                                              direction::kForward,
+                                              kTinyBelow4.tiny_component_ways_);
+    return utl::to_vec(sel->from_[match_idx_t{0U}].way_,
+                       [&](way_idx_t const x) { return *w_->get_osm_way(x); });
+  };
+  EXPECT_EQ((std::vector<std::int64_t>{200, 102, 101}), kept_ways(25.0));
+  EXPECT_EQ((std::vector<std::int64_t>{102, 101}), kept_ways(100.0));
 }
 
 // The cap applies to foot and bike components, not to car components, and
-// counts from the closest component.
+// counts from the closest component. Foot can't switch and keeps both.
 TEST(choose_component, car_switches_without_cap) {
   auto e = match_components{.components_ = {}, .max_switch_ = 250.F};
   auto o = match_components{};
@@ -193,7 +209,7 @@ TEST(choose_component, car_switches_without_cap) {
     o.components_.push_back(
         {.class_ = c, .key_ = 1U, .dist_ = 5.F, .tiny_ = false});
   }
-  EXPECT_EQ(7U, choose_component(e, o, component_class::kFoot));
+  EXPECT_EQ(std::nullopt, choose_component(e, o, component_class::kFoot));
   EXPECT_EQ(1U, choose_component(e, o, component_class::kCar));
 
   for (auto& x : e.components_) {
@@ -202,6 +218,21 @@ TEST(choose_component, car_switches_without_cap) {
     }
   }
   EXPECT_EQ(1U, choose_component(e, o, component_class::kFoot));
+}
+
+// With 7 ways as the threshold, the footway and the north street are both
+// tiny and the street at lat 49.0 is out of reach. Both ends have candidates
+// on the footway and on the north street, but each is closest to another one:
+// neither end is narrowed, so the route is found (on the north street).
+TEST_F(endpoint_selection_test, ends_without_big_component_are_not_narrowed) {
+  auto const near_footway = location{{49.000850, 8.006550}, kNoLevel};
+  auto const near_north_street = location{{49.000650, 8.007050}, kNoLevel};
+  auto const p = route(near_footway, near_north_street,
+                       route_options{.tiny_component_ways_ = 7U});
+  ASSERT_TRUE(p.has_value());
+  EXPECT_EQ(52U, p->cost_);
+  EXPECT_EQ(43U, p->duration_.count());
+  EXPECT_NEAR(3.6, p->dist_, 0.1);
 }
 
 // The closest component is big: the street 55 m away is not considered.
