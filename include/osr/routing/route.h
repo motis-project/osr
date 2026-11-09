@@ -1,13 +1,13 @@
 #pragma once
 
 #include <chrono>
+
 #include <memory>
 #include <optional>
 #include <string_view>
 #include <vector>
 
 #include "geo/polyline.h"
-
 #include "osr/elevation_storage.h"
 #include "osr/location.h"
 #include "osr/lookup.h"
@@ -33,6 +33,15 @@ struct bidirectional;
 
 struct sharing_data;
 
+// travel start                                       travel end
+// x ~~match~~ o --foot-- o ==vehicle== o --foot-- o ~~match~~ x
+// 0                      ^             ^                      ^
+//                        ride_start_   ride_end_              path::duration_
+struct rental_duration_info {
+  duration_t ride_start_;
+  duration_t ride_end_;
+};
+
 struct one_to_many_state {
   virtual ~one_to_many_state() = default;
   virtual std::vector<std::optional<path>> const& results() const = 0;
@@ -40,6 +49,8 @@ struct one_to_many_state {
                                           lookup const&,
                                           std::size_t dest_idx,
                                           sharing_data const*) = 0;
+  virtual std::optional<rental_duration_info> rental_durations(
+      std::size_t dest_idx) const = 0;
 };
 
 std::unique_ptr<one_to_many_state> route_one_to_many(
