@@ -50,6 +50,7 @@
 #include "osr/lookup.h"
 #include "osr/platforms.h"
 #include "osr/preprocessing/elevation/provider.h"
+#include "osr/routing/parking_matching.h"
 #include "osr/ways.h"
 
 namespace fs = std::filesystem;
@@ -301,7 +302,8 @@ way_properties get_way_properties(
   p.is_oneway_reverse_ = t.oneway_reverse_;
   p.is_elevator_ = t.is_elevator_;
   p.is_steps_ = is_steps(t, obj_type);
-  p.is_parking_ = t.is_parking_;
+  p.is_parking_ =
+      (t.is_parking_ || t.is_bicycle_parking_) && !t.private_access_;
   p.speed_limit_ = get_speed_limit(t);
   p.from_level_ = to_idx(from);
   p.to_level_ = to_idx(to);
@@ -364,7 +366,7 @@ std::pair<node_properties, level_bits_t> get_node_properties(tags const& t) {
   p.is_elevator_ = t.is_elevator_;
   p.is_entrance_ = t.is_entrance_;
   p.is_multi_level_ = is_multi;
-  p.is_parking_ = t.is_parking_;
+  p.is_parking_ = t.is_parking_ || t.is_bicycle_parking_;  // TODO: MK - Check
   p.is_steps_ = is_steps(t, osm_obj_type::kNode);
   p.to_level_ = to_idx(to);
   p.has_barrier_cost_ = t.is_gate() || is_private;
@@ -405,11 +407,13 @@ struct way_handler : public osmium::handler::Handler {
   way_handler(ways& w,
               platforms* platforms,
               rel_ways_t const& rel_ways,
-              hash_map<osm_node_idx_t, level_bits_t>& elevator_nodes)
+              hash_map<osm_node_idx_t, level_bits_t>& elevator_nodes,
+              vec_map<way_idx_t, way_extra_properties>& way_extra)
       : w_{w},
         platforms_{platforms},
         rel_ways_{rel_ways},
-        elevator_nodes_{elevator_nodes} {
+        elevator_nodes_{elevator_nodes},
+        way_extra_{way_extra} {
     strings_set_.hash_function().strings_ = &w_.strings_;
     strings_set_.key_eq().strings_ = &w_.strings_;
   }
@@ -433,7 +437,7 @@ struct way_handler : public osmium::handler::Handler {
     }
 
     if (!t.is_elevator_ &&  // elevators tagged as building would be landuse
-        !t.is_parking_ &&
+        !t.is_parking_ && !t.is_bicycle_parking_ &&
         ((it == end(rel_ways_) && t.highway_.empty() && t.railway_.empty() &&
           !t.is_ferry_route_ && !t.is_platform()) ||
          (t.highway_.empty() && !t.is_platform() && it != end(rel_ways_) &&
@@ -444,7 +448,8 @@ struct way_handler : public osmium::handler::Handler {
     auto const in_route = it != end(rel_ways_) && it->second.p_.in_route_;
     auto const hgv_info = get_hgv_way_info(t);
 
-    auto p = (t.is_platform() || t.is_parking_ || !t.highway_.empty() ||
+    auto p = (t.is_platform() || t.is_parking_ || t.is_bicycle_parking_ ||
+              !t.highway_.empty() ||
               (!t.railway_.empty() && (in_route || it == end(rel_ways_))) ||
               t.is_ferry_route_)
                  ? get_way_properties(t)
@@ -540,6 +545,8 @@ struct way_handler : public osmium::handler::Handler {
       w_.way_conditional_access_no_.emplace_back(
           way_idx, register_string(t.access_conditional_no_));
     }
+
+    way_extra_.emplace_back(way_extra_properties{t});
   }
 
   using strings_set_t = hash_set<string_idx_t, strings_hash, strings_equals>;
@@ -552,6 +559,7 @@ struct way_handler : public osmium::handler::Handler {
 
   std::mutex elevator_nodes_mutex_;
   hash_map<osm_node_idx_t, level_bits_t>& elevator_nodes_;
+  vec_map<way_idx_t, way_extra_properties>& way_extra_;
 };
 
 // A turn-restriction relation with its way/node members already resolved,
@@ -820,13 +828,16 @@ void extract(bool const with_platforms,
                 is_accessible<wheelchair_profile>(t, osm_obj_type::kNode) &&
                 is_accessible<foot_profile>(t, osm_obj_type::kNode);
             if (!accessible || t.is_elevator_ || t.is_platform() ||
-                t.is_gate()) {
+                t.is_gate() || t.is_bicycle_parking_) {
               ctx.blocking_nodes_.push_back(to_idx(to_osm_node_idx(id)));
             }
 
+            // TODO: MK - Keep isolated parking nodes for matching only
+            // For now: Ensure nodes are created
+
             // Ensure platform nodes are created
             // even if they are not part of a routable way.
-            if (pl != nullptr && t.is_platform()) {
+            if ((pl != nullptr && t.is_platform()) || t.is_bicycle_parking_) {
               ctx.blocking_nodes_.push_back(to_idx(to_osm_node_idx(id)));
             }
           }
@@ -883,10 +894,11 @@ void extract(bool const with_platforms,
   }
 
   auto elevator_nodes = hash_map<osm_node_idx_t, level_bits_t>{};
+  auto way_extra = std::optional{vec_map<way_idx_t, way_extra_properties>{}};
   {  // Pass 2: extract streets, collect area member way geometries.
     pt->status("Load OSM / Ways").in_high(blocks.size()).out_bounds(15, 38);
 
-    auto h = way_handler{w, pl.get(), rel_ways, elevator_nodes};
+    auto h = way_handler{w, pl.get(), rel_ways, elevator_nodes, *way_extra};
 
     struct pass2_ctx {
       osmium::memory::Buffer scratch_{1U << 12U,
@@ -1098,10 +1110,15 @@ void extract(bool const with_platforms,
 
   pt->status("Big Street Neighbors").in_high(w.n_ways()).out_bounds(95, 99);
   w.compute_big_street_neighbors();
-  w.r_->write(out);
 
   pt->status("Build R-Tree").in_high(1).out_bounds(99, 100);
-  lookup{w, out, cista::mmap::protection::WRITE}.build_rtree();
+  auto l = lookup{w, out, cista::mmap::protection::WRITE};
+  l.build_rtree();
+  // TODO: MK - Update progress bar
+  connect_parking_ways(w, l, *way_extra);
+  way_extra.reset();
+
+  w.r_->write(out);
 }
 
 }  // namespace osr

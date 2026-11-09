@@ -54,6 +54,16 @@ cost_policy combine(cost_policy const a, cost_policy const b) {
           clamp_cost(static_cast<std::uint64_t>(a.allowance_) + b.allowance_)};
 }
 
+template <bool Parking>
+cost_policy policy(bike_parking<Parking> const& profile,
+                   typename bike_parking<Parking>::parameters const& p) {
+  return combine(
+      policy(typename std::remove_cvref_t<decltype(profile)>::streetp{},
+             p.bike_),
+      policy(typename std::remove_cvref_t<decltype(profile)>::footp{},
+             p.foot_));
+}
+
 template <bool Wheelchair, bool Parking>
 cost_policy policy(
     car_parking<Wheelchair, Parking> const&,

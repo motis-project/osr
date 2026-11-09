@@ -8,6 +8,8 @@
 
 #include "cista/hash.h"
 
+#include "utl/parser/arg_parser.h"
+
 #include "osmium/osm/object.hpp"
 
 #include "osr/conditional.h"
@@ -67,6 +69,7 @@ private:
         case cista::hash("amenity"):
           is_parking_ |=
               (value == "parking"sv || value == "parking_entrance"sv);
+          is_bicycle_parking_ |= value == "bicycle_parking"sv;
           is_ticket_validator_ = value == "ticket_validator"sv;
           break;
         case cista::hash("building"):
@@ -132,6 +135,10 @@ private:
         case cista::hash("ref"): ref_ = value; break;
         case cista::hash("entrance"): is_entrance_ = true; break;
         case cista::hash("sidewalk"):
+          if (value == "left"sv || value == "right"sv || value == "both"sv) {
+            sidewalk_ = true;
+          }
+          [[fallthrough]];
         case cista::hash("sidewalk:both"):
         case cista::hash("sidewalk:left"): [[fallthrough]];
         case cista::hash("sidewalk:right"):
@@ -437,6 +444,9 @@ public:
   // https://wiki.openstreetmap.org/wiki/Tag:amenity%3Dparking
   bool is_parking_{false};
 
+  // https://wiki.openstreetmap.org/wiki/Tag:amenity%3Dbicycle_parking
+  bool is_bicycle_parking_{false};
+
   // https://wiki.openstreetmap.org/wiki/Key:level
   bool has_level_{false};
   level_bits_t level_bits_{0U};
@@ -468,7 +478,7 @@ bool is_accessible_with_penalty(tags const& o, osm_obj_type const type) {
   return T::access_with_penalty(o, type);
 }
 
-bool is_steps(tags const& t, osm_obj_type const type) {
+static inline bool is_steps(tags const& t, osm_obj_type const type) {
   using namespace std::string_view_literals;
   switch (type) {
     case osr::osm_obj_type::kWay: return t.highway_ == "steps"sv;
@@ -620,6 +630,10 @@ struct bike_profile {
       return override::kBlacklist;
     }
 
+    if (t.is_bicycle_parking_) {
+      return override::kWhitelist;
+    }
+
     return t.vehicle_;
   }
 
@@ -657,6 +671,7 @@ struct bike_profile {
 struct car_profile {
   static override access_override(tags const& t, osm_obj_type const type) {
     if (t.access_ == override::kBlacklist || t.is_route_ || t.is_ferry_route_ ||
+        t.is_bicycle_parking_ ||
         (type == osm_obj_type::kWay && t.highway_.empty())) {
       return override::kBlacklist;
     }
