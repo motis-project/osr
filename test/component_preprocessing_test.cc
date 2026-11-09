@@ -1,5 +1,6 @@
 #include "gtest/gtest.h"
 
+#include <cstdint>
 #include <array>
 #include <vector>
 
@@ -33,7 +34,8 @@ TEST(component_preprocessing, loops_accessibility_and_islands) {
   for (auto const& ways : node_ways) {
     r.node_ways_.emplace_back(ways);
   }
-  r.node_properties_.resize(node_ways.size(), kPassable);
+  r.node_properties_.resize(static_cast<std::uint32_t>(node_ways.size()),
+                            kPassable);
   auto const expected =
       std::array{std::array{1U, 1U, 0U, 0U, 2U, 2U, 0U, 0U, 3U, 3U},
                  std::array{1U, 1U, 0U, 0U, 0U, 0U, 0U, 0U, 0U, 0U},
