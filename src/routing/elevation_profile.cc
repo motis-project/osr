@@ -78,10 +78,6 @@ elevation_profile::elevation_profile(ways const& w,
     return;
   }
 
-  baseline_ = *segments[1].elevation_.first_;
-  min_ = baseline_;
-  max_ = baseline_;
-
   auto const add = [&](point const& pos, ev::elevation_meters_t z) {
     points_.push_back(pos);
     elevation_.push_back(z);
@@ -91,12 +87,14 @@ elevation_profile::elevation_profile(ways const& w,
   };
 
   for (auto s : segments) {
-    if (s.elevation_.n_ <= 2) {
-      add(w.get_node_pos(s.from_), *s.elevation_.first_);
-      add(w.get_node_pos(s.to_), (s.elevation_.n_ == 1)
-                                     ? *s.elevation_.first_
-                                     : *std::next(s.elevation_.first_));
+    if (s.elevation_.n_ == 0) {
       continue;
+    }
+
+    if (baseline_ == ev::elevation_meters_t::invalid()) {
+      baseline_ = *s.elevation_.first_;
+      min_ = baseline_;
+      max_ = baseline_;
     }
 
     auto const step_dist = 1 / (s.elevation_.n_ - 1);
@@ -113,11 +111,10 @@ elevation_profile::elevation_profile(ways const& w,
     }
   }
 
-  if (elevation_.size() < 5) {
-    return;
-  }
+  auto const kWindowSize = elevation_.size() >> 1;
 
-  auto avg = moving_average<ev::elevation_meters_t>{5};
+  auto avg = moving_average<ev::elevation_meters_t>{
+      static_cast<unsigned>(kWindowSize)};
   avg.init_from(elevation_);
   for (auto i = avg.window_size_; i < elevation_.size() + avg.window_size_;
        ++i) {

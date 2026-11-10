@@ -15,7 +15,8 @@ struct elevation_profile {
 
   std::vector<point> points_{};
   std::vector<preprocessing::elevation::elevation_meters_t> elevation_{};
-  preprocessing::elevation::elevation_meters_t baseline_;
+  preprocessing::elevation::elevation_meters_t baseline_ =
+      preprocessing::elevation::elevation_meters_t::invalid();
   preprocessing::elevation::elevation_meters_t min_{0}, max_{0};
 };
 
