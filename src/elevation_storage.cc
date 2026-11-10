@@ -152,7 +152,8 @@ std::vector<ev::elevation_meters_t> get_way_elevation(
   auto const is_significant = [&](auto const& estimate, auto const& value) {
     auto const abs_diff =
         (estimate < value) ? value - estimate : estimate - value;
-    auto const rel_diff = cista::to_idx(abs_diff) / way_dist;
+    auto const rel_diff =
+        static_cast<double>(cista::to_idx(abs_diff)) * steps / way_dist;
 
     return abs_diff > min_elevation || rel_diff > min_rel_elevation;
   };

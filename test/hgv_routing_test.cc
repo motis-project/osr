@@ -126,7 +126,7 @@ public:
     fs::remove_all(dir_, ec);
     fs::create_directories(dir_, ec);
 
-    osr::extract(false, osm_path.generic_string(), dir_, {});
+    osr::extract(false, osm_path.generic_string(), dir_, {}, 0, 0.0);
     ways_ = std::make_unique<osr::ways>(dir_, cista::mmap::protection::READ);
     lookup_ = std::make_unique<osr::lookup>(*ways_, dir_,
                                             cista::mmap::protection::READ);

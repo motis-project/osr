@@ -702,7 +702,7 @@ void extract(bool const with_platforms,
              fs::path const& out,
              fs::path const& elevation_dir,
              std::uint32_t min_elevation,
-             double max_incline) {
+             double min_incline) {
   auto ec = std::error_code{};
   fs::remove_all(out, ec);
   if (!fs::is_directory(out)) {
@@ -1060,7 +1060,7 @@ void extract(bool const with_platforms,
           w, provider,
           static_cast<preprocessing::elevation::elevation_meters_t>(
               min_elevation),
-          max_incline);
+          min_incline);
     }
   }
 

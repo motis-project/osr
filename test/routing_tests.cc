@@ -26,7 +26,7 @@ std::string extract_and_route(
   fs::remove_all(dir, ec);
   fs::create_directories(dir, ec);
 
-  osr::extract(false, path, dir, {});
+  osr::extract(false, path, dir, {}, 0, 0.0);
 
   auto w = osr::ways{dir, cista::mmap::protection::READ};
   auto l = osr::lookup{w, dir, cista::mmap::protection::READ};
@@ -54,7 +54,7 @@ TEST(routing, sharing_geofencing_does_not_restrict_walking) {
   fs::remove_all(dir, ec);
   fs::create_directories(dir, ec);
 
-  osr::extract(false, path, dir, {});
+  osr::extract(false, path, dir, {}, 0, 0.0);
 
   auto w = osr::ways{dir, cista::mmap::protection::READ};
   auto l = osr::lookup{w, dir, cista::mmap::protection::READ};
@@ -244,7 +244,7 @@ TEST(routing, aplerbeck_levels) {
   auto ec = std::error_code{};
   fs::remove_all(dir, ec);
   fs::create_directories(dir, ec);
-  osr::extract(false, "test/aplerbeck.osm.pbf", dir, {});
+  osr::extract(false, "test/aplerbeck.osm.pbf", dir, {}, 0, 0.0);
 
   auto w = osr::ways{dir, cista::mmap::protection::READ};
   auto l = osr::lookup{w, dir, cista::mmap::protection::READ};
