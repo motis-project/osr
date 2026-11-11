@@ -16,6 +16,8 @@
 #include "utl/progress_tracker.h"
 #include "utl/raii.h"
 
+#include "geo/latlng.h"
+
 #include "osr/point.h"
 #include "osr/preprocessing/elevation/provider.h"
 #include "osr/preprocessing/elevation/resolution.h"
@@ -88,8 +90,7 @@ std::vector<ev::elevation_meters_t> get_way_elevation(
     point const from,
     point const to,
     ev::resolution const& res,
-    ev::elevation_meters_t min_elevation,
-    double min_rel_elevation) {
+    ev::elevation_params const& params) {
   auto a = provider.get(from);
   auto const b = provider.get(to);
   if (a == ev::elevation_meters_t::invalid() ||
@@ -117,6 +118,9 @@ std::vector<ev::elevation_meters_t> get_way_elevation(
   auto const steps = static_cast<unsigned>(
       std::max(std::ceil(kSafetyFactor * std::abs(lat_diff) / res.y_),
                std::ceil(kSafetyFactor * std::abs(min_lng_diff) / res.x_)));
+  auto const step_dist =
+      (steps > 0) ? geo::distance(from.as_latlng(), to.as_latlng()) / steps
+                  : 0.0;
 
   auto const kMaxPoints = 8U;
   auto elevation = std::vector<ev::elevation_meters_t>{};
@@ -147,19 +151,17 @@ std::vector<ev::elevation_meters_t> get_way_elevation(
     return e_estimate;
   };
 
-  auto const way_dist =
-      std::sqrt(std::pow(min_lng_diff, 2) + std::pow(lat_diff, 2));
+  auto const way_dir =
+      ev::resolution{.x_ = min_lng_diff / steps, .y_ = lat_diff / steps};
   auto const is_significant = [&](auto const& estimate, auto const& value) {
     auto const abs_diff =
         (estimate < value) ? value - estimate : estimate - value;
-    auto const rel_diff =
-        static_cast<double>(cista::to_idx(abs_diff)) * steps / way_dist;
+    auto const incline = abs_diff.v_ / step_dist;
 
-    return abs_diff > min_elevation || rel_diff > min_rel_elevation;
+    return (abs_diff >= params.min_elevation ||
+            incline >= params.min_rel_elevation) &&
+           incline < params.max_incline;
   };
-
-  auto const way_dir =
-      ev::resolution{.x_ = min_lng_diff / steps, .y_ = lat_diff / steps};
 
   auto const get = [&](auto const s) {
     return provider.get(
@@ -272,8 +274,7 @@ encoding_result_t calculate_way_encodings(
     mm_vec<way_ordering_t> const& ordering,
     node_point_map const& points,
     utl::progress_tracker_ptr& pt,
-    preprocessing::elevation::elevation_meters_t min_elevation,
-    double min_rel_elevation) {
+    ev::elevation_params const& params) {
   paths.reserve(paths.size() + 4U);
   auto const& mapping_path = paths.emplace_back(fs::temp_directory_path() /
                                                 "temp_osr_extract_mapping");
@@ -317,9 +318,8 @@ encoding_result_t calculate_way_encodings(
         offsets.clear();
         auto elevations_idx = std::size_t{0};
         for (auto const [from, to] : utl::pairwise(w.r_->way_nodes_[way_idx])) {
-          auto const segment_elevation =
-              get_way_elevation(provider, points[from], points[to], res,
-                                min_elevation, min_rel_elevation);
+          auto const segment_elevation = get_way_elevation(
+              provider, points[from], points[to], res, params);
 
           offsets.resize(elevations_idx);
           if (!segment_elevation.empty()) {
@@ -399,11 +399,9 @@ void write_ordered_encodings(elevation_storage& storage,
   }
 }
 
-void elevation_storage::set_elevations(
-    ways const& w,
-    ev::provider const& provider,
-    preprocessing::elevation::elevation_meters_t min_elevation,
-    double min_rel_elevation) {
+void elevation_storage::set_elevations(ways const& w,
+                                       ev::provider const& provider,
+                                       ev::elevation_params params) {
   auto pt = utl::get_active_progress_tracker_or_activate("osr");
   auto cleanup_paths = utl::make_raii(path_vec{}, [](path_vec const& paths) {
     auto e = std::error_code{};
@@ -419,8 +417,7 @@ void elevation_storage::set_elevations(
       calculate_way_order(cleanup_paths.get(), w, points, provider, pt);
   pt->status("Calculating way elevations").out_bounds(81, 89);
   auto unordered_encodings = calculate_way_encodings(
-      cleanup_paths.get(), w, provider, processing_order, points, pt,
-      min_elevation, min_rel_elevation);
+      cleanup_paths.get(), w, provider, processing_order, points, pt, params);
   pt->status("Storing ordered elevations").out_bounds(89, 90);
   write_ordered_encodings(*this, std::move(unordered_encodings), pt);
 }

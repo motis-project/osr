@@ -1,13 +1,14 @@
-#include <cstdint>
 #include <filesystem>
 
 namespace osr {
+namespace preprocessing::elevation {
+struct elevation_params;
+}
 
 void extract(bool with_platforms,
              std::filesystem::path const& in,
              std::filesystem::path const& out,
              std::filesystem::path const& elevation_dir,
-             std::uint32_t min_elevation,
-             double max_incline);
+             preprocessing::elevation::elevation_params params);
 
 }  // namespace osr

@@ -15,7 +15,13 @@ namespace osr {
 
 namespace preprocessing::elevation {
 struct provider;
-}
+
+struct elevation_params {
+  elevation_meters_t min_elevation;
+  double min_rel_elevation;
+  double max_incline;
+};
+}  // namespace preprocessing::elevation
 
 struct elevation_storage {
   using data_vec_t = mm_vec32<preprocessing::elevation::elevation_meters_t>;
@@ -52,11 +58,9 @@ struct elevation_storage {
                     cista::mmap::protection const mode);
   static std::unique_ptr<elevation_storage> try_open(
       std::filesystem::path const&);
-  void set_elevations(
-      ways const&,
-      preprocessing::elevation::provider const&,
-      preprocessing::elevation::elevation_meters_t min_elevation,
-      double max_incline);
+  void set_elevations(ways const&,
+                      preprocessing::elevation::provider const&,
+                      preprocessing::elevation::elevation_params);
   elevation get_elevations(way_idx_t const way,
                            std::uint16_t const segment) const;
 
