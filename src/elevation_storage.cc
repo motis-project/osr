@@ -7,6 +7,7 @@
 #include <mutex>
 #include <ranges>
 #include <span>
+#include <sstream>
 #include <string>
 #include <vector>
 
@@ -85,12 +86,53 @@ std::unique_ptr<elevation_storage> elevation_storage::try_open(
                                              cista::mmap::protection::READ);
 }
 
+struct elevation_stats {
+  static auto const kNBuckets = 8;
+  double const buckets_[kNBuckets] = {0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 10.0, 50.0};
+  unsigned n_per_length_[kNBuckets][ev::elevation_params::kMaxPoints] = {{0}};
+  unsigned n_segments_ = 0U;
+
+  std::uint64_t total_comparisons_{0};
+  unsigned min_abs_threshold_{0};
+  unsigned min_incline_{0};
+  unsigned max_incline_{0};
+
+  void reset() {
+    n_segments_ = 0U;
+    total_comparisons_ = 0;
+    min_abs_threshold_ = 0;
+    min_incline_ = 0;
+    max_incline_ = 0;
+
+    for (auto i = 0U; i < kNBuckets; ++i) {
+      for (auto j = 0U; j < ev::elevation_params::kMaxPoints; ++j) {
+        n_per_length_[i][j] = 0U;
+      }
+    }
+  }
+
+  void add(elevation_stats const& other) {
+    n_segments_ += other.n_segments_;
+    total_comparisons_ += other.total_comparisons_;
+    min_abs_threshold_ += other.min_abs_threshold_;
+    min_incline_ += other.min_incline_;
+    max_incline_ += other.max_incline_;
+
+    for (auto i = 0U; i < kNBuckets; ++i) {
+      for (auto j = 0U; j < ev::elevation_params::kMaxPoints; ++j) {
+        n_per_length_[i][j] += other.n_per_length_[i][j];
+      }
+    }
+  }
+};
+
 std::vector<ev::elevation_meters_t> get_way_elevation(
     ev::provider const& provider,
     point const from,
     point const to,
     ev::resolution const& res,
-    ev::elevation_params const& params) {
+    ev::elevation_params const& params,
+    elevation_stats& stats) {
   auto a = provider.get(from);
   auto const b = provider.get(to);
   if (a == ev::elevation_meters_t::invalid() ||
@@ -118,15 +160,13 @@ std::vector<ev::elevation_meters_t> get_way_elevation(
   auto const steps = static_cast<unsigned>(
       std::max(std::ceil(kSafetyFactor * std::abs(lat_diff) / res.y_),
                std::ceil(kSafetyFactor * std::abs(min_lng_diff) / res.x_)));
-  auto const step_dist =
-      (steps > 0) ? geo::distance(from.as_latlng(), to.as_latlng()) / steps
-                  : 0.0;
+  auto const seg_dist = geo::distance(from.as_latlng(), to.as_latlng());
+  auto const step_dist = (steps > 0) ? seg_dist / steps : 0;
 
-  auto const kMaxPoints = 8U;
   auto elevation = std::vector<ev::elevation_meters_t>{};
   auto step_index = std::vector<unsigned>{};
-  step_index.reserve(kMaxPoints);
-  step_index.reserve(kMaxPoints);
+  step_index.reserve(params.kMaxPoints);
+  step_index.reserve(params.kMaxPoints);
 
   unsigned n = 2;
   elevation.push_back(a);
@@ -158,9 +198,26 @@ std::vector<ev::elevation_meters_t> get_way_elevation(
         (estimate < value) ? value - estimate : estimate - value;
     auto const incline = abs_diff.v_ / step_dist;
 
-    return (abs_diff >= params.min_elevation ||
-            incline >= params.min_rel_elevation) &&
-           incline < params.max_incline;
+    stats.total_comparisons_++;
+    if (incline >= params.max_incline) {
+      stats.max_incline_++;
+      return false;
+    }
+
+    if (abs_diff < params.min_elevation) {
+      stats.min_abs_threshold_++;
+    }
+
+    if (incline < params.min_rel_elevation) {
+      stats.min_incline_++;
+    }
+
+    return abs_diff >= params.min_elevation ||
+           incline >= params.min_rel_elevation;
+
+    // return (abs_diff >= params.min_elevation ||
+    //         incline >= params.min_rel_elevation) &&
+    //        incline < params.max_incline;
   };
 
   auto const get = [&](auto const s) {
@@ -169,7 +226,7 @@ std::vector<ev::elevation_meters_t> get_way_elevation(
   };
 
   auto stop = false;
-  while (n < kMaxPoints) {
+  while (n < params.kMaxPoints) {
     stop = true;
     for (auto s = 1U; s < steps; ++s) {
       auto const m = get(s);
@@ -199,11 +256,18 @@ std::vector<ev::elevation_meters_t> get_way_elevation(
     }
   }
 
-  if (elevation.size() == 2 &&
-      !is_significant(a, b)) {  // flat way -> single point
+  if (n == 2 && !is_significant(a, b)) {  // flat way -> single point
     elevation.resize(1);
+    n--;
   }
 
+  stats.n_segments_ += 1;
+  for (auto i = 1U; i <= elevation_stats::kNBuckets; ++i) {
+    if (i == elevation_stats::kNBuckets || stats.buckets_[i] > seg_dist) {
+      stats.n_per_length_[i - 1][n - 1] += 1;
+      break;
+    }
+  }
   return elevation;
 }
 
@@ -267,6 +331,28 @@ way_ordering_vec calculate_way_order(path_vec& paths,
   return ordering;
 }
 
+std::string stats_to_string(elevation_stats const& stats) {
+  std::stringstream ss{};
+
+  ss << "Number of segments: " << stats.n_segments_ << std::endl;
+  ss << "Number of points per segment length: " << std::endl;
+  for (auto i = 0U; i < elevation_stats::kNBuckets; ++i) {
+    ss << stats.buckets_[i] << "m: " << stats.n_per_length_[i][0];
+    for (auto j = 1U; j < ev::elevation_params::kMaxPoints; ++j) {
+      ss << ", " << stats.n_per_length_[i][j];
+    }
+    ss << std::endl;
+  }
+  ss << std::endl;
+
+  ss << "below 'min_elevation': " << stats.min_abs_threshold_ << std::endl;
+  ss << "below 'min_rel_elevation': " << stats.min_incline_ << std::endl;
+  ss << "greater 'max_incline': " << stats.max_incline_ << std::endl;
+  ss << "total comparisons: " << stats.total_comparisons_;
+
+  return ss.str();
+}
+
 encoding_result_t calculate_way_encodings(
     path_vec& paths,
     ways const& w,
@@ -305,21 +391,25 @@ encoding_result_t calculate_way_encodings(
 
   pt->in_high(ordering.size());
 
+  auto stats = elevation_stats{};
+
   utl::parallel_for(
       ordering,
       [&](way_ordering_t const way_ordering) {
         thread_local auto elevations = std::vector<ev::elevation_meters_t>{};
         thread_local auto offsets = std::vector<elevation_storage::encoding>{};
+        thread_local auto thread_stats = elevation_stats{};
 
         auto const& way_idx = way_ordering.way_idx_;
 
         // Calculate elevations
         elevations.clear();
         offsets.clear();
+        thread_stats.reset();
         auto elevations_idx = std::size_t{0};
         for (auto const [from, to] : utl::pairwise(w.r_->way_nodes_[way_idx])) {
           auto const segment_elevation = get_way_elevation(
-              provider, points[from], points[to], res, params);
+              provider, points[from], points[to], res, params, thread_stats);
 
           offsets.resize(elevations_idx);
           if (!segment_elevation.empty()) {
@@ -360,10 +450,14 @@ encoding_result_t calculate_way_encodings(
           result.offsets_.emplace_back(offsets);
           result.elevations_.insert(end(result.elevations_), begin(elevations),
                                     end(elevations));
+          stats.add(thread_stats);
         }
       },
       pt->update_fn());
 
+  auto fout = std::ofstream{params.stats_file_};
+  fout << stats_to_string(stats);
+  fout.close();
   return result;
 }
 

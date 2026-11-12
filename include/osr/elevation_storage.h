@@ -17,6 +17,8 @@ namespace preprocessing::elevation {
 struct provider;
 
 struct elevation_params {
+  static auto const kMaxPoints = 8U;
+  std::filesystem::path stats_file_;
   elevation_meters_t min_elevation;
   double min_rel_elevation;
   double max_incline;
