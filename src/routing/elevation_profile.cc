@@ -1,8 +1,11 @@
 #include "osr/routing/elevation_profile.h"
+#include <cmath>
 #include <cstddef>
+#include <cstdlib>
 
 #include <algorithm>
 #include <iterator>
+#include <string>
 #include <vector>
 
 #include "cista/strong.h"
@@ -21,42 +24,81 @@ namespace ev = preprocessing::elevation;
 
 template <typename T>
 struct moving_average {
-  moving_average(std::size_t window_size, std::vector<double> weights)
-      : window_size_(window_size), weights_(weights) {
-    assert(window_size % 2 == 1);
-  }
+  moving_average(double window_distance, T pad_left, T pad_right)
+      : window_distance_(window_distance),
+        pad_left_(pad_left),
+        pad_right_(pad_right) {}
 
-  moving_average(unsigned window_size) : window_size_(window_size) {
-    assert(window_size % 2 == 1);
-    weights_.resize(window_size, 1.0 / window_size);
-  }
-
-  void init_from(std::vector<T> const& values) {
-    auto const left = window_size_ / 2 + 1;
-    auto const right = window_size_ - left;
-    window_.resize(left, values[0]);
-    for (auto i = std::size_t{1}; i <= right; ++i) {
-      window_.push_back(values[i]);
-    }
-  }
-
-  T next(T value) {
-    window_.push_back(value);
-    if (window_.size() > window_size_) {
-      window_.erase(window_.begin());
+  std::vector<T> apply(std::vector<T> const& values,
+                       std::vector<double> const& distances) {
+    if (values.empty() || values.size() != distances.size()) {
+      return {};
     }
 
-    double sum = 0.0;
-    for (auto i = std::size_t{0}; i < window_size_; ++i) {
-      sum = sum + to_idx(window_[i]) * weights_[i];
+    auto const half_window_d = window_distance_ / 2.0;
+
+    auto res = std::vector<T>(values.size());
+
+    auto w_start = 0U;
+    auto w_end = 0U;
+    for (auto i = 0U; i < values.size(); ++i) {
+      auto const pos = distances[i];
+      auto const left_edge = pos - half_window_d;
+      auto const right_edge = pos + half_window_d;
+
+      auto const evaluate = [&](auto a, auto b, auto x) {
+        double const x0 = distances[a];
+        double const x1 = distances[b];
+        double const y0 = static_cast<double>(values[a].v_);
+        double const y1 = static_cast<double>(values[b].v_);
+        double const m = (y1 - y0) / (x1 - x0);
+
+        return 0.5 * m * std::pow((x - x0), 2) + y0 * x;
+      };
+
+      while (w_start < i && distances[w_start] < left_edge) {
+        ++w_start;
+      }
+
+      while (w_end < values.size() - 1 && distances[w_end + 1] <= right_edge) {
+        ++w_end;
+      }
+
+      auto sum = 0.0;
+      if (w_start > 0) {
+        double const val = evaluate(w_start - 1, w_start, distances[w_start]) -
+                           evaluate(w_start - 1, w_start, left_edge);
+        sum += val;
+      } else {
+        double const val =
+            (distances[0] - left_edge) * static_cast<double>(values[0].v_);
+        sum += val;
+      }
+      for (auto j = w_start; j < w_end; ++j) {
+        double const val = evaluate(j, j + 1, distances[j + 1]) -
+                           evaluate(j, j + 1, distances[j]);
+        sum += val;
+      }
+
+      if (w_end < values.size() - 1) {
+        double const val = evaluate(w_end, w_end + 1, right_edge) -
+                           evaluate(w_end, w_end + 1, distances[w_end]);
+        sum += val;
+      } else {
+        double const val = (right_edge - distances[w_end]) *
+                           static_cast<double>(values[w_end].v_);
+        sum += val;
+      }
+
+      res[i] = static_cast<T>(sum / window_distance_);
     }
 
-    return static_cast<T>(sum);
+    return res;
   }
 
-  std::size_t window_size_;
-  std::vector<T> window_{};
-  std::vector<double> weights_{};
+  double window_distance_;
+  T pad_left_;
+  T pad_right_;
 };
 
 elevation_profile::elevation_profile(ways const& w,
@@ -78,14 +120,14 @@ elevation_profile::elevation_profile(ways const& w,
     return;
   }
 
-  auto const add = [&](point const& pos, ev::elevation_meters_t z) {
+  auto distances = std::vector<double>{};
+  auto const add = [&](point const& pos, double d, ev::elevation_meters_t z) {
     points_.push_back(pos);
     elevation_.push_back(z);
-
-    min_ = std::min(z, min_);
-    max_ = std::max(z, max_);
+    distances.push_back(d);
   };
 
+  auto dist_acc = 0U;
   for (auto s : segments) {
     if (s.elevation_.n_ == 0) {
       continue;
@@ -95,34 +137,34 @@ elevation_profile::elevation_profile(ways const& w,
       baseline_ = *s.elevation_.first_;
       min_ = baseline_;
       max_ = baseline_;
+      add(w.get_node_pos(s.from_), 0, baseline_);
     }
 
-    auto const step_dist = 1 / (s.elevation_.n_ - 1);
-    auto const from_pos = w.get_node_pos(s.from_);
-    auto const to_pos = w.get_node_pos(s.to_);
-    auto const lng_dist = adjust_lng(to_pos.lng() - from_pos.lng()) * step_dist;
-    auto const lat_dist = (to_pos.lat() - from_pos.lat()) * step_dist;
-    for (auto i = 1U; i < s.elevation_.n_; ++i) {
-      auto const new_lng = from_pos.lng() + lng_dist * i;
-      auto const new_lat = from_pos.lat() + lat_dist * i;
+    auto from_lng = w.get_node_pos(s.from_).lng();
+    auto from_lat = w.get_node_pos(s.from_).lat();
+    auto to_lng = w.get_node_pos(s.to_).lng();
+    auto to_lat = w.get_node_pos(s.to_).lat();
+    auto const step_dist_fak = 1.0 / (s.elevation_.n_ - 1);
+    auto const lng_dist = adjust_lng(to_lng - from_lng) * step_dist_fak;
+    auto const lat_dist = (to_lat - from_lat) * step_dist_fak;
+    auto const step_dist = s.dist_ * step_dist_fak;
 
-      add(point::from_latlng({.lng_ = new_lng, .lat_ = new_lat}),
+    for (auto i = 1U; i < s.elevation_.n_; ++i) {
+      to_lng = from_lng + lng_dist * i;
+      to_lat = from_lat + lat_dist * i;
+      dist_acc += step_dist;
+
+      add(point::from_latlng({to_lat, to_lng}), dist_acc,
           *std::next(s.elevation_.first_, i));
     }
   }
 
-  auto const kWindowSize = elevation_.size() >> 1;
-
   auto avg = moving_average<ev::elevation_meters_t>{
-      static_cast<unsigned>(kWindowSize)};
-  avg.init_from(elevation_);
-  for (auto i = avg.window_size_; i < elevation_.size() + avg.window_size_;
-       ++i) {
-    auto const curr = i - avg.window_size_;
-    auto const next =
-        (i < elevation_.size()) ? elevation_[i] : elevation_.back();
-    elevation_[curr] = avg.next(next);
-  }
+      static_cast<double>(dist_acc) / 4, ev::elevation_meters_t{0},
+      ev::elevation_meters_t{0}};
+  elevation_ = avg.apply(elevation_, distances);
+  min_ = *std::min_element(begin(elevation_), end(elevation_));
+  max_ = *std::max_element(begin(elevation_), end(elevation_));
 }
 
 ev::elevation_meters_t elevation_profile::median() const {
