@@ -9,6 +9,8 @@
 #include <optional>
 #include <ranges>
 
+#include "utl/enumerate.h"
+
 #include "osr/location.h"
 #include "osr/lookup.h"
 #include "osr/routing/additional_connection.h"
@@ -188,7 +190,7 @@ void connect_parking_ways(
       [&](node_idx_t const node_idx, geo::latlng const& center,
           std::function<bool(way_properties const&)> const& is_accessible)
       -> std::optional<matching_result_t> {
-    for (auto const connecting_way : w.r_->node_ways_[node_idx]) {
+    for (auto const [way_pos, connecting_way] : utl::enumerate(w.r_->node_ways_[node_idx])) {
       auto const way_props = w.r_->way_properties_[connecting_way];
       if (is_accessible(way_props)) {
         return std::optional<matching_result_t>{{connected_way_candidate{
@@ -214,7 +216,7 @@ void connect_parking_ways(
       -> std::optional<matching_result_t> {
     auto best = connected_way_candidate{};
     for (auto const [i, node_idx] : utl::enumerate(w.r_->way_nodes_[way_idx])) {
-      for (auto const connecting_way : w.r_->node_ways_[node_idx]) {
+      for (auto const [way, connecting_way] : utl::enumerate(w.r_->node_ways_[node_idx])) {
         auto const way_props = w.r_->way_properties_[connecting_way];
         if (connecting_way != way_idx && is_accessible(way_props)) {
           auto const dist = geo::approx_squared_distance(
@@ -313,8 +315,9 @@ void connect_parking_ways(
 
     // TODO: MK - Use point only?
     auto const center = w.r_->node_positions_[node_idx].as_latlng();
+    auto const lvl = w.r_->node_properties_[node_idx].from_level();
 
-    auto const loc = location{.pos_ = center, .lvl_ = kNoLevel};
+    auto const loc = location{.pos_ = center, .lvl_ = lvl};
 
     auto const street_matching =
         is_street_connected
@@ -388,8 +391,9 @@ void connect_parking_ways(
     auto const center = get_parking_space_center(way_idx);
     auto const approx_distance_lng_degrees =
         geo::approx_distance_lng_degrees(center);
+    auto const lvl = w.r_->way_properties_[way_idx].from_level();
 
-    auto const loc = location{.pos_ = center, .lvl_ = kNoLevel};
+    auto const loc = location{.pos_ = center, .lvl_ = lvl};
 
     auto const street_matching =
         is_street_connected ? get_closest_connected_way(

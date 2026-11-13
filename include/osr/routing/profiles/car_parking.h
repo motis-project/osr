@@ -4,6 +4,10 @@
 
 #include "boost/json.hpp"
 
+#include "utl/enumerate.h"
+#include "utl/helpers/algorithm.h"
+#include "utl/verify.h"
+
 #include "osr/elevation_storage.h"
 #include "osr/routing/additional_connection.h"
 #include "osr/routing/entry_storage.h"
@@ -14,7 +18,6 @@
 #include "osr/routing/profiles/foot.h"
 #include "osr/types.h"
 #include "osr/ways.h"
-#include "utl/helpers/algorithm.h"
 
 namespace osr {
 
@@ -302,16 +305,26 @@ struct car_parking {
     }
 
     if constexpr (UseParking) {
+              auto const get_way_pos = [&](way_idx_t const way_idx, node_idx_t const node_idx) -> way_pos_t {
+                for (auto const [way_pos, way] : utl::enumerate(w.node_ways_[node_idx])) {
+                  if (way == way_idx) {
+                    return static_cast<way_pos_t>(way_pos);
+                  }
+                }
+                utl::fail("osr: way_pos not found for way {} at node {}", way_idx, node_idx);
+        return 0U;
+              };
       if ((kFwd && n.is_car_node()) || (!kFwd && n.is_foot_node())) {
         for_each_additional_connection(
             w, n.n_, SearchDir, [&](additional_connection const connection) {
+            auto const to_way_pos = get_way_pos(connection.to_.way_, connection.to_.node_);
               if (!connection.is_car_parking_) {
                 return;
               }
               auto const& car_side = kFwd ? connection.from_ : connection.to_;
               auto const& foot_side = kFwd ? connection.to_ : connection.from_;
               auto const target = connection.to_.node_;
-              auto const lvl = w.node_properties_[target].from_level();
+              auto const lvl = kFwd ? w.node_properties_[target].from_level() : kNoLevel;
 
               auto const dist = static_cast<distance_t>(
                   car_side.dist_ + connection.connection_dist_ +
@@ -336,13 +349,8 @@ struct car_parking {
                    cost.cost_, cost.duration_, dist, connection.connection_way_,
                    0, 0, elevation_storage::elevation{}, false);
               } else {
-                // Route in both directions
                 fn({target, node_type::kCar, lvl,
-                    flip<SearchDir>(connection.to_.dir_), 0U},
-                   cost.cost_, cost.duration_, dist, connection.connection_way_,
-                   0, 0, elevation_storage::elevation{}, false);
-                fn({target, node_type::kCar, lvl,
-                    flip<SearchDir>(opposite(connection.to_.dir_)), 0U},
+                    flip<SearchDir>(connection.to_.dir_), get_way_pos(connection.to_.way_, connection.to_.node_)},
                    cost.cost_, cost.duration_, dist, connection.connection_way_,
                    0, 0, elevation_storage::elevation{}, false);
               }
