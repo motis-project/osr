@@ -413,10 +413,10 @@ encoding_result_t calculate_way_encodings(
 
           offsets.resize(elevations_idx);
           if (!segment_elevation.empty()) {
-            auto& encoding =
-                offsets.emplace_back(elevations_idx, segment_elevation.size(),
-                                     elevation_storage::encoding::coding{0},
-                                     elevation_storage::encoding::coding{0});
+            auto& encoding = offsets.emplace_back(
+                elevations.size(), segment_elevation.size(),
+                elevation_storage::encoding::coding{0},
+                elevation_storage::encoding::coding{0});
             if (segment_elevation.size() > 1) {
               auto prev = segment_elevation[0];
               // TODO make readable
@@ -446,7 +446,9 @@ encoding_result_t calculate_way_encodings(
           auto const lock = std::lock_guard{m};
           result.mappings_.emplace_back(way_idx,
                                         sort_idx_t{result.offsets_.size()});
-          offsets[0].idx_ = result.elevations_.size();
+          for (auto i = 0U; i < offsets.size(); ++i) {
+            offsets[i].idx_ += result.elevations_.size();
+          }
           result.offsets_.emplace_back(offsets);
           result.elevations_.insert(end(result.elevations_), begin(elevations),
                                     end(elevations));
