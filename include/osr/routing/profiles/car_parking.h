@@ -1,6 +1,7 @@
 #pragma once
 
 #include <optional>
+#include <utility>
 
 #include "boost/json.hpp"
 
@@ -305,26 +306,37 @@ struct car_parking {
     }
 
     if constexpr (UseParking) {
-              auto const get_way_pos = [&](way_idx_t const way_idx, node_idx_t const node_idx) -> way_pos_t {
-                for (auto const [way_pos, way] : utl::enumerate(w.node_ways_[node_idx])) {
-                  if (way == way_idx) {
-                    return static_cast<way_pos_t>(way_pos);
-                  }
-                }
-                utl::fail("osr: way_pos not found for way {} at node {}", way_idx, node_idx);
-        return 0U;
-              };
-      if ((kFwd && n.is_car_node()) || (!kFwd && n.is_foot_node())) {
+      auto const get_way_pos = [&](way_idx_t const way_idx,
+                                   node_idx_t const node_idx) -> way_pos_t {
+        for (auto const [way_pos, way] :
+             utl::enumerate(w.node_ways_[node_idx])) {
+          if (way == way_idx) {
+            return static_cast<way_pos_t>(way_pos);
+          }
+        }
+        utl::fail("osr: way_pos not found for way {} at node {}", way_idx,
+                  node_idx);
+        std::unreachable();
+      };
+      if ((kFwd && n.is_car_node()) ||
+          (!kFwd && n.is_foot_node() &&
+           is_resolved_foot_state<footp>(w, n,
+                                         [&](footp::node const foot_state) {
+                                           return to_node(foot_state);
+                                         }))) {
         for_each_additional_connection(
             w, n.n_, SearchDir, [&](additional_connection const connection) {
-            auto const to_way_pos = get_way_pos(connection.to_.way_, connection.to_.node_);
               if (!connection.is_car_parking_) {
                 return;
               }
               auto const& car_side = kFwd ? connection.from_ : connection.to_;
               auto const& foot_side = kFwd ? connection.to_ : connection.from_;
               auto const target = connection.to_.node_;
-              auto const lvl = kFwd ? w.node_properties_[target].from_level() : kNoLevel;
+              auto const lvl =
+                  kFwd ? w.node_properties_[target].from_level() : kNoLevel;
+              auto const car_way_pos =
+                  get_way_pos(car_side.way_, car_side.node_);
+              auto const car_exit_dir = flip<SearchDir>(car_side.dir_);
 
               auto const dist = static_cast<distance_t>(
                   car_side.dist_ + connection.connection_dist_ +
@@ -345,12 +357,32 @@ struct car_parking {
                       .cost_ = kSwitchPenalty,
                       .duration_ = duration_from_cost(kSwitchPenalty)});
               if (kFwd) {
-                fn({target, node_type::kFoot, lvl, direction::kForward, 0U},
-                   cost.cost_, cost.duration_, dist, connection.connection_way_,
-                   0, 0, elevation_storage::elevation{}, false);
+                if (w.is_restricted<SearchDir>(n.n_, n.way_, car_way_pos)) {
+                  return;
+                }
+                auto const is_u_turn =
+                    car_way_pos == n.way_ && car_exit_dir == opposite(n.dir_);
+                auto const turn_cost =
+                    get_profile_turn_cost<streetp, SearchDir>(
+                        params.car_, w, to_car(n), car_way_pos, car_exit_dir,
+                        is_u_turn);
+                if (turn_cost == kInfeasible) {
+                  return;
+                }
+                auto car_cost = clamp_add(cost, turn_cost, duration_t{0U});
+                if (is_u_turn) {
+                  car_cost = clamp_add(car_cost, params.car_.uturn_penalty_,
+                                       duration_t{0U});
+                }
+
+                footp::resolve_all(
+                    w, target, [&](footp::node const foot_state) {
+                      fn(to_node(foot_state), car_cost.cost_,
+                         car_cost.duration_, dist, connection.connection_way_,
+                         0, 0, elevation_storage::elevation{}, false);
+                    });
               } else {
-                fn({target, node_type::kCar, lvl,
-                    flip<SearchDir>(connection.to_.dir_), get_way_pos(connection.to_.way_, connection.to_.node_)},
+                fn({target, node_type::kCar, lvl, car_exit_dir, car_way_pos},
                    cost.cost_, cost.duration_, dist, connection.connection_way_,
                    0, 0, elevation_storage::elevation{}, false);
               }
