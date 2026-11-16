@@ -33,7 +33,7 @@
 [net]
   url=git@github.com:motis-project/net.git
   branch=master
-  commit=c2599102dcffa4babfdcf5320a6bd6f5c6e9b731
+  commit=d1d445326a5d3ec77e14394fee60962d08894ba0
 [osm]
   url=git@github.com:motis-project/osm.git
   branch=dev
