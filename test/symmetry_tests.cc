@@ -38,6 +38,7 @@ struct result_t {
 
 bool supports_bidirectional(osr::search_profile const profile) {
   switch (profile) {
+    case osr::search_profile::kBikeParking:
     case osr::search_profile::kBikeSharing:
     case osr::search_profile::kCarSharing:
     case osr::search_profile::kCarParking:
@@ -236,6 +237,8 @@ TEST(symmetry, random_pairs_forward_backward_equivalence) {
            osr::search_profile::kHgv},
           {osr::get_parameters(osr::search_profile::kRailway),
            osr::search_profile::kRailway},
+          {osr::get_parameters(osr::search_profile::kBikeParking),
+           osr::search_profile::kBikeParking},
           {osr::get_parameters(osr::search_profile::kCarParking),
            osr::search_profile::kCarParking},
           {osr::get_parameters(osr::search_profile::kCarDropOff),

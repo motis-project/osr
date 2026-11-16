@@ -302,7 +302,12 @@ struct bike_parking {
     }
 
     if constexpr (UseParking) {
-      if ((kFwd && n.is_bike_node()) || (!kFwd && n.is_foot_node())) {
+      if ((kFwd && n.is_bike_node()) ||
+          (!kFwd && n.is_foot_node() &&
+           is_resolved_foot_state<footp>(w, n,
+                                         [&](footp::node const foot_state) {
+                                           return to_node(foot_state);
+                                         }))) {
         for_each_additional_connection(
             w, n.n_, SearchDir, [&](additional_connection const connection) {
               if (!connection.is_bike_parking_) {
@@ -311,7 +316,8 @@ struct bike_parking {
               auto const& bike_side = kFwd ? connection.from_ : connection.to_;
               auto const& foot_side = kFwd ? connection.to_ : connection.from_;
               auto const target = connection.to_.node_;
-              auto const lvl = w.node_properties_[target].from_level();
+              auto const lvl =
+                  kFwd ? w.node_properties_[target].from_level() : kNoLevel;
 
               auto const dist = static_cast<distance_t>(
                   bike_side.dist_ + connection.connection_dist_ +
@@ -333,17 +339,19 @@ struct bike_parking {
                       .cost_ = kSwitchPenalty,
                       .duration_ = duration_from_cost(kSwitchPenalty)});
               if (kFwd) {
-                fn({target, node_type::kFoot, lvl, direction::kForward, 0U},
-                   cost.cost_, cost.duration_, dist, connection.connection_way_,
-                   0, 0, elevation_storage::elevation{}, false);
+                footp::resolve_all(
+                    w, target, [&](footp::node const foot_state) {
+                      fn(to_node(foot_state), cost.cost_, cost.duration_, dist,
+                         connection.connection_way_, 0, 0,
+                         elevation_storage::elevation{}, false);
+                    });
               } else {
-                // Route in both directions
-                fn({target, node_type::kBike, lvl,
-                    flip<SearchDir>(connection.to_.dir_), 0U},
+                fn({target, node_type::kBike, lvl, direction::kForward,
+                    way_pos_t{0}},
                    cost.cost_, cost.duration_, dist, connection.connection_way_,
                    0, 0, elevation_storage::elevation{}, false);
-                fn({target, node_type::kBike, lvl,
-                    flip<SearchDir>(opposite(connection.to_.dir_)), 0U},
+                fn({target, node_type::kBike, lvl, direction::kBackward,
+                    way_pos_t{0}},
                    cost.cost_, cost.duration_, dist, connection.connection_way_,
                    0, 0, elevation_storage::elevation{}, false);
               }
