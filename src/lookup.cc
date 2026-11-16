@@ -70,6 +70,7 @@ std::optional<kept_candidate> keep_candidate(
     component_classes const classes,
     location const& query,
     way_idx_t const way,
+    std::uint16_t const edge,
     float const dist) {
   auto const& props = w.r_->way_properties_[way];
   auto k = kept_candidate{
@@ -92,7 +93,7 @@ std::optional<kept_candidate> keep_candidate(
     }
     voted = true;
     auto const ci = static_cast<std::size_t>(c);
-    auto const id = w.r_->get_class_components(c).get(way);
+    auto const id = w.r_->get_class_components(c).get(way, edge);
     auto const unpenalized = is_accessible_without_penalty(c, props);
     auto const with_penalty = has_penalty(c, props);
     auto const oneway = is_oneway(c, props);
@@ -233,9 +234,11 @@ void lookup::filter_by_component(
   kept.reserve(to - from);
   auto write = from;
   for (auto read = from; read != to; ++read) {
+    auto const way = out.way_[idx_t{read}];
     auto const k =
-        keep_candidate(ways_, kept, classes[read - from], query,
-                       out.way_[idx_t{read}], out.dist_to_way_[idx_t{read}]);
+        keep_candidate(ways_, kept, classes[read - from], query, way,
+                       candidate_edge(ways_, way, out.nodes_[idx_t{read}]),
+                       out.dist_to_way_[idx_t{read}]);
     if (!k.has_value()) {
       continue;
     }
@@ -265,7 +268,7 @@ void lookup::set_penalty_reference(match_result& out,
   auto const to = static_cast<std::uint32_t>(out.way_.size());
   for (auto i = to_idx(out.begin_.back()); i != to; ++i) {
     if (touches_ground(ways_.r_->way_properties_[out.way_[idx_t{i}]])) {
-      out.penalty_ref_.back() = out.dist_to_way_[idx_t{i}];
+      out.penalty_ref_.resize(to, out.dist_to_way_[idx_t{i}]);
       return;
     }
   }
