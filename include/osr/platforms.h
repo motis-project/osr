@@ -6,7 +6,7 @@
 
 #include "rtree.h"
 
-#include "utl/overloaded.h"
+#include "utl/visit.h"
 #include "utl/zip.h"
 
 #include "osr/types.h"
@@ -35,10 +35,10 @@ constexpr ref_t to_ref(ref_value_t const v) {
 }
 
 constexpr ref_value_t to_value(ref_t const r) {
-  return std::visit(
-      utl::overloaded{[](way_idx_t x) { return to_idx(x); },
-                      [](node_idx_t x) { return to_idx(x) + kNodeMarker; }},
-      r);
+  return utl::visit(
+      r,  //
+      [](way_idx_t x) { return to_idx(x); },
+      [](node_idx_t x) { return to_idx(x) + kNodeMarker; });
 }
 
 struct platforms {
@@ -136,13 +136,10 @@ struct platforms {
       return level_t{0.0F};
     }
     auto const& plref = platform_ref_.at(i);
-    return std::visit(
-        utl::overloaded{
-            [&](way_idx_t x) { return w.r_->way_properties_[x].from_level(); },
-            [&](node_idx_t x) {
-              return w.r_->node_properties_[x].from_level();
-            }},
-        to_ref(plref.at(0)));
+    return utl::visit(
+        to_ref(plref.at(0)),
+        [&](way_idx_t x) { return w.r_->way_properties_[x].from_level(); },
+        [&](node_idx_t x) { return w.r_->node_properties_[x].from_level(); });
   }
 
   template <typename Fn>
@@ -189,32 +186,31 @@ struct platforms {
     for (auto const refs : platform_ref_) {
       for (auto const ref : refs) {
         assert(ref != std::numeric_limits<decltype(ref)>::max());
-        std::visit(
-            utl::overloaded{
-                [&](node_idx_t const x) {
-                  auto const pos = get_node_pos(x).as_latlng();
-                  auto const min_corner = std::array{pos.lng(), pos.lat()};
-                  rtree_insert(rtree_, min_corner.data(), nullptr,
-                               reinterpret_cast<void*>(
-                                   static_cast<std::size_t>(to_idx(i))));
-                },
+        utl::visit(
+            to_ref(ref),
+            [&](node_idx_t const x) {
+              auto const pos = get_node_pos(x).as_latlng();
+              auto const min_corner = std::array{pos.lng(), pos.lat()};
+              rtree_insert(
+                  rtree_, min_corner.data(), nullptr,
+                  reinterpret_cast<void*>(static_cast<std::size_t>(to_idx(i))));
+            },
 
-                [&](way_idx_t const x) {
-                  auto b = osmium::Box{};
-                  for (auto const& c : w.way_polylines_[x]) {
-                    b.extend(osmium::Location{c.lat_, c.lng_});
-                  }
+            [&](way_idx_t const x) {
+              auto b = osmium::Box{};
+              for (auto const& c : w.way_polylines_[x]) {
+                b.extend(osmium::Location{c.lat_, c.lng_});
+              }
 
-                  auto const min_corner =
-                      std::array{b.bottom_left().lon(), b.bottom_left().lat()};
-                  auto const max_corner =
-                      std::array{b.top_right().lon(), b.top_right().lat()};
+              auto const min_corner =
+                  std::array{b.bottom_left().lon(), b.bottom_left().lat()};
+              auto const max_corner =
+                  std::array{b.top_right().lon(), b.top_right().lat()};
 
-                  rtree_insert(rtree_, min_corner.data(), max_corner.data(),
-                               reinterpret_cast<void*>(
-                                   static_cast<std::size_t>(to_idx(i))));
-                }},
-            to_ref(ref));
+              rtree_insert(
+                  rtree_, min_corner.data(), max_corner.data(),
+                  reinterpret_cast<void*>(static_cast<std::size_t>(to_idx(i))));
+            });
       }
       ++i;
     }

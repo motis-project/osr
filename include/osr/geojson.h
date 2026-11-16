@@ -13,6 +13,7 @@
 
 #include "utl/pairwise.h"
 #include "utl/pipes.h"
+#include "utl/visit.h"
 
 #include "osr/platforms.h"
 #include "osr/routing/dijkstra.h"
@@ -555,14 +556,10 @@ inline void add_class_component_properties(boost::json::object& properties,
 struct geojson_writer {
   void write_platform(platform_idx_t const i) {
     for (auto const r : platforms_->platform_ref_[i]) {
-      auto const geometry = std::visit(
-          utl::overloaded{[&](node_idx_t x) {
-                            return to_point(platforms_->get_node_pos(x));
-                          },
-                          [&](way_idx_t x) {
-                            return to_line_string(w_.way_polylines_[x]);
-                          }},
-          to_ref(r));
+      auto const geometry = utl::visit(
+          to_ref(r),
+          [&](node_idx_t x) { return to_point(platforms_->get_node_pos(x)); },
+          [&](way_idx_t x) { return to_line_string(w_.way_polylines_[x]); });
       features_.emplace_back(boost::json::value{
           {"type", "Feature"},
           {"properties",

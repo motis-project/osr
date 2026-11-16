@@ -27,6 +27,7 @@
 
 #include "utl/enumerate.h"
 #include "utl/helpers/algorithm.h"
+#include "utl/lookup.h"
 #include "utl/parser/arg_parser.h"
 #include "utl/progress_tracker.h"
 #include "utl/verify.h"
@@ -607,9 +608,10 @@ struct node_handler : public osmium::handler::Handler {
       if (p.is_elevator() && p.is_multi_level()) {
         auto const l = std::scoped_lock{multi_level_elevators_mutex_};
         w_.r_->multi_level_elevators_.emplace_back(*node_idx, level_bits);
-      } else if (auto const it = elevator_nodes_.find(osm_node_idx);
-                 it != end(elevator_nodes_)) {
-        auto const [from, to, is_multi] = get_levels(true, it->second);
+      } else if (auto const elevator_level_bits =
+                     utl::lookup(elevator_nodes_, osm_node_idx)) {
+        auto const [from, to, is_multi] =
+            get_levels(true, *elevator_level_bits);
         auto& x = w_.r_->node_properties_[*node_idx];
         x.is_elevator_ = true;
         x.from_level_ = to_idx(from);
@@ -617,7 +619,8 @@ struct node_handler : public osmium::handler::Handler {
         x.is_multi_level_ = is_multi;
         if (is_multi) {
           auto const l = std::scoped_lock{multi_level_elevators_mutex_};
-          w_.r_->multi_level_elevators_.emplace_back(*node_idx, it->second);
+          w_.r_->multi_level_elevators_.emplace_back(*node_idx,
+                                                     *elevator_level_bits);
         }
       }
     }

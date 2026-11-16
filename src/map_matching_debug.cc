@@ -11,6 +11,7 @@
 #include "boost/iostreams/filtering_stream.hpp"
 
 #include "utl/enumerate.h"
+#include "utl/lookup.h"
 
 #include "osr/lookup.h"
 #include "osr/routing/profiles/bike.h"
@@ -245,9 +246,8 @@ boost::json::object build_map_match_debug_json(
     if (way_idx == way_idx_t::invalid()) {
       return std::numeric_limits<std::size_t>::max();
     }
-    if (auto const it = way_to_array_idx.find(way_idx);
-        it != way_to_array_idx.end()) {
-      return it->second;
+    if (auto const i = utl::lookup(way_to_array_idx, way_idx)) {
+      return *i;
     }
     auto const idx = dbg_ways.size();
     way_to_array_idx[way_idx] = idx;
@@ -318,14 +318,12 @@ boost::json::object build_map_match_debug_json(
     if (node_idx == node_idx_t::invalid()) {
       return std::numeric_limits<std::size_t>::max();
     }
-    if (auto const it = node_to_array_idx.find(node_idx);
-        it != node_to_array_idx.end()) {
-      auto const i = it->second;
+    if (auto const i = utl::lookup(node_to_array_idx, node_idx)) {
       if (!is_additional && include_way_indices &&
-          !dbg_nodes[i].if_contains("wayIndices")) {
-        populate_node_fields(i, node_idx, true);
+          !dbg_nodes[*i].if_contains("wayIndices")) {
+        populate_node_fields(*i, node_idx, true);
       }
-      return i;
+      return *i;
     }
     auto const idx = dbg_nodes.size();
     node_to_array_idx[node_idx] = idx;

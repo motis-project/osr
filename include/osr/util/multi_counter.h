@@ -8,6 +8,8 @@
 
 #include "cista/containers/bitset.h"
 
+#include "utl/lookup.h"
+
 #include "osr/types.h"
 
 namespace osr {
@@ -29,10 +31,7 @@ struct multi_counter {
              pages_[p]->multi_.test(i % kPageBits);
     }
 
-    if (auto const it = sparse_counter_.find(i); it != end(sparse_counter_)) {
-      return it->second >= 2U;
-    }
-    return false;
+    return utl::lookup(sparse_counter_, i).value_or(0U) >= 2U;
   }
 
   void increment(size_type const i) {
