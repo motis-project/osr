@@ -385,9 +385,9 @@ struct bike_parking {
   }
 
   static bool can_leave_bike(ways::routing const& w, node_idx_t const n) {
-    return !UseParking || w.node_properties_[n].is_parking() ||
+    return !UseParking || w.node_properties_[n].is_bike_parking() ||
            utl::any_of(w.node_ways_[n], [&](way_idx_t const way) {
-             return w.way_properties_[way].is_parking();
+             return w.way_properties_[way].is_bike_parking();
            });
   }
 

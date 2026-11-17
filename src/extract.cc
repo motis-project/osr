@@ -437,7 +437,7 @@ struct way_handler : public osmium::handler::Handler {
     }
 
     if (!t.is_elevator_ &&  // elevators tagged as building would be landuse
-        !t.is_parking_ && !t.is_bicycle_parking_ &&
+        !t.is_parking() &&
         ((it == end(rel_ways_) && t.highway_.empty() && t.railway_.empty() &&
           !t.is_ferry_route_ && !t.is_platform()) ||
          (t.highway_.empty() && !t.is_platform() && it != end(rel_ways_) &&
@@ -448,8 +448,7 @@ struct way_handler : public osmium::handler::Handler {
     auto const in_route = it != end(rel_ways_) && it->second.p_.in_route_;
     auto const hgv_info = get_hgv_way_info(t);
 
-    auto p = (t.is_platform() || t.is_parking_ || t.is_bicycle_parking_ ||
-              !t.highway_.empty() ||
+    auto p = (t.is_platform() || t.is_parking() || !t.highway_.empty() ||
               (!t.railway_.empty() && (in_route || it == end(rel_ways_))) ||
               t.is_ferry_route_)
                  ? get_way_properties(t)
@@ -828,7 +827,7 @@ void extract(bool const with_platforms,
                 is_accessible<wheelchair_profile>(t, osm_obj_type::kNode) &&
                 is_accessible<foot_profile>(t, osm_obj_type::kNode);
             if (!accessible || t.is_elevator_ || t.is_platform() ||
-                t.is_gate() || t.is_bicycle_parking_) {
+                t.is_gate() || t.is_parking()) {
               ctx.blocking_nodes_.push_back(to_idx(to_osm_node_idx(id)));
             }
 
@@ -837,7 +836,7 @@ void extract(bool const with_platforms,
 
             // Ensure platform nodes are created
             // even if they are not part of a routable way.
-            if ((pl != nullptr && t.is_platform()) || t.is_bicycle_parking_) {
+            if ((pl != nullptr && t.is_platform()) || t.is_parking()) {
               ctx.blocking_nodes_.push_back(to_idx(to_osm_node_idx(id)));
             }
           }

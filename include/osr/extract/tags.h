@@ -273,6 +273,12 @@ public:
     }
   }
 
+  bool is_parking() const { return is_parking_ || is_bicycle_parking_; }
+
+  bool is_bike_parking() const { return is_bicycle_parking_; }
+
+  bool is_car_parking() const { return is_parking_; }
+
   bool is_public_transport_route() const {
     switch (cista::hash(route_type_)) {
       case cista::hash("bus"):
@@ -671,8 +677,8 @@ struct bike_profile {
 struct car_profile {
   static override access_override(tags const& t, osm_obj_type const type) {
     if (t.access_ == override::kBlacklist || t.is_route_ || t.is_ferry_route_ ||
-        (type == osm_obj_type::kWay && t.is_bicycle_parking_) ||
-        (type == osm_obj_type::kWay && t.highway_.empty())) {
+        t.is_bicycle_parking_ ||
+        (type == osm_obj_type::kWay && !t.is_parking_ && t.highway_.empty())) {
       return override::kBlacklist;
     }
 

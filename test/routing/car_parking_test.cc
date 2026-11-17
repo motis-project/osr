@@ -163,7 +163,7 @@ TEST(car_parking, monaco) {
         {.lat_ = 43.725320, .lng_ = 7.418700},
         {.lat_ = 43.725425, .lng_ = 7.418853},
     };
-    auto const to = geo::latlng{.lat_ = 43.725731, .lng_ = 7.418250};
+    auto const to = geo::latlng{.lat_ = 43.725799, .lng_ = 7.419103};
     // Node on connected way, that should never be used
     auto const not_used_car_parking_node =
         geo::latlng{.lat_ = 43.7257018, .lng_ = 7.4190091};
@@ -183,8 +183,8 @@ TEST(car_parking, monaco) {
 
       for (auto const& res : results) {
         ASSERT_TRUE(res.has_value());
-        ASSERT_TRUE(res->segments_.size() > 7);
-        auto const parking_segment = res->segments_.size() - 7;
+        ASSERT_TRUE(res->segments_.size() > 2);
+        auto const parking_segment = res->segments_.size() - 2;
         for (auto const& [idx, segment] : utl::enumerate(res->segments_)) {
           EXPECT_EQ(segment.mode_, idx < parking_segment    ? mode::kCar
                                    : idx == parking_segment ? mode::kParking
@@ -197,9 +197,9 @@ TEST(car_parking, monaco) {
       }
     }
     // Check that tested node is actual node on car usable way
-    // Note (Corner case): With forward search, nodes on the car parking segment
-    // might match with the left node. In that case, no loop is required. With
-    // backward search, a loop is always required.
+    // Notice that starting on the parking segment should match with the right
+    // node. This results in a required loop, before parking is allowed. This
+    // affects searching in both directions.
     {
       auto const res =
           route(params, w, l, search_profile::kCarParking,
@@ -209,7 +209,7 @@ TEST(car_parking, monaco) {
                 nullptr, routing_algorithm::kDijkstra);
 
       ASSERT_TRUE(res.has_value());
-      ASSERT_EQ(res->segments_.size(), 14);
+      ASSERT_EQ(res->segments_.size(), 9);
       EXPECT_EQ(res->segments_[7].mode_, mode::kParking);
       EXPECT_TRUE(geo::distance(res->segments_[0].polyline_.front(),
                                 not_used_car_parking_node) < 1e-6);

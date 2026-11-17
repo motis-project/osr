@@ -631,6 +631,7 @@ struct geojson_writer {
           {"sidewalk_separate", p.is_sidewalk_separate()},
           {"is_steps", p.is_steps()},
           {"is_parking", p.is_parking()},
+          {"is_bicycle_parking", p.is_bike_parking()},
           {"is_ramp", p.is_ramp()},
           {"in_route", p.in_route()},
           {"is_detour", p.is_detour()}};
@@ -671,6 +672,7 @@ struct geojson_writer {
         {"sidewalk_separate", p.is_sidewalk_separate()},
         {"is_steps", p.is_steps()},
         {"is_parking", p.is_parking()},
+        {"is_bicycle_parking", p.is_bike_parking()},
         {"is_ramp", p.is_ramp()},
         {"in_route", p.in_route()},
         {"is_detour", p.is_detour()},

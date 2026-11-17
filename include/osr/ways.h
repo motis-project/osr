@@ -214,8 +214,7 @@ struct way_properties {
     return is_parking_ && is_bike_accessible_ && !is_car_accessible_;
   }
   constexpr bool is_parking() const {
-    return is_parking_;
-    // return is_parking_ && is_car_accessible_;
+    return is_parking_ && is_car_accessible_;
   }
   constexpr bool has_toll() const { return has_toll_; }
   constexpr bool is_sidewalk_separate() const { return is_sidewalk_separate_; }
@@ -300,7 +299,12 @@ struct node_properties {
   constexpr bool is_elevator() const { return is_elevator_; }
   constexpr bool is_multi_level() const { return is_multi_level_; }
   constexpr bool is_entrance() const { return is_entrance_; }
-  constexpr bool is_parking() const { return is_parking_; }
+  constexpr bool is_parking() const {
+    return is_parking_ && is_car_accessible_;
+  }
+  constexpr bool is_bike_parking() const {
+    return is_parking_ && is_bike_accessible_ && !is_car_accessible_;
+  }
   constexpr bool is_steps() const { return is_steps_; }
   // Passable: a gate without access tags. Not passable: a private barrier,
   // passable at a high cost.

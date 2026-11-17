@@ -153,6 +153,7 @@ void connect_parking_ways(
     ways& w,
     lookup const& l,
     vec_map<way_idx_t, way_extra_properties> const& way_extra,
+    std::function<bool(node_properties const&)> const& is_parking_node,
     std::function<bool(way_properties const&)> const& is_parking,
     std::function<bool(way_properties const&)> const& is_street_accessible,
     std::function<double(double, way_idx_t)> const& street_way_score) {
@@ -190,7 +191,8 @@ void connect_parking_ways(
       [&](node_idx_t const node_idx, geo::latlng const& center,
           std::function<bool(way_properties const&)> const& is_accessible)
       -> std::optional<matching_result_t> {
-    for (auto const [way_pos, connecting_way] : utl::enumerate(w.r_->node_ways_[node_idx])) {
+    for (auto const [way_pos, connecting_way] :
+         utl::enumerate(w.r_->node_ways_[node_idx])) {
       auto const way_props = w.r_->way_properties_[connecting_way];
       if (is_accessible(way_props)) {
         return std::optional<matching_result_t>{{connected_way_candidate{
@@ -216,7 +218,8 @@ void connect_parking_ways(
       -> std::optional<matching_result_t> {
     auto best = connected_way_candidate{};
     for (auto const [i, node_idx] : utl::enumerate(w.r_->way_nodes_[way_idx])) {
-      for (auto const [way, connecting_way] : utl::enumerate(w.r_->node_ways_[node_idx])) {
+      for (auto const [way, connecting_way] :
+           utl::enumerate(w.r_->node_ways_[node_idx])) {
         auto const way_props = w.r_->way_properties_[connecting_way];
         if (connecting_way != way_idx && is_accessible(way_props)) {
           auto const dist = geo::approx_squared_distance(
@@ -300,9 +303,7 @@ void connect_parking_ways(
     auto const node_idx = node_idx_t{i};
     auto const p = w.r_->node_properties_[node_idx];
 
-		// TODO Must be bike_parking
-		// ⇒ BUG: All parking nodes are allowed
-    if (!p.is_parking()) {
+    if (!is_parking_node(p)) {
       continue;
     }
     auto const is_street_connected =
@@ -464,6 +465,9 @@ void connect_parking_ways(
     ways& w,
     lookup const& l,
     vec_map<way_idx_t, way_extra_properties> const& way_extra) {
+  auto const is_bike_parking_node = [&](node_properties const& props) {
+    return props.is_bike_parking();
+  };
   auto const is_bike_parking = [&](way_properties const& props) {
     return props.is_bike_parking();
   };
@@ -473,6 +477,9 @@ void connect_parking_ways(
   auto const bike_way_score = [&](double const dist_to_way,
                                   way_idx_t const way_idx) -> double {
     return score(dist_to_way, !w.r_->way_properties_[way_idx].is_big_street());
+  };
+  auto const is_car_parking_node = [&](node_properties const& props) {
+    return props.is_parking();
   };
   auto const is_car_parking = [&](way_properties const& props) {
     return props.is_parking();
@@ -485,10 +492,12 @@ void connect_parking_ways(
     return score(dist_to_way, way_extra[way_idx].is_parking_aisle());
   };
 
-  connect_parking_ways<bike_parking<true>>(w, l, way_extra, is_bike_parking,
-                                           is_bike_accessible, bike_way_score);
+  connect_parking_ways<bike_parking<true>>(
+      w, l, way_extra, is_bike_parking_node, is_bike_parking,
+      is_bike_accessible, bike_way_score);
   connect_parking_ways<car_parking<false, true>>(
-      w, l, way_extra, is_car_parking, is_car_accessible, car_way_score);
+      w, l, way_extra, is_car_parking_node, is_car_parking, is_car_accessible,
+      car_way_score);
 
   utl::sort(w.r_->additional_node_connections_);
   // Ensure no duplicates are stored
