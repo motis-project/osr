@@ -90,16 +90,96 @@ struct best_matching_candidate {
   std::uint32_t component_{0U};
 };
 
-template <Profile P>
+template <component_class C>
+bool is_street_accessible(way_properties const&);
+
+template <>
+bool is_street_accessible<component_class::kBike>(way_properties const& props) {
+  return props.is_bike_accessible();
+}
+
+template <>
+bool is_street_accessible<component_class::kCar>(way_properties const& props) {
+  return props.is_car_accessible();
+}
+
+template <component_class C>
+bool is_parking(node_properties const&);
+
+template <>
+bool is_parking<component_class::kBike>(node_properties const& props) {
+  return props.is_bike_parking();
+}
+
+template <>
+bool is_parking<component_class::kCar>(node_properties const& props) {
+  return props.is_parking();
+}
+
+template <component_class C>
+bool is_parking(way_properties const&);
+
+template <>
+bool is_parking<component_class::kBike>(way_properties const& props) {
+  return props.is_bike_parking();
+}
+
+template <>
+bool is_parking<component_class::kCar>(way_properties const& props) {
+  return props.is_parking();
+}
+
+double score(double const dist_to_way, bool const is_preferred) {
+  // Penalize not designated ways
+  // Add shift to find nearby preferred ways, like nearest footpath
+  // Lower penalty to not match with ways too far away
+  return -((1 + ((is_preferred ? 0.0 : 4.0) / (dist_to_way + 1.0))) *
+           (dist_to_way + 2.5));
+}
+
+template <component_class C>
+double component_way_score(
+    ways const&,
+    vec_map<way_idx_t, way_extra_properties> const& way_extra,
+    double const dist_to_way,
+    way_idx_t);
+
+template <>
+double component_way_score<component_class::kBike>(
+    ways const& w,
+    vec_map<way_idx_t, way_extra_properties> const&,
+    double const dist_to_way,
+    way_idx_t const way_idx) {
+  return score(dist_to_way, !w.r_->way_properties_[way_idx].is_big_street());
+}
+
+template <>
+double component_way_score<component_class::kCar>(
+    ways const&,
+    vec_map<way_idx_t, way_extra_properties> const& way_extra,
+    double const dist_to_way,
+    way_idx_t const way_idx) {
+  return score(dist_to_way, way_extra[way_idx].is_parking_aisle());
+}
+
+template <>
+double component_way_score<component_class::kFoot>(
+    ways const&,
+    vec_map<way_idx_t, way_extra_properties> const& way_extra,
+    double const dist_to_way,
+    way_idx_t const way_idx) {
+  return score(dist_to_way, way_extra[way_idx].is_preferred_footpath());
+}
+
+template <Profile P, component_class C>
 std::optional<matching_result_t> find_closest_offset(
     ways const& w,
     lookup const& l,
+    vec_map<way_idx_t, way_extra_properties> const& way_extra,
     location const& loc,
-    direction const dir,
-    component_class const cc,
-    std::function<double(double, way_idx_t)> const& score) {
+    direction const dir) {
   auto const params = typename P::parameters{};
-  auto const& class_components = w.r_->get_class_components(cc);
+  auto const& class_components = w.r_->get_class_components(C);
 
   auto best = best_matching_candidate{};
 
@@ -112,7 +192,9 @@ std::optional<matching_result_t> find_closest_offset(
       auto const way_idx = match.way_[j];
       auto const way_component = class_components.get(way_idx);
       if (best.update_component(way_component)) {
-        auto const s = score(match.dist_to_way_[j], way_idx);
+        // TODO: MK - Check for levels
+        auto const s = component_way_score<C>(w, way_extra,
+                                              match.dist_to_way_[j], way_idx);
         best.update(way_idx, match, j, s);
       }
     }
@@ -133,17 +215,9 @@ std::optional<matching_result_t> find_closest_offset(
 
     std::clog << fmt::format(
         "osr: No matching way found for location {} (component_class={})\n",
-        loc.pos_, to_str(cc));
+        loc.pos_, to_str(C));
     return std::nullopt;
   }
-}
-
-double score(double const dist_to_way, bool const is_preferred) {
-  // Penalize not designated ways
-  // Add shift to find nearby preferred ways, like nearest footpath
-  // Lower penalty to not match with ways too far away
-  return -((1 + ((is_preferred ? 0.0 : 4.0) / (dist_to_way + 1.0))) *
-           (dist_to_way + 2.5));
 }
 
 }  // namespace
@@ -152,18 +226,9 @@ template <ParkingProfile P>
 void connect_parking_ways(
     ways& w,
     lookup const& l,
-    vec_map<way_idx_t, way_extra_properties> const& way_extra,
-    std::function<bool(node_properties const&)> const& is_parking_node,
-    std::function<bool(way_properties const&)> const& is_parking,
-    std::function<bool(way_properties const&)> const& is_street_accessible,
-    std::function<double(double, way_idx_t)> const& street_way_score) {
+    vec_map<way_idx_t, way_extra_properties> const& way_extra) {
   auto const is_foot_accessible = [&](way_properties const& props) {
     return props.is_foot_accessible();
-  };
-
-  auto const foot_way_score = [&](double const dist_to_way,
-                                  way_idx_t const way_idx) -> double {
-    return score(dist_to_way, way_extra[way_idx].is_preferred_footpath());
   };
 
   auto const get_parking_space_center = [&](way_idx_t const way_idx) {
@@ -303,7 +368,7 @@ void connect_parking_ways(
     auto const node_idx = node_idx_t{i};
     auto const p = w.r_->node_properties_[node_idx];
 
-    if (!is_parking_node(p)) {
+    if (!is_parking<P::kStreetComponentClass>(p)) {
       continue;
     }
     auto const is_street_connected =
@@ -322,10 +387,11 @@ void connect_parking_ways(
 
     auto const street_matching =
         is_street_connected
-            ? get_connected_way(node_idx, center, is_street_accessible)
-            : find_closest_offset<typename P::streetp>(
-                  w, l, loc, direction::kBackward, P::kStreetComponentClass,
-                  street_way_score);
+            ? get_connected_way(node_idx, center,
+                                is_street_accessible<P::kStreetComponentClass>)
+            : find_closest_offset<typename P::streetp,
+                                  P::kStreetComponentClass>(
+                  w, l, way_extra, loc, direction::kBackward);
     if (!street_matching.has_value()) {
       std::clog << fmt::format(
           "osr: parking space matching failed for street offset on node {} "
@@ -344,9 +410,8 @@ void connect_parking_ways(
     auto const foot_matching =
         (is_foot_connected && is_same_foot_component)
             ? get_connected_way(node_idx, center, is_foot_accessible)
-            : find_closest_offset<foot<false>>(w, l, loc, direction::kForward,
-                                               component_class::kFoot,
-                                               foot_way_score);
+            : find_closest_offset<foot<false>, component_class::kFoot>(
+                  w, l, way_extra, loc, direction::kForward);
     if (!foot_matching.has_value()) {
       std::clog << fmt::format(
           "osr: parking space matching failed for foot offset on node {} "
@@ -379,7 +444,7 @@ void connect_parking_ways(
     auto const way_idx = way_idx_t{i};
     auto const p = w.r_->way_properties_[way_idx];
 
-    if (!is_parking(p)) {
+    if (!is_parking<P::kStreetComponentClass>(p)) {
       continue;
     }
     auto const is_street_connected = is_connected(way_idx, street_components);
@@ -397,12 +462,13 @@ void connect_parking_ways(
     auto const loc = location{.pos_ = center, .lvl_ = lvl};
 
     auto const street_matching =
-        is_street_connected ? get_closest_connected_way(
-                                  way_idx, center, approx_distance_lng_degrees,
-                                  is_street_accessible)
-                            : find_closest_offset<typename P::streetp>(
-                                  w, l, loc, direction::kBackward,
-                                  P::kStreetComponentClass, street_way_score);
+        is_street_connected
+            ? get_closest_connected_way(
+                  way_idx, center, approx_distance_lng_degrees,
+                  is_street_accessible<P::kStreetComponentClass>)
+            : find_closest_offset<typename P::streetp,
+                                  P::kStreetComponentClass>(
+                  w, l, way_extra, loc, direction::kBackward);
     if (!street_matching.has_value()) {
       std::clog << fmt::format(
           "osr: parking space matching failed for street offset on way {} "
@@ -421,9 +487,8 @@ void connect_parking_ways(
             ? get_closest_connected_way(way_idx, center,
                                         approx_distance_lng_degrees,
                                         is_foot_accessible)
-            : find_closest_offset<foot<false>>(w, l, loc, direction::kForward,
-                                               component_class::kFoot,
-                                               foot_way_score);
+            : find_closest_offset<foot<false>, component_class::kFoot>(
+                  w, l, way_extra, loc, direction::kForward);
     if (!foot_matching.has_value()) {
       std::clog << fmt::format(
           "osr: parking space matching failed for foot offset on way {} "
@@ -465,39 +530,9 @@ void connect_parking_ways(
     ways& w,
     lookup const& l,
     vec_map<way_idx_t, way_extra_properties> const& way_extra) {
-  auto const is_bike_parking_node = [&](node_properties const& props) {
-    return props.is_bike_parking();
-  };
-  auto const is_bike_parking = [&](way_properties const& props) {
-    return props.is_bike_parking();
-  };
-  auto const is_bike_accessible = [&](way_properties const& props) {
-    return props.is_bike_accessible();
-  };
-  auto const bike_way_score = [&](double const dist_to_way,
-                                  way_idx_t const way_idx) -> double {
-    return score(dist_to_way, !w.r_->way_properties_[way_idx].is_big_street());
-  };
-  auto const is_car_parking_node = [&](node_properties const& props) {
-    return props.is_parking();
-  };
-  auto const is_car_parking = [&](way_properties const& props) {
-    return props.is_parking();
-  };
-  auto const is_car_accessible = [&](way_properties const& props) {
-    return props.is_car_accessible();
-  };
-  auto const car_way_score = [&](double const dist_to_way,
-                                 way_idx_t const way_idx) -> double {
-    return score(dist_to_way, way_extra[way_idx].is_parking_aisle());
-  };
 
-  connect_parking_ways<bike_parking<true>>(
-      w, l, way_extra, is_bike_parking_node, is_bike_parking,
-      is_bike_accessible, bike_way_score);
-  connect_parking_ways<car_parking<false, true>>(
-      w, l, way_extra, is_car_parking_node, is_car_parking, is_car_accessible,
-      car_way_score);
+  connect_parking_ways<bike_parking<true>>(w, l, way_extra);
+  connect_parking_ways<car_parking<false, true>>(w, l, way_extra);
 
   utl::sort(w.r_->additional_node_connections_);
   // Ensure no duplicates are stored
