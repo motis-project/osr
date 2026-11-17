@@ -5,6 +5,7 @@
 #include "osr/point.h"
 #include "osr/preprocessing/elevation/shared.h"
 #include "osr/routing/path.h"
+#include "osr/types.h"
 
 namespace osr {
 
@@ -18,6 +19,7 @@ struct elevation_profile {
   preprocessing::elevation::elevation_meters_t baseline_ =
       preprocessing::elevation::elevation_meters_t::invalid();
   preprocessing::elevation::elevation_meters_t min_{0}, max_{0};
+  elevation_monotonic_t up_{0}, down_{0};
 };
 
 }  // namespace osr

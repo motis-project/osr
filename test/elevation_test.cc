@@ -24,7 +24,12 @@ TEST(elevation, flat_test) {
 
   extract(false,
           osr::test::osm_to_pbf("test/da_hbf_elevation.osm").generic_string(),
-          p, "test/elevation_test_data", 1, 0.1);
+          p,
+          preprocessing::elevation::elevation_params{
+              .stats_file_ = "test/elevation_test_data",
+              .min_elevation_ = preprocessing::elevation::elevation_meters_t{1},
+              .min_incline_ = 0.1,
+              .max_incline_ = 0.35});
 
   auto const elevation = elevation_storage::try_open(p);
   auto w = ways{p, cista::mmap::protection::READ};
@@ -45,7 +50,7 @@ TEST(elevation, flat_test) {
         preprocessing::elevation::elevation_meters_t{groundTruth + kTolerance};
     ASSERT_EQ(1, res.n_);
     EXPECT_THAT(*res.first_,
-                ::testing::AllOf(::testing::Gt(min), ::testing::Lt(max)));
+                ::testing::AllOf(::testing::Ge(min), ::testing::Le(max)));
     ASSERT_EQ(elevation_monotonic_t{0}, res.down_);
     ASSERT_EQ(elevation_monotonic_t{0}, res.up_);
   }
@@ -59,7 +64,12 @@ TEST(elevation, up_down_test) {
 
   extract(false,
           osr::test::osm_to_pbf("test/taunus_elevation.osm").generic_string(),
-          p, "test/elevation_test_data", 0, 0.0);
+          p,
+          preprocessing::elevation::elevation_params{
+              .stats_file_ = "test/elevation_test_data",
+              .min_elevation_ = preprocessing::elevation::elevation_meters_t{1},
+              .min_incline_ = 0.1,
+              .max_incline_ = 0.35});
 
   auto const elevation = elevation_storage::try_open(p);
   auto w = ways{p, cista::mmap::protection::READ};
@@ -90,11 +100,11 @@ TEST(elevation, up_down_test) {
     for (int j = 0U; j < res.n_; ++j) {
       EXPECT_THAT(
           *std::next(res.first_, j),
-          ::testing::AllOf(::testing::Gt(kGroundTruthMin - kTolerance),
-                           ::testing::Lt(kGroundTruthMax + kTolerance)));
+          ::testing::AllOf(::testing::Ge(kGroundTruthMin - kTolerance),
+                           ::testing::Le(kGroundTruthMax + kTolerance)));
     }
   }
 
-  EXPECT_THAT(up, ::testing::Lt(elevation_monotonic_t{12 + kTolerance * 2}));
-  EXPECT_THAT(down, ::testing::Lt(elevation_monotonic_t{4 + kTolerance * 2}));
+  EXPECT_THAT(up, ::testing::Lt(elevation_monotonic_t{12 + kTolerance}));
+  EXPECT_THAT(down, ::testing::Lt(elevation_monotonic_t{4 + kTolerance}));
 }

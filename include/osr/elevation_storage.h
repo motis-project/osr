@@ -17,11 +17,11 @@ namespace preprocessing::elevation {
 struct provider;
 
 struct elevation_params {
-  static auto const kMaxPoints = 8U;
+  unsigned max_points_;
   std::filesystem::path stats_file_;
-  elevation_meters_t min_elevation;
-  double min_rel_elevation;
-  double max_incline;
+  elevation_meters_t min_elevation_;
+  double min_incline_;
+  double max_incline_;
 };
 }  // namespace preprocessing::elevation
 

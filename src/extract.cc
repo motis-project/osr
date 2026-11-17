@@ -701,7 +701,7 @@ void extract(bool const with_platforms,
              fs::path const& in,
              fs::path const& out,
              fs::path const& elevation_dir,
-             preprocessing::elevation::elevation_params params) {
+             preprocessing::elevation::elevation_params elevation_params) {
   auto ec = std::error_code{};
   fs::remove_all(out, ec);
   if (!fs::is_directory(out)) {
@@ -1055,7 +1055,7 @@ void extract(bool const with_platforms,
         osr::preprocessing::elevation::provider{elevation_dir};
     if (provider.driver_count() > 0) {
       auto elevations = elevation_storage{out, cista::mmap::protection::WRITE};
-      elevations.set_elevations(w, provider, params);
+      elevations.set_elevations(w, provider, elevation_params);
     }
   }
 

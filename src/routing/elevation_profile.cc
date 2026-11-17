@@ -24,18 +24,16 @@ namespace ev = preprocessing::elevation;
 
 template <typename T>
 struct moving_average {
-  moving_average(double window_distance, T pad_left, T pad_right)
-      : window_distance_(window_distance),
-        pad_left_(pad_left),
-        pad_right_(pad_right) {}
-
-  std::vector<T> apply(std::vector<T> const& values,
-                       std::vector<double> const& distances) {
+  static std::vector<T> apply(std::vector<T> const& values,
+                              std::vector<double> const& distances,
+                              double window_distance,
+                              T pad_left,
+                              T pad_right) {
     if (values.empty() || values.size() != distances.size()) {
       return {};
     }
 
-    auto const half_window_d = window_distance_ / 2.0;
+    auto const half_window_d = window_distance / 2.0;
 
     auto res = std::vector<T>(values.size());
 
@@ -65,40 +63,38 @@ struct moving_average {
       }
 
       auto sum = 0.0;
+      // edge to first point
       if (w_start > 0) {
         double const val = evaluate(w_start - 1, w_start, distances[w_start]) -
                            evaluate(w_start - 1, w_start, left_edge);
         sum += val;
       } else {
         double const val =
-            (distances[0] - left_edge) * static_cast<double>(values[0].v_);
+            (distances[0] - left_edge) * static_cast<double>(pad_left.v_);
         sum += val;
       }
+      // points in window
       for (auto j = w_start; j < w_end; ++j) {
         double const val = evaluate(j, j + 1, distances[j + 1]) -
                            evaluate(j, j + 1, distances[j]);
         sum += val;
       }
-
+      // last point to edge
       if (w_end < values.size() - 1) {
         double const val = evaluate(w_end, w_end + 1, right_edge) -
                            evaluate(w_end, w_end + 1, distances[w_end]);
         sum += val;
       } else {
-        double const val = (right_edge - distances[w_end]) *
-                           static_cast<double>(values[w_end].v_);
+        double const val =
+            (right_edge - distances[w_end]) * static_cast<double>(pad_right.v_);
         sum += val;
       }
 
-      res[i] = static_cast<T>(sum / window_distance_);
+      res[i] = static_cast<T>(sum / window_distance);
     }
 
     return res;
   }
-
-  double window_distance_;
-  T pad_left_;
-  T pad_right_;
 };
 
 elevation_profile::elevation_profile(ways const& w,
@@ -114,9 +110,10 @@ elevation_profile::elevation_profile(ways const& w,
     }
   };
 
-  if (utl::find_if(segments, [&](auto const& seg) {
-        return seg.elevation_.first_ != nullptr && seg.elevation_.n_ != 0;
-      }) == end(segments)) {
+  auto it = utl::find_if(segments, [&](auto const& seg) {
+    return seg.elevation_.first_ != nullptr && seg.elevation_.n_ != 0;
+  });
+  if (it == end(segments)) {
     return;
   }
 
@@ -128,27 +125,21 @@ elevation_profile::elevation_profile(ways const& w,
   };
 
   auto dist_acc = 0U;
-  for (auto s : segments) {
+  add(w.get_node_pos(it->from_), 0, *(it->elevation_.first_));
+  for (; it != end(segments); it++) {
+    auto const s = *it;
     if (s.elevation_.n_ == 0) {
       continue;
-    }
-
-    if (baseline_ == ev::elevation_meters_t::invalid()) {
-      baseline_ = *s.elevation_.first_;
-      min_ = baseline_;
-      max_ = baseline_;
-      add(w.get_node_pos(s.from_), 0, baseline_);
     }
 
     auto from_lng = w.get_node_pos(s.from_).lng();
     auto from_lat = w.get_node_pos(s.from_).lat();
     auto to_lng = w.get_node_pos(s.to_).lng();
     auto to_lat = w.get_node_pos(s.to_).lat();
-    auto const step_dist_fak = 1.0 / (s.elevation_.n_ - 1);
-    auto const lng_dist = adjust_lng(to_lng - from_lng) * step_dist_fak;
-    auto const lat_dist = (to_lat - from_lat) * step_dist_fak;
-    auto const step_dist = s.dist_ * step_dist_fak;
-
+    auto const step_fak = 1.0 / (s.elevation_.n_ - 1);
+    auto const step_dist = s.dist_ * step_fak;
+    auto const lng_dist = adjust_lng(to_lng - from_lng) * step_fak;
+    auto const lat_dist = (to_lat - from_lat) * step_fak;
     for (auto i = 1U; i < s.elevation_.n_; ++i) {
       to_lng = from_lng + lng_dist * i;
       to_lat = from_lat + lat_dist * i;
@@ -159,12 +150,23 @@ elevation_profile::elevation_profile(ways const& w,
     }
   }
 
-  auto avg = moving_average<ev::elevation_meters_t>{
-      static_cast<double>(dist_acc) / 4, ev::elevation_meters_t{0},
-      ev::elevation_meters_t{0}};
-  elevation_ = avg.apply(elevation_, distances);
+  elevation_ = moving_average<ev::elevation_meters_t>::apply(
+      elevation_, distances, static_cast<double>(dist_acc) / 4,
+      elevation_.front(), elevation_.back());
   min_ = *std::min_element(begin(elevation_), end(elevation_));
   max_ = *std::max_element(begin(elevation_), end(elevation_));
+  baseline_ = elevation_[0];
+
+  auto prev = baseline_;
+  for (auto const e : elevation_) {
+    if (prev > e) {
+      down_ = down_ + static_cast<elevation_monotonic_t>((prev - e).v_);
+    } else {
+      up_ = up_ + static_cast<elevation_monotonic_t>((e - prev).v_);
+    }
+
+    prev = e;
+  }
 }
 
 ev::elevation_meters_t elevation_profile::median() const {
