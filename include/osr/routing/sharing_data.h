@@ -4,11 +4,26 @@
 
 #include "geo/latlng.h"
 
+#include "utl/verify.h"
+
 #include "osr/routing/additional_edge.h"
 #include "osr/types.h"
 #include "osr/ways.h"
 
 namespace osr {
+
+inline void verify_additional_edge_count(
+    hash_map<node_idx_t, std::vector<additional_edge>> const& edges,
+    node_idx_t::value_t const additional_node_offset) {
+  for (auto const& [node, node_edges] : edges) {
+    if (to_idx(node) < additional_node_offset) {
+      continue;
+    }
+    utl::verify(node_edges.size() <= kMaxWaysPerNode,
+                "additional node {} has {} additional edges, maximum is {}",
+                node, node_edges.size(), kMaxWaysPerNode);
+  }
+}
 
 struct sharing_data {
   geo::latlng get_additional_node_coordinates(node_idx_t const n) const {

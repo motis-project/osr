@@ -28,6 +28,7 @@
 
 #include "utl/enumerate.h"
 #include "utl/helpers/algorithm.h"
+#include "utl/lookup.h"
 #include "utl/parser/arg_parser.h"
 #include "utl/progress_tracker.h"
 #include "utl/verify.h"
@@ -277,23 +278,42 @@ std::tuple<level_t, level_t, bool> get_levels(tags const& t) {
   return get_levels(t.has_level_, t.level_bits_);
 }
 
+bool is_foot_fallback(tags const& t,
+                      osm_obj_type const type,
+                      way_properties const& p) {
+  return !p.is_foot_accessible_ && p.is_bike_accessible_ &&
+         !p.has_bike_penalty_ && !p.is_railway_accessible_ &&
+         foot_profile::explicit_access_override(t, type) !=
+             override::kBlacklist;
+}
+
 way_properties get_way_properties(
     tags const& t, osm_obj_type const obj_type = osm_obj_type::kWay) {
   auto const [from, to, _] = get_levels(t);
   auto p = way_properties{};
   std::memset(&p, 0, sizeof(way_properties));
-  p.is_foot_accessible_ = is_accessible<foot_profile>(t, obj_type);
-  p.is_bike_accessible_ = is_accessible<bike_profile>(t, obj_type);
+  p.has_bike_penalty_ = is_accessible_with_penalty<bike_profile>(t, obj_type);
+  p.is_bike_accessible_ =
+      p.has_bike_penalty_ || is_accessible<bike_profile>(t, obj_type);
   p.is_car_accessible_ = is_accessible<car_profile>(t, obj_type);
-  p.is_bus_accessible_ = is_accessible<bus_profile>(t, obj_type);
-  p.is_railway_accessible_ = is_accessible<railway_profile>(t, obj_type);
+  p.has_bus_penalty_ = is_accessible_with_penalty<bus_profile>(t, obj_type);
+  p.is_bus_accessible_ =
+      p.has_bus_penalty_ || is_accessible<bus_profile>(t, obj_type);
+  p.has_railway_penalty_ =
+      is_accessible_with_penalty<railway_profile>(t, obj_type);
+  p.is_railway_accessible_ =
+      p.has_railway_penalty_ || is_accessible<railway_profile>(t, obj_type);
+  auto const foot_trunk = is_accessible_with_penalty<foot_profile>(t, obj_type);
+  p.is_foot_accessible_ =
+      foot_trunk || is_accessible<foot_profile>(t, obj_type);
+  p.has_foot_penalty_ = foot_trunk || is_foot_fallback(t, obj_type, p);
   p.is_destination_ = t.is_destination_;
   p.is_oneway_car_ = t.oneway_;
   p.is_oneway_bike_ = t.oneway_ && !t.not_oneway_bike_;
   p.is_oneway_bus_psv_ = t.oneway_ && !t.not_oneway_bus_psv_;
   p.is_oneway_reverse_ = t.oneway_reverse_;
   p.is_elevator_ = t.is_elevator_;
-  p.is_steps_ = (t.highway_ == "steps"sv);
+  p.is_steps_ = is_steps(t, obj_type);
   p.is_parking_ = t.is_parking_;
   p.speed_limit_ = get_speed_limit(t);
   p.from_level_ = to_idx(from);
@@ -307,13 +327,30 @@ way_properties get_way_properties(
   p.has_toll_ = t.toll_;
   p.is_big_street_ = is_big_street(t);
   p.in_route_ = t.is_route_ && t.is_public_transport_route();
-  p.is_bus_accessible_with_penalty_ =
-      is_accessible_with_penalty<bus_profile>(t, obj_type);
   p.is_ferry_accessible_ = is_accessible<ferry_profile>(t, obj_type);
-  p.is_railway_accessible_with_penalty_ =
-      is_accessible_with_penalty<railway_profile>(t, obj_type);
   p.is_detour_ = t.is_detour_route();
   return p;
+}
+
+tags without_private_access(tags const& t) {
+  auto open = t;
+  open.access_ = t.private_access_ ? override::kNone : t.access_;
+  open.foot_ = t.foot_ == "private" ? std::string_view{} : t.foot_;
+  open.bicycle_ = t.bicycle_ == "private" ? std::string_view{} : t.bicycle_;
+  return open;
+}
+
+// Blocked only by private access for foot and bike (where blocked at all):
+// passable at a high cost.
+bool is_private_barrier(tags const& t) {
+  auto const foot = is_accessible<foot_profile>(t, osm_obj_type::kNode);
+  auto const bike = is_accessible<bike_profile>(t, osm_obj_type::kNode);
+  if (foot && bike) {
+    return false;
+  }
+  auto const open = without_private_access(t);
+  return (foot || is_accessible<foot_profile>(open, osm_obj_type::kNode)) &&
+         (bike || is_accessible<bike_profile>(open, osm_obj_type::kNode));
 }
 
 std::pair<node_properties, level_bits_t> get_node_properties(tags const& t) {
@@ -322,16 +359,28 @@ std::pair<node_properties, level_bits_t> get_node_properties(tags const& t) {
   std::memset(&p, 0, sizeof(node_properties));
   p.from_level_ = to_idx(from);
   p.is_foot_accessible_ = is_accessible<foot_profile>(t, osm_obj_type::kNode);
+  // Wheelchairs pass private barriers at a high cost like foot, unless other
+  // tags (e.g. kerb=raised) block them.
+  auto const is_private = is_private_barrier(t);
+  p.is_wheelchair_accessible_ =
+      is_private ? is_accessible<wheelchair_profile>(without_private_access(t),
+                                                     osm_obj_type::kNode)
+                 : is_accessible<wheelchair_profile>(t, osm_obj_type::kNode);
   p.is_bike_accessible_ = is_accessible<bike_profile>(t, osm_obj_type::kNode);
   p.is_car_accessible_ = is_accessible<car_profile>(t, osm_obj_type::kNode);
-  p.is_bus_accessible_ = is_accessible<bus_profile>(t, osm_obj_type::kNode);
+  // An explicitly allowed bus passes a private gate without the penalty.
+  auto const unpenalized = is_accessible<bus_profile>(t, osm_obj_type::kNode);
+  auto const with_penalty =
+      is_accessible_with_penalty<bus_profile>(t, osm_obj_type::kNode);
+  p.is_bus_accessible_ = unpenalized || with_penalty;
+  p.has_bus_penalty_ = !unpenalized && with_penalty;
   p.is_elevator_ = t.is_elevator_;
   p.is_entrance_ = t.is_entrance_;
   p.is_multi_level_ = is_multi;
   p.is_parking_ = t.is_parking_;
+  p.is_steps_ = is_steps(t, osm_obj_type::kNode);
   p.to_level_ = to_idx(to);
-  p.is_bus_accessible_with_penalty_ =
-      is_accessible_with_penalty<bus_profile>(t, osm_obj_type::kNode);
+  p.has_barrier_cost_ = t.is_gate() || is_private;
   return {p, t.level_bits_};
 }
 
@@ -561,9 +610,10 @@ struct node_handler : public osmium::handler::Handler {
       if (p.is_elevator() && p.is_multi_level()) {
         auto const l = std::scoped_lock{multi_level_elevators_mutex_};
         w_.r_->multi_level_elevators_.emplace_back(*node_idx, level_bits);
-      } else if (auto const it = elevator_nodes_.find(osm_node_idx);
-                 it != end(elevator_nodes_)) {
-        auto const [from, to, is_multi] = get_levels(true, it->second);
+      } else if (auto const elevator_level_bits =
+                     utl::lookup(elevator_nodes_, osm_node_idx)) {
+        auto const [from, to, is_multi] =
+            get_levels(true, *elevator_level_bits);
         auto& x = w_.r_->node_properties_[*node_idx];
         x.is_elevator_ = true;
         x.from_level_ = to_idx(from);
@@ -571,7 +621,8 @@ struct node_handler : public osmium::handler::Handler {
         x.is_multi_level_ = is_multi;
         if (is_multi) {
           auto const l = std::scoped_lock{multi_level_elevators_mutex_};
-          w_.r_->multi_level_elevators_.emplace_back(*node_idx, it->second);
+          w_.r_->multi_level_elevators_.emplace_back(*node_idx,
+                                                     *elevator_level_bits);
         }
       }
     }
@@ -782,8 +833,10 @@ void extract(bool const with_platforms,
             auto const accessible =
                 is_accessible<car_profile>(t, osm_obj_type::kNode) &&
                 is_accessible<bike_profile>(t, osm_obj_type::kNode) &&
+                is_accessible<wheelchair_profile>(t, osm_obj_type::kNode) &&
                 is_accessible<foot_profile>(t, osm_obj_type::kNode);
-            if (!accessible || t.is_elevator_ || t.is_platform()) {
+            if (!accessible || t.is_elevator_ || t.is_platform() ||
+                t.is_gate()) {
               ctx.blocking_nodes_.push_back(to_idx(to_osm_node_idx(id)));
             }
 
@@ -921,7 +974,7 @@ void extract(bool const with_platforms,
   w.sync();
 
   w.connect_ways();
-  w.build_components();
+  w.build_class_components();
 
   auto r = std::vector<resolved_restriction>{};
   {  // Pass 3: node properties + turn restrictions.

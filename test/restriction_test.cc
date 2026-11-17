@@ -4,6 +4,8 @@
 
 #include "gtest/gtest.h"
 
+#include <chrono>
+#include <cmath>
 #include <filesystem>
 
 #include "cista/mmap.h"
@@ -48,19 +50,19 @@ TEST(extract, wa) {
   ASSERT_TRUE(n_dst.has_value());
   auto const from = location{w.get_node_pos(*n), kNoLevel};
   auto const to = location{w.get_node_pos(*n_dst), kNoLevel};
-  constexpr auto const kMaxCost = cost_t{3600};
+  constexpr auto const kMaxDuration = std::chrono::seconds{3600};
   constexpr auto const kMaxMatchDistance = 100;
   constexpr auto const kParamsNoCosts =
       bike<bike_costing::kSafe, kElevationNoCost>::parameters{};
   constexpr auto const kParamsHighCosts =
       bike<bike_costing::kSafe, kElevationHighCost>::parameters{};
   auto const route_no_costs =
-      route(kParamsNoCosts, w, l, search_profile::kBike, from, to, kMaxCost,
+      route(kParamsNoCosts, w, l, search_profile::kBike, from, to, kMaxDuration,
             direction::kForward, kMaxMatchDistance, nullptr, nullptr,
             elevations.get());
   auto const route_high_costs =
       route(kParamsHighCosts, w, l, search_profile::kBikeElevationHigh, from,
-            to, kMaxCost, direction::kForward, kMaxMatchDistance, nullptr,
+            to, kMaxDuration, direction::kForward, kMaxMatchDistance, nullptr,
             nullptr, elevations.get());
 
   auto const is_restricted = w.r_->is_restricted<osr::direction::kForward>(
@@ -80,4 +82,55 @@ TEST(extract, wa) {
   // Upper bounds for elevations on each segment
   EXPECT_EQ(elevation_monotonic_t{1U + 0U}, route_high_costs->elevation_.up_);
   EXPECT_EQ(elevation_monotonic_t{4U + 0U}, route_high_costs->elevation_.down_);
+}
+
+// A turn restriction between ways at positions >= 16 of a node (node ways
+// are ordered by way index, i.e. by OSM id here).
+TEST(extract, restriction_at_high_way_position) {
+  auto const p = fs::temp_directory_path() / "osr_restriction_high_way_pos";
+  auto ec = std::error_code{};
+  fs::remove_all(p, ec);
+
+  constexpr auto const kWays = 20U;
+  auto xml = std::string{R"(<osm version="0.6" generator="test">
+  <node id="1" lat="48.0" lon="9.0"/>
+)"};
+  for (auto i = 0U; i != kWays; ++i) {
+    xml += fmt::format(R"(  <node id="{}" lat="{}" lon="{}"/>
+)",
+                       i + 2U, 48.0 + 0.001 * std::cos(i * 6.28 / kWays),
+                       9.0 + 0.001 * std::sin(i * 6.28 / kWays));
+  }
+  for (auto i = 0U; i != kWays; ++i) {
+    xml += fmt::format(R"(  <way id="{}">
+    <nd ref="1"/><nd ref="{}"/>
+    <tag k="highway" v="residential"/>
+  </way>
+)",
+                       i + 1U, i + 2U);
+  }
+  xml += R"(  <relation id="1">
+    <member type="way" ref="18" role="from"/>
+    <member type="node" ref="1" role="via"/>
+    <member type="way" ref="19" role="to"/>
+    <tag k="type" v="restriction"/>
+    <tag k="restriction" v="no_left_turn"/>
+  </relation>
+</osm>)";
+
+  osr::extract(false,
+               osr::test::write_osm_pbf("osr_restriction_high_way_pos", xml), p,
+               {});
+
+  auto w = osr::ways{p, cista::mmap::protection::READ};
+  auto const center = w.get_node_idx(osr::to_osm_node_idx(1));
+  auto const pos = [&](std::int64_t const osm_way) {
+    return w.r_->get_way_pos(center, *w.find_way(osr::to_osm_way_idx(osm_way)));
+  };
+  ASSERT_GE(pos(18), 16U);
+  ASSERT_GE(pos(19), 16U);
+  EXPECT_TRUE(
+      w.r_->is_restricted<osr::direction::kForward>(center, pos(18), pos(19)));
+  EXPECT_FALSE(w.r_->is_restricted<osr::direction::kForward>(
+      center, pos(18) - 16U, pos(19) - 16U));  // no wrap-around
 }

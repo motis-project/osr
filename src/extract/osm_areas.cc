@@ -21,6 +21,7 @@
 #include "osmium/osm/area.hpp"
 #include "osmium/osm/way.hpp"
 
+#include "utl/lookup.h"
 #include "utl/parallel_for.h"
 #include "utl/parser/arg_parser.h"
 #include "utl/verify.h"
@@ -140,9 +141,8 @@ struct osm_areas::impl {
 
   std::optional<conditional_timezone_idx_t> register_timezone(
       osmium::Area const& area, std::string_view const name) {
-    if (auto const it = timezone_idx_by_name_.find(name);
-        it != end(timezone_idx_by_name_)) {
-      return it->second;
+    if (auto const tz = utl::lookup(timezone_idx_by_name_, name)) {
+      return tz;
     }
 
     try {

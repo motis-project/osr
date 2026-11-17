@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <filesystem>
 #include <fstream>
+#include <memory>
 #include <string_view>
 
 #include "cista/mmap.h"
@@ -109,6 +110,102 @@ constexpr auto const kLowEmissionZoneOsm =
   </relation>
 </osm>)osm";
 
+constexpr auto const kCrossingNodeAccessOsm =
+    R"osm(<osm version="0.6" generator="test">
+  <node id="1" lat="48.0000" lon="8.9990"/>
+  <node id="2" lat="48.0000" lon="9.0000">
+    <tag k="highway" v="crossing"/>
+    <tag k="bicycle" v="no"/>
+    <tag k="foot" v="no"/>
+    <tag k="motor_vehicle" v="no"/>
+    <tag k="bus" v="no"/>
+  </node>
+  <node id="3" lat="48.0000" lon="9.0010"/>
+  <node id="4" lat="47.9990" lon="9.0000"/>
+  <node id="5" lat="48.0010" lon="9.0000"/>
+
+  <node id="11" lat="48.0100" lon="8.9990"/>
+  <node id="12" lat="48.0100" lon="9.0000">
+    <tag k="highway" v="crossing"/>
+    <tag k="bicycle" v="no"/>
+    <tag k="barrier" v="yes"/>
+  </node>
+  <node id="13" lat="48.0100" lon="9.0010"/>
+  <node id="14" lat="48.0090" lon="9.0000"/>
+  <node id="15" lat="48.0110" lon="9.0000"/>
+
+  <node id="21" lat="48.0200" lon="8.9990"/>
+  <node id="22" lat="48.0200" lon="9.0000">
+    <tag k="highway" v="traffic_signals"/>
+    <tag k="bicycle" v="no"/>
+  </node>
+  <node id="23" lat="48.0200" lon="9.0010"/>
+  <node id="24" lat="48.0190" lon="9.0000"/>
+  <node id="25" lat="48.0210" lon="9.0000"/>
+
+  <way id="101">
+    <nd ref="1"/>
+    <nd ref="2"/>
+    <nd ref="3"/>
+    <tag k="highway" v="residential"/>
+  </way>
+  <way id="102">
+    <nd ref="4"/>
+    <nd ref="2"/>
+    <nd ref="5"/>
+    <tag k="highway" v="footway"/>
+    <tag k="bicycle" v="no"/>
+  </way>
+  <way id="111">
+    <nd ref="11"/>
+    <nd ref="12"/>
+    <nd ref="13"/>
+    <tag k="highway" v="residential"/>
+  </way>
+  <way id="112">
+    <nd ref="14"/>
+    <nd ref="12"/>
+    <nd ref="15"/>
+    <tag k="highway" v="footway"/>
+  </way>
+  <way id="121">
+    <nd ref="21"/>
+    <nd ref="22"/>
+    <nd ref="23"/>
+    <tag k="highway" v="residential"/>
+  </way>
+  <way id="122">
+    <nd ref="24"/>
+    <nd ref="22"/>
+    <nd ref="25"/>
+    <tag k="highway" v="service"/>
+  </way>
+</osm>)osm";
+
+struct crossing_node_access_test : public ::testing::Test {
+  static void SetUpTestSuite() {
+    dir_ = fs::temp_directory_path() / "osr_crossing_node_access_test";
+    auto ec = std::error_code{};
+    fs::remove_all(dir_, ec);
+    fs::create_directories(dir_, ec);
+    extract(false,
+            osr::test::write_osm_pbf("osr_crossing_node_access",
+                                     kCrossingNodeAccessOsm)
+                .generic_string(),
+            dir_, {});
+    ways_ = std::make_unique<ways>(dir_, cista::mmap::protection::READ);
+  }
+
+  static void TearDownTestSuite() {
+    ways_.reset();
+    auto ec = std::error_code{};
+    fs::remove_all(dir_, ec);
+  }
+
+  static inline fs::path dir_{};
+  static inline std::unique_ptr<ways> ways_{};
+};
+
 }  // namespace
 
 TEST(extract, string_cache) {
@@ -146,6 +243,31 @@ TEST(extract, bus_only_on_highway) {
   auto const& wp = w.r_->way_properties_[luisenplatz_outer.value()];
   ASSERT_FALSE(wp.is_bus_accessible());
   ASSERT_TRUE(wp.is_foot_accessible());
+}
+
+TEST(extract, ignores_ways_exceeding_max_ways_per_node) {
+  auto const p = fs::temp_directory_path() / "osr_24_way_node_test";
+  auto ec = std::error_code{};
+  fs::remove_all(p, ec);
+  fs::create_directories(p, ec);
+
+  extract(false, "test/39-way-node.osm.pbf", p, {});
+
+  auto w = ways{p, cista::mmap::protection::READ};
+  for (auto n = node_idx_t{0U}; n != w.n_nodes(); ++n) {
+    auto const ways = w.r_->node_ways_[n];
+    auto const in_way_idx = w.r_->node_in_way_idx_[n];
+    EXPECT_LE(ways.size(), kMaxWaysPerNode);
+    ASSERT_EQ(ways.size(), in_way_idx.size());
+    for (auto i = std::size_t{0U}; i != ways.size(); ++i) {
+      auto const way = ways[i];
+      ASSERT_LT(to_idx(way), w.r_->way_nodes_.size()) << "dangling way index";
+      ASSERT_LT(in_way_idx[i], w.r_->way_nodes_[way].size())
+          << "dangling node-in-way index";
+      EXPECT_EQ(n, w.r_->way_nodes_[way][in_way_idx[i]])
+          << "node_ways_/node_in_way_idx_ does not point back to this node";
+    }
+  }
 }
 
 TEST(extract, standalone_ramp) {
@@ -243,4 +365,38 @@ TEST(extract, marks_low_emission_zone_ways) {
   EXPECT_TRUE(w.r_->way_properties_[*inside].is_in_low_emission_zone());
   EXPECT_FALSE(w.r_->way_properties_[*outside].is_in_low_emission_zone());
   EXPECT_TRUE(w.r_->way_properties_[*crossing].is_in_low_emission_zone());
+}
+
+TEST_F(crossing_node_access_test, unbarriered_crossing_ignores_bicycle_access) {
+  auto const node = ways_->find_node_idx(osm_node_idx_t{2});
+  ASSERT_TRUE(node.has_value());
+  EXPECT_TRUE(ways_->r_->node_properties_[*node].is_bike_accessible());
+}
+
+TEST_F(crossing_node_access_test, other_profiles_are_unchanged) {
+  auto const node = ways_->find_node_idx(osm_node_idx_t{2});
+  ASSERT_TRUE(node.has_value());
+  auto const& properties = ways_->r_->node_properties_[*node];
+  EXPECT_FALSE(properties.is_walk_accessible());
+  EXPECT_FALSE(properties.is_car_accessible());
+  EXPECT_FALSE(properties.is_bus_accessible());
+}
+
+TEST_F(crossing_node_access_test, barrier_keeps_bicycle_access_restriction) {
+  auto const node = ways_->find_node_idx(osm_node_idx_t{12});
+  ASSERT_TRUE(node.has_value());
+  EXPECT_FALSE(ways_->r_->node_properties_[*node].is_bike_accessible());
+}
+
+TEST_F(crossing_node_access_test,
+       non_crossing_keeps_bicycle_access_restriction) {
+  auto const node = ways_->find_node_idx(osm_node_idx_t{22});
+  ASSERT_TRUE(node.has_value());
+  EXPECT_FALSE(ways_->r_->node_properties_[*node].is_bike_accessible());
+}
+
+TEST_F(crossing_node_access_test, way_access_is_unchanged) {
+  auto const crossing = ways_->find_way(osm_way_idx_t{102});
+  ASSERT_TRUE(crossing.has_value());
+  EXPECT_FALSE(ways_->r_->way_properties_[*crossing].is_bike_accessible());
 }

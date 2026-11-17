@@ -13,6 +13,7 @@
 
 #include "utl/pairwise.h"
 #include "utl/pipes.h"
+#include "utl/visit.h"
 
 #include "osr/platforms.h"
 #include "osr/routing/dijkstra.h"
@@ -541,17 +542,24 @@ inline void add_hgv_way_info_properties(boost::json::object& properties,
   }
 }
 
+// null: single-way component or a way the class cannot use.
+inline void add_class_component_properties(boost::json::object& properties,
+                                           ways::routing const& r,
+                                           way_idx_t const way) {
+  for (auto const c : kAllComponentClasses) {
+    auto const id = r.get_class_components(c).get(way);
+    properties[std::string{"component_"} + to_str(c)] =
+        id.has_value() ? boost::json::value{*id} : boost::json::value{nullptr};
+  }
+}
+
 struct geojson_writer {
   void write_platform(platform_idx_t const i) {
     for (auto const r : platforms_->platform_ref_[i]) {
-      auto const geometry = std::visit(
-          utl::overloaded{[&](node_idx_t x) {
-                            return to_point(platforms_->get_node_pos(x));
-                          },
-                          [&](way_idx_t x) {
-                            return to_line_string(w_.way_polylines_[x]);
-                          }},
-          to_ref(r));
+      auto const geometry = utl::visit(
+          to_ref(r),
+          [&](node_idx_t x) { return to_point(platforms_->get_node_pos(x)); },
+          [&](way_idx_t x) { return to_line_string(w_.way_polylines_[x]); });
       features_.emplace_back(boost::json::value{
           {"type", "Feature"},
           {"properties",
@@ -579,15 +587,14 @@ struct geojson_writer {
           {"type", "edge"},
           {"osm_way_id", to_idx(w_.way_osm_idx_[i])},
           {"internal_id", to_idx(i)},
-          {"component", to_idx(w_.r_->way_component_[i])},
           {"distance", dist},
           {"car", p.is_car_accessible()},
           {"bike", p.is_bike_accessible()},
           {"foot", p.is_foot_accessible()},
           {"bus", p.is_bus_accessible()},
-          {"bus_with_penalty", p.is_bus_accessible_with_penalty()},
+          {"bus_with_penalty", p.has_bus_penalty()},
           {"railway", p.is_railway_accessible()},
-          {"railway_with_penalty", p.is_railway_accessible_with_penalty()},
+          {"railway_with_penalty", p.has_railway_penalty()},
           {"ferry", p.is_ferry_accessible()},
           {"low_emission_zone", p.is_in_low_emission_zone()},
           {"is_big_street", p.is_big_street()},
@@ -609,6 +616,7 @@ struct geojson_writer {
           {"is_detour", p.is_detour()}};
       add_hgv_way_info_properties(properties, *w_.r_, i, p);
       add_conditional_properties(properties, w_, i, p);
+      add_class_component_properties(properties, *w_.r_, i);
       features_.emplace_back(boost::json::value{
           {"type", "Feature"},
           {"properties", std::move(properties)},
@@ -620,14 +628,13 @@ struct geojson_writer {
         {"type", "geometry"},
         {"osm_way_id", to_idx(w_.way_osm_idx_[i])},
         {"internal_id", to_idx(i)},
-        {"component", to_idx(w_.r_->way_component_[i])},
         {"car", p.is_car_accessible()},
         {"bike", p.is_bike_accessible()},
         {"foot", p.is_foot_accessible()},
         {"bus", p.is_bus_accessible()},
-        {"bus_with_penalty", p.is_bus_accessible_with_penalty()},
+        {"bus_with_penalty", p.has_bus_penalty()},
         {"railway", p.is_railway_accessible()},
-        {"railway_with_penalty", p.is_railway_accessible_with_penalty()},
+        {"railway_with_penalty", p.has_railway_penalty()},
         {"ferry", p.is_ferry_accessible()},
         {"low_emission_zone", p.is_in_low_emission_zone()},
         {"is_destination", p.is_destination()},
@@ -646,9 +653,11 @@ struct geojson_writer {
         {"is_parking", p.is_parking()},
         {"is_ramp", p.is_ramp()},
         {"in_route", p.in_route()},
-        {"is_detour", p.is_detour()}};
+        {"is_detour", p.is_detour()},
+    };
     add_hgv_way_info_properties(properties, *w_.r_, i, p);
     add_conditional_properties(properties, w_, i, p);
+    add_class_component_properties(properties, *w_.r_, i);
 
     features_.emplace_back(
         boost::json::value{{"type", "Feature"},
@@ -659,20 +668,30 @@ struct geojson_writer {
     ++n;
   }
 
-  template <typename Dijkstra>
-  void finish(Dijkstra const* s) {
-    for (auto const n : nodes_) {
-      auto const p = w_.r_->node_properties_[n];
+  void finish() {
+    write_nodes([](node_idx_t) { return std::string{}; });
+  }
 
+  template <typename Dijkstra>
+  void finish(Dijkstra const& s) {
+    write_nodes([&](node_idx_t const n) {
       auto ss = std::stringstream{};
-      Dijkstra::profile_t::resolve_all(*w_.r_, n, kNoLevel, [&](auto const x) {
-        auto const cost = s->get_cost(x);
+      Dijkstra::profile_t::resolve_all(*w_.r_, n, [&](auto const x) {
+        auto const cost = s.get_cost(x);
         if (cost != kInfeasible) {
           ss << "{";
           x.print(ss, w_);
           ss << ", " << cost << "}\n";
         }
       });
+      return ss.str().empty() ? std::string{"unreachable"} : ss.str();
+    });
+  }
+
+  template <typename LabelFn>
+  void write_nodes(LabelFn&& label_fn) {
+    for (auto const n : nodes_) {
+      auto const p = w_.r_->node_properties_[n];
 
       auto levels = std::vector<float>();
       foot<true>::for_each_elevator_level(
@@ -684,12 +703,14 @@ struct geojson_writer {
           {"car", p.is_car_accessible()},
           {"bike", p.is_bike_accessible()},
           {"foot", p.is_walk_accessible()},
+          {"wheelchair", p.is_wheelchair_accessible()},
           {"bus", p.is_bus_accessible()},
-          {"bus_with_penalty", p.is_bus_accessible_with_penalty()},
+          {"bus_with_penalty", p.has_bus_penalty()},
           {"is_restricted", w_.r_->node_is_restricted_[n]},
           {"is_entrance", p.is_entrance()},
           {"is_elevator", p.is_elevator()},
           {"is_parking", p.is_parking()},
+          {"is_steps", p.is_steps()},
           {"multi_level", p.is_multi_level()},
           {"levels", boost::json::array(levels.begin(), levels.end())},
           {"ways", fmt::format("{}", w_.r_->node_ways_[n] |
@@ -703,8 +724,10 @@ struct geojson_writer {
                              std::views::transform([&](restriction const r) {
                                return restriction_to_string(w_, n, r);
                              }),
-                         ", "))},
-          {"label", ss.str().empty() ? "unreachable" : ss.str()}};
+                         ", "))}};
+      if (auto label = label_fn(n); !label.empty()) {
+        properties.emplace("label", std::move(label));
+      }
       features_.emplace_back(boost::json::value{
           {"type", "Feature"},
           {"properties", properties},

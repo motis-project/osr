@@ -9,7 +9,6 @@
 #include <optional>
 
 #include "ankerl/cista_adapter.h"
-
 #include "cista/containers/bitvec.h"
 #include "cista/containers/mmap_vec.h"
 #include "cista/containers/nvec.h"
@@ -18,7 +17,6 @@
 #include "cista/containers/vector.h"
 #include "cista/containers/vecvec.h"
 #include "cista/strong.h"
-
 #include "utl/for_each_bit_set.h"
 
 namespace osr {
@@ -159,8 +157,6 @@ constexpr bool osm_id_less(OsmIdx const lhs, OsmIdx const rhs) {
 using way_idx_t = cista::strong<std::uint32_t, struct way_idx_>;
 using node_idx_t = cista::strong<std::uint32_t, struct node_idx_>;
 
-using component_idx_t = cista::strong<std::uint32_t, struct component_idx_>;
-
 using platform_idx_t = cista::strong<std::uint32_t, struct platform_idx_>;
 
 using multi_level_elevator_idx_t =
@@ -171,6 +167,9 @@ using elevation_monotonic_t =
     cista::strong<std::uint16_t, struct elevation_monotonic_>;
 
 using way_pos_t = std::uint8_t;
+
+constexpr auto const kMaxWaysPerNode = way_pos_t{32U};
+constexpr auto const kInlineWaysPerNode = way_pos_t{2U};
 
 using cost_t = std::uint32_t;
 using duration_t = std::chrono::duration<std::uint16_t>;  // sec -> max ~18h
@@ -211,6 +210,8 @@ constexpr duration_t duration_from_cost(T const c) {
 struct cost_and_duration {
   cost_t cost_{0U};
   duration_t duration_{0U};
+
+  constexpr auto operator<=>(cost_and_duration const&) const noexcept = default;
 
   constexpr bool feasible() const noexcept { return cost_ != kInfeasible; }
 };

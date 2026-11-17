@@ -1,16 +1,15 @@
 #pragma once
 
 #include <chrono>
-#include <bitset>
 #include <optional>
 
 #include "boost/json/object.hpp"
 
-#include "utl/helpers/algorithm.h"
-
 #include "osr/elevation_storage.h"
+#include "osr/routing/entry_storage.h"
 #include "osr/routing/mode.h"
 #include "osr/routing/path.h"
+#include "osr/routing/profile.h"
 #include "osr/routing/profiles/common.h"
 #include "osr/routing/turns.h"
 #include "osr/ways.h"
@@ -18,6 +17,18 @@
 namespace osr {
 
 struct sharing_data;
+
+struct railway_slot {
+  node_idx_t pred_{node_idx_t::invalid()};
+  cost_t cost_{kInfeasible};
+  way_pos_t pred_way_{0U};
+  bool pred_dir_{false};
+  duration_t duration_{kMaxDuration};
+
+  constexpr cost_and_duration cd() const noexcept {
+    return {.cost_ = cost_, .duration_ = duration_};
+  }
+};
 
 struct railway {
   static constexpr auto const kName = "railway";
@@ -105,57 +116,53 @@ struct railway {
   };
 
   struct entry {
-    static constexpr auto const kMaxWays = way_pos_t{16U};
-    static constexpr auto const kN = kMaxWays * 2U /* FWD+BWD */;
+    using slot_t = railway_slot;
 
-    entry() {
-      utl::fill(cost_, kInfeasible);
-      utl::fill(pred_, node_idx_t::invalid());
-      utl::fill(pred_way_, way_pos_t{0});
-    }
+    using storage_t = entry_storage<slot_t, 0U>;
+    static constexpr auto const kN = storage_t::kN /* FWD+BWD */;
 
-    constexpr std::optional<node> pred(node const n) const noexcept {
-      auto const idx = get_index(n);
-      return pred_[idx] == node_idx_t::invalid()
+    std::optional<node> pred(node const n) const noexcept {
+      auto const s = s_[get_index(n)];
+      return s.pred_ == node_idx_t::invalid()
                  ? std::nullopt
-                 : std::optional{node{pred_[idx], pred_way_[idx],
-                                      to_dir(pred_dir_[idx])}};
+                 : std::optional{
+                       node{s.pred_, s.pred_way_, to_dir(s.pred_dir_)}};
     }
 
-    constexpr cost_t cost(node const n) const noexcept {
-      return cost_[get_index(n)];
+    cost_t cost(node const n) const noexcept { return s_[get_index(n)].cost_; }
+
+    duration_t duration(node const n) const noexcept {
+      return s_[get_index(n)].duration_;
     }
 
-    constexpr duration_t duration(node const n) const noexcept {
-      return duration_from_cost(cost(n));
-    }
-
-    constexpr bool update(label const&,
-                          node const n,
-                          cost_t const c,
-                          node const pred,
-                          duration_t const) noexcept {
-      auto const idx = get_index(n);
-      if (c < cost_[idx]) {
-        cost_[idx] = c;
-        pred_[idx] = pred.n_;
-        pred_way_[idx] = pred.way_;
-        pred_dir_[idx] = to_bool(pred.dir_);
-        return true;
+    bool update(label const&,
+                node const n,
+                cost_and_duration const c,
+                node const pred,
+                ways::routing const& w,
+                entry_storage_arena& a) {
+      auto& s = s_.slot(get_index(n), w, n.n_, a);
+      if (c >= s.cd()) {
+        return false;
       }
-      return false;
+      s.cost_ = c.cost_;
+      s.duration_ = c.duration_;
+      s.pred_ = pred.n_;
+      s.pred_way_ = pred.way_;
+      s.pred_dir_ = to_bool(pred.dir_);
+      return true;
     }
 
     void write(node, path&) const {}
 
     static constexpr node get_node(node_idx_t const n,
                                    std::size_t const index) {
-      return node{n, static_cast<way_pos_t>(index % kMaxWays),
-                  to_dir((index / kMaxWays) != 0U)};
+      return node{n, static_cast<way_pos_t>(index / 2U),
+                  to_dir((index % 2U) != 0U)};
     }
 
     static constexpr std::size_t get_index(node const n) {
-      return (n.dir_ == direction::kForward ? 0U : 1U) * kMaxWays + n.way_;
+      return storage_t::index(n.way_, n.dir_);
     }
 
     static constexpr direction to_dir(bool const b) {
@@ -166,10 +173,7 @@ struct railway {
       return d == direction::kForward ? false : true;
     }
 
-    std::array<node_idx_t, kN> pred_;
-    std::array<way_pos_t, kN> pred_way_;
-    std::bitset<kN> pred_dir_;
-    std::array<cost_t, kN> cost_;
+    storage_t s_;
   };
 
   struct hash {
@@ -188,31 +192,65 @@ struct railway {
   }
 
   template <typename Fn>
-  static void resolve_start_node(ways::routing const& w,
-                                 way_idx_t const way,
-                                 node_idx_t const n,
-                                 level_t,
-                                 direction,
-                                 Fn&& f) {
-    auto const ways = w.node_ways_[n];
-    for (auto i = way_pos_t{0U}; i != ways.size(); ++i) {
-      if (ways[i] == way) {
-        f(node{n, i, direction::kForward});
-        f(node{n, i, direction::kBackward});
-      }
+  static void resolve_all(ways::routing const& w, node_idx_t const n, Fn&& f) {
+    auto const n_ways = to_idx(n) < w.node_ways_.size() ? w.node_ways_[n].size()
+                                                        : kMaxWaysPerNode;
+    for (auto i = way_pos_t{0U}; i != n_ways; ++i) {
+      f(node{n, i, direction::kForward});
+      f(node{n, i, direction::kBackward});
     }
   }
 
   template <typename Fn>
-  static void resolve_all(ways::routing const& w,
-                          node_idx_t const n,
-                          level_t,
-                          Fn&& f) {
-    auto const ways = w.node_ways_[n];
-    for (auto i = way_pos_t{0U}; i != ways.size(); ++i) {
-      f(node{n, i, direction::kForward});
-      f(node{n, i, direction::kBackward});
+  static void resolve_endpoint(ways::routing const& w,
+                               way_idx_t const way,
+                               node_idx_t const n,
+                               level_t,
+                               route_end,
+                               endpoint_role const role,
+                               endpoint_state_t,
+                               Fn&& f) {
+    resolve_way_aware_endpoint<railway>(w, way, n, role, std::forward<Fn>(f));
+  }
+
+  static constexpr cost_and_duration endpoint_transition_cost(
+      parameters const& params,
+      ways::routing const& w,
+      timezone_cache_t const&,
+      node const n,
+      way_idx_t const way,
+      direction const way_dir,
+      direction const search_dir,
+      std::optional<routing_time_t>,
+      duration_t) {
+    auto const transition_node =
+        search_dir == direction::kForward ? n : get_reverse(n);
+    auto const transition_dir =
+        search_dir == direction::kForward ? way_dir : opposite(way_dir);
+    return get_endpoint_transition_cost<railway>(
+        params, w, transition_node, way, transition_dir, kUturnPenalty);
+  }
+
+  static constexpr bool endpoint_root_allowed(parameters const&,
+                                              node const n,
+                                              direction const way_dir) {
+    return n.dir_ == way_dir;
+  }
+
+  static constexpr cost_and_duration bidirectional_meet_cost(
+      parameters const& params,
+      ways::routing const& w,
+      node const fwd,
+      node const bwd,
+      sharing_data const* additional = nullptr) {
+    if (additional != nullptr && additional->is_additional_node(fwd.n_)) {
+      auto const uturn =
+          fwd.get_way(w, additional) == bwd.get_way(w, additional) &&
+          fwd.dir_ != bwd.dir_;
+      return {.cost_ = uturn ? kUturnPenalty : 0U};
     }
+    return get_transition_cost<railway>(params, w, get_reverse(bwd), fwd.way_,
+                                        opposite(fwd.dir_), kUturnPenalty);
   }
 
   template <direction SearchDir, bool WithBlocked, typename Fn>
@@ -233,9 +271,9 @@ struct railway {
           [&](additional_edge const& ae, cost_and_duration const edge_cost,
               direction const edge_dir) {
             auto const [target, cost, duration] =
-                get_adjacent_additional_node<railway>(params, w, n, additional,
-                                                      ae, edge_dir, edge_cost,
-                                                      kUturnPenalty);
+                get_adjacent_additional_node<railway, SearchDir>(
+                    params, w, n, additional, ae, edge_dir, edge_cost,
+                    kUturnPenalty);
             if (cost == kInfeasible) {
               return;
             }
@@ -254,25 +292,6 @@ struct railway {
         duration_t{0}, SearchDir, fn);
   }
 
-  static bool is_dest_reachable(parameters const& params,
-                                ways::routing const& w,
-                                timezone_cache_t const& timezones,
-                                node const,
-                                way_idx_t const way,
-                                direction const way_dir,
-                                direction const search_dir,
-                                std::optional<routing_time_t> const start_time,
-                                duration_t const current_duration) {
-    auto const target_way_prop = w.way_properties_[way];
-    if (way_cost(params, w, timezones, way, target_way_prop, way_dir, 0U,
-                 start_time, current_duration, search_dir)
-            .cost_ == kInfeasible) {
-      return false;
-    }
-
-    return true;
-  }
-
   static constexpr cost_and_duration way_cost(
       parameters const&,
       ways::routing const&,
@@ -284,12 +303,9 @@ struct railway {
       std::optional<routing_time_t> const,
       duration_t const,
       direction const) {
-    auto const accessible = e.is_railway_accessible();
-    auto const accessible_with_penalty = e.is_railway_accessible_with_penalty();
-    if ((accessible || accessible_with_penalty) &&
-        e.is_bus_psv_direction_allowed(dir)) {
+    if (e.is_railway_accessible() && e.is_bus_psv_direction_allowed(dir)) {
       auto cost = static_cast<cost_t>(dist);
-      if (accessible_with_penalty) {
+      if (e.has_railway_penalty()) {
         cost *= e.in_route() ? 2U : 4U;
       }
       return {.cost_ = cost,
@@ -297,6 +313,22 @@ struct railway {
     } else {
       return infeasible_cost_and_duration();
     }
+  }
+
+  static constexpr cost_and_duration endpoint_way_cost(
+      parameters const& params,
+      ways::routing const& w,
+      timezone_cache_t const& timezones,
+      node const,
+      way_idx_t const way,
+      way_properties const& properties,
+      direction const way_dir,
+      distance_t const distance,
+      std::optional<routing_time_t> const start_time,
+      duration_t const current_duration,
+      direction const search_dir) {
+    return way_cost(params, w, timezones, way, properties, way_dir, distance,
+                    start_time, current_duration, search_dir);
   }
 
   static constexpr cost_and_duration node_cost(parameters const&,
@@ -317,6 +349,22 @@ struct railway {
     }
   }
 
+  static constexpr cost_and_duration endpoint_node_cost(
+      parameters const& params, node const, node_properties const& n) {
+    return node_cost(params, n);
+  }
+
+  static constexpr component_classes endpoint_component_classes(
+      route_end, endpoint_state_t) noexcept {
+    return {};
+  }
+
+  static constexpr auto kReachabilityClass = std::optional<component_class>{};
+
+  static bool endpoint_way_feasible(parameters const& params,
+                                    endpoint_way_query const& q) {
+    return q.feasible<railway>(params);
+  }
   static constexpr double lower_bound_heuristic(parameters const&,
                                                 double const dist) {
     return dist;
@@ -330,6 +378,11 @@ struct railway {
   static constexpr node get_reverse(node const n) {
     return {n.n_, n.way_, opposite(n.dir_)};
   }
+};
+
+template <>
+struct bidirectional_meet_policy<railway> {
+  static constexpr auto const kEnumerateStates = true;
 };
 
 }  // namespace osr

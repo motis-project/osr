@@ -3,8 +3,10 @@
 #include <optional>
 
 #include "osr/elevation_storage.h"
+#include "osr/routing/entry_storage_arena.h"
 #include "osr/routing/mode.h"
 #include "osr/routing/path.h"
+#include "osr/routing/profile.h"
 #include "osr/types.h"
 #include "osr/ways.h"
 
@@ -34,11 +36,14 @@ template <bike_costing Costing,
           unsigned int ElevationExponentThousandth = 2100U>
 struct bike {
   static constexpr auto const kMaxMatchDistance = 100U;
+  static constexpr auto const kTrunkCostFactor = 2.0;
+  static constexpr auto const kGateCost = cost_t{60U};
+  static constexpr auto const kPrivateBarrierCost = cost_t{600U};
 
   struct parameters {
     using profile_t =
         bike<Costing, ElevationUpCost, ElevationExponentThousandth>;
-    float const speed_meters_per_second_{4.2F};
+    float speed_meters_per_second_{4.2F};
   };
 
   struct node {
@@ -96,6 +101,7 @@ struct bike {
 
   struct entry {
     entry() {
+      utl::fill(duration_, kMaxDuration);
       utl::fill(cost_, kInfeasible);
       utl::fill(pred_, node_idx_t::invalid());
     }
@@ -112,17 +118,23 @@ struct bike {
     }
 
     constexpr duration_t duration(node const n) const noexcept {
-      return duration_from_cost(cost(n));
+      return duration_[get_index(n)];
+    }
+
+    constexpr cost_and_duration cd(std::size_t const idx) const noexcept {
+      return {.cost_ = cost_[idx], .duration_ = duration_[idx]};
     }
 
     constexpr bool update(label const&,
                           node const n,
-                          cost_t const c,
+                          cost_and_duration const c,
                           node const pred,
-                          duration_t const) noexcept {
+                          ways::routing const&,
+                          entry_storage_arena&) noexcept {
       auto const idx = get_index(n);
-      if (c < cost_[idx]) {
-        cost_[idx] = c;
+      if (c < cd(idx)) {
+        cost_[idx] = c.cost_;
+        duration_[idx] = c.duration_;
         pred_[idx] = pred.n_;
         pred_dir_[idx] = pred.dir_;
         return true;
@@ -144,6 +156,7 @@ struct bike {
     std::array<node_idx_t, 2U> pred_;
     std::array<direction, 2U> pred_dir_;
     std::array<cost_t, 2U> cost_;
+    std::array<duration_t, 2U> duration_;
   };
 
   static node create_node(node_idx_t const n,
@@ -154,37 +167,30 @@ struct bike {
   }
 
   template <typename Fn>
-  static void resolve_start_node(ways::routing const&,
-                                 way_idx_t,
-                                 node_idx_t const n,
-                                 level_t,
-                                 direction,
-                                 Fn&& f) {
+  static void resolve_all(ways::routing const&, node_idx_t const n, Fn&& f) {
     f(node{n, direction::kForward});
     f(node{n, direction::kBackward});
   }
 
   template <typename Fn>
-  static void resolve_all(ways::routing const&,
-                          node_idx_t const n,
-                          level_t,
-                          Fn&& f) {
-    f(node{n, direction::kForward});
-    f(node{n, direction::kBackward});
+  static void resolve_endpoint(ways::routing const& w,
+                               way_idx_t,
+                               node_idx_t const n,
+                               level_t,
+                               route_end,
+                               endpoint_role,
+                               endpoint_state_t,
+                               Fn&& f) {
+    resolve_all(w, n, std::forward<Fn>(f));
   }
 
-  static bool is_dest_reachable(parameters const& params,
-                                ways::routing const& w,
-                                timezone_cache_t const& timezones,
-                                node,
-                                way_idx_t const way,
-                                direction const way_dir,
-                                direction const search_dir,
-                                std::optional<routing_time_t> const start_time,
-                                duration_t const current_duration) {
-    return way_cost(params, w, timezones, way, w.way_properties_[way], way_dir,
-                    0U, start_time, current_duration, search_dir)
-               .cost_ != kInfeasible;
+  static constexpr cost_and_duration bidirectional_meet_cost(
+      parameters const&,
+      ways::routing const&,
+      node const,
+      node const,
+      sharing_data const* = nullptr) {
+    return {};
   }
 
   template <direction SearchDir, bool WithBlocked, typename Fn>
@@ -204,13 +210,15 @@ struct bike {
                               std::uint16_t const to) {
         // NOLINTNEXTLINE(clang-analyzer-core.CallAndMessage)
         auto const target_node = w.way_nodes_[way][to];
+        auto const cost_node =
+            SearchDir == direction::kForward ? target_node : n.n_;
         if constexpr (WithBlocked) {
-          if (blocked->test(target_node)) {
+          if (blocked->test(cost_node)) {
             return;
           }
         }
-        auto const target_node_prop = w.node_properties_[target_node];
-        if (node_cost(params, target_node_prop).cost_ == kInfeasible) {
+        auto const cost_node_prop = w.node_properties_[cost_node];
+        if (node_cost(params, cost_node_prop).cost_ == kInfeasible) {
           return;
         }
 
@@ -243,7 +251,7 @@ struct bike {
             clamp_add(
                 way_cost(params, w, timezones, way, target_way_prop, way_dir,
                          dist, start_time, current_duration, SearchDir),
-                node_cost(params, target_node_prop)),
+                node_cost(params, cost_node_prop)),
             elevation_cost, duration_t{0});
         fn(node{target_node, way_dir}, step.cost_, step.duration_, dist, way,
            from, to, elevation, false);
@@ -285,14 +293,16 @@ struct bike {
       std::optional<routing_time_t> const,
       duration_t const,
       direction const) {
+    auto const is_trunk = e.has_bike_penalty();
     if (e.is_bike_accessible() && e.is_bike_direction_allowed(dir)) {
-      auto const cost = static_cast<cost_t>(
-          std::round(static_cast<double>(dist) /
-                     (params.speed_meters_per_second_ +
-                      (Costing == bike_costing::kFast
-                           ? 0
-                           : (e.is_big_street_ ? -0.7 : 0) +
-                                 (e.motor_vehicle_no_ ? 0.5 : 0.0)))));
+      auto const ride = static_cast<double>(dist) /
+                        (params.speed_meters_per_second_ +
+                         (Costing == bike_costing::kFast
+                              ? 0
+                              : (e.is_big_street_ ? -0.7 : 0) +
+                                    (e.motor_vehicle_no_ ? 0.5 : 0.0)));
+      auto const cost = static_cast<cost_t>(std::round(
+          is_trunk ? ride * trunk_cost_factor(e, kTrunkCostFactor) : ride));
       return {
           .cost_ = cost,
           .duration_ = duration_from_cost(static_cast<cost_t>(std::round(
@@ -302,10 +312,72 @@ struct bike {
     }
   }
 
+  static constexpr cost_and_duration endpoint_way_cost(
+      parameters const& params,
+      ways::routing const& w,
+      timezone_cache_t const& timezones,
+      node const,
+      way_idx_t const way,
+      way_properties const& properties,
+      direction const way_dir,
+      distance_t const distance,
+      std::optional<routing_time_t> const start_time,
+      duration_t const current_duration,
+      direction const search_dir) {
+    return way_cost(params, w, timezones, way, properties, way_dir, distance,
+                    start_time, current_duration, search_dir);
+  }
+
+  static constexpr bool endpoint_root_allowed(parameters const&,
+                                              node const,
+                                              direction) {
+    return true;
+  }
+
+  static constexpr cost_and_duration endpoint_transition_cost(
+      parameters const&,
+      ways::routing const&,
+      timezone_cache_t const&,
+      node const,
+      way_idx_t,
+      direction,
+      direction,
+      std::optional<routing_time_t>,
+      duration_t) {
+    return {};
+  }
+
+  static constexpr cost_and_duration endpoint_node_cost(
+      parameters const& params, node const, node_properties const& n) {
+    return node_cost(params, n);
+  }
+
+  static constexpr component_classes endpoint_component_classes(
+      route_end, endpoint_state_t) noexcept {
+    return {component_class::kBike};
+  }
+
+  static constexpr auto kReachabilityClass =
+      std::optional{component_class::kBike};
+
+  static bool endpoint_way_feasible(parameters const& params,
+                                    endpoint_way_query const& q) {
+    return q.template feasible<typename parameters::profile_t>(params);
+  }
+
   static constexpr cost_and_duration node_cost(parameters const&,
                                                node_properties const n) {
-    return n.is_bike_accessible() ? cost_and_duration_from_cost(0U)
-                                  : infeasible_cost_and_duration();
+    if (!n.is_bike_accessible()) {
+      return n.has_barrier_cost()
+                 ? cost_and_duration{.cost_ = kPrivateBarrierCost,
+                                     .duration_ = duration_t{0}}
+                 : infeasible_cost_and_duration();
+    }
+    auto c = cost_and_duration_from_cost(n.is_steps() ? 30U : 0U);
+    if (n.has_barrier_cost()) {
+      c.cost_ += kGateCost;
+    }
+    return c;
   }
 
   static constexpr double lower_bound_heuristic(parameters const& params,
@@ -319,8 +391,16 @@ struct bike {
   }
 
   static constexpr node get_reverse(node const n) {
-    return {n, opposite(n.dir_)};
+    return {n.n_, opposite(n.dir_)};
   }
+};
+
+template <bike_costing Costing,
+          unsigned int ElevationUpCost,
+          unsigned int ElevationExponentThousandth>
+struct bidirectional_meet_policy<
+    bike<Costing, ElevationUpCost, ElevationExponentThousandth>> {
+  static constexpr auto const kEnumerateStates = true;
 };
 
 }  // namespace osr

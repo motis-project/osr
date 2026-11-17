@@ -193,22 +193,4 @@ inline double add_path(typename P::parameters const& params,
   return distance;
 }
 
-template <Profile P>
-inline double add_path(typename P::parameters const& params,
-                       ways const& w,
-                       ways::routing const& r,
-                       bitvec<node_idx_t> const* blocked,
-                       sharing_data const* sharing,
-                       elevation_storage const* elevations,
-                       typename P::node const from,
-                       typename P::node const to,
-                       cost_t const expected_cost,
-                       std::vector<path::segment>& path,
-                       direction const dir) {
-  return add_path<P>(params, w, r, blocked, sharing, elevations, from, to,
-                     duration_from_cost(expected_cost), std::nullopt,
-                     expected_cost, duration_from_cost(expected_cost), path,
-                     dir);
-}
-
 }  // namespace osr

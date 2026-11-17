@@ -14,6 +14,7 @@
 
 #include "conf/options_parser.h"
 
+#include "utl/helpers/algorithm.h"
 #include "utl/memory_usage_printer.h"
 #include "utl/timer.h"
 #include "utl/verify.h"
@@ -103,51 +104,38 @@ void print_result(std::vector<benchmark_result> const& var,
 }
 
 template <Profile P>
-void set_start(dijkstra<P>& d, ways const& w, node_idx_t const start) {
-  d.add_start(w, typename P::label{typename P::node{start}, 0U});
+void set_start(dijkstra<P>& d, node_idx_t const start) {
+  d.add_start(typename P::label{typename P::node{start}, 0U});
 }
 
 template <>
-void set_start<car>(dijkstra<car>& d, ways const& w, node_idx_t const start) {
-  d.add_start(w, car::label{car::node{start, 0, direction::kForward}, 0U});
-  d.add_start(w, car::label{car::node{start, 0, direction::kBackward}, 0U});
+void set_start<car>(dijkstra<car>& d, node_idx_t const start) {
+  d.add_start(car::label{car::node{start, 0, direction::kForward}, 0U});
+  d.add_start(car::label{car::node{start, 0, direction::kBackward}, 0U});
 };
 
 template <Profile P>
-void set_start(typename P::parameters const& params,
-               bidirectional<P>& b,
-               ways const& w,
-               node_idx_t const start) {
-  b.add_start(params, w, typename P::label{typename P::node{start}, 0U},
-              nullptr);
+void set_start(bidirectional<P>& b, node_idx_t const start) {
+  b.add_start(typename P::label{typename P::node{start}, 0U});
 }
 
 template <>
-void set_start<car>(car::parameters const& params,
-                    bidirectional<car>& b,
-                    ways const& w,
-                    node_idx_t const start) {
-  b.add_start(params, w,
-              car::label{car::node{start, 0, direction::kForward}, 0U},
-              nullptr);
-  b.add_start(params, w,
-              car::label{car::node{start, 0, direction::kBackward}, 0U},
-              nullptr);
+void set_start<car>(bidirectional<car>& b, node_idx_t const start) {
+  b.add_start(car::label{car::node{start, 0, direction::kForward}, 0U});
+  b.add_start(car::label{car::node{start, 0, direction::kBackward}, 0U});
 };
 
 template <Profile P>
-std::vector<typename P::label> set_end(typename P::parameters const& params,
-                                       bidirectional<P>& b,
-                                       ways const& w,
+std::vector<typename P::label> set_end(bidirectional<P>& b,
+                                       ways const&,
                                        node_idx_t const end) {
   auto const l = typename P::label{typename P::node{end}, 0U};
-  b.add_end(params, w, l, nullptr);
+  b.add_end(l);
   return {l};
 }
 
 template <>
-std::vector<typename car::label> set_end<car>(car::parameters const& params,
-                                              bidirectional<car>& b,
+std::vector<typename car::label> set_end<car>(bidirectional<car>& b,
                                               ways const& w,
                                               node_idx_t const end) {
   std::vector<typename car::label> ends;
@@ -156,12 +144,24 @@ std::vector<typename car::label> set_end<car>(car::parameters const& params,
   for (auto i = way_pos_t{0U}; i != ways.size(); ++i) {
     auto const l1 = car::label{car::node{end, i, direction::kForward}, 0U};
     auto const l2 = car::label{car::node{end, i, direction::kBackward}, 0U};
-    b.add_end(params, w, l1, nullptr);
-    b.add_end(params, w, l2, nullptr);
+    b.add_end(l1);
+    b.add_end(l2);
     ends.push_back(l1);
     ends.push_back(l2);
   }
   return ends;
+}
+
+template <Profile P>
+bool in_same_component(ways const& w, way_idx_t const a, way_idx_t const b) {
+  auto const classes =
+      P::endpoint_component_classes(route_end::kOrigin, kNoEndpointState);
+  return classes.empty() ||
+         utl::any_of(kAllComponentClasses, [&](auto const c) {
+           auto const x = w.r_->get_class_components(c).get(a);
+           return classes.contains(c) && x.has_value() &&
+                  x == w.r_->get_class_components(c).get(b);
+         });
 }
 
 int main(int argc, char const* argv[]) {
@@ -226,15 +226,15 @@ int main(int argc, char const* argv[]) {
               location{w.get_node_pos(end).as_latlng(), level_t{0.F}};
           if (opt.from_coords_) {
             auto const start_time = std::chrono::steady_clock::now();
-            auto const d_res =
-                route(params, w, l, profile, start_loc, end_loc, opt.max_dist_,
-                      direction::kForward, 250, nullptr, nullptr, nullptr,
-                      routing_algorithm::kDijkstra);
+            auto const d_res = route(params, w, l, profile, start_loc, end_loc,
+                                     std::chrono::seconds{opt.max_dist_},
+                                     direction::kForward, 250, nullptr, nullptr,
+                                     nullptr, routing_algorithm::kDijkstra);
             auto const middle_time = std::chrono::steady_clock::now();
-            auto const b_res =
-                route(params, w, l, profile, start_loc, end_loc, opt.max_dist_,
-                      direction::kForward, 250, nullptr, nullptr, nullptr,
-                      routing_algorithm::kAStarBi);
+            auto const b_res = route(params, w, l, profile, start_loc, end_loc,
+                                     std::chrono::seconds{opt.max_dist_},
+                                     direction::kForward, 250, nullptr, nullptr,
+                                     nullptr, routing_algorithm::kAStarBi);
             auto const end_time = std::chrono::steady_clock::now();
 
             /*std::cout << "took "
@@ -256,25 +256,29 @@ int main(int argc, char const* argv[]) {
                                                          middle_time)});
             }
           } else {
-            if (w.r_->way_component_[w.r_->node_ways_[start][0]] !=
-                w.r_->way_component_[w.r_->node_ways_[end][0]]) {
+            if (!in_same_component<P>(w, w.r_->node_ways_[start][0],
+                                      w.r_->node_ways_[end][0])) {
               std::cout << "skipping" << std::endl;
               continue;
             }
-            d.reset(opt.max_dist_);
-            b.reset(params, opt.max_dist_, start_loc, end_loc);
-            set_start<P>(d, w, start);
-            set_start<P>(params, b, w, start);
+            auto const sp = search_params<typename P::parameters>{
+                .profile_ = params,
+                .w_ = &w,
+                .max_ = opt.max_dist_,
+                .dir_ = direction::kForward,
+                .elevations_ = elevations.get(),
+                .start_loc_ = start_loc,
+                .end_loc_ = end_loc};
+            d.reset(sp);
+            b.reset(sp);
+            set_start<P>(d, start);
+            set_start<P>(b, start);
 
-            auto const ends = set_end<P>(params, b, w, end);
+            auto const ends = set_end<P>(b, w, end);
             auto const start_time = std::chrono::steady_clock::now();
-            d.template run<direction::kForward, false>(
-                params, w, *w.r_, opt.max_dist_, {}, nullptr, nullptr,
-                elevations.get());
+            d.template run<direction::kForward, false>();
             auto const middle_time = std::chrono::steady_clock::now();
-            b.template run<direction::kForward, false>(
-                params, w, *w.r_, opt.max_dist_, nullptr, nullptr,
-                elevations.get());
+            b.template run<direction::kForward, false>();
             auto const end_time = std::chrono::steady_clock::now();
             /*std::cout << "took "
                       << std::chrono::duration_cast<std::chrono::milliseconds>(
@@ -283,8 +287,7 @@ int main(int argc, char const* argv[]) {
                       << std::chrono::duration_cast<std::chrono::milliseconds>(
                              end_time - middle_time)
                       << std::endl;*/
-            auto const b_res =
-                b.get_cost_to_mp(b.meet_point_1_, b.meet_point_2_);
+            auto const b_res = b.best_cost_;
             if (!utl::any_of(ends, [&](auto&& e) {
                   auto const it = d.cost_.find(e.get_node().get_key());
                   auto const d_res = d.get_cost(e.get_node());

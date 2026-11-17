@@ -1,5 +1,8 @@
 #pragma once
 
+#include <chrono>
+#include <memory>
+#include <optional>
 #include <string_view>
 #include <vector>
 
@@ -31,14 +34,32 @@ struct bidirectional;
 
 struct sharing_data;
 
-template <Profile P>
-bidirectional<P>& get_bidirectional();
+struct one_to_many_state {
+  virtual ~one_to_many_state() = default;
+  virtual std::vector<std::optional<path>> const& results() const = 0;
+  virtual std::optional<path> reconstruct(ways const&,
+                                          lookup const&,
+                                          std::size_t dest_idx,
+                                          sharing_data const*) = 0;
+};
 
-template <Profile P>
-dijkstra<P, false>& get_dijkstra();
-
-template <Profile P>
-astar<P, false>& get_astar();
+std::unique_ptr<one_to_many_state> route_one_to_many(
+    profile_parameters const&,
+    ways const&,
+    lookup const&,
+    search_profile,
+    location const& from,
+    std::vector<location> const& to,
+    match_view_t const& from_match,
+    match_result const& to_match,
+    std::chrono::seconds max_duration,
+    direction,
+    bitvec<node_idx_t> const* blocked = nullptr,
+    sharing_data const* = nullptr,
+    elevation_storage const* = nullptr,
+    std::function<bool(path const&)> const& do_reconstruct =
+        [](path const&) { return false; },
+    std::optional<routing_time_t> = std::nullopt);
 
 std::vector<std::optional<path>> route(
     profile_parameters const&,
@@ -47,7 +68,7 @@ std::vector<std::optional<path>> route(
     search_profile,
     location const& from,
     std::vector<location> const& to,
-    cost_t max,
+    std::chrono::seconds max_duration,
     direction,
     double max_match_distance,
     bitvec<node_idx_t> const* blocked = nullptr,
@@ -63,7 +84,7 @@ std::optional<path> route(profile_parameters const&,
                           search_profile,
                           location const& from,
                           location const& to,
-                          cost_t max,
+                          std::chrono::seconds max_duration,
                           direction,
                           double max_match_distance,
                           bitvec<node_idx_t> const* blocked = nullptr,
@@ -79,7 +100,7 @@ std::optional<path> route_bidirectional(
     search_profile,
     location const& from,
     location const& to,
-    cost_t max,
+    std::chrono::seconds max_duration,
     direction,
     double max_match_distance,
     bitvec<node_idx_t> const* blocked = nullptr,
@@ -93,7 +114,7 @@ std::optional<path> route_dijkstra(
     search_profile,
     location const& from,
     location const& to,
-    cost_t max,
+    std::chrono::seconds max_duration,
     direction,
     double max_match_distance,
     bitvec<node_idx_t> const* blocked = nullptr,
@@ -107,31 +128,13 @@ std::optional<path> route_astar(profile_parameters const&,
                                 search_profile,
                                 location const& from,
                                 location const& to,
-                                cost_t max,
+                                std::chrono::seconds max_duration,
                                 direction,
                                 double max_match_distance,
                                 bitvec<node_idx_t> const* blocked = nullptr,
                                 sharing_data const* sharing = nullptr,
                                 elevation_storage const* = nullptr,
                                 std::optional<routing_time_t> = std::nullopt);
-
-std::vector<std::optional<path>> route(
-    profile_parameters const&,
-    ways const&,
-    lookup const&,
-    search_profile const,
-    location const& from,
-    std::vector<location> const& to,
-    match_view_t const& from_match,
-    match_result const& to_match,
-    cost_t const max,
-    direction const,
-    bitvec<node_idx_t> const* blocked = nullptr,
-    sharing_data const* sharing = nullptr,
-    elevation_storage const* = nullptr,
-    std::function<bool(path const&)> const& do_reconstruct =
-        [](path const&) { return false; },
-    std::optional<routing_time_t> = std::nullopt);
 
 std::optional<path> route(profile_parameters const&,
                           ways const& w,
@@ -141,7 +144,7 @@ std::optional<path> route(profile_parameters const&,
                           location const& to,
                           match_view_t const& from_match,
                           match_view_t const& to_match,
-                          cost_t const max,
+                          std::chrono::seconds max_duration,
                           direction const dir,
                           bitvec<node_idx_t> const* blocked = nullptr,
                           sharing_data const* sharing = nullptr,

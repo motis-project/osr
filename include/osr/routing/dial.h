@@ -20,8 +20,13 @@ struct dial {
   template <typename El>
   void push(El&& el) {
     auto const dist = get_bucket_(el);
-    assert(dist < buckets_.size());
+    assert(dist < n_buckets_);
 
+    if (dist >= buckets_.size()) {
+      buckets_.resize(std::min(
+          static_cast<std::size_t>(n_buckets_),
+          std::max(static_cast<std::size_t>(dist) + 1U, buckets_.size() * 2U)));
+    }
     buckets_[dist].emplace_back(std::forward<El>(el));
     current_bucket_ = std::min(current_bucket_, dist);
     max_bucket_ = std::max(max_bucket_, dist);
@@ -53,9 +58,9 @@ struct dial {
     max_bucket_ = 0U;
   }
 
-  void n_buckets(dist_t const n) { buckets_.resize(n); }
+  void n_buckets(dist_t const n) { n_buckets_ = n; }
 
-  dist_t n_buckets() const { return static_cast<dist_t>(buckets_.size()); }
+  dist_t n_buckets() const { return n_buckets_; }
 
 public:
   dist_t get_next_bucket() const {
@@ -70,6 +75,7 @@ public:
   GetBucketFn get_bucket_;
   dist_t current_bucket_{};
   dist_t max_bucket_{};
+  dist_t n_buckets_{};
   std::size_t size_{};
   std::vector<std::vector<T>> buckets_;
 };
