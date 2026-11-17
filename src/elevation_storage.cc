@@ -190,8 +190,8 @@ std::vector<ev::elevation_meters_t> get_way_elevation(
 
   auto elevation = std::vector<ev::elevation_meters_t>{};
   auto step_index = std::vector<unsigned>{};
-  step_index.reserve(params.kMaxPoints);
-  step_index.reserve(params.kMaxPoints);
+  step_index.reserve(params.max_points_);
+  step_index.reserve(params.max_points_);
 
   unsigned n = 2;
   elevation.push_back(a);
@@ -245,7 +245,7 @@ std::vector<ev::elevation_meters_t> get_way_elevation(
   };
 
   auto stop = false;
-  while (n < params.kMaxPoints) {
+  while (n < params.max_points_) {
     stop = true;
     for (auto s = 1U; s < steps; ++s) {
       auto const m = get(s);
@@ -450,9 +450,11 @@ encoding_result_t calculate_way_encodings(
       },
       pt->update_fn());
 
-  auto f = std::ofstream{params.stats_file_};
-  f << stats.to_str();
-  f.close();
+  if (params.stats_file_.has_value()) {
+    auto f = std::ofstream{params.stats_file_.value()};
+    f << stats.to_str();
+    f.close();
+  }
   return result;
 }
 

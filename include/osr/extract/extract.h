@@ -1,5 +1,7 @@
 #include <filesystem>
 
+#include "osr/elevation_storage.h"
+
 namespace osr {
 namespace preprocessing::elevation {
 struct elevation_params;

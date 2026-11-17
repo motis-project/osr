@@ -1,4 +1,4 @@
-#include "osr/preprocessing/elevation/shared.h"
+#include "osr/extract/extract.h"
 #ifdef _WIN_32
 // Otherwise
 // winnt.h(169): fatal error C1189: #error:  "No Target Architecture"
@@ -16,7 +16,6 @@
 #include <optional>
 #include <string>
 #include <vector>
-#include "osr/extract/extract.h"
 
 #include "boost/thread/tss.hpp"
 
@@ -44,7 +43,6 @@
 
 #include "geo/box.h"
 
-#include "osr/elevation_storage.h"
 #include "osr/extract/conditional_parser.h"
 #include "osr/extract/osm_areas.h"
 #include "osr/extract/tag_parser.h"
