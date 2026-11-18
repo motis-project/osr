@@ -1,11 +1,8 @@
 #include "gtest/gtest.h"
 
 #include <chrono>
-#include <filesystem>
-#include <memory>
 #include <random>
 
-#include "osr/extract/extract.h"
 #include "osr/lookup.h"
 #include "osr/routing/parameters.h"
 #include "osr/routing/profiles/bike.h"
@@ -13,8 +10,10 @@
 #include "osr/routing/route.h"
 #include "osr/ways.h"
 
-namespace fs = std::filesystem;
+#include "test_graph.h"
+
 using namespace osr;
+using test::graph;
 
 namespace {
 
@@ -22,21 +21,9 @@ constexpr auto const kMaxMatchDistance = 100.0;
 constexpr auto const kMax = std::chrono::seconds{900};
 constexpr auto const kNumDestinations = 200U;
 
-struct graph {
-  graph() {
-    dir_ = fs::temp_directory_path() / "osr_one_to_many_state_test";
-    auto ec = std::error_code{};
-    fs::remove_all(dir_, ec);
-    fs::create_directories(dir_, ec);
-    extract(false, "test/miraustr.osm.pbf", dir_, {});
-    w_ = std::make_unique<ways>(dir_, cista::mmap::protection::READ);
-    l_ = std::make_unique<lookup>(*w_, dir_, cista::mmap::protection::READ);
-  }
-
-  fs::path dir_;
-  std::unique_ptr<ways> w_;
-  std::unique_ptr<lookup> l_;
-};
+graph make_graph() {
+  return graph{"test/miraustr.osm.pbf", "osr_one_to_many_state_test"};
+}
 
 cost_t segment_cost_sum(path const& p) {
   auto sum = cost_t{0U};
@@ -148,31 +135,31 @@ void check(graph const& g,
 }  // namespace
 
 TEST(one_to_many_state, foot_forward) {
-  auto const g = graph{};
+  auto const g = make_graph();
   check<foot<false, elevator_tracking>>(g, search_profile::kFoot,
                                         direction::kForward, 1U);
 }
 
 TEST(one_to_many_state, foot_backward) {
-  auto const g = graph{};
+  auto const g = make_graph();
   check<foot<false, elevator_tracking>>(g, search_profile::kFoot,
                                         direction::kBackward, 2U);
 }
 
 TEST(one_to_many_state, bike_forward) {
-  auto const g = graph{};
+  auto const g = make_graph();
   check<bike<bike_costing::kSafe, kElevationNoCost>>(g, search_profile::kBike,
                                                      direction::kForward, 3U);
 }
 
 TEST(one_to_many_state, bike_backward) {
-  auto const g = graph{};
+  auto const g = make_graph();
   check<bike<bike_costing::kSafe, kElevationNoCost>>(g, search_profile::kBike,
                                                      direction::kBackward, 4U);
 }
 
 TEST(one_to_many_state, empty_from_match) {
-  auto const g = graph{};
+  auto const g = make_graph();
   auto const params =
       profile_parameters{foot<false, elevator_tracking>::parameters{}};
   auto const to =
