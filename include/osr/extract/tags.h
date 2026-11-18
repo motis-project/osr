@@ -1,6 +1,8 @@
 #pragma once
 
+#include <optional>
 #include <ranges>
+#include <string>
 #include <string_view>
 #include <tuple>
 #include <utility>
@@ -8,9 +10,13 @@
 
 #include "cista/hash.h"
 
+#include "utl/parser/arg_parser.h"
+#include "utl/parser/cstr.h"
+
 #include "osmium/osm/object.hpp"
 
 #include "osr/conditional.h"
+#include "osr/extract/accessibility_tags.h"
 #include "osr/types.h"
 
 namespace osr {
@@ -233,7 +239,9 @@ private:
         case cista::hash("incline"): {
           has_incline_ = true;
           is_incline_down_ = value == "down"sv || value.starts_with("-"sv);
+          incline_percent_ = parse_incline_percent(value);
         } break;
+        case cista::hash("width"): width_m_ = parse_width_meters(value); break;
         case cista::hash("route"):
           route_type_ = value;
           is_ferry_route_ = value == "ferry"sv;
@@ -444,6 +452,10 @@ public:
   // https://wiki.openstreetmap.org/wiki/Key:incline
   bool has_incline_{false};
   bool is_incline_down_{false};
+  std::optional<float> incline_percent_{};
+
+  // https://wiki.openstreetmap.org/wiki/Key:width
+  std::optional<float> width_m_{};
 
   // https://wiki.openstreetmap.org/wiki/Key:toll
   bool toll_{false};

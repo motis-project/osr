@@ -1,5 +1,7 @@
 #pragma once
 
+#include <cstdint>
+#include <limits>
 #include <optional>
 
 #include "utl/for_each_bit_set.h"
@@ -16,6 +18,52 @@ namespace osr {
 
 struct sharing_data;
 
+// Hard accessibility constraints of a pedestrian (user group, avoided
+// features). Unknown incline / width: strict -> infeasible, else allowed.
+struct foot_accessibility {
+  static constexpr auto const kSteps = std::uint8_t{1U << 0U};
+  static constexpr auto const kElevator = std::uint8_t{1U << 2U};
+  static constexpr auto const kRamp = std::uint8_t{1U << 3U};
+  static constexpr auto const kNoInclineLimit =
+      std::numeric_limits<std::uint16_t>::max();
+
+  constexpr bool is_active() const {
+    return forbidden_ != 0U || max_incline_ != kNoInclineLimit ||
+           min_width_cm_ != 0U;
+  }
+
+  constexpr bool is_allowed(ways::routing const& w,
+                            way_idx_t const way,
+                            way_properties const& e) const {
+    if (((forbidden_ & kSteps) != 0U && e.is_steps()) ||
+        ((forbidden_ & kRamp) != 0U && e.is_ramp()) ||
+        ((forbidden_ & kElevator) != 0U && e.is_elevator())) {
+      return false;
+    }
+    if (max_incline_ == kNoInclineLimit && min_width_cm_ == 0U) {
+      return true;
+    }
+    auto const* a = w.get_accessibility(way);
+    if (max_incline_ != kNoInclineLimit &&
+        (a != nullptr && a->has_incline()
+             ? a->abs_incline() > max_incline_
+             : strict_ && !e.is_steps() && !e.is_elevator())) {
+      return false;
+    }
+    if (min_width_cm_ != 0U &&
+        (a != nullptr && a->has_width() ? a->width_cm_ < min_width_cm_
+                                        : strict_)) {
+      return false;
+    }
+    return true;
+  }
+
+  std::uint8_t forbidden_{0U};
+  std::uint16_t max_incline_{kNoInclineLimit};  // 0.1 %
+  std::uint16_t min_width_cm_{0U};
+  bool strict_{false};
+};
+
 template <bool IsWheelchair, typename Tracking = noop_tracking>
 struct foot {
   static constexpr auto const kMaxMatchDistance = 100U;
@@ -28,6 +76,7 @@ struct foot {
   struct parameters {
     using profile_t = foot<IsWheelchair, Tracking>;
     float speed_meters_per_second_{IsWheelchair ? 0.8F : 1.2F};
+    foot_accessibility accessibility_{};
   };
 
   struct node {
@@ -390,9 +439,9 @@ struct foot {
 
   static constexpr cost_and_duration way_cost(
       parameters const& params,
-      ways::routing const&,
+      ways::routing const& w,
       timezone_cache_t const&,
-      way_idx_t const,
+      way_idx_t const way,
       way_properties const e,
       direction,
       distance_t const dist,
@@ -400,6 +449,10 @@ struct foot {
       duration_t const,
       direction const) {
     if (IsWheelchair && e.is_steps()) {
+      return infeasible_cost_and_duration();
+    }
+    if (params.accessibility_.is_active() &&
+        !params.accessibility_.is_allowed(w, way, e)) {
       return infeasible_cost_and_duration();
     }
     if (!e.is_foot_accessible() && !e.has_foot_penalty()) {
@@ -475,8 +528,13 @@ struct foot {
     return q.template feasible<typename parameters::profile_t>(params);
   }
 
-  static constexpr cost_and_duration node_cost(parameters const&,
+  static constexpr cost_and_duration node_cost(parameters const& params,
                                                node_properties const n) {
+    if ((params.accessibility_.forbidden_ & foot_accessibility::kElevator) !=
+            0U &&
+        n.is_elevator()) {
+      return infeasible_cost_and_duration();
+    }
     if constexpr (IsWheelchair) {
       if (!n.is_wheelchair_accessible()) {
         return infeasible_cost_and_duration();

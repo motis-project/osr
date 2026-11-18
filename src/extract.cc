@@ -4,6 +4,7 @@
 #include <windows.h>
 #endif
 
+#include <cmath>
 #include <cstdint>
 
 #include <algorithm>
@@ -103,6 +104,22 @@ std::optional<conditional_turn_restriction> parse_conditional_turn_restriction(
     return std::nullopt;
   }
   return conditional_turn_restriction{*type, condition};
+}
+
+std::optional<way_accessibility> get_way_accessibility(tags const& t) {
+  if (!t.incline_percent_.has_value() && !t.width_m_.has_value()) {
+    return std::nullopt;
+  }
+  auto a = way_accessibility{};
+  if (t.incline_percent_.has_value()) {
+    a.incline_ = static_cast<std::int16_t>(std::clamp(
+        std::round(*t.incline_percent_ * 10.0F), -32767.0F, 32767.0F));
+  }
+  if (t.width_m_.has_value()) {
+    a.width_cm_ = static_cast<std::uint16_t>(
+        std::clamp(std::round(*t.width_m_ * 100.0F), 1.0F, 65535.0F));
+  }
+  return a;
 }
 
 template <typename T, typename Value>
@@ -461,6 +478,8 @@ struct way_handler : public osmium::handler::Handler {
                  ? get_way_properties(t)
                  : it->second.p_;
     p.has_hgv_info_ = hgv_info.has_value();
+    auto const accessibility = get_way_accessibility(t);
+    p.has_accessibility_info_ = accessibility.has_value();
 
     if (!t.has_level_ && it != end(rel_ways_)) {
       p.from_level_ = it->second.p_.from_level_;
@@ -528,6 +547,9 @@ struct way_handler : public osmium::handler::Handler {
     w_.r_->way_properties_.emplace_back(p);
     if (hgv_info.has_value()) {
       w_.r_->way_hgv_info_.emplace_back(way_idx, *hgv_info);
+    }
+    if (accessibility.has_value()) {
+      w_.r_->way_accessibility_.emplace_back(way_idx, *accessibility);
     }
     if (p.has_conditionals()) {
       w_.r_->way_conditionals_.emplace_back(way_idx, conditional_builder.way_);

@@ -4,12 +4,16 @@
 
 #include <cmath>
 #include <algorithm>
+#include <functional>
+#include <limits>
 #include <memory>
 #include <optional>
+#include <queue>
 #include <ranges>
 #include <span>
 #include <utility>
 
+#include "utl/erase_if.h"
 #include "utl/helpers/algorithm.h"
 #include "utl/to_vec.h"
 #include "utl/verify.h"
@@ -30,6 +34,7 @@
 #include "osr/routing/profiles/hgv.h"
 #include "osr/routing/reachability.h"
 #include "osr/routing/sharing_data.h"
+#include "osr/routing/tracking.h"
 #include "osr/routing/with_profile.h"
 #include "osr/util/infinite.h"
 #include "osr/util/reverse.h"
@@ -1159,6 +1164,270 @@ std::unique_ptr<one_to_many_state> route_one_to_many(
                   blocked, sharing, elevations, do_reconstruct, s.get());
         return s;
       });
+}
+
+template <Profile P, direction SearchDir, bool WithBlocked>
+std::vector<std::vector<pareto_path>> route_pareto(
+    typename P::parameters const& params,
+    ways const& w,
+    lookup const& l,
+    location const& from,
+    std::vector<location> const& to,
+    match_view_t const& from_match,
+    match_result const& to_match,
+    duration_t const max_duration,
+    bitvec<node_idx_t> const* blocked,
+    elevation_storage const* elevations) {
+  constexpr auto const kNoPred = std::numeric_limits<std::uint32_t>::max();
+  constexpr auto const dir = SearchDir;
+  auto result = std::vector<std::vector<pareto_path>>(to.size());
+  if (from_match.empty() || to_match.empty()) {
+    return result;
+  }
+
+  auto const& r = *w.r_;
+  auto const* components = reachability_components<P>(w, nullptr);
+  auto const profile_limit =
+      cost_search_limit(profile_parameters{params}, max_duration);
+  auto const from_penalty = max_matching_penalty(from_match);
+  auto const destination_limits = utl::to_vec(
+      std::views::iota(match_idx_t::value_t{0U},
+                       static_cast<match_idx_t::value_t>(to_match.size())),
+      [&](match_idx_t::value_t const i) {
+        auto const to_i = to_match[match_idx_t{i}];
+        if (components != nullptr &&
+            !is_connected(*components, from_match, to_i)) {
+          return cost_t{0U};
+        }
+        return endpoint_cost_limit(profile_limit, from_penalty,
+                                   max_matching_penalty(to_i));
+      });
+  auto const max = std::ranges::max(destination_limits);
+  auto const from_connected_m =
+      connected_candidates<P>(w, nullptr, from_match, to_match.way_);
+  auto const from_connected = from_connected_m[match_idx_t{0U}];
+
+  // Criteria (plan §0.3/§3): walking time, fixed time (elevator rides),
+  // accessibility record.
+  struct label {
+    duration_t total() const { return clamp_add_duration(walk_, fixed_); }
+
+    typename P::node node_;
+    duration_t walk_;
+    duration_t fixed_;
+    path_accessibility accessibility_;
+    std::uint32_t pred_;
+    bool is_dead_;
+  };
+  auto labels = std::vector<label>{};
+  auto bags =
+      ankerl::unordered_dense::map<typename P::key, std::vector<std::uint32_t>,
+                                   typename P::hash>{};
+  using queue_entry = std::pair<duration_t::rep, std::uint32_t>;
+  auto pq = std::priority_queue<queue_entry, std::vector<queue_entry>,
+                                std::greater<queue_entry>>{};
+
+  auto const dominates = [](label const& a, label const& b) {
+    return a.walk_ <= b.walk_ && a.fixed_ <= b.fixed_ &&
+           is_less_restricted(a.accessibility_, b.accessibility_);
+  };
+  auto const insert = [&](label const& x) {
+    auto& bag = bags[x.node_.get_key()];
+    if (utl::any_of(bag, [&](std::uint32_t const i) {
+          return dominates(labels[i], x);
+        })) {
+      return;
+    }
+    utl::erase_if(bag, [&](std::uint32_t const i) {
+      if (dominates(x, labels[i])) {
+        labels[i].is_dead_ = true;
+        return true;
+      }
+      return false;
+    });
+    auto const idx = static_cast<std::uint32_t>(labels.size());
+    labels.push_back(x);
+    bag.push_back(idx);
+    pq.emplace(x.total().count(), idx);
+  };
+
+  // Roots: the connector from the query position over its way.
+  auto roots = std::vector<std::pair<typename P::node, cost_and_duration>>{};
+  auto const root_infos = add_endpoint_roots<P>(
+      params, w, from_connected, route_end_of(dir), dir, std::nullopt, max,
+      [&](auto&& root_label, duration_t const duration) {
+        roots.emplace_back(root_label.get_node(),
+                           cost_and_duration{.cost_ = root_label.cost(),
+                                             .duration_ = duration});
+      });
+  for (auto i = std::size_t{0U}; i != roots.size(); ++i) {
+    insert(label{.node_ = roots[i].first,
+                 .walk_ = roots[i].second.duration_,
+                 .fixed_ = duration_t{0U},
+                 .accessibility_ = extend(path_accessibility{}, r,
+                                          root_infos[i].endpoint_.way_,
+                                          roots[i].first.get_node()),
+                 .pred_ = kNoPred,
+                 .is_dead_ = false});
+  }
+
+  while (!pq.empty()) {
+    auto const idx = pq.top().second;
+    pq.pop();
+    if (labels[idx].is_dead_) {
+      continue;
+    }
+    auto const curr = labels[idx];
+    P::template adjacent<SearchDir, WithBlocked>(
+        params, r, w.timezones_, curr.node_, curr.total(), std::nullopt,
+        blocked, nullptr, elevations,
+        [&](typename P::node const neighbor, std::uint32_t, duration_t const d,
+            distance_t, way_idx_t const way, std::uint16_t, std::uint16_t,
+            elevation_storage::elevation, bool) {
+          // elevator rides (node cost of the elevator) are the fixed part
+          auto const cost_node = SearchDir == direction::kForward
+                                     ? neighbor.get_node()
+                                     : curr.node_.get_node();
+          auto const fixed =
+              r.node_properties_[cost_node].is_elevator()
+                  ? std::min(d,
+                             P::node_cost(params, r.node_properties_[cost_node])
+                                 .duration_)
+                  : duration_t{0U};
+          auto const next_walk = clamp_add_duration(curr.walk_, d - fixed);
+          auto const next_fixed = clamp_add_duration(curr.fixed_, fixed);
+          if (clamp_add_duration(next_walk, next_fixed) > max_duration) {
+            return;
+          }
+          insert(label{.node_ = neighbor,
+                       .walk_ = next_walk,
+                       .fixed_ = next_fixed,
+                       .accessibility_ = extend(curr.accessibility_, r, way,
+                                                neighbor.get_node()),
+                       .pred_ = idx,
+                       .is_dead_ = false});
+        });
+  }
+
+  // Destinations: every label at a candidate node + the connector.
+  struct candidate {
+    duration_t walk_;
+    duration_t fixed_;
+    path_accessibility accessibility_;
+  };
+  auto const goal_end = route_end_of(opposite(dir));
+  auto candidates = std::vector<candidate>{};
+  for (auto i = std::size_t{0U}; i != to.size(); ++i) {
+    if (auto const direct = try_direct(from, to[i], dir); direct.has_value()) {
+      result[i].push_back(pareto_path{.walk_ = direct->duration_,
+                                      .fixed_ = duration_t{0U},
+                                      .accessibility_ = {}});
+      continue;
+    }
+    auto const to_i =
+        to_match[match_idx_t{static_cast<match_idx_t::value_t>(i)}];
+    candidates.clear();
+    for_each_endpoint_candidate(to_i, [&](endpoint_candidate const& endpoint) {
+      P::resolve_endpoint(
+          r, endpoint.way_, endpoint.node_.node_, to_i.lvl_, goal_end,
+          endpoint_role::kGoal, endpoint.state_, [&](auto const node) {
+            auto const it = bags.find(node.get_key());
+            if (it == end(bags)) {
+              return;
+            }
+            for (auto const li : it->second) {
+              auto const& x = labels[li];
+              auto const connection = get_endpoint_connection<P>(
+                  params, w, endpoint, node, goal_end, endpoint_role::kGoal,
+                  std::nullopt, x.total(), dir);
+              if (!connection.feasible() ||
+                  connection.cost_ >= destination_limits[i]) {
+                continue;
+              }
+              auto const walk =
+                  clamp_add_duration(x.walk_, connection.duration_);
+              if (clamp_add_duration(walk, x.fixed_) > max_duration) {
+                continue;
+              }
+              candidates.push_back(candidate{
+                  .walk_ = walk,
+                  .fixed_ = x.fixed_,
+                  .accessibility_ = extend(x.accessibility_, r, endpoint.way_,
+                                           node_idx_t::invalid())});
+            }
+          });
+    });
+    if (auto const stretch =
+            same_stretch_path<P>(params, w, l, from, to[i], from_match, to_i,
+                                 dir, std::nullopt, destination_limits[i]);
+        stretch.has_value() && stretch->duration_ <= max_duration) {
+      auto a = path_accessibility{};
+      for (auto const& seg : stretch->segments_) {
+        a = extend(a, r, seg.way_, node_idx_t::invalid());
+      }
+      candidates.push_back(candidate{.walk_ = stretch->duration_,
+                                     .fixed_ = duration_t{0U},
+                                     .accessibility_ = a});
+    }
+
+    utl::sort(candidates, [](candidate const& a, candidate const& b) {
+      return std::tuple{a.walk_ + a.fixed_, a.walk_} <
+             std::tuple{b.walk_ + b.fixed_, b.walk_};
+    });
+    for (auto const& c : candidates) {
+      if (utl::any_of(result[i], [&](pareto_path const& p) {
+            return p.walk_ <= c.walk_ && p.fixed_ <= c.fixed_ &&
+                   is_less_restricted(p.accessibility_, c.accessibility_);
+          })) {
+        continue;
+      }
+      result[i].push_back(pareto_path{.walk_ = c.walk_,
+                                      .fixed_ = c.fixed_,
+                                      .accessibility_ = c.accessibility_});
+    }
+  }
+  return result;
+}
+
+std::vector<std::vector<pareto_path>> route_pareto(
+    profile_parameters const& params,
+    ways const& w,
+    lookup const& l,
+    search_profile const profile,
+    location const& from,
+    std::vector<location> const& to,
+    match_view_t const& from_match,
+    match_result const& to_match,
+    std::chrono::seconds const max_duration,
+    direction const dir,
+    bitvec<node_idx_t> const* blocked,
+    elevation_storage const* elevations) {
+  auto const limit = to_duration_limit(max_duration);
+  auto const run = [&]<typename P>(typename P::parameters const& p) {
+    auto const with_dir = [&]<direction Dir>() {
+      return blocked == nullptr
+                 ? route_pareto<P, Dir, false>(p, w, l, from, to, from_match,
+                                               to_match, limit, nullptr,
+                                               elevations)
+                 : route_pareto<P, Dir, true>(p, w, l, from, to, from_match,
+                                              to_match, limit, blocked,
+                                              elevations);
+    };
+    return dir == direction::kForward
+               ? with_dir.template operator()<direction::kForward>()
+               : with_dir.template operator()<direction::kBackward>();
+  };
+  switch (profile) {
+    case search_profile::kFoot: {
+      using P = foot<false, elevator_tracking>;
+      return run.template operator()<P>(std::get<P::parameters>(params));
+    }
+    case search_profile::kWheelchair: {
+      using P = foot<true, elevator_tracking>;
+      return run.template operator()<P>(std::get<P::parameters>(params));
+    }
+    default: throw utl::fail("route_pareto: {} not supported", to_str(profile));
+  }
 }
 
 std::optional<path> route(profile_parameters const& params,

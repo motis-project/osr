@@ -8,10 +8,12 @@
 #else
 #include <sys/mman.h>
 #endif
+#include <cstdint>
 #include <algorithm>
 #include <array>
 #include <filesystem>
 #include <initializer_list>
+#include <limits>
 #include <optional>
 #include <ranges>
 #include <span>
@@ -106,6 +108,38 @@ enum class hgv_info_field : std::uint16_t {
 constexpr std::uint16_t to_mask(hgv_info_field const field) {
   return static_cast<std::uint16_t>(field);
 }
+
+// Numeric accessibility values of a way (OSM incline / width), stored only
+// for ways that have at least one of them.
+struct way_accessibility {
+  static constexpr auto const kUnknownIncline =
+      std::numeric_limits<std::int16_t>::min();
+
+  friend bool operator==(way_accessibility, way_accessibility) = default;
+
+  template <std::size_t NMaxTypes>
+  friend constexpr auto static_type_hash(
+      way_accessibility const*, cista::hash_data<NMaxTypes> h) noexcept {
+    return h.combine(cista::hash("way_accessibility v1"));
+  }
+
+  template <typename Ctx>
+  friend void serialize(Ctx&, way_accessibility const*, cista::offset_t) {}
+
+  template <typename Ctx>
+  friend void deserialize(Ctx const&, way_accessibility*) {}
+
+  constexpr bool has_incline() const { return incline_ != kUnknownIncline; }
+  constexpr bool has_width() const { return width_cm_ != 0U; }
+
+  // Steepest absolute incline in 0.1 % (direction does not matter).
+  constexpr std::uint16_t abs_incline() const {
+    return static_cast<std::uint16_t>(incline_ < 0 ? -incline_ : incline_);
+  }
+
+  std::int16_t incline_{kUnknownIncline};  // 0.1 %, + = up in way direction
+  std::uint16_t width_cm_{0U};  // 0 = unknown
+};
 
 struct hgv_way_info {
   friend bool operator==(hgv_way_info, hgv_way_info) = default;
@@ -214,6 +248,9 @@ struct way_properties {
   constexpr bool is_sidewalk_separate() const { return is_sidewalk_separate_; }
   constexpr bool in_route() const { return in_route_; }
   constexpr bool has_hgv_info() const { return has_hgv_info_; }
+  constexpr bool has_accessibility_info() const {
+    return has_accessibility_info_;
+  }
   constexpr bool has_conditionals() const { return has_conditionals_; }
   constexpr bool is_in_low_emission_zone() const {
     return is_in_low_emission_zone_;
@@ -231,7 +268,7 @@ struct way_properties {
   template <std::size_t NMaxTypes>
   friend constexpr auto static_type_hash(
       way_properties const*, cista::hash_data<NMaxTypes> h) noexcept {
-    return h.combine(cista::hash("way_properties v1.4"));
+    return h.combine(cista::hash("way_properties v1.5"));
   }
 
   template <typename Ctx>
@@ -277,6 +314,7 @@ struct way_properties {
   std::uint8_t is_oneway_reverse_ : 1;
   std::uint8_t has_foot_penalty_ : 1;
   std::uint8_t has_bike_penalty_ : 1;
+  std::uint8_t has_accessibility_info_ : 1;
 };
 
 static_assert(sizeof(way_properties) == 6);
@@ -652,6 +690,18 @@ struct ways {
       return &it->second;
     }
 
+    way_accessibility const* get_accessibility(way_idx_t const way) const {
+      if (!way_properties_[way].has_accessibility_info()) {
+        return nullptr;
+      }
+      auto const it = std::lower_bound(
+          begin(way_accessibility_), end(way_accessibility_), way,
+          [](auto const& entry, auto const& key) { return entry.first < key; });
+      utl::verify(it != end(way_accessibility_) && it->first == way,
+                  "missing accessibility info for way {}", way);
+      return &it->second;
+    }
+
     way_conditional_restrictions const* get_conditional_restrictions(
         way_idx_t const way) const {
       if (!way_properties_[way].has_conditionals()) {
@@ -676,6 +726,7 @@ struct ways {
     vec_map<node_idx_t, node_properties> node_properties_;
     vec_map<way_idx_t, way_properties> way_properties_;
     vec<pair<way_idx_t, hgv_way_info>> way_hgv_info_;
+    vec<pair<way_idx_t, way_accessibility>> way_accessibility_;
 
     vec<pair<way_idx_t, way_conditional_restrictions>> way_conditionals_;
     vec<conditional_access_restriction> conditional_access_;

@@ -60,6 +60,33 @@ std::unique_ptr<one_to_many_state> route_one_to_many(
         [](path const&) { return false; },
     std::optional<routing_time_t> = std::nullopt);
 
+// One Pareto-optimal path of route_pareto.
+struct pareto_path {
+  duration_t duration() const { return walk_ + fixed_; }
+
+  duration_t walk_;  // walking time
+  duration_t fixed_;  // elevator rides (not scaled by walking speed)
+  path_accessibility accessibility_;
+};
+
+// Multi-criteria one-to-many search (kFoot / kWheelchair): labels (walking
+// time, fixed time, accessibility record), one Pareto bag per node. Per
+// destination: all Pareto-optimal paths (both times <=, record at most as
+// restricted).
+std::vector<std::vector<pareto_path>> route_pareto(
+    profile_parameters const&,
+    ways const&,
+    lookup const&,
+    search_profile,
+    location const& from,
+    std::vector<location> const& to,
+    match_view_t const& from_match,
+    match_result const& to_match,
+    std::chrono::seconds max_duration,
+    direction,
+    bitvec<node_idx_t> const* blocked = nullptr,
+    elevation_storage const* = nullptr);
+
 std::vector<std::optional<path>> route(
     profile_parameters const&,
     ways const&,
