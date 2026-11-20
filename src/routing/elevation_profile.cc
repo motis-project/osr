@@ -132,6 +132,12 @@ elevation_profile::elevation_profile(ways const& w,
       continue;
     }
 
+    if (s.elevation_.n_ == 1) {
+      dist_acc += s.dist_;
+      add(w.get_node_pos(s.to_), dist_acc, *(s.elevation_.first_));
+      continue;
+    }
+
     auto from_lng = w.get_node_pos(s.from_).lng();
     auto from_lat = w.get_node_pos(s.from_).lat();
     auto to_lng = w.get_node_pos(s.to_).lng();
