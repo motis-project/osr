@@ -1,11 +1,16 @@
 #include "osr/elevation_storage.h"
 
+#include <cmath>
 #include <algorithm>
 #include <array>
-#include <execution>
+#include <filesystem>
+#include <fstream>
 #include <mutex>
 #include <ranges>
+#include <span>
+#include <sstream>
 #include <string>
+#include <vector>
 
 #include "utl/enumerate.h"
 #include "utl/pairwise.h"
@@ -13,12 +18,13 @@
 #include "utl/progress_tracker.h"
 #include "utl/raii.h"
 
-#include "cista/strong.h"
+#include "geo/latlng.h"
 
 #include "osr/point.h"
 #include "osr/preprocessing/elevation/provider.h"
 #include "osr/preprocessing/elevation/resolution.h"
 #include "osr/preprocessing/elevation/shared.h"
+#include "osr/types.h"
 
 namespace ev = osr::preprocessing::elevation;
 namespace fs = std::filesystem;
@@ -27,8 +33,73 @@ namespace osr {
 
 namespace elevation_files {
 constexpr auto const kDataName = "elevation_data.bin";
-constexpr auto const kIndexName = "elevation_idx.bin";
+constexpr auto const kOffsetName = "elevation_offsets.bin";
+constexpr auto const kOffsetIndexName = "elevation_offset_idx.bin";
 };  // namespace elevation_files
+
+struct elevation_stats {
+  static auto const kNBuckets = 8U;
+
+  elevation_stats(unsigned max_points) : max_points_{max_points} {
+    for (auto const _ : buckets_) {
+      n_per_length_.add_back_sized(max_points);
+    }
+  }
+
+  void clear() {
+    n_segments_ = 0U;
+    min_abs_threshold_ = 0;
+    min_incline_ = 0;
+    max_incline_ = 0;
+
+    for (auto i = 0U; i < kNBuckets; ++i) {
+      for (auto j = 0U; j < max_points_; ++j) {
+        n_per_length_[i][j] = 0U;
+      }
+    }
+  }
+
+  void add(elevation_stats const& other) {
+    n_segments_ += other.n_segments_;
+    min_abs_threshold_ += other.min_abs_threshold_;
+    min_incline_ += other.min_incline_;
+    max_incline_ += other.max_incline_;
+
+    for (auto i = 0U; i < kNBuckets; ++i) {
+      for (auto j = 0U; j < max_points_; ++j) {
+        n_per_length_[i][j] += other.n_per_length_[i][j];
+      }
+    }
+  }
+
+  std::string to_str() {
+    std::stringstream ss{};
+
+    ss << "Number of segments: " << n_segments_ << std::endl;
+    ss << "Number of points per segment length (max=" << max_points_
+       << "): " << std::endl;
+    for (auto i = 0U; i < kNBuckets; ++i) {
+      ss << buckets_[i] << "m: " << n_per_length_[i][0];
+      for (auto j = 1U; j < max_points_; ++j) {
+        ss << ", " << n_per_length_[i][j];
+      }
+      ss << std::endl;
+    }
+    ss << std::endl;
+
+    ss << "below 'min_elevation': " << min_abs_threshold_ << std::endl;
+    ss << "below 'min_incline': " << min_incline_ << std::endl;
+    ss << "greater 'max_incline': " << max_incline_ << std::endl;
+
+    return ss.str();
+  }
+
+  double const buckets_[kNBuckets] = {0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 10.0, 50.0};
+  vecvec<std::size_t, unsigned> n_per_length_{};
+  unsigned const max_points_;
+  unsigned n_segments_{0}, min_abs_threshold_{0}, min_incline_{0},
+      max_incline_{0};
+};
 
 using path_vec = std::vector<fs::path>;
 using sort_idx_t = cista::strong<std::uint32_t, struct sort_idx_>;
@@ -46,7 +117,8 @@ struct mapping_t {
 
 struct encoding_result_t {
   mm_vec<mapping_t> mappings_;
-  mm_vecvec<sort_idx_t, elevation_storage::encoding> encodings_;
+  elevation_storage::data_vec_t elevations_;
+  mm_vecvec<sort_idx_t, elevation_storage::encoding> offsets_;
 };
 
 using way_ordering_vec = mm_vec<way_ordering_t>;
@@ -59,14 +131,16 @@ cista::mmap mm(fs::path const& path, cista::mmap::protection const mode) {
 
 elevation_storage::elevation_storage(fs::path const& p,
                                      cista::mmap::protection const mode)
-    : elevations_{mm_vec<encoding>{mm(p / elevation_files::kDataName, mode)},
-                  mm_vec<cista::base_t<way_idx_t>>{
-                      mm(p / elevation_files::kIndexName, mode)}} {}
+    : elevations_{mm(p / elevation_files::kDataName, mode)},
+      offsets_{mm_vec<encoding>{mm(p / elevation_files::kOffsetName, mode)},
+               mm_vec<cista::base_t<way_idx_t>>{
+                   mm(p / elevation_files::kOffsetIndexName, mode)}} {}
 
 std::unique_ptr<elevation_storage> elevation_storage::try_open(
     fs::path const& path) {
   for (auto const& filename :
-       {elevation_files::kDataName, elevation_files::kIndexName}) {
+       {elevation_files::kDataName, elevation_files::kOffsetName,
+        elevation_files::kOffsetIndexName}) {
     auto const full_path = path / filename;
     if (!fs::exists(full_path)) {
       std::clog << "Elevation file " << full_path << " does not exist\n";
@@ -77,60 +151,140 @@ std::unique_ptr<elevation_storage> elevation_storage::try_open(
                                              cista::mmap::protection::READ);
 }
 
-elevation_storage::elevation get_way_elevation(ev::provider const& provider,
-                                               point const from,
-                                               point const to,
-                                               ev::resolution const& res) {
-  auto elevation = elevation_storage::elevation{};
+std::vector<ev::elevation_meters_t> get_way_elevation(
+    ev::provider const& provider,
+    point const from,
+    point const to,
+    ev::resolution const& res,
+    ev::elevation_params const& params,
+    elevation_stats& stats) {
   auto a = provider.get(from);
   auto const b = provider.get(to);
-  if (a != ev::elevation_meters_t::invalid() &&
-      b != ev::elevation_meters_t::invalid()) {
-    // TODO Approximation only for short ways
-    // Use slightly larger value to not skip intermediate values
-    constexpr auto const kSafetyFactor = 1.000001;
-    // map longitude in [-360, 360] to [-180, 180]
-    auto const adjust_lng = [](double const x) {
-      if (x < -180.) {
-        return x + 360.;
-      } else if (x <= 180.) {
-        return x;
-      } else {
-        return x - 360.;
-      }
-    };
-    auto const from_lat = from.lat();
-    auto const from_lng = from.lng();
-    auto const min_lng_diff = adjust_lng(to.lng() - from_lng);
-    auto const lat_diff = to.lat() - from_lat;
-    auto const steps = static_cast<int>(
-        std::max(std::ceil(kSafetyFactor * std::abs(lat_diff) / res.y_),
-                 std::ceil(kSafetyFactor * std::abs(min_lng_diff) / res.x_)));
-    if (steps > 1) {
-      auto const way_dir =
-          ev::resolution{.x_ = min_lng_diff / steps, .y_ = lat_diff / steps};
-      for (auto s = 1; s < steps; ++s) {
-        auto const m = provider.get(
-            {from_lat + s * way_dir.y_, adjust_lng(from_lng + s * way_dir.x_)});
-        if (m != ev::elevation_meters_t::invalid()) {
-          if (a < m) {
-            elevation.up_ += static_cast<cista::base_t<elevation_monotonic_t>>(
-                to_idx(m - a));
-          } else {
-            elevation.down_ +=
-                static_cast<cista::base_t<elevation_monotonic_t>>(
-                    to_idx(a - m));
-          }
-          a = m;
-        }
-      }
-    }
-    if (a < b) {
-      elevation.up_ +=
-          static_cast<cista::base_t<elevation_monotonic_t>>(to_idx(b - a));
+  if (a == ev::elevation_meters_t::invalid() ||
+      b == ev::elevation_meters_t::invalid()) {
+    return {};
+  }
+
+  // TODO Approximation only for short ways
+  // Use slightly larger value to not skip intermediate values
+  constexpr auto const kSafetyFactor = 1.000001;
+  // map longitude in [-360, 360] to [-180, 180]
+  auto const adjust_lng = [](double const x) {
+    if (x < -180.) {
+      return x + 360.;
+    } else if (x <= 180.) {
+      return x;
     } else {
-      elevation.down_ +=
-          static_cast<cista::base_t<elevation_monotonic_t>>(to_idx(a - b));
+      return x - 360.;
+    }
+  };
+  auto const from_lat = from.lat();
+  auto const from_lng = from.lng();
+  auto const min_lng_diff = adjust_lng(to.lng() - from_lng);
+  auto const lat_diff = to.lat() - from_lat;
+  auto const steps = static_cast<unsigned>(
+      std::max(std::ceil(kSafetyFactor * std::abs(lat_diff) / res.y_),
+               std::ceil(kSafetyFactor * std::abs(min_lng_diff) / res.x_)));
+  auto const seg_dist = geo::distance(from.as_latlng(), to.as_latlng());
+  auto const step_dist = (steps > 0) ? seg_dist / steps : 0;
+
+  auto elevation = std::vector<ev::elevation_meters_t>{};
+  auto step_index = std::vector<unsigned>{};
+  step_index.reserve(params.max_points_);
+  step_index.reserve(params.max_points_);
+
+  unsigned n = 2;
+  elevation.push_back(a);
+  step_index.push_back(0);
+  elevation.push_back(b);
+  step_index.push_back(steps);
+
+  // only call with at least 2 points, never with s = steps
+  auto const evaluate = [&](auto const& s) {
+    auto const i1 = static_cast<std::size_t>(
+        std::distance(begin(step_index),
+                      std::lower_bound(begin(step_index), end(step_index), s)));
+    auto const i0 = i1 - 1;
+
+    auto const y0 = elevation.at(i0);
+    auto const y1 = elevation.at(i1);
+    auto const x0 = step_index.at(i0);
+    auto const x1 = step_index.at(i1);
+    auto const e_estimate = ev::elevation_meters_t{s - x0} * (y1 - y0) /
+                                ev::elevation_meters_t{x1 - x0} +
+                            y0;
+    return e_estimate;
+  };
+
+  auto const way_dir =
+      ev::resolution{.x_ = min_lng_diff / steps, .y_ = lat_diff / steps};
+  auto const is_significant = [&](auto const& estimate, auto const& value) {
+    auto const abs_diff =
+        (estimate < value) ? value - estimate : estimate - value;
+    auto const incline = abs_diff.v_ / step_dist;
+
+    if (incline >= params.max_incline_) {
+      stats.max_incline_++;
+      return false;
+    }
+
+    if (abs_diff < params.min_elevation_) {
+      stats.min_abs_threshold_++;
+    }
+
+    if (incline < params.min_incline_) {
+      stats.min_incline_++;
+    }
+
+    return abs_diff >= params.min_elevation_ || incline >= params.min_incline_;
+  };
+
+  auto const get = [&](auto const s) {
+    return provider.get(
+        {from_lat + s * way_dir.y_, adjust_lng(from_lng + s * way_dir.x_)});
+  };
+
+  auto stop = false;
+  while (n < params.max_points_) {
+    stop = true;
+    for (auto s = 1U; s < steps; ++s) {
+      auto const m = get(s);
+
+      if (m == ev::elevation_meters_t::invalid() ||
+          !is_significant(evaluate(s), m)) {
+        continue;
+      }
+      stop = false;
+      break;
+    }
+
+    if (stop) {
+      break;
+    }
+
+    step_index.insert(--end(step_index), steps * (n - 1) / n);
+    elevation.insert(--end(elevation), get(steps * (n - 1) / n));
+    n++;
+    elevation.push_back(b);
+    step_index.push_back(steps);
+    auto x = steps / n;
+    for (auto i = 1U; i < n - 1; ++i) {
+      step_index[i] = x;
+      elevation[i] = get(x);
+      x += steps / n;
+    }
+  }
+
+  if (n == 2 && !is_significant(a, b)) {  // flat way -> single point
+    elevation.resize(1);
+    n--;
+  }
+
+  stats.n_segments_ += 1;
+  for (auto i = 1U; i <= elevation_stats::kNBuckets; ++i) {
+    if (i == elevation_stats::kNBuckets || stats.buckets_[i] > seg_dist) {
+      stats.n_per_length_[i - 1][n - 1] += 1;
+      break;
     }
   }
   return elevation;
@@ -202,23 +356,30 @@ encoding_result_t calculate_way_encodings(
     ev::provider const& provider,
     mm_vec<way_ordering_t> const& ordering,
     node_point_map const& points,
-    utl::progress_tracker_ptr& pt) {
-  paths.reserve(paths.size() + 3U);
+    utl::progress_tracker_ptr& pt,
+    ev::elevation_params const& params) {
+  paths.reserve(paths.size() + 4U);
   auto const& mapping_path = paths.emplace_back(fs::temp_directory_path() /
                                                 "temp_osr_extract_mapping");
   auto const& encoding_data_path = paths.emplace_back(
-      fs::temp_directory_path() / "temp_osr_extract_unordered_encoding_data");
-  auto const& encoding_idx_path = paths.emplace_back(
-      fs::temp_directory_path() / "temp_osr_extract_unordered_encoding_idx");
+      fs::temp_directory_path() / "temp_osr_extract_unordered_elevation_data");
+  auto const& encoding_offset_path = paths.emplace_back(
+      fs::temp_directory_path() / "temp_osr_extract_unordered_elevation_idx");
+  auto const& encoding_offset_idx_path =
+      paths.emplace_back(fs::temp_directory_path() /
+                         "temp_osr_extract_unordered_elevation_offset_idx");
 
   auto result = encoding_result_t{
       .mappings_ = mm_vec<mapping_t>{mm(mapping_path, kWriteMode)},
-      .encodings_ =
+      .elevations_ =
+          elevation_storage::data_vec_t{mm(encoding_data_path, kWriteMode)},
+      .offsets_ =
           mm_vecvec<sort_idx_t, elevation_storage::encoding>{
-              mm_vec<elevation_storage::encoding>{
-                  mm(encoding_data_path, kWriteMode)},
+              mm_vec<cista::base_t<elevation_storage::encoding>>{
+                  mm(encoding_offset_path, kWriteMode)},
               mm_vec<cista::base_t<sort_idx_t>>{
-                  mm(encoding_idx_path, kWriteMode)}},
+                  mm(encoding_offset_idx_path, kWriteMode)}},
+
   };
   result.mappings_.reserve(ordering.size());
 
@@ -227,23 +388,47 @@ encoding_result_t calculate_way_encodings(
 
   pt->in_high(ordering.size());
 
+  auto stats = elevation_stats{params.max_points_};
   utl::parallel_for(
       ordering,
       [&](way_ordering_t const way_ordering) {
-        thread_local auto elevations =
-            std::vector<elevation_storage::encoding>{};
+        thread_local auto elevations = std::vector<ev::elevation_meters_t>{};
+        thread_local auto offsets = std::vector<elevation_storage::encoding>{};
+        thread_local auto thread_stats = elevation_stats{params.max_points_};
 
         auto const& way_idx = way_ordering.way_idx_;
 
         // Calculate elevations
         elevations.clear();
-        auto elevations_idx = std::size_t{0U};
+        offsets.clear();
+        auto elevations_idx = std::size_t{0};
         for (auto const [from, to] : utl::pairwise(w.r_->way_nodes_[way_idx])) {
-          auto const elevation = elevation_storage::encoding{
-              get_way_elevation(provider, points[from], points[to], res)};
-          if (elevation) {
-            elevations.resize(elevations_idx);
-            elevations.push_back(elevation);
+          auto const segment_elevation = get_way_elevation(
+              provider, points[from], points[to], res, params, thread_stats);
+
+          offsets.resize(elevations_idx);
+          if (!segment_elevation.empty()) {
+            auto& encoding = offsets.emplace_back(
+                elevations.size(), segment_elevation.size(),
+                elevation_storage::encoding::coding{0},
+                elevation_storage::encoding::coding{0});
+            elevations.insert(end(elevations), begin(segment_elevation),
+                              end(segment_elevation));
+
+            auto prev = segment_elevation[0];
+            for (auto it = ++begin(segment_elevation);
+                 it != end(segment_elevation); ++it) {
+              if (*it < prev) {
+                encoding.down_ +=
+                    static_cast<cista::base_t<elevation_monotonic_t>>(
+                        to_idx(prev - (*it)));
+              } else {
+                encoding.up_ +=
+                    static_cast<cista::base_t<elevation_monotonic_t>>(
+                        to_idx((*it) - prev));
+              }
+              prev = *it;
+            }
           }
           ++elevations_idx;
         }
@@ -252,12 +437,24 @@ encoding_result_t calculate_way_encodings(
         if (!elevations.empty()) {
           auto const lock = std::lock_guard{m};
           result.mappings_.emplace_back(way_idx,
-                                        sort_idx_t{result.encodings_.size()});
-          result.encodings_.emplace_back(elevations);
+                                        sort_idx_t{result.offsets_.size()});
+          for (auto i = 0U; i < offsets.size(); ++i) {
+            offsets[i].idx_ += result.elevations_.size();
+          }
+          result.offsets_.emplace_back(offsets);
+          result.elevations_.insert(end(result.elevations_), begin(elevations),
+                                    end(elevations));
+          stats.add(thread_stats);
+          thread_stats.clear();
         }
       },
       pt->update_fn());
 
+  if (params.stats_file_.has_value()) {
+    auto f = std::ofstream{params.stats_file_.value()};
+    f << stats.to_str();
+    f.close();
+  }
   return result;
 }
 
@@ -276,17 +473,26 @@ void write_ordered_encodings(elevation_storage& storage,
   pt->in_high(result.mappings_.size());
 
   for (auto const& mapping : result.mappings_) {
-    storage.elevations_.resize(to_idx(mapping.way_idx_) + 1U);
-    auto bucket = storage.elevations_.back();
-    for (auto const e : result.encodings_[mapping.sort_idx_]) {
-      bucket.push_back(e);
+    storage.offsets_.resize(to_idx(mapping.way_idx_) + 1U);
+    auto bucket = storage.offsets_.back();
+    for (auto const offset : result.offsets_[mapping.sort_idx_]) {
+      if (offset.valid()) {
+        bucket.push_back(elevation_storage::encoding{
+            storage.elevations_.size(), offset.n_, offset.up_, offset.down_});
+        for (auto i = offset.idx_; i < offset.idx_ + offset.n_; ++i) {
+          storage.elevations_.push_back(result.elevations_[i]);
+        }
+      } else {
+        bucket.push_back(elevation_storage::encoding{0, 0, 0, 0});
+      }
     }
     pt->increment();
   }
 }
 
 void elevation_storage::set_elevations(ways const& w,
-                                       ev::provider const& provider) {
+                                       ev::provider const& provider,
+                                       ev::elevation_params params) {
   auto pt = utl::get_active_progress_tracker_or_activate("osr");
   auto cleanup_paths = utl::make_raii(path_vec{}, [](path_vec const& paths) {
     auto e = std::error_code{};
@@ -302,37 +508,9 @@ void elevation_storage::set_elevations(ways const& w,
       calculate_way_order(cleanup_paths.get(), w, points, provider, pt);
   pt->status("Calculating way elevations").out_bounds(81, 89);
   auto unordered_encodings = calculate_way_encodings(
-      cleanup_paths.get(), w, provider, processing_order, points, pt);
+      cleanup_paths.get(), w, provider, processing_order, points, pt, params);
   pt->status("Storing ordered elevations").out_bounds(89, 90);
   write_ordered_encodings(*this, std::move(unordered_encodings), pt);
-}
-
-elevation_storage::elevation elevation_storage::get_elevations(
-    way_idx_t const way, std::uint16_t const segment) const {
-  return (way < elevations_.size() && segment < elevations_[way].size())
-             ? elevations_[way][segment].decode()
-             : elevation{};
-}
-
-elevation_storage::elevation get_elevations(elevation_storage const* elevations,
-                                            way_idx_t const way,
-                                            std::uint16_t const segment) {
-  return elevations == nullptr ? elevation_storage::elevation{}
-                               : elevations->get_elevations(way, segment);
-}
-
-elevation_storage::elevation& elevation_storage::elevation::operator+=(
-    elevation const& other) {
-  up_ += to_idx(other.up_);
-  down_ += to_idx(other.down_);
-  return *this;
-}
-
-elevation_storage::elevation elevation_storage::elevation::swapped() const {
-  return {
-      .up_ = down_,
-      .down_ = up_,
-  };
 }
 
 constexpr auto const kCompressedValues = std::array<elevation_monotonic_t, 16>{
@@ -360,18 +538,50 @@ elevation_monotonic_t decode_helper(
   return kCompressedValues.at(c);
 }
 
-elevation_storage::encoding::encoding(elevation const& e)
-    : up_{encode(e.up_)}, down_{encode(e.down_)} {}
+elevation_storage::elevation elevation_storage::get_elevations(
+    way_idx_t const way, std::uint16_t const segment) const {
+  if (way >= elevations_.size() || segment >= offsets_[way].size()) {
+    return {};
+  }
 
-elevation_storage::elevation elevation_storage::encoding::decode() const {
+  auto const encoding = offsets_[way][segment];
+
+  if (!encoding.valid()) {
+    return {};
+  }
+
+  return {.first_ = std::next(begin(elevations_), encoding.idx_),
+          .n_ = encoding.n_,
+          .up_ = decode_helper(encoding.up_),
+          .down_ = decode_helper(encoding.down_)};
+}
+
+elevation_storage::elevation get_elevations(elevation_storage const* elevations,
+                                            way_idx_t const way,
+                                            std::uint16_t const segment) {
+  if (elevations == nullptr) {
+    return {};
+  }
+
+  return elevations->get_elevations(way, segment);
+}
+
+elevation_storage::elevation& elevation_storage::elevation::operator+=(
+    elevation const& other) {
+  up_ += to_idx(other.up_);
+  down_ += to_idx(other.down_);
+  return *this;
+}
+
+elevation_storage::elevation elevation_storage::elevation::swapped() const {
   return {
-      .up_ = decode_helper(up_),
-      .down_ = decode_helper(down_),
+      .up_ = down_,
+      .down_ = up_,
   };
 }
 
 elevation_storage::encoding::operator bool() const {
-  return up_ != 0U || down_ != 0U;
+  return valid() && (up_ != 0U || down_ != 0U);
 }
 
 }  // namespace osr

@@ -11,6 +11,7 @@
 #include <utility>
 
 #include "utl/helpers/algorithm.h"
+#include "utl/pipes/make_range.h"
 #include "utl/to_vec.h"
 #include "utl/verify.h"
 

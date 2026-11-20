@@ -5,7 +5,9 @@
 #include <memory>
 
 #include "cista/mmap.h"
+#include "cista/strong.h"
 
+#include "osr/preprocessing/elevation/shared.h"
 #include "osr/types.h"
 #include "osr/ways.h"
 
@@ -13,33 +15,63 @@ namespace osr {
 
 namespace preprocessing::elevation {
 struct provider;
-}
+
+struct elevation_params {
+  unsigned max_points_{8U};
+  std::optional<std::filesystem::path> stats_file_{};
+  elevation_meters_t min_elevation_{0};
+  double min_incline_{0};
+  double max_incline_{1.0};
+};
+}  // namespace preprocessing::elevation
 
 struct elevation_storage {
+  using data_vec_t = mm_vec32<preprocessing::elevation::elevation_meters_t>;
+
   struct elevation {
     elevation& operator+=(elevation const&);
     elevation swapped() const;
-    elevation_monotonic_t up_{0U};
-    elevation_monotonic_t down_{0U};
+
+    data_vec_t::value_type const* first_{nullptr};
+    std::uint8_t n_{0};
+    elevation_monotonic_t up_{0};
+    elevation_monotonic_t down_{0};
   };
+
   struct encoding {
     using coding = std::uint8_t;
-    explicit encoding(elevation const&);
+    encoding(cista::base_t<way_idx_t> idx,
+             std::uint8_t n,
+             coding up,
+             coding down)
+        : idx_{idx}, n_{n}, up_{up}, down_{down} {}
     encoding() = default;
     elevation decode() const;
     explicit operator bool() const;
+    bool valid() const { return n_ != 0; }
+
+    cista::base_t<way_idx_t> idx_{0};
+    std::uint8_t n_{0};
     coding up_ : 4 {};
     coding down_ : 4 {};
   };
+
   elevation_storage(std::filesystem::path const&,
                     cista::mmap::protection const mode);
   static std::unique_ptr<elevation_storage> try_open(
       std::filesystem::path const&);
-  void set_elevations(ways const&, preprocessing::elevation::provider const&);
+  void set_elevations(ways const&,
+                      preprocessing::elevation::provider const&,
+                      preprocessing::elevation::elevation_params);
   elevation get_elevations(way_idx_t const way,
                            std::uint16_t const segment) const;
 
-  mm_vecvec<way_idx_t, encoding> elevations_;
+  // (way_idx, internal-idx) -> single elevation sample
+  // mm_vecvec<way_idx_t, encoding> elevations_;
+  data_vec_t elevations_;
+
+  // (way_idx, segment_idx) -> internal-idx, number of samples
+  mm_vecvec<way_idx_t, encoding> offsets_;
 };
 
 elevation_storage::elevation get_elevations(elevation_storage const*,

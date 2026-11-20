@@ -1,3 +1,4 @@
+#include "osr/extract/extract.h"
 #ifdef _WIN_32
 // Otherwise
 // winnt.h(169): fatal error C1189: #error:  "No Target Architecture"
@@ -15,7 +16,6 @@
 #include <optional>
 #include <string>
 #include <vector>
-#include "osr/extract/extract.h"
 
 #include "boost/thread/tss.hpp"
 
@@ -43,7 +43,6 @@
 
 #include "geo/box.h"
 
-#include "osr/elevation_storage.h"
 #include "osr/extract/conditional_parser.h"
 #include "osr/extract/osm_areas.h"
 #include "osr/extract/tag_parser.h"
@@ -51,6 +50,7 @@
 #include "osr/lookup.h"
 #include "osr/platforms.h"
 #include "osr/preprocessing/elevation/provider.h"
+#include "osr/preprocessing/elevation/shared.h"
 #include "osr/ways.h"
 
 namespace fs = std::filesystem;
@@ -749,7 +749,8 @@ struct rel_ways_handler : public osmium::handler::Handler {
 void extract(bool const with_platforms,
              fs::path const& in,
              fs::path const& out,
-             fs::path const& elevation_dir) {
+             fs::path const& elevation_dir,
+             preprocessing::elevation::elevation_params elevation_params) {
   auto ec = std::error_code{};
   fs::remove_all(out, ec);
   if (!fs::is_directory(out)) {
@@ -1105,7 +1106,7 @@ void extract(bool const with_platforms,
         osr::preprocessing::elevation::provider{elevation_dir};
     if (provider.driver_count() > 0) {
       auto elevations = elevation_storage{out, cista::mmap::protection::WRITE};
-      elevations.set_elevations(w, provider);
+      elevations.set_elevations(w, provider, elevation_params);
     }
   }
 
